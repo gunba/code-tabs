@@ -1,5 +1,18 @@
 # Claude Tabs — Development Guide
 
+## MANDATORY: Test Every Change
+
+You MUST personally test every change using the test harness before delivering. Do NOT guess at fixes or theorize about root causes without evidence. The workflow is:
+
+1. Add logging/instrumentation to observe the actual behavior
+2. Launch the app and reproduce the issue using the test bridge
+3. Read the logs/state to understand what's actually happening
+4. Make a targeted fix based on observed evidence
+5. Re-run the same reproduction test to verify the fix works
+6. Only then commit and deliver
+
+If the test harness can't reproduce an issue, EXTEND IT until it can. Never say "I can't test this" — build the capability first.
+
 ## What is this?
 
 A Tauri v2 desktop app that manages multiple Claude Code CLI sessions in tabs. Built with Rust backend + React/TypeScript frontend. No API key required — uses the Claude Code CLI directly.

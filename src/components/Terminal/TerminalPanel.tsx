@@ -229,13 +229,19 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-fit and focus when becoming visible
+  // Re-fit and focus when becoming visible — only depends on visible and session.id.
+  // terminal is NOT in deps because useTerminal returns a new object on every render,
+  // which would cause this effect to re-fire on every store update, calling fit()
+  // repeatedly and flashing the terminal.
   useEffect(() => {
     if (visible) {
       terminal.fit();
+      // Scroll to bottom after fit to prevent showing top of scrollback
+      terminal.termRef.current?.scrollToBottom();
       terminal.focus();
     }
-  }, [visible, terminal, session.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, session.id]);
 
   // Reclaim focus when terminal is visible but loses it to non-interactive elements.
   useEffect(() => {

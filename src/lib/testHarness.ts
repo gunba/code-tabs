@@ -41,6 +41,7 @@ export interface TestState {
   recentDirCount: number;
   cliVersion: string | null;
   lastCommandResult?: unknown;
+  consoleLogs: string[];
   feedEntryCount: number;
   feedLastEntry: unknown;
   feedTracking: unknown;
@@ -81,6 +82,7 @@ function captureState(lastResult?: unknown): TestState {
     recentDirCount: settings.recentDirs.length,
     cliVersion: settings.cliVersion,
     lastCommandResult: lastResult,
+    consoleLogs: (globalThis as Record<string, unknown>).__consoleLogs as string[] ?? [],
     feedEntryCount: (globalThis as Record<string, unknown>).__feedEntryCount as number ?? 0,
     feedLastEntry: (globalThis as Record<string, unknown>).__feedLastEntry ?? null,
     feedTracking: (globalThis as Record<string, unknown>).__feedTracking ?? null,
@@ -213,6 +215,29 @@ async function pollCommands(): Promise<void> {
 // ── Lifecycle ─────────────────────────────────────────────────────
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
+
+// Set up log interception IMMEDIATELY (module load time, before any hooks run)
+const __logs: string[] = [];
+const __origLog = console.log;
+const __origTrace = console.trace;
+console.log = (...args: unknown[]) => {
+  const msg = args.map(String).join(" ");
+  if (msg.includes("[terminal]") || msg.includes("[TerminalPanel]") || msg.includes("[pty]")) {
+    __logs.push(msg);
+    if (__logs.length > 200) __logs.shift();
+  }
+  (globalThis as Record<string, unknown>).__consoleLogs = __logs;
+  __origLog.apply(console, args);
+};
+console.trace = (...args: unknown[]) => {
+  const msg = args.map(String).join(" ");
+  if (msg.includes("[terminal]")) {
+    __logs.push(msg + " (trace)");
+    if (__logs.length > 200) __logs.shift();
+  }
+  (globalThis as Record<string, unknown>).__consoleLogs = __logs;
+  __origTrace.apply(console, args);
+};
 
 export function startTestHarness(): void {
   if (intervalId) return;

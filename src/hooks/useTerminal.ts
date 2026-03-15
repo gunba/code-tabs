@@ -106,17 +106,13 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       // Will be retried by ResizeObserver when container becomes visible
     }
 
-    // Observe container size changes (debounced to avoid WebGL flash on rapid resize)
+    // Observe container size changes
     observerRef.current?.disconnect();
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const observer = new ResizeObserver(() => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        try {
-          fit.fit();
-        } catch {
-          // Ignore fit errors during rapid resize
-        }
+        try { fit.fit(); } catch {}
       }, 50);
     });
     observer.observe(el);
@@ -142,9 +138,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const fit = useCallback(() => {
     try {
       fitRef.current?.fit();
-    } catch {
-      // Ignore
-    }
+    } catch {}
   }, []);
 
   const getDimensions = useCallback(() => {
