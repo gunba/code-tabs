@@ -86,11 +86,31 @@ export function useClaudeState(sessionId: string | null) {
       }
     );
 
-    // Listen for caught-up signal — watcher reached end of file
+    // Listen for caught-up signal — watcher reached end of file.
+    // Snapshot the current metadata fingerprint so the first post-replay
+    // metadata update doesn't leak stale recentOutput to the activity feed.
     const unlistenCaughtUp = listen<{ sessionId: string }>(
       "jsonl-caught-up",
       (event) => {
         if (event.payload.sessionId !== sessionId) return;
+        // Set fingerprint to current accumulated state so only genuinely
+        // NEW changes after this point trigger metadata updates.
+        const acc = accRef.current;
+        lastFingerprintRef.current = JSON.stringify({
+          costUsd: acc.costUsd,
+          currentAction: acc.currentAction,
+          currentToolName: acc.currentToolName,
+          subagentCount: acc.subagentCount,
+          subagentActivity: acc.subagentActivity,
+          recentOutput: acc.lastAssistantText,
+          contextWarning: acc.contextWarning,
+          taskProgress: acc.taskProgress,
+          inputTokens: acc.inputTokens,
+          outputTokens: acc.outputTokens,
+          assistantMessageCount: acc.assistantMessageCount,
+        });
+        // Also sync the state so the first post-replay state doesn't flicker
+        lastStateRef.current = acc.state;
         caughtUpRef.current = true;
       }
     );

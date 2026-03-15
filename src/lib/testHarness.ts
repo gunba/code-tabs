@@ -118,6 +118,39 @@ async function executeCommand(cmd: TestCommand): Promise<unknown> {
       return { closed: true };
     }
 
+    case "reviveSession": {
+      // Replicate the handleTabActivate logic for dead sessions
+      const id = cmd.args?.id as string;
+      const session = store.sessions.find((s) => s.id === id);
+      if (!session || session.state !== "dead") return { error: "Not a dead session" };
+      const resumeId = session.config.resumeSession || session.config.sessionId || session.id;
+      let hasConversation = false;
+      try {
+        hasConversation = await invoke<boolean>("session_has_conversation", {
+          sessionId: resumeId,
+          workingDir: session.config.workingDir,
+        });
+      } catch {}
+      const config: SessionConfig = {
+        ...session.config,
+        continueSession: false,
+        resumeSession: hasConversation ? resumeId : null,
+      };
+      const name = session.name;
+      const idx = store.sessions.findIndex((s) => s.id === id);
+      const savedMeta = { ...session.metadata };
+      await store.closeSession(id);
+      const newSession = await store.createSession(name, config, { insertAtIndex: idx });
+      store.updateMetadata(newSession.id, {
+        nodeSummary: savedMeta.nodeSummary,
+        inputTokens: savedMeta.inputTokens,
+        outputTokens: savedMeta.outputTokens,
+        assistantMessageCount: savedMeta.assistantMessageCount,
+      });
+      store.setActiveTab(newSession.id);
+      return { newId: newSession.id, resumed: hasConversation, resumeId };
+    }
+
     case "setActiveTab": {
       store.setActiveTab(cmd.args?.id as string);
       return { active: cmd.args?.id };
