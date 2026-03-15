@@ -114,10 +114,9 @@ export function ActivityFeed() {
       }
     }
 
-    // Detect removed sessions
-    for (const [id, data] of prev.entries()) {
+    // Clean up tracking for removed sessions (no noise — revivals remove+recreate)
+    for (const [id] of prev.entries()) {
       if (!sessions.find((s) => s.id === id)) {
-        addEntry({ timestamp: now, sessionName: data.name, type: "system", message: "Session closed" });
         prev.delete(id);
       }
     }

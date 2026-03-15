@@ -95,16 +95,18 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const spawnedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { feed, caughtUp } = useClaudeState(session.id);
-  const [loading, setLoading] = useState(true);
+  // Only show loading spinner for resumed sessions (which have JSONL to replay)
+  const isResumed = !!session.config.resumeSession;
+  const [loading, setLoading] = useState(isResumed);
 
-  // Clear loading spinner when JSONL watcher catches up
   useEffect(() => {
+    if (!isResumed) return;
     if (caughtUp.current) { setLoading(false); return; }
     const interval = setInterval(() => {
       if (caughtUp.current) { setLoading(false); clearInterval(interval); }
     }, 200);
     return () => clearInterval(interval);
-  }, [caughtUp]);
+  }, [caughtUp, isResumed]);
 
   // Start subagent JSONL watcher — uses the app's session ID directly.
   // For new sessions: --session-id matches, subagents go under our ID's dir.
