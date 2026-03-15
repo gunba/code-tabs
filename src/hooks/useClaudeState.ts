@@ -135,5 +135,5 @@ export function useClaudeState(sessionId: string | null) {
     [sessionId, updateState]
   );
 
-  return { feed };
+  return { feed, caughtUp: caughtUpRef };
 }

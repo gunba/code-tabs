@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTerminal } from "../../hooks/useTerminal";
 import { usePty } from "../../hooks/usePty";
@@ -94,7 +94,17 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const updateState = useSessionStore((s) => s.updateState);
   const spawnedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { feed } = useClaudeState(session.id);
+  const { feed, caughtUp } = useClaudeState(session.id);
+  const [loading, setLoading] = useState(true);
+
+  // Clear loading spinner when JSONL watcher catches up
+  useEffect(() => {
+    if (caughtUp.current) { setLoading(false); return; }
+    const interval = setInterval(() => {
+      if (caughtUp.current) { setLoading(false); clearInterval(interval); }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [caughtUp]);
 
   // Start subagent JSONL watcher — uses the app's session ID directly.
   // For new sessions: --session-id matches, subagents go under our ID's dir.
@@ -250,6 +260,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       style={{ display: visible ? "flex" : "none" }}
     >
       <StateBanner session={session} />
+      {loading && visible && (
+        <div className="terminal-loading">
+          <div className="terminal-loading-spinner" />
+          <span>Loading conversation...</span>
+        </div>
+      )}
       <div className="terminal-container" ref={setContainer} />
     </div>
   );
