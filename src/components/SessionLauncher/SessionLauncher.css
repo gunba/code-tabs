@@ -109,6 +109,18 @@
   flex-wrap: wrap;
 }
 
+.launcher-select-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.launcher-select-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .launcher-select {
   background: var(--bg-primary);
   border: 1px solid var(--border);

@@ -232,7 +232,9 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     const handleFocusOut = () => {
       requestAnimationFrame(() => {
         const active = document.activeElement;
-        if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) return;
+        if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) return;
+        // Don't reclaim focus if a modal overlay is open
+        if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .hooks-overlay, .palette-overlay')) return;
         terminal.focus();
       });
     };

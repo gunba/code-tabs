@@ -24,7 +24,7 @@ interface PrevSession {
   summary: string | null;
   name: string;
   recentOutput: string;
-  muteUntil: number; // Suppress output entries until this timestamp (JSONL replay grace period)
+  settled: boolean; // true after first idle transition from an active state (not initial state)
 }
 
 export function ActivityFeed() {
@@ -53,40 +53,49 @@ export function ActivityFeed() {
 
       if (!existing) {
         // Initialize with CURRENT values so restored/revived state doesn't
-        // generate spurious feed entries. Mute output for 5s to let JSONL replay settle.
+        // generate spurious feed entries. Not settled until first active→idle transition.
         prev.set(session.id, {
           state: session.state,
           summary: session.metadata.nodeSummary ?? null,
           name: sessionName,
           recentOutput: session.metadata.recentOutput ?? "",
-          muteUntil: now + 5000,
+          settled: false,
         });
         continue;
+      }
+
+      // Detect active→idle transition to mark session as settled.
+      // A session is "settled" after it first transitions TO idle from an active state
+      // (thinking/toolUse). This suppresses JSONL replay floods and initial startup noise.
+      const prevState = existing.state;
+      const curState = session.state;
+      if (!existing.settled && (prevState === "thinking" || prevState === "toolUse") && curState === "idle") {
+        existing.settled = true;
       }
 
       // Agent output — what they're "typing" (speech bubble replacement)
       const currentOutput = session.metadata.recentOutput ?? "";
       if (currentOutput && currentOutput !== existing.recentOutput && session.state !== "dead") {
-        // Only show in feed after the JSONL replay grace period
-        if (now >= existing.muteUntil) {
+        // Only show in feed after the session has settled
+        if (existing.settled) {
           const lines = currentOutput.split("\n").filter((l) => l.trim());
           const lastLine = lines[lines.length - 1]?.trim().slice(0, 200);
           if (lastLine) {
             addEntry({ timestamp: now, sessionName, type: "output", message: lastLine });
           }
         }
-        // Always track the latest value (even during mute) so we don't
-        // flood when the mute expires
+        // Always track the latest value (even before settled) so we don't
+        // flood when the session settles
         existing.recentOutput = currentOutput;
       }
 
       // Track state (for internal use) but don't spam the feed with transitions
-      existing.state = session.state;
+      existing.state = curState;
 
-      // Summary update (from Haiku) — suppress during mute window (revival/restore)
+      // Summary update (from Haiku) — suppress until settled (revival/restore)
       const currentSummary = session.metadata.nodeSummary ?? null;
       if (currentSummary && currentSummary !== existing.summary) {
-        if (now >= existing.muteUntil) {
+        if (existing.settled) {
           addEntry({ timestamp: now, sessionName, type: "summary", message: currentSummary });
         }
         existing.summary = currentSummary;

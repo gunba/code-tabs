@@ -33,11 +33,6 @@
   display: none;
 }
 
-@keyframes tab-appear {
-  from { opacity: 0.3; }
-  to { opacity: 1; }
-}
-
 .tab {
   display: flex;
   align-items: flex-start;
@@ -48,7 +43,6 @@
   background: transparent;
   color: var(--text-secondary);
   font-size: 11px;
-  animation: tab-appear 0.15s ease-out;
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.1s, color 0.1s;

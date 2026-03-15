@@ -31,7 +31,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon());
 
-    // Ctrl+C: copy selection if present, otherwise send interrupt to PTY
+    // Custom key handlers: Ctrl+C copy, Ctrl+V paste
     term.attachCustomKeyEventHandler((ev) => {
       if (ev.ctrlKey && ev.key === "c" && ev.type === "keydown") {
         if (term.hasSelection()) {
@@ -39,6 +39,13 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
           term.clearSelection();
           return false; // Don't send to PTY
         }
+      }
+      // Handle Ctrl+V paste — read clipboard and insert into terminal
+      if (ev.ctrlKey && ev.key === "v" && ev.type === "keydown") {
+        navigator.clipboard.readText().then((text) => {
+          if (text) term.paste(text);
+        }).catch(() => {});
+        return false; // Prevent default handling
       }
       return true; // Let it through
     });
@@ -99,14 +106,18 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       // Will be retried by ResizeObserver when container becomes visible
     }
 
-    // Observe container size changes
+    // Observe container size changes (debounced to avoid WebGL flash on rapid resize)
     observerRef.current?.disconnect();
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const observer = new ResizeObserver(() => {
-      try {
-        fit.fit();
-      } catch {
-        // Ignore fit errors during rapid resize
-      }
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        try {
+          fit.fit();
+        } catch {
+          // Ignore fit errors during rapid resize
+        }
+      }, 50);
     });
     observer.observe(el);
     observerRef.current = observer;

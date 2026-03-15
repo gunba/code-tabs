@@ -67,10 +67,11 @@ export function SessionLauncher() {
     permissionMode: lastConfig.permissionMode,
     effort: lastConfig.effort,
     dangerouslySkipPermissions: lastConfig.dangerouslySkipPermissions,
+    workingDir: lastConfig.workingDir || "",
   });
   const [showCliOptions, setShowCliOptions] = useState(true);
   const [defaultsSaved, setDefaultsSaved] = useState(false);
-  const [extraFlags, setExtraFlags] = useState(config.extraFlags || "");
+  const [extraFlags, setExtraFlags] = useState(lastConfig.extraFlags || "");
 
   useEffect(() => {
     const el = document.getElementById("launcher-path");
@@ -219,41 +220,50 @@ export function SessionLauncher() {
 
         {/* Compact selects row: Model, Permissions, Effort, Skip checkbox, Save defaults */}
         <div className="launcher-selects">
-          <select
-            className="launcher-select"
-            value={config.model ?? ""}
-            onChange={(e) => updateConfig("model", e.target.value || null)}
-          >
-            {MODEL_OPTIONS.map((opt) => (
-              <option key={String(opt.value)} value={opt.value ?? ""}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          <label className="launcher-select-group">
+            <span className="launcher-select-label">Model</span>
+            <select
+              className="launcher-select"
+              value={config.model ?? ""}
+              onChange={(e) => updateConfig("model", e.target.value || null)}
+            >
+              {MODEL_OPTIONS.map((opt) => (
+                <option key={String(opt.value)} value={opt.value ?? ""}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <select
-            className="launcher-select"
-            value={config.permissionMode}
-            onChange={(e) => updateConfig("permissionMode", e.target.value as PermissionMode)}
-          >
-            {PERM_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          <label className="launcher-select-group">
+            <span className="launcher-select-label">Perms</span>
+            <select
+              className="launcher-select"
+              value={config.permissionMode}
+              onChange={(e) => updateConfig("permissionMode", e.target.value as PermissionMode)}
+            >
+              {PERM_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <select
-            className="launcher-select"
-            value={config.effort ?? ""}
-            onChange={(e) => updateConfig("effort", e.target.value || null)}
-          >
-            {EFFORT_OPTIONS.map((opt) => (
-              <option key={String(opt.value)} value={opt.value ?? ""}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          <label className="launcher-select-group">
+            <span className="launcher-select-label">Effort</span>
+            <select
+              className="launcher-select"
+              value={config.effort ?? ""}
+              onChange={(e) => updateConfig("effort", e.target.value || null)}
+            >
+              {EFFORT_OPTIONS.map((opt) => (
+                <option key={String(opt.value)} value={opt.value ?? ""}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <label className="launcher-skip-label">
             <input
