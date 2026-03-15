@@ -68,6 +68,7 @@ export function SessionLauncher() {
     effort: lastConfig.effort,
     dangerouslySkipPermissions: lastConfig.dangerouslySkipPermissions,
     workingDir: lastConfig.workingDir || "",
+    resumeSession: lastConfig.resumeSession,
   });
   const [showCliOptions, setShowCliOptions] = useState(true);
   const [defaultsSaved, setDefaultsSaved] = useState(false);
@@ -108,18 +109,26 @@ export function SessionLauncher() {
     return { ...config, extraFlags: extraFlags.trim() || null };
   }, [config, extraFlags]);
 
+  const closeSession = useSessionStore((s) => s.closeSession);
+
   const handleLaunch = useCallback(async () => {
     if (!launchConfig.workingDir.trim()) return;
     const name = dirToTabName(launchConfig.workingDir);
     addRecentDir(launchConfig.workingDir);
     setLastConfig(launchConfig);
     try {
+      // If relaunching an existing session, close it first
+      const replaceId = useSettingsStore.getState().replaceSessionId;
+      if (replaceId) {
+        await closeSession(replaceId);
+        useSettingsStore.getState().setReplaceSessionId(null);
+      }
       await createSession(name, launchConfig);
       setShowLauncher(false);
     } catch (err) {
       console.error("Failed to create session:", err);
     }
-  }, [launchConfig, createSession, setShowLauncher, addRecentDir, setLastConfig]);
+  }, [launchConfig, createSession, closeSession, setShowLauncher, addRecentDir, setLastConfig]);
 
   const handleBrowse = useCallback(async () => {
     const selected = await open({
@@ -134,7 +143,10 @@ export function SessionLauncher() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) handleLaunch();
-      if (e.key === "Escape") setShowLauncher(false);
+      if (e.key === "Escape") {
+        useSettingsStore.getState().setReplaceSessionId(null);
+        setShowLauncher(false);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -182,7 +194,7 @@ export function SessionLauncher() {
   // ── Main launcher ──
 
   return (
-    <div className="launcher-overlay" onClick={() => setShowLauncher(false)}>
+    <div className="launcher-overlay" onClick={() => { useSettingsStore.getState().setReplaceSessionId(null); setShowLauncher(false); }}>
       <div className="launcher" onClick={(e) => e.stopPropagation()}>
 
         {/* Resume banner or path input */}

@@ -41,6 +41,7 @@ interface SettingsState {
 
   commandUsage: Record<string, number>;
   showHooksManager: boolean;
+  replaceSessionId: string | null; // Session to close when launcher launches (Shift+Click relaunch)
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -53,6 +54,7 @@ interface SettingsState {
   setCliCapabilities: (version: string, capabilities: CliCapabilities) => void;
   recordCommandUsage: (command: string) => void;
   setSlashCommands: (cmds: SlashCommand[]) => void;
+  setReplaceSessionId: (id: string | null) => void;
   setShowHooksManager: (show: boolean) => void;
 }
 
@@ -71,6 +73,7 @@ export const useSettingsStore = create<SettingsState>()(
       slashCommands: [],
       commandUsage: {},
       showHooksManager: false,
+      replaceSessionId: null,
 
       addRecentDir: (dir) =>
         set((s) => ({
@@ -115,6 +118,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       setSlashCommands: (cmds) => set({ slashCommands: cmds }),
       setShowHooksManager: (show) => set({ showHooksManager: show }),
+      setReplaceSessionId: (id) => set({ replaceSessionId: id }),
     }),
     {
       name: "claude-tabs-settings",
