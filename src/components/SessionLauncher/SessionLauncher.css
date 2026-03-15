@@ -367,12 +367,13 @@
   padding: 8px 10px;
   font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 12px;
-  overflow-x: auto;
+  flex-wrap: wrap;
 }
 
 .launcher-cmd-prefix {
   color: var(--accent-secondary);
-  white-space: nowrap;
+  white-space: pre-wrap;
+  word-break: break-all;
   flex-shrink: 0;
   user-select: all;
 }
@@ -388,10 +389,12 @@
   font-size: 12px;
   padding: 0;
   caret-color: var(--accent);
-  resize: none;
-  min-height: 36px;
-  line-height: 1.4;
   white-space: pre-wrap;
+  word-break: break-word;
+  resize: none;
+  min-height: 28px;
+  width: 100%;
+  line-height: 1.4;
   overflow-y: auto;
 }
 

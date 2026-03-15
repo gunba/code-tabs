@@ -7,15 +7,20 @@ import { dirToTabName } from "../lib/claude";
 
 const DEBOUNCE_MS = 15_000;
 const MIN_SESSIONS = 1;
+const RESUMMARISE_INTERVAL = 15;
 
 /**
  * Manages an on-demand Haiku summariser that analyzes active sessions
- * and updates their `nodeSummary` metadata for the graph canvas.
+ * and updates their names and `nodeSummary` metadata for the graph canvas.
  *
- * Triggers contextually:
- * - When a session transitions from active (thinking/toolUse) to idle
- * - When sessions are added or removed
- * - NOT when nothing has changed since the last summary
+ * Title (session name):
+ * - Set ONCE when the session first gets assistantMessageCount === 1
+ * - Uses Haiku to generate a 2-4 word title from the first response
+ * - Once set, NEVER changes
+ *
+ * Summary (nodeSummary):
+ * - First summary generated alongside the title (at assistantMessageCount === 1)
+ * - Updated every RESUMMARISE_INTERVAL messages to reflect conversation drift
  *
  * Uses one-shot Claude CLI pipe mode per invocation.
  */
@@ -48,7 +53,7 @@ export function useMetaAgent(): { isRunning: boolean } {
         }
       }
 
-      // Apply smart names for sessions still using default directory names
+      // Apply names only for sessions still using default directory names
       if (names && typeof names === "object") {
         for (const [sessionId, name] of Object.entries(names)) {
           if (typeof name === "string" && name.length > 0 && name.length <= 30) {
@@ -77,33 +82,52 @@ export function useMetaAgent(): { isRunning: boolean } {
 
     if (targetSessions.length === 0 || !claudePath) return;
 
-    // Check fingerprint — don't re-summarise if nothing changed
+    // Check fingerprint — don't re-run if nothing changed
     const fp = sessionFingerprint(targetSessions);
     if (fp === lastFingerprintRef.current) return;
     lastFingerprintRef.current = fp;
 
-    // Identify sessions still using default directory-basename names
-    // Only name sessions that have had at least 2 assistant messages (actual conversation)
+    // Identify sessions needing a name (first response received, still using default name)
     const needsNaming = targetSessions.filter(
-      (s) => s.name === dirToTabName(s.config.workingDir) && s.metadata.assistantMessageCount >= 2
+      (s) => s.metadata.assistantMessageCount >= 1 && s.name === dirToTabName(s.config.workingDir)
     );
 
+    // Identify sessions needing a summary (first response received, no summary or drifted)
+    const lastSummarisedAtMap = lastSummarisedAtRef.current;
+    const needsSummary = targetSessions.filter((s) => {
+      if (s.metadata.assistantMessageCount < 1) return false;
+      const lastAt = lastSummarisedAtMap[s.id] ?? 0;
+      // Needs first summary or has drifted enough
+      return !s.metadata.nodeSummary || (s.metadata.assistantMessageCount - lastAt >= RESUMMARISE_INTERVAL);
+    });
+
+    // Nothing to do
+    if (needsNaming.length === 0 && needsSummary.length === 0) return;
+
     // Build compact prompt
-    const sessionsJson = targetSessions.map((s) => ({
-      id: s.id,
-      name: s.name,
-      state: s.state,
-      action: s.metadata.currentAction || "none",
-      output: (s.metadata.recentOutput || "").slice(0, 150).replace(/\n/g, " "),
-      summary: s.metadata.nodeSummary || "none",
-    }));
+    const allNeeded = new Set([...needsNaming.map((s) => s.id), ...needsSummary.map((s) => s.id)]);
+    const sessionsJson = targetSessions
+      .filter((s) => allNeeded.has(s.id))
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        state: s.state,
+        action: s.metadata.currentAction || "none",
+        output: (s.metadata.recentOutput || "").slice(0, 150).replace(/\n/g, " "),
+        summary: s.metadata.nodeSummary || "none",
+      }));
 
     const needsNamingIds = needsNaming.map((s) => s.id);
+    const needsSummaryIds = needsSummary.map((s) => s.id);
+
     const namingPart = needsNamingIds.length > 0
-      ? ` Also name sessions with default dir names: ${needsNamingIds.join(",")}.`
+      ? ` Give a 2-4 word title for sessions: ${needsNamingIds.join(",")}.`
+      : "";
+    const summaryPart = needsSummaryIds.length > 0
+      ? ` Summarize these sessions briefly: ${needsSummaryIds.join(",")}.`
       : "";
 
-    const prompt = `Summarize: ${JSON.stringify(sessionsJson)}.${namingPart} Return JSON: {"summaries":{"<id>":"<summary>"}${needsNamingIds.length > 0 ? ',"names":{"<id>":"<name>"}' : ""}}`;
+    const prompt = `Sessions: ${JSON.stringify(sessionsJson)}.${namingPart}${summaryPart} Return JSON: {"names":{...},"summaries":{...}}`;
     const systemPrompt = "You summarize Claude Code sessions. Return only valid JSON, no markdown, no explanation.";
 
     try {
@@ -118,12 +142,20 @@ export function useMetaAgent(): { isRunning: boolean } {
         workingDir: cwd,
       });
       processResponse(response);
+
+      // Record the message counts so we don't re-trigger immediately
+      for (const s of needsSummary) {
+        lastSummarisedAtMap[s.id] = s.metadata.assistantMessageCount;
+      }
     } catch (err) {
       console.error("[useMetaAgent] Haiku failed:", err);
     } finally {
       isRunningRef.current = false;
     }
   }, [processResponse]);
+
+  // Track the assistantMessageCount at which we last summarised each session
+  const lastSummarisedAtRef = useRef<Record<string, number>>({});
 
   // Debounced trigger function
   const triggerSummary = useCallback(() => {
@@ -159,19 +191,17 @@ export function useMetaAgent(): { isRunning: boolean } {
   // Subscribe to session state changes and trigger contextually
   useEffect(() => {
     let prevFingerprint = "";
-    // Track the assistantMessageCount at which we last summarised each session,
-    // so we can re-trigger every RESUMMARISE_INTERVAL messages as conversations drift.
-    const lastSummarisedAt: Record<string, number> = {};
-    const RESUMMARISE_INTERVAL = 10;
+    // Track which sessions have already been named (reached assistantMessageCount >= 1)
+    const namedSessions = new Set<string>();
+    const lastSummarisedAt = lastSummarisedAtRef.current;
 
     const unsub = useSessionStore.subscribe((state) => {
       const sessions = state.sessions.filter((s) => !s.isMetaAgent);
 
-      // Don't trigger if no sessions, all starting, or none have conversation data
+      // Don't trigger if no sessions or all starting
       if (
         sessions.length < MIN_SESSIONS ||
-        sessions.every((s) => s.state === "starting") ||
-        !sessions.some((s) => s.metadata.assistantMessageCount >= 2)
+        sessions.every((s) => s.state === "starting")
       ) {
         return;
       }
@@ -189,43 +219,51 @@ export function useMetaAgent(): { isRunning: boolean } {
         {} as Record<string, string>
       );
 
-      // Check if any session just went from active -> idle (response completed)
-      const hasRelevantChange = sessions.some((s) => {
-        const prev = prevSessions[s.id];
-        // Session just completed a response
-        if (
-          prev &&
-          (prev === "thinking" || prev === "toolUse") &&
-          s.state === "idle"
-        ) {
-          return true;
+      prevFingerprint = fp;
+
+      // Naming trigger: session has messages but still using default directory name
+      const hasNewFirstResponse = sessions.some((s) => {
+        if (s.metadata.assistantMessageCount >= 1 && !namedSessions.has(s.id)) {
+          namedSessions.add(s.id);
+          if (s.name === dirToTabName(s.config.workingDir)) return true;
         }
-        // New session appeared, is past startup, and has had some conversation
-        if (!prev && s.state !== "starting" && s.metadata.assistantMessageCount >= 2) return true;
         return false;
       });
 
-      // Also trigger if sessions were removed
-      const sessionRemoved = Object.keys(prevSessions).some(
-        (id) => !sessions.find((s) => s.id === id)
-      );
+      // Also trigger for sessions that have messages but no summary
+      // (e.g., revived from Claude history, not originally created in the app)
+      const needsInitialSummary = sessions.some((s) => {
+        return s.metadata.assistantMessageCount >= 1
+          && !s.metadata.nodeSummary
+          && s.state !== "dead"
+          && s.state !== "starting"
+          && !(lastSummarisedAt[s.id]);
+      });
 
-      // Re-summarise drifted conversations: trigger every N assistant messages
+      // Check if any session's message count exceeds lastSummarisedAt by RESUMMARISE_INTERVAL
       const hasDriftedSession = sessions.some((s) => {
         const count = s.metadata.assistantMessageCount;
         const lastAt = lastSummarisedAt[s.id] ?? 0;
-        return count >= 2 && count - lastAt >= RESUMMARISE_INTERVAL;
+        return count >= 1 && count - lastAt >= RESUMMARISE_INTERVAL;
       });
 
-      prevFingerprint = fp;
-
-      if (hasRelevantChange || sessionRemoved || hasDriftedSession) {
-        // Record the current message counts so we don't re-trigger immediately
-        for (const s of sessions) {
-          if (s.metadata.assistantMessageCount >= 2) {
-            lastSummarisedAt[s.id] = s.metadata.assistantMessageCount;
-          }
+      // Check if any session just went from active -> idle AND needs a summary update
+      const hasIdleTransitionNeedingSummary = sessions.some((s) => {
+        const prev = prevSessions[s.id];
+        if (
+          prev &&
+          (prev === "thinking" || prev === "toolUse") &&
+          s.state === "idle" &&
+          s.metadata.assistantMessageCount >= 1
+        ) {
+          const lastAt = lastSummarisedAt[s.id] ?? 0;
+          // Needs first summary or has drifted
+          return !s.metadata.nodeSummary || (s.metadata.assistantMessageCount - lastAt >= RESUMMARISE_INTERVAL);
         }
+        return false;
+      });
+
+      if (hasNewFirstResponse || needsInitialSummary || hasDriftedSession || hasIdleTransitionNeedingSummary) {
         triggerSummary();
       }
     });
