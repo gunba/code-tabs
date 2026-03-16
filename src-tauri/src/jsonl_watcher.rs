@@ -19,6 +19,9 @@ impl WatcherState {
     }
 }
 
+/// Public wrapper for encode_dir (used by commands.rs)
+pub fn encode_dir_pub(dir: &str) -> String { encode_dir(dir) }
+
 fn encode_dir(dir: &str) -> String {
     // Mirrors Claude Code's project directory encoding:
     // replaces ALL non-alphanumeric characters with hyphens.

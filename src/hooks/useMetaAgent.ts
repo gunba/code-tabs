@@ -4,12 +4,14 @@ import { useSessionStore } from "../store/sessions";
 import { dirToTabName } from "../lib/claude";
 
 /**
- * Session namer — calls Haiku once per session to generate a 2-4 word title
- * from the first user message. Uses haiku_query (Rust) which hooks directly
- * into Claude.exe's stdin/stdout via piped child process (not PTY).
+ * Session namer + summariser — calls Haiku once per session to generate
+ * a 2-4 word title and a brief summary from the first user message.
  *
- * Triggers when assistantMessageCount reaches 1 and the session still has
- * its default directory-based name.
+ * For new sessions: triggers when assistantMessageCount reaches 1.
+ * For revived sessions: reads the first user message from the JSONL history.
+ *
+ * Uses haiku_query (Rust) which hooks directly into Claude.exe's
+ * stdin/stdout via piped child process (not PTY).
  */
 export function useMetaAgent(): { isRunning: boolean } {
   const namedRef = useRef(new Set<string>());
@@ -25,37 +27,62 @@ export function useMetaAgent(): { isRunning: boolean } {
         if (session.isMetaAgent || session.state === "dead") continue;
         if (named.has(session.id)) continue;
 
-        // Only trigger when we have at least one assistant message
-        // and the session still uses the default dir name
+        // Need at least one assistant message (proves session is active)
         if (session.metadata.assistantMessageCount < 1) continue;
+
+        // Already named? Skip.
         const defaultName = dirToTabName(session.config.workingDir);
         if (session.name !== defaultName) {
-          named.add(session.id); // Already named, skip
+          named.add(session.id);
           continue;
         }
 
-        // Mark as in-progress to prevent duplicate calls
+        // Mark in-progress
         named.add(session.id);
 
-        // Get the first user output to include in the naming prompt
-        const output = (session.metadata.recentOutput || "").slice(0, 200).replace(/\n/g, " ");
+        const sessionId = session.id;
+        const workingDir = session.config.workingDir;
+        // For resumed sessions, the JSONL is under the original session ID
+        const jsonlId = session.config.resumeSession || session.config.sessionId || session.id;
 
-        // Fire and forget — set the CLI path and query Haiku
         (async () => {
           try {
+            // Get the first user message from the JSONL file
+            let firstMessage: string;
+            try {
+              firstMessage = await invoke<string>("get_first_user_message", {
+                sessionId: jsonlId,
+                workingDir,
+              });
+            } catch {
+              // Fallback to recentOutput if JSONL not available
+              firstMessage = (session.metadata.recentOutput || "").slice(0, 300);
+            }
+
+            if (!firstMessage || firstMessage.length < 5) {
+              named.delete(sessionId);
+              return;
+            }
+
             await invoke("haiku_set_path", { path: claudePath });
             const response = await invoke<string>("haiku_query", {
-              prompt: `Session in directory "${defaultName}". Recent output: "${output}". Give a 2-4 word title for this session. Return ONLY the title, nothing else.`,
-              systemPrompt: "You name Claude Code sessions with short 2-4 word titles. Return only the title text, no quotes, no explanation.",
+              prompt: `First user message in a Claude Code session: "${firstMessage.slice(0, 300)}"\n\nRespond with EXACTLY two lines:\nLine 1: A 2-4 word title\nLine 2: A one-sentence summary`,
+              systemPrompt: "You name and summarize Claude Code sessions. Respond with exactly two lines: the title on line 1, the summary on line 2. No quotes, no labels, no extra text.",
             });
 
-            const title = response.trim().replace(/^["']|["']$/g, "").slice(0, 30);
+            const lines = response.trim().split("\n").map(l => l.trim()).filter(Boolean);
+            const title = (lines[0] || "").replace(/^["']|["']$/g, "").slice(0, 30);
+            const summary = (lines[1] || lines[0] || "").slice(0, 200);
+
             if (title.length >= 2) {
-              useSessionStore.getState().renameSession(session.id, title);
+              useSessionStore.getState().renameSession(sessionId, title);
+            }
+            if (summary.length >= 5) {
+              useSessionStore.getState().updateMetadata(sessionId, { nodeSummary: summary });
             }
           } catch (err) {
             console.error("[useMetaAgent] Naming failed:", err);
-            named.delete(session.id); // Allow retry
+            named.delete(sessionId);
           }
         })();
       }

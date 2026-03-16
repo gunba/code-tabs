@@ -115,8 +115,10 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
     async (pastSession: PastSession) => {
       const workingDir = pastSession.directory || ".";
       const dead = deadSessionMap.get(pastSession.id);
-      // Use the full original config if we have it, otherwise fall back to defaults
-      const baseConfig = dead?.config ?? { ...DEFAULT_SESSION_CONFIG, ...lastConfig };
+      // Use the full original config if we have a dead tab, otherwise use defaults.
+      // Don't spread lastConfig — it can contain stale flags like --effort that
+      // Claude CLI may not support with --resume.
+      const baseConfig = dead?.config ?? DEFAULT_SESSION_CONFIG;
       const resumeConfig: SessionConfig = {
         ...baseConfig,
         workingDir,
@@ -138,7 +140,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
   const handleConfigure = useCallback(
     (pastSession: PastSession) => {
       const dead = deadSessionMap.get(pastSession.id);
-      const baseConfig = dead?.config ?? { ...DEFAULT_SESSION_CONFIG, ...lastConfig };
+      const baseConfig = dead?.config ?? DEFAULT_SESSION_CONFIG;
       const prefillConfig: SessionConfig = {
         ...baseConfig,
         workingDir: pastSession.directory,

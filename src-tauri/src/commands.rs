@@ -580,6 +580,45 @@ pub fn discover_plugin_commands(extra_dirs: Vec<String>) -> Result<Vec<serde_jso
     Ok(commands)
 }
 
+/// Read the first user message from a session's JSONL file.
+#[tauri::command]
+pub fn get_first_user_message(session_id: String, working_dir: String) -> Result<String, String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    let encoded = crate::jsonl_watcher::encode_dir_pub(&working_dir);
+    let path = home.join(".claude").join("projects").join(encoded).join(format!("{}.jsonl", session_id));
+
+    if !path.exists() {
+        return Err("JSONL file not found".into());
+    }
+
+    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    for line in content.lines() {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+            if parsed["type"].as_str() != Some("user") { continue; }
+            let msg_content = &parsed["message"]["content"];
+            // String content
+            if let Some(text) = msg_content.as_str() {
+                if text.len() > 10 && !text.contains("command-name") && !text.contains("local-command") {
+                    return Ok(text.chars().take(500).collect());
+                }
+            }
+            // Array content (text blocks)
+            if let Some(arr) = msg_content.as_array() {
+                for block in arr {
+                    if block["type"].as_str() == Some("text") {
+                        if let Some(t) = block["text"].as_str() {
+                            if t.len() > 10 && !t.contains("command-name") && !t.contains("local-command") {
+                                return Ok(t.chars().take(500).collect());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Err("No user message found".into())
+}
+
 #[tauri::command]
 pub fn build_claude_args(config: SessionConfig) -> Result<Vec<String>, String> {
     let mut args: Vec<String> = Vec::new();

@@ -49,6 +49,7 @@ pub fn run() {
             commands::read_ui_config,
             commands::write_ui_config,
             commands::invoke_claude_pipe,
+            commands::get_first_user_message,
             commands::discover_hooks,
             commands::save_hooks,
             commands::read_test_commands,
