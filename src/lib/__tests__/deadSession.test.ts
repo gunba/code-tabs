@@ -197,3 +197,71 @@ describe("store initialized flag", () => {
     expect(afterInit.initialized).toBe(true);
   });
 });
+
+// ── projectDir field ────────────────────────────────────────────────
+
+describe("projectDir field in SessionConfig", () => {
+  it("DEFAULT_CONFIG includes projectDir as false", () => {
+    expect(DEFAULT_CONFIG.projectDir).toBe(false);
+  });
+
+  it("projectDir can be set to true in config", () => {
+    const config = { ...DEFAULT_CONFIG, projectDir: true };
+    expect(config.projectDir).toBe(true);
+  });
+
+  it("revive config preserves projectDir from dead session", () => {
+    const dead = mockSession({
+      state: "dead",
+      config: { ...DEFAULT_CONFIG, projectDir: true, workingDir: "/project" },
+    });
+
+    const config = {
+      ...dead.config,
+      continueSession: false,
+      resumeSession: dead.config.sessionId || dead.id,
+    };
+
+    expect(config.projectDir).toBe(true);
+  });
+});
+
+// ── encode_dir normalization (ResumePicker filter logic) ────────────
+
+describe("encode_dir normalization for directory filtering", () => {
+  // This tests the normalization logic used in ResumePicker to handle
+  // the lossy decode_project_dir encoding where periods, spaces, and
+  // path separators all become hyphens.
+  const normalize = (s: string) => s.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase();
+
+  it("normalizes periods to hyphens", () => {
+    expect(normalize("Jordan.Graham")).toBe("jordan-graham");
+  });
+
+  it("normalizes path separators to hyphens", () => {
+    expect(normalize("C:/Users/jorda")).toBe("c--users-jorda");
+    expect(normalize("C:\\Users\\jorda")).toBe("c--users-jorda");
+  });
+
+  it("normalizes spaces to hyphens", () => {
+    expect(normalize("My Project")).toBe("my-project");
+  });
+
+  it("matches encoded directory with original path containing periods", () => {
+    const encoded = "C--Users-Jordan-Graham-Projects-my-app";
+    const original = "C:/Users/Jordan.Graham/Projects/my-app";
+    const filterNorm = normalize("Jordan.Graham");
+    const dirNorm = normalize(encoded);
+    const origNorm = normalize(original);
+
+    // Both the encoded and original paths should contain the normalized filter
+    expect(dirNorm.includes(filterNorm)).toBe(true);
+    expect(origNorm.includes(filterNorm)).toBe(true);
+  });
+
+  it("case-insensitive matching", () => {
+    const filter = normalize("MY-PROJECT");
+    const dir = normalize("my-project");
+    expect(dir.includes(filter)).toBe(true);
+  });
+});

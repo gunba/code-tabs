@@ -59,7 +59,5 @@ export function useCommandDiscovery(): void {
       const merged = mergeCommands(toSlash(builtins), toSlash(plugins));
       useSettingsStore.getState().setSlashCommands(merged);
     }
-
-    discover();
   }, [claudePath]);
 }

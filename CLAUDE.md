@@ -1,66 +1,169 @@
 # Claude Tabs — Development Guide
 
-## MANDATORY: Test Every Change
+## Iteration Speed is Everything
 
-You MUST personally test every change using the test harness before delivering. Do NOT guess at fixes or theorize about root causes without evidence. The workflow is:
+Fast builds and manual verification are the core workflow. Never do a full NSIS build just to test — use quick builds.
 
-1. Add logging/instrumentation to observe the actual behavior
-2. Launch the app and reproduce the issue using the test bridge
-3. Read the logs/state to understand what's actually happening
+```bash
+npm run build:quick     # Release binary, no installer (~30s after first build)
+npm run build:debug     # Debug binary, fastest (~10-15s incremental)
+npm run tauri dev       # Dev mode with hot-reload (frontend only, Rust recompiles on change)
+npm run tauri build     # Full NSIS installer (only for releases)
+```
+
+The portable exe is at `src-tauri/target/release/claude-tabs.exe` (quick) or `src-tauri/target/debug/claude-tabs.exe` (debug).
+
+### Validation (before every commit)
+
+```bash
+npx tsc --noEmit           # Zero TypeScript errors
+npm test                   # All Vitest unit tests pass
+cargo check (in src-tauri) # Zero Rust errors
+```
+
+### Manual Testing (MANDATORY for every change)
+
+You MUST personally test every change before delivering. Do NOT guess at fixes or theorize without evidence. The workflow is:
+
+1. Add logging/instrumentation to observe actual behavior
+2. Launch the app (`build:quick` or `tauri dev`) and reproduce the issue
+3. Read the test harness state (`%LOCALAPPDATA%/claude-tabs/test-state.json`) to understand what's happening
 4. Make a targeted fix based on observed evidence
-5. Re-run the same reproduction test to verify the fix works
+5. Re-run the same reproduction to verify the fix works
 6. Only then commit and deliver
 
-If the test harness can't reproduce an issue, EXTEND IT until it can. Never say "I can't test this" — build the capability first.
+If the test harness can't observe an issue, EXTEND IT. Never say "I can't test this."
 
 ## What is this?
 
-A Tauri v2 desktop app that manages multiple Claude Code CLI sessions in tabs. Built with Rust backend + React/TypeScript frontend. No API key required — uses the Claude Code CLI directly.
-
-## Quick Commands
-
-```bash
-npm run tauri dev      # Run in dev mode (hot-reload)
-npm run tauri build    # Build NSIS installer
-npx tsc --noEmit       # Type-check only
-npm test               # Run unit tests (vitest)
-node scripts/e2e-test.cjs  # Full E2E self-test (build first)
-```
-
-## Documentation
-
-| File | Purpose |
-|------|---------|
-| `CLAUDE.md` | This file — conventions and rules for agents |
-| `docs/ARCHITECTURE.md` | System design, data flow, component architecture |
-| `docs/STATUS.md` | Current project state — what's done, pending, known issues |
-| `docs/SELF-TEST.md` | Agent self-testing protocol |
-| `docs/TESTING.md` | Manual test checklist |
+A Tauri v2 desktop app that manages multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
 
 ## Architecture
 
 ```
-React UI (WebView2) ←→ Tauri IPC ←→ Rust Backend ←→ ConPTY ←→ Claude CLI
+React UI (WebView2) ←→ Tauri IPC ←→ Rust Backend ←→ ConPTY ←→ Claude Code CLI
 ```
 
-**Layout**: Terminal-first. Tab bar → Subagent bar → [Terminal | ActivityFeed] → CommandBar → StatusBar.
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Tab Bar  [● session1 | ● session2 | + ]                      │
+├──────────────────────────────────────────────────────────────┤
+│ Subagent Bar  [▐ agent-task-1  12K] [▐ agent-task-2  8K]    │
+├────────────────────────────────────────────┬─────────────────┤
+│  Terminal (xterm.js 6.0)                   │  ActivityFeed   │
+│  (active session, CSS display toggle)      │  (IRC-style)    │
+├────────────────────────────────────────────┴─────────────────┤
+│ Command Bar (slash commands)                                  │
+├──────────────────────────────────────────────────────────────┤
+│ StatusBar (model, cost, tokens, duration)                    │
+└──────────────────────────────────────────────────────────────┘
+```
 
-- **PTY**: `tauri-plugin-pty` (Rust) + `tauri-pty` npm. Do NOT pass `env: {}` — omit to inherit.
-- **State detection**: JSONL-based. Rust watcher tails `~/.claude/projects/{dir}/{session}.jsonl`. PTY is display-only (permission scan only).
-- **Persistence**: Sessions → `%LOCALAPPDATA%/claude-tabs/sessions.json` (frontend-owned). Settings → `localStorage`.
-- **Discovery**: CLI options from `claude --help`. Slash commands from binary scan + plugin/skill file scan. Hooks from settings files.
-- **Haiku summariser**: `useMetaAgent()` hook, one-shot pipe mode, 15s debounce.
+### Data Flow
 
-## Validation — REQUIRED before every delivery
+1. User types in xterm.js → `onData` → PTY `write` → ConPTY → Claude stdin
+2. Claude stdout → ConPTY → `tauri-pty` npm `onData` callback → `Uint8Array`
+3. PTY data handler: `writeBytes(data)` to xterm.js (debounce-batched) + `feed(text)` for permission detection
+4. Rust JSONL watcher tails `~/.claude/projects/{encoded_dir}/{session}.jsonl` → Tauri events → `useClaudeState` updates Zustand store
+5. React re-renders from store: tab state dots, status bar, activity feed, subagent cards
+
+### Key Subsystems
+
+| Subsystem | Implementation | Notes |
+|-----------|---------------|-------|
+| **PTY** | `tauri-plugin-pty` (Rust) + `tauri-pty` npm | Do NOT pass `env: {}` — omit to inherit |
+| **Terminal** | xterm.js 6.0 + WebGL + FitAddon | Native DEC 2026 sync output prevents ink flash |
+| **State detection** | JSONL-based (Rust watcher) | PTY scan only for permission detection |
+| **Persistence** | Sessions → `%LOCALAPPDATA%/claude-tabs/sessions.json` | Frontend-owned via `persist_sessions_json` |
+| **Settings** | Zustand + `localStorage` | Recent dirs, CLI capabilities, command usage |
+| **Discovery** | `claude --help` + binary scan + plugin/skill file scan | Options, commands, slash commands, hooks |
+| **Summariser** | `useMetaAgent()` → `invoke_claude_pipe` (Haiku, one-shot) | 15s debounce, fingerprint-based skip |
+| **Dir encoding** | `encode_dir()` — ALL non-alphanumeric → hyphen | Must match Claude Code's encoding exactly |
+
+### Rust Backend
+
+| Command | Purpose |
+|---------|---------|
+| `create_session` / `close_session` | Session CRUD |
+| `build_claude_args` | SessionConfig → CLI args (`--resume`, `--session-id`, `--project-dir`, etc.) |
+| `start_jsonl_watcher` / `stop_jsonl_watcher` | Tail JSONL files, emit events |
+| `start_subagent_watcher` / `stop_subagent_watcher` | Watch subagent JSONL directory |
+| `detect_claude_cli` / `check_cli_version` / `get_cli_help` | CLI discovery |
+| `invoke_claude_pipe` | One-shot `claude -p` for Haiku summariser |
+| `list_past_sessions` | Scan `~/.claude/projects/` for resumable sessions |
+| `persist_sessions_json` / `load_persisted_sessions` | Save/restore sessions |
+| `discover_builtin_commands` / `discover_plugin_commands` | Slash command discovery |
+| `discover_hooks` / `save_hooks` | Hook configuration |
+
+### Frontend Structure
+
+```
+src/
+├── App.tsx                              # Root: tab bar, subagent bar, terminals, activity feed
+├── store/sessions.ts                    # Zustand: sessions, active tab, subagents
+├── store/settings.ts                    # Zustand: preferences, CLI info (persisted to localStorage)
+├── hooks/
+│   ├── useTerminal.ts                   # xterm.js lifecycle, debounced write batching
+│   ├── usePty.ts                        # PTY spawn (tauri-pty npm wrapper)
+│   ├── useClaudeState.ts                # JSONL event listener + permission PTY scan
+│   ├── useMetaAgent.ts                  # Haiku summariser (pipe mode, 15s debounce)
+│   ├── useSubagentWatcher.ts            # Subagent JSONL tracking
+│   ├── useCliWatcher.ts                 # CLI version + capabilities
+│   └── useNotifications.ts              # Desktop notifications
+├── components/
+│   ├── Terminal/TerminalPanel.tsx        # PTY + terminal + JSONL watcher per session
+│   ├── ActivityFeed/ActivityFeed.tsx     # IRC-style event feed
+│   ├── SessionLauncher/SessionLauncher.tsx  # New/resume session modal
+│   ├── ResumePicker/ResumePicker.tsx     # Browse past sessions to resume
+│   ├── CommandBar/CommandBar.tsx         # Slash command buttons
+│   ├── StatusBar/StatusBar.tsx           # Model, cost, tokens, duration
+│   ├── CommandPalette/CommandPalette.tsx # Ctrl+K search
+│   ├── SubagentInspector/SubagentInspector.tsx  # Subagent conversation viewer
+│   └── HooksManager/HooksManager.tsx    # Hook configuration UI
+├── lib/
+│   ├── jsonlState.ts                    # JSONL event processor (state machine + cost + metadata)
+│   ├── theme.ts                         # Theme definitions, CSS variable setter, xterm theme
+│   ├── claude.ts                        # CLI helpers (buildClaudeArgs, dirToTabName, formatTokenCount)
+│   ├── ptyRegistry.ts                   # Global PTY writer registry
+│   ├── terminalRegistry.ts             # Terminal buffer reader registry
+│   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
+│   └── metaAgentUtils.ts               # Session fingerprinting for summariser
+└── types/session.ts                     # TypeScript types mirroring Rust (camelCase)
+```
+
+### Theme System
+
+All colors are CSS custom properties on `:root`. Components never use hardcoded hex. Theme is applied at startup via `applyTheme()`. xterm.js colors come from `getXtermTheme()` reading CSS variables.
+
+Key variables: `--bg-primary`, `--bg-surface`, `--accent` (clay), `--accent-secondary` (blue), `--accent-tertiary` (purple), `--term-bg`, `--term-fg`.
+
+## Test Harness
+
+The app includes a test bridge (`src/lib/testHarness.ts`) that writes a JSON snapshot of app state to `%LOCALAPPDATA%/claude-tabs/test-state.json` every 2 seconds. It also polls for commands from `test-commands.json`.
+
+### Reading State
 
 ```bash
-npx tsc --noEmit           # Zero TypeScript errors
-npm test                   # All Vitest tests pass
-cargo check (in src-tauri) # Zero Rust errors
-node scripts/e2e-test.cjs  # 20+ E2E checks pass (launches app, verifies state)
+cat "$LOCALAPPDATA/claude-tabs/test-state.json"
 ```
 
-The E2E test is the primary verification tool. It launches the built exe, reads app state from the test harness (`test-state.json`), and verifies initialization, session persistence, CLI discovery, slash commands, and hooks. See `docs/SELF-TEST.md`.
+Contains: session count/states/metadata, CLI version, option count, slash command count, active tab, subagents, activity feed entries, console logs.
+
+### Sending Commands
+
+Write a JSON command to `test-commands.json`:
+
+```json
+{ "command": "createSession", "args": { "name": "test", "config": { "workingDir": "C:/path" } } }
+```
+
+Available commands: `createSession`, `closeSession`, `reviveSession`, `setActiveTab`, `getSubagents`, `listSessions`, `sendInput`.
+
+### Extending the Harness
+
+1. Add state to the `captureState()` function in `testHarness.ts`
+2. Read it from `test-state.json` after launching the app
+3. For new commands, add a handler in the command polling loop
 
 ## Key Conventions
 
@@ -81,6 +184,13 @@ All Rust commands that spawn subprocesses MUST:
 - Check JSONL file existence via `session_has_conversation` (not `assistantMessageCount`)
 - Skip `--session-id` when using `--resume` or `--continue`
 - Preserve metadata (nodeSummary, tokens) across revival
+- `resumeSession` and `continueSession` are one-shot — never persist them in `lastConfig`
+
+### Terminal Write Batching
+PTY data is debounce-batched in `useTerminal.ts` before writing to xterm.js (4ms quiet / 50ms max). xterm.js 6.0's native DEC 2026 synchronized output handles ink's redraw sequences. The batching is defense-in-depth for data outside sync blocks.
+
+### Directory Encoding
+`encode_dir()` replaces ALL non-alphanumeric characters with hyphens (matching Claude Code). `decode_project_dir()` is lossy — can't distinguish periods from path separators. The resume filter normalizes both sides for comparison.
 
 ### Things that broke before (don't repeat)
 - **DO NOT** use Tauri event listeners for PTY data — use `tauri-pty` npm wrapper
@@ -93,17 +203,24 @@ All Rust commands that spawn subprocesses MUST:
 - **DO NOT** sync Rust subprocess spawns on main thread (blocks WebView for seconds)
 - **DO NOT** seed the ActivityFeed with persisted state on startup (users see it as noise)
 - **DO NOT** persist sessions from the Rust session manager (metadata is stale — frontend owns persistence via `persist_sessions_json`)
+- **DO NOT** persist `resumeSession`/`continueSession` in `lastConfig` (one-shot fields, causes launcher to stick in resume mode)
+- **DO NOT** try to fix terminal flash by removing WebGL or memoizing useTerminal (the fix is xterm.js 6.0 DEC 2026 sync + debounced batching)
+- **DO NOT** use xterm.js 5.x — v6.0 is required for synchronized output support
 
-### Subagent Delegation
-Delegate independent work to subagents. Farm out file creation, test writing, and documentation updates to parallel agents.
+## Unit Tests (67 across 6 files)
 
-## Testing
-
-### Unit Tests (67 across 6 files)
 - `jsonlState` 31, `claude` 14, `deadSession` 10, `metaAgent` 5, `theme` 4, `ptyRegistry` 3
 
-### E2E Self-Test (20+ checks)
-```bash
-node scripts/e2e-test.cjs
-```
-Launches the app, reads test harness state, verifies everything. See `docs/SELF-TEST.md`.
+Run with `npm test`. Add tests for any new pure-logic functions in `src/lib/`.
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+T` | New session |
+| `Ctrl+W` | Close active tab |
+| `Ctrl+R` | Resume from history |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Cycle tabs |
+| `Ctrl+1-9` | Jump to tab N |
+| `Ctrl+K` | Command palette |
+| `Esc` | Close modal / dismiss inspector |

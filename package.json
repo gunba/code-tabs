@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:quick": "tauri build --no-bundle",
+    "build:debug": "tauri build --debug --no-bundle"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",
