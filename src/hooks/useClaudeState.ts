@@ -19,6 +19,9 @@ const PERMISSION_PATTERNS = [
   /waiting for.*input/i,
 ];
 
+/** Claude Code's idle prompt — the ❯ character rendered by ink when waiting for input. */
+const IDLE_PROMPT = /❯\s*$/;
+
 /**
  * Hook that derives session state + metadata from JSONL events
  * emitted by the Rust file watcher. Keeps a minimal PTY scan
@@ -130,17 +133,34 @@ export function useClaudeState(sessionId: string | null) {
   }, [sessionId, updateState, updateMetadata]);
 
 
-  // Minimal PTY feed — ONLY for permission detection
+  // PTY feed — detects idle prompt and permission patterns from terminal output.
+  // This is how we read the actual state of the Claude Code instance: by parsing
+  // what it renders to the terminal. JSONL covers most transitions, but interrupts
+  // (Ctrl+C) and permission prompts are only visible in PTY output.
   const feed = useCallback(
     (data: string) => {
       if (!sessionId) return;
       // Strip ANSI escape sequences before buffering
       const clean = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
       permissionRef.current = (permissionRef.current + clean).slice(-800);
-      // Only trigger waitingPermission from PTY scan when JSONL says we're
-      // in an active state (toolUse/thinking). Don't override idle — that
-      // means Claude finished and the permission text is stale.
-      if (lastStateRef.current === "toolUse" || lastStateRef.current === "thinking") {
+
+      const state = lastStateRef.current;
+
+      // Idle prompt detection: Claude Code renders ❯ when waiting for input.
+      // If we see this while in an active state, Claude has returned to idle
+      // (e.g. after interrupt, completion without end_turn, or error recovery).
+      if (state !== "idle" && state !== "dead" && state !== "starting") {
+        if (IDLE_PROMPT.test(permissionRef.current)) {
+          updateState(sessionId, "idle");
+          lastStateRef.current = "idle";
+          permissionRef.current = "";
+          return;
+        }
+      }
+
+      // Permission prompt detection: only when JSONL says we're in an active
+      // state (toolUse/thinking). Don't override idle.
+      if (state === "toolUse" || state === "thinking") {
         if (PERMISSION_PATTERNS.some((p) => p.test(permissionRef.current))) {
           updateState(sessionId, "waitingPermission");
           lastStateRef.current = "waitingPermission";

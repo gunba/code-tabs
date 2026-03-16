@@ -54,7 +54,10 @@ export function processJsonlEvent(acc: JsonlAccumulator, event: any): JsonlAccum
     if (hasToolResult) {
       return { ...acc, state: "thinking", currentAction: null, currentToolName: null };
     }
-    return acc;
+    // A user message with text (not a tool result) means the user typed a new
+    // prompt. Claude must have been idle to accept it. If state was stuck in
+    // thinking/toolUse (e.g. after an interrupt), this corrects it.
+    return { ...acc, state: "idle", currentAction: null, currentToolName: null };
   }
 
   if (type === "progress") {
