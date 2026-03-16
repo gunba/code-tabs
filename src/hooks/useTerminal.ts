@@ -102,6 +102,15 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     term.open(el);
     attachedRef.current = true;
 
+    // Block xterm.js 6.0's native paste handler — our custom Ctrl+V handler
+    // in attachCustomKeyEventHandler handles paste via navigator.clipboard.
+    // Without this, the Tauri permission dialog triggers a synthetic paste
+    // event that xterm.js also handles, causing double-paste.
+    el.addEventListener('paste', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, true); // Capture phase — intercept before xterm.js
+
     try {
       term.loadAddon(new WebglAddon());
     } catch {}
@@ -192,6 +201,16 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     termRef.current?.focus();
   }, []);
 
+  const scrollToBottom = useCallback(() => {
+    termRef.current?.scrollToBottom();
+  }, []);
+
+  const isAtBottom = useCallback(() => {
+    const term = termRef.current;
+    if (!term) return true;
+    return term.buffer.active.viewportY >= term.buffer.active.baseY;
+  }, []);
+
   const fit = useCallback(() => {
     try {
       fitRef.current?.fit();
@@ -226,6 +245,8 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     writeBytes,
     clear,
     focus,
+    scrollToBottom,
+    isAtBottom,
     fit,
     getDimensions,
     getBufferText,

@@ -375,50 +375,53 @@
 
 .launcher-cmd {
   margin-top: 12px;
-}
-
-.launcher-cmd-line {
-  display: flex;
-  align-items: flex-start;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-  font-size: 12px;
-  flex-wrap: wrap;
-}
-
-.launcher-cmd-prefix {
-  color: var(--accent-secondary);
-  white-space: pre-wrap;
-  word-break: break-all;
-  flex-shrink: 0;
-  user-select: all;
+  position: relative;
 }
 
 .launcher-cmd-input {
-  flex: 1;
-  min-width: 40px;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text-primary);
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 32px 8px 10px;
+  color: var(--accent-secondary);
   font-family: 'Cascadia Code', 'Fira Code', monospace;
   font-size: 12px;
-  padding: 0;
   caret-color: var(--accent);
   white-space: pre-wrap;
   word-break: break-word;
   resize: none;
-  min-height: 28px;
-  width: 100%;
+  min-height: 36px;
   line-height: 1.4;
   overflow-y: auto;
+  outline: none;
+  box-sizing: border-box;
 }
 
-.launcher-cmd-input::placeholder {
+.launcher-cmd-input:focus {
+  border-color: var(--accent-secondary);
+}
+
+.launcher-cmd-reset {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.launcher-cmd-reset:hover {
+  opacity: 1;
+  color: var(--accent);
 }
 
 /* ── Resume Banner ──────────────────────────────────────── */

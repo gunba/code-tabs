@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import { useSessionStore } from "../../store/sessions";
-import { dirToTabName } from "../../lib/claude";
+import { dirToTabName, sessionColor } from "../../lib/claude";
 import "./ActivityFeed.css";
 
 interface FeedEntry {
@@ -141,7 +141,7 @@ export function ActivityFeed() {
           entries.map((entry) => (
             <div key={entry.id} className={`feed-entry feed-entry-${entry.type}`}>
               <span className="feed-time">{formatTime(entry.timestamp)}</span>
-              <span className="feed-nick">{entry.sessionName}</span>
+              <span className="feed-nick" style={{ color: sessionColor(entry.sessionName) }}>{entry.sessionName}</span>
               <span className="feed-msg"><ReactMarkdown>{entry.message}</ReactMarkdown></span>
             </div>
           ))

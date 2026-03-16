@@ -232,6 +232,7 @@
 .subagent-bar {
   display: flex;
   gap: 1px;
+  padding-left: 8px;
   background: var(--border-subtle);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -246,19 +247,20 @@
 .subagent-card {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 5px 10px;
   border: none;
-  background: var(--bg-surface);
+  background: color-mix(in srgb, var(--accent-secondary) 4%, var(--bg-surface));
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s;
   border-left: 2px solid transparent;
   text-align: left;
-  min-width: 140px;
-  max-width: 280px;
+  min-width: 100px;
+  max-width: 240px;
+  position: relative;
 }
 
 .subagent-card:hover {
@@ -277,12 +279,30 @@
   50% { border-left-color: var(--accent); opacity: 0.7; }
 }
 
-.subagent-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+.subagent-icon {
+  color: var(--accent-secondary);
+  font-size: 10px;
   flex-shrink: 0;
-  margin-top: 4px;
+  margin-top: 1px;
+}
+
+.subagent-close {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+  margin-left: 2px;
+}
+
+.subagent-card:hover .subagent-close {
+  opacity: 0.6;
+}
+
+.subagent-close:hover {
+  opacity: 1 !important;
+  color: var(--error);
 }
 
 .subagent-label {
@@ -295,7 +315,7 @@
 
 .subagent-name {
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

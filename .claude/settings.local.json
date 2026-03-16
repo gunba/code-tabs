@@ -1,18 +1,5 @@
 {
   "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '{\"systemMessage\": \"MANDATORY before finishing: 1) Run /simplify on code you changed. 2) Build the app: npm run tauri build. 3) Launch the app and verify your changes work: run the E2E self-test (node scripts/e2e-test.cjs) which launches the built exe, reads test-state.json, and verifies 20+ checks including startup, session persistence, CLI discovery, slash commands, and hooks. ALL checks must pass. 4) If you made UI changes, launch the exe yourself (src-tauri/target/release/claude-tabs.exe), wait 10s, read %LOCALAPPDATA%/claude-tabs/test-state.json to verify the app state matches expectations. 5) Update docs/STATUS.md if features were added or changed. 6) Review docs/ for stale or redundant content — remove anything that describes features that no longer exist, duplicates other docs, or states the obvious. Documentation should be concise and help the next agent, not exhaustive.\"}'",
-            "timeout": 10,
-            "statusMessage": "Session end reminder"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",

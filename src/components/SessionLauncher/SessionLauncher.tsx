@@ -39,20 +39,6 @@ const EFFORT_OPTIONS: { value: string | null; label: string }[] = [
 
 const EXCLUDED_FLAGS = new Set<string>();
 
-/** Build a CLI command preview string from the current config. */
-function buildCommandPreview(config: SessionConfig): string {
-  const parts: string[] = ["claude"];
-
-  if (config.model) parts.push("--model", config.model);
-  if (config.permissionMode !== "default") parts.push("--permission-mode", config.permissionMode);
-  if (config.effort) parts.push("--effort", config.effort);
-  if (config.dangerouslySkipPermissions) parts.push("--dangerously-skip-permissions");
-  if (config.projectDir) parts.push("--project-dir", config.workingDir || ".");
-  if (config.resumeSession) parts.push("--resume", config.resumeSession);
-
-  return parts.join(" ");
-}
-
 // ── Main component ──────────────────────────────────────────────────
 
 export function SessionLauncher() {
@@ -74,7 +60,27 @@ export function SessionLauncher() {
   });
   const [showCliOptions, setShowCliOptions] = useState(true);
   const [defaultsSaved, setDefaultsSaved] = useState(false);
-  const [extraFlags, setExtraFlags] = useState(lastConfig.extraFlags || "");
+
+  // Unified command line: editable string that starts from config selections.
+  // User can edit freely; reset button regenerates from current dropdowns.
+  const buildFullCommand = useCallback((cfg: SessionConfig, extra?: string) => {
+    const parts: string[] = ["claude"];
+    if (cfg.model) parts.push("--model", cfg.model);
+    if (cfg.permissionMode !== "default") parts.push("--permission-mode", cfg.permissionMode);
+    if (cfg.effort) parts.push("--effort", cfg.effort);
+    if (cfg.dangerouslySkipPermissions) parts.push("--dangerously-skip-permissions");
+    if (cfg.projectDir) parts.push("--project-dir", cfg.workingDir || ".");
+    if (cfg.resumeSession) parts.push("--resume", cfg.resumeSession);
+    if (extra?.trim()) parts.push(extra.trim());
+    return parts.join(" ");
+  }, []);
+
+  const [commandLine, setCommandLine] = useState(() => buildFullCommand(config, lastConfig.extraFlags || ""));
+
+  // Regenerate command line when config dropdowns change
+  useEffect(() => {
+    setCommandLine(buildFullCommand(config));
+  }, [config.model, config.permissionMode, config.effort, config.dangerouslySkipPermissions, config.projectDir, config.resumeSession, buildFullCommand, config]);
 
   useEffect(() => {
     const el = document.getElementById("launcher-path");
@@ -106,10 +112,22 @@ export function SessionLauncher() {
       .sort((a, b) => a.flag.localeCompare(b.flag));
   }, [cliCapabilities.options]);
 
-  // Merge extraFlags into config for launch
+  // Extract extra flags from the command line (anything the user typed beyond
+  // what the dropdowns generate). We parse the command line to find extra args.
   const launchConfig = useMemo((): SessionConfig => {
-    return { ...config, extraFlags: extraFlags.trim() || null };
-  }, [config, extraFlags]);
+    const generated = buildFullCommand(config);
+    // If user edited the command line, the extra part is whatever they added
+    let extra: string | null = null;
+    if (commandLine.startsWith(generated)) {
+      extra = commandLine.slice(generated.length).trim() || null;
+    } else {
+      // User edited the generated part too — pass entire command line as extra
+      // and let the Rust arg builder handle the structured fields
+      const parts = commandLine.replace(/^claude\s*/, "").trim();
+      extra = parts || null;
+    }
+    return { ...config, extraFlags: extra };
+  }, [config, commandLine, buildFullCommand]);
 
   const closeSession = useSessionStore((s) => s.closeSession);
 
@@ -163,16 +181,18 @@ export function SessionLauncher() {
   const handleCliPillClick = useCallback(
     (opt: CliOption) => {
       const flag = opt.flag;
-      const append = opt.argName ? `${flag} ` : `${flag} `;
-      setExtraFlags((prev) => {
-        if (prev.includes(flag)) return prev; // Already present
-        return prev ? `${prev}${append}` : append;
+      const append = opt.argName ? ` ${flag} ` : ` ${flag}`;
+      setCommandLine((prev) => {
+        if (prev.includes(flag)) return prev;
+        return prev + append;
       });
     },
     []
   );
 
-  const commandPreview = useMemo(() => buildCommandPreview(launchConfig), [launchConfig]);
+  const handleResetCommand = useCallback(() => {
+    setCommandLine(buildFullCommand(config));
+  }, [config, buildFullCommand]);
 
   // ── CLI not found ──
 
@@ -359,10 +379,7 @@ export function SessionLauncher() {
                       <button
                         key={cmd.name}
                         className="launcher-cli-pill launcher-cli-pill-cmd"
-                        onClick={() => setExtraFlags(prev => {
-                          const trimmed = prev.trim();
-                          return trimmed ? `${trimmed} ${cmd.name}` : cmd.name;
-                        })}
+                        onClick={() => setCommandLine(prev => prev.trimEnd() + ` ${cmd.name}`)}
                         title={cmd.description}
                         type="button"
                       >
@@ -376,19 +393,23 @@ export function SessionLauncher() {
           </div>
         )}
 
-        {/* Command input — editable terminal-style prompt */}
+        {/* Command input — single editable command line */}
         <div className="launcher-cmd">
-          <div className="launcher-cmd-line">
-            <span className="launcher-cmd-prefix">{commandPreview} </span>
-            <textarea
-              className="launcher-cmd-input"
-              value={extraFlags}
-              onChange={(e) => setExtraFlags(e.target.value)}
-              placeholder=""
-              spellCheck={false}
-              rows={2}
-            />
-          </div>
+          <textarea
+            className="launcher-cmd-input"
+            value={commandLine}
+            onChange={(e) => setCommandLine(e.target.value)}
+            spellCheck={false}
+            rows={2}
+          />
+          <button
+            className="launcher-cmd-reset"
+            onClick={handleResetCommand}
+            title="Reset to generated command"
+            type="button"
+          >
+            ↺
+          </button>
         </div>
 
         {/* Enter hint */}

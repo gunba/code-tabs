@@ -94,10 +94,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const updateState = useSessionStore((s) => s.updateState);
   const spawnedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { feed, caughtUp } = useClaudeState(session.id);
-  // Only show loading spinner for resumed sessions (which have JSONL to replay)
   const isResumed = !!session.config.resumeSession;
+  const { feed, caughtUp } = useClaudeState(session.id, isResumed);
   const [loading, setLoading] = useState(isResumed);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   useEffect(() => {
     if (!isResumed) return;
@@ -206,7 +206,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       }
     };
 
-    const timer = setTimeout(doSpawn, 150);
+    const timer = setTimeout(doSpawn, 50);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claudePath, session.id]);
@@ -243,6 +243,15 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, session.id]);
 
+  // Poll scroll position to show/hide scroll-to-bottom button
+  useEffect(() => {
+    if (!visible) return;
+    const check = () => setShowScrollBtn(!terminal.isAtBottom());
+    const interval = setInterval(check, 300);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
   // Reclaim focus when terminal is visible but loses it to non-interactive elements.
   useEffect(() => {
     if (!visible) return;
@@ -275,6 +284,15 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         </div>
       )}
       <div className="terminal-container" ref={setContainer} />
+      {showScrollBtn && (
+        <button
+          className="scroll-to-bottom-btn"
+          onClick={() => terminal.scrollToBottom()}
+          title="Scroll to bottom"
+        >
+          ↓
+        </button>
+      )}
     </div>
   );
 }

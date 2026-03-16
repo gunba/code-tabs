@@ -33,6 +33,14 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevLenRef = useRef(subagent.messages.length);
 
+  // Scroll to bottom on mount
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, []);
+
+  // Scroll to bottom on new messages
   useEffect(() => {
     if (subagent.messages.length > prevLenRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;

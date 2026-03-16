@@ -1,28 +1,21 @@
 import { useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { sessionFingerprint } from "../lib/metaAgentUtils";
 import { dirToTabName } from "../lib/claude";
+import { writeToPty, registerPtyWriter, unregisterPtyWriter } from "../lib/ptyRegistry";
+import { spawn as ptySpawn } from "tauri-pty";
 
 const DEBOUNCE_MS = 15_000;
 const MIN_SESSIONS = 1;
 const RESUMMARISE_INTERVAL = 15;
+// Max time to wait for a Haiku response before giving up (ms)
+const RESPONSE_TIMEOUT = 30_000;
 
 /**
- * Manages an on-demand Haiku summariser that analyzes active sessions
- * and updates their names and `nodeSummary` metadata for the graph canvas.
- *
- * Title (session name):
- * - Set ONCE when the session first gets assistantMessageCount === 1
- * - Uses Haiku to generate a 2-4 word title from the first response
- * - Once set, NEVER changes
- *
- * Summary (nodeSummary):
- * - First summary generated alongside the title (at assistantMessageCount === 1)
- * - Updated every RESUMMARISE_INTERVAL messages to reflect conversation drift
- *
- * Uses one-shot Claude CLI pipe mode per invocation.
+ * Persistent Haiku summariser — spawns ONE long-lived Claude session
+ * with --model haiku and reuses it for all summarisation requests.
+ * Between requests, sends /clear to reset context. No process restarts.
  */
 export function useMetaAgent(): { isRunning: boolean } {
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
@@ -32,6 +25,146 @@ export function useMetaAgent(): { isRunning: boolean } {
   const lastTriggerRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef(false);
+  const lastSummarisedAtRef = useRef<Record<string, number>>({});
+
+  // Persistent Haiku session state
+  const metaSessionIdRef = useRef<string | null>(null);
+  const metaReadyRef = useRef(false);
+  const responseBufferRef = useRef("");
+  const responseResolveRef = useRef<((text: string) => void) | null>(null);
+  const spawnAttemptedRef = useRef(false);
+
+  // Spawn the persistent Haiku session (once)
+  const ensureMetaSession = useCallback(async (): Promise<boolean> => {
+    if (metaReadyRef.current && metaSessionIdRef.current) return true;
+    if (spawnAttemptedRef.current) return false;
+    spawnAttemptedRef.current = true;
+
+    const claudePath = useSessionStore.getState().claudePath;
+    if (!claudePath) { spawnAttemptedRef.current = false; return false; }
+
+    const cwd = useSettingsStore.getState().lastConfig.workingDir || ".";
+
+    try {
+      const session = await useSessionStore.getState().createSession("_haiku", {
+        workingDir: cwd,
+        model: "haiku",
+        permissionMode: "default",
+        dangerouslySkipPermissions: true,
+        systemPrompt: null,
+        appendSystemPrompt: "You summarize Claude Code sessions. Return only valid JSON, no markdown, no explanation.",
+        allowedTools: [],
+        disallowedTools: [],
+        additionalDirs: [],
+        mcpConfig: null,
+        agent: null,
+        effort: null,
+        verbose: false,
+        debug: false,
+        maxBudget: null,
+        resumeSession: null,
+        forkSession: false,
+        continueSession: false,
+        projectDir: false,
+        extraFlags: null,
+        sessionId: null,
+      }, { isMetaAgent: true });
+
+      metaSessionIdRef.current = session.id;
+
+      // Spawn PTY for the meta-agent
+      const args = ["--model", "haiku", "--dangerously-skip-permissions",
+        "--append-system-prompt", "You summarize Claude Code sessions. Return only valid JSON, no markdown, no explanation."];
+
+      const pty = ptySpawn(claudePath, args, { cwd, cols: 200, rows: 50 });
+
+      // Register PTY writer
+      registerPtyWriter(session.id, (data: string) => pty.write(data));
+
+      // Collect output for response detection
+      const decoder = new TextDecoder();
+      pty.onData((data: Uint8Array) => {
+        const bytes = data instanceof Uint8Array ? data : Uint8Array.from(data as unknown as number[]);
+        const text = decoder.decode(bytes, { stream: true });
+        // Strip ANSI sequences
+        const clean = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+        responseBufferRef.current += clean;
+
+        // Check if response is complete (idle prompt appeared)
+        if (responseResolveRef.current && /❯\s*$/.test(responseBufferRef.current)) {
+          const response = responseBufferRef.current;
+          responseBufferRef.current = "";
+          const resolve = responseResolveRef.current;
+          responseResolveRef.current = null;
+          resolve(response);
+        }
+      });
+
+      pty.onExit(() => {
+        metaReadyRef.current = false;
+        metaSessionIdRef.current = null;
+        spawnAttemptedRef.current = false;
+        unregisterPtyWriter(session.id);
+        useSessionStore.getState().updateState(session.id, "dead");
+      });
+
+      // Wait for initial idle prompt
+      await new Promise<void>((resolve) => {
+        const check = setInterval(() => {
+          if (/❯\s*$/.test(responseBufferRef.current)) {
+            clearInterval(check);
+            responseBufferRef.current = "";
+            resolve();
+          }
+        }, 200);
+        // Timeout after 15s
+        setTimeout(() => { clearInterval(check); resolve(); }, 15_000);
+      });
+
+      metaReadyRef.current = true;
+      useSessionStore.getState().updateState(session.id, "idle");
+      return true;
+    } catch (err) {
+      console.error("[useMetaAgent] Failed to spawn Haiku session:", err);
+      spawnAttemptedRef.current = false;
+      return false;
+    }
+  }, []);
+
+  // Send a prompt to the persistent session and wait for response
+  const queryHaiku = useCallback(async (prompt: string): Promise<string | null> => {
+    const sid = metaSessionIdRef.current;
+    if (!sid || !metaReadyRef.current) return null;
+
+    // Clear context — \r triggers Enter in the PTY (ink's input submit).
+    // Wait for the idle prompt (❯) to confirm clear is complete before sending.
+    writeToPty(sid, "/clear\r");
+    responseBufferRef.current = "";
+    await new Promise<void>((resolve) => {
+      responseResolveRef.current = () => resolve();
+      setTimeout(() => {
+        if (responseResolveRef.current) {
+          responseResolveRef.current = null;
+          resolve(); // Timeout fallback
+        }
+      }, RESPONSE_TIMEOUT);
+    });
+    responseBufferRef.current = "";
+
+    // Send prompt
+    writeToPty(sid, prompt + "\r");
+
+    // Wait for response (idle prompt signals completion)
+    return new Promise<string | null>((resolve) => {
+      responseResolveRef.current = (text) => resolve(text);
+      setTimeout(() => {
+        if (responseResolveRef.current) {
+          responseResolveRef.current = null;
+          resolve(null); // Timeout
+        }
+      }, RESPONSE_TIMEOUT);
+    });
+  }, []);
 
   const processResponse = useCallback((response: string) => {
     const renameSession = useSessionStore.getState().renameSession;
@@ -39,6 +172,10 @@ export function useMetaAgent(): { isRunning: boolean } {
     let jsonStr = response.trim();
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+    // Try to find JSON object in the response
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (jsonMatch) jsonStr = jsonMatch[0];
 
     try {
       const parsed = JSON.parse(jsonStr);
@@ -53,7 +190,6 @@ export function useMetaAgent(): { isRunning: boolean } {
         }
       }
 
-      // Apply names only for sessions still using default directory names
       if (names && typeof names === "object") {
         for (const [sessionId, name] of Object.entries(names)) {
           if (typeof name === "string" && name.length > 0 && name.length <= 30) {
@@ -70,41 +206,39 @@ export function useMetaAgent(): { isRunning: boolean } {
         }
       }
     } catch {
-      // Not valid JSON — log for debugging
       console.warn("[useMetaAgent] Failed to parse Haiku response:", response.slice(0, 200));
     }
   }, [updateMetadata]);
 
   const sendPrompt = useCallback(async () => {
     const sessions = useSessionStore.getState().sessions;
-    const claudePath = useSessionStore.getState().claudePath;
     const targetSessions = sessions.filter((s) => !s.isMetaAgent && s.state !== "dead");
 
-    if (targetSessions.length === 0 || !claudePath) return;
+    if (targetSessions.length === 0) return;
 
-    // Check fingerprint — don't re-run if nothing changed
+    // Check fingerprint
     const fp = sessionFingerprint(targetSessions);
     if (fp === lastFingerprintRef.current) return;
     lastFingerprintRef.current = fp;
 
-    // Identify sessions needing a name (first response received, still using default name)
+    const lastSummarisedAtMap = lastSummarisedAtRef.current;
+
     const needsNaming = targetSessions.filter(
       (s) => s.metadata.assistantMessageCount >= 1 && s.name === dirToTabName(s.config.workingDir)
     );
-
-    // Identify sessions needing a summary (first response received, no summary or drifted)
-    const lastSummarisedAtMap = lastSummarisedAtRef.current;
     const needsSummary = targetSessions.filter((s) => {
       if (s.metadata.assistantMessageCount < 1) return false;
       const lastAt = lastSummarisedAtMap[s.id] ?? 0;
-      // Needs first summary or has drifted enough
       return !s.metadata.nodeSummary || (s.metadata.assistantMessageCount - lastAt >= RESUMMARISE_INTERVAL);
     });
 
-    // Nothing to do
     if (needsNaming.length === 0 && needsSummary.length === 0) return;
 
-    // Build compact prompt
+    // Ensure persistent session exists
+    const ready = await ensureMetaSession();
+    if (!ready) return;
+
+    // Build prompt
     const allNeeded = new Set([...needsNaming.map((s) => s.id), ...needsSummary.map((s) => s.id)]);
     const sessionsJson = targetSessions
       .filter((s) => allNeeded.has(s.id))
@@ -128,36 +262,24 @@ export function useMetaAgent(): { isRunning: boolean } {
       : "";
 
     const prompt = `Sessions: ${JSON.stringify(sessionsJson)}.${namingPart}${summaryPart} Return JSON: {"names":{...},"summaries":{...}}`;
-    const systemPrompt = "You summarize Claude Code sessions. Return only valid JSON, no markdown, no explanation.";
 
     try {
       isRunningRef.current = true;
-      const cwd = useSettingsStore.getState().lastConfig.workingDir || ".";
-
-      const response = await invoke<string>("invoke_claude_pipe", {
-        claudePath,
-        prompt,
-        systemPrompt,
-        model: "haiku",
-        workingDir: cwd,
-      });
-      processResponse(response);
-
-      // Record the message counts so we don't re-trigger immediately
-      for (const s of needsSummary) {
-        lastSummarisedAtMap[s.id] = s.metadata.assistantMessageCount;
+      const response = await queryHaiku(prompt);
+      if (response) {
+        processResponse(response);
+        for (const s of needsSummary) {
+          lastSummarisedAtMap[s.id] = s.metadata.assistantMessageCount;
+        }
       }
     } catch (err) {
       console.error("[useMetaAgent] Haiku failed:", err);
     } finally {
       isRunningRef.current = false;
     }
-  }, [processResponse]);
+  }, [processResponse, ensureMetaSession, queryHaiku]);
 
-  // Track the assistantMessageCount at which we last summarised each session
-  const lastSummarisedAtRef = useRef<Record<string, number>>({});
-
-  // Debounced trigger function
+  // Debounced trigger
   const triggerSummary = useCallback(() => {
     const now = Date.now();
     const elapsed = now - lastTriggerRef.current;
@@ -166,7 +288,6 @@ export function useMetaAgent(): { isRunning: boolean } {
       lastTriggerRef.current = now;
       sendPrompt();
     } else {
-      // Schedule for later if not already pending
       if (!pendingRef.current) {
         pendingRef.current = true;
         debounceTimerRef.current = setTimeout(() => {
@@ -178,27 +299,24 @@ export function useMetaAgent(): { isRunning: boolean } {
     }
   }, [sendPrompt]);
 
-  // Cleanup debounce timer on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
-        debounceTimerRef.current = null;
       }
     };
   }, []);
 
-  // Subscribe to session state changes and trigger contextually
+  // Subscribe to session state changes
   useEffect(() => {
     let prevFingerprint = "";
-    // Track which sessions have already been named (reached assistantMessageCount >= 1)
     const namedSessions = new Set<string>();
     const lastSummarisedAt = lastSummarisedAtRef.current;
 
     const unsub = useSessionStore.subscribe((state) => {
       const sessions = state.sessions.filter((s) => !s.isMetaAgent);
 
-      // Don't trigger if no sessions or all starting
       if (
         sessions.length < MIN_SESSIONS ||
         sessions.every((s) => s.state === "starting")
@@ -209,7 +327,6 @@ export function useMetaAgent(): { isRunning: boolean } {
       const fp = sessionFingerprint(sessions);
       if (fp === prevFingerprint) return;
 
-      // Parse previous fingerprint into a lookup of id -> state
       const prevSessions = prevFingerprint.split("|").reduce(
         (acc, pair) => {
           const [id, st] = pair.split(":");
@@ -221,7 +338,6 @@ export function useMetaAgent(): { isRunning: boolean } {
 
       prevFingerprint = fp;
 
-      // Naming trigger: session has messages but still using default directory name
       const hasNewFirstResponse = sessions.some((s) => {
         if (s.metadata.assistantMessageCount >= 1 && !namedSessions.has(s.id)) {
           namedSessions.add(s.id);
@@ -230,8 +346,6 @@ export function useMetaAgent(): { isRunning: boolean } {
         return false;
       });
 
-      // Also trigger for sessions that have messages but no summary
-      // (e.g., revived from Claude history, not originally created in the app)
       const needsInitialSummary = sessions.some((s) => {
         return s.metadata.assistantMessageCount >= 1
           && !s.metadata.nodeSummary
@@ -240,14 +354,12 @@ export function useMetaAgent(): { isRunning: boolean } {
           && !(lastSummarisedAt[s.id]);
       });
 
-      // Check if any session's message count exceeds lastSummarisedAt by RESUMMARISE_INTERVAL
       const hasDriftedSession = sessions.some((s) => {
         const count = s.metadata.assistantMessageCount;
         const lastAt = lastSummarisedAt[s.id] ?? 0;
         return count >= 1 && count - lastAt >= RESUMMARISE_INTERVAL;
       });
 
-      // Check if any session just went from active -> idle AND needs a summary update
       const hasIdleTransitionNeedingSummary = sessions.some((s) => {
         const prev = prevSessions[s.id];
         if (
@@ -257,7 +369,6 @@ export function useMetaAgent(): { isRunning: boolean } {
           s.metadata.assistantMessageCount >= 1
         ) {
           const lastAt = lastSummarisedAt[s.id] ?? 0;
-          // Needs first summary or has drifted
           return !s.metadata.nodeSummary || (s.metadata.assistantMessageCount - lastAt >= RESUMMARISE_INTERVAL);
         }
         return false;

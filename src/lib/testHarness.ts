@@ -222,7 +222,7 @@ const __origLog = console.log;
 const __origTrace = console.trace;
 console.log = (...args: unknown[]) => {
   const msg = args.map(String).join(" ");
-  if (msg.includes("[terminal]") || msg.includes("[TerminalPanel]") || msg.includes("[pty]")) {
+  if (msg.includes("[terminal]") || msg.includes("[TerminalPanel]") || msg.includes("[pty]") || msg.includes("[useClaudeState]") || msg.includes("[useMetaAgent]")) {
     __logs.push(msg);
     if (__logs.length > 200) __logs.shift();
   }

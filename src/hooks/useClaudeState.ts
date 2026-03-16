@@ -27,15 +27,16 @@ const IDLE_PROMPT = /❯\s*$/;
  * emitted by the Rust file watcher. Keeps a minimal PTY scan
  * only for permission detection (the one thing JSONL doesn't capture).
  */
-export function useClaudeState(sessionId: string | null) {
+export function useClaudeState(sessionId: string | null, _isResumed = false) {
   const updateState = useSessionStore((s) => s.updateState);
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
   const accRef = useRef<JsonlAccumulator>(createAccumulator());
   const lastStateRef = useRef<string>("starting");
   const lastFingerprintRef = useRef<string>("");
   const permissionRef = useRef("");
-  // Suppress state/metadata updates until the JSONL watcher has caught up
-  // (finished reading all existing lines). This prevents replay floods on resume.
+  // Suppress state/metadata updates until the JSONL watcher has caught up.
+  // Only needed for resumed sessions (which have history to replay).
+  // New sessions start caught-up — no replay to suppress.
   const caughtUpRef = useRef(false);
 
   // Listen to JSONL events from Rust watcher
@@ -49,8 +50,6 @@ export function useClaudeState(sessionId: string | null) {
 
         try {
           const parsed = JSON.parse(event.payload.line);
-
-
           accRef.current = processJsonlEvent(accRef.current, parsed);
           const acc = accRef.current;
 
@@ -117,8 +116,24 @@ export function useClaudeState(sessionId: string | null) {
           outputTokens: acc.outputTokens,
           assistantMessageCount: acc.assistantMessageCount,
         });
-        // Also sync the state so the first post-replay state doesn't flicker
+        // Sync state and push accumulated metadata to the store so the
+        // summariser can see assistantMessageCount > 0. Without this,
+        // metadata from replay stays invisible to other hooks.
         lastStateRef.current = acc.state;
+        updateState(sessionId, acc.state);
+        updateMetadata(sessionId, {
+          costUsd: acc.costUsd,
+          currentAction: acc.currentAction,
+          currentToolName: acc.currentToolName,
+          subagentCount: acc.subagentCount,
+          subagentActivity: acc.subagentActivity,
+          recentOutput: acc.lastAssistantText,
+          contextWarning: acc.contextWarning,
+          taskProgress: acc.taskProgress,
+          inputTokens: 0, // Reset — only count NEW tokens
+          outputTokens: 0,
+          assistantMessageCount: acc.assistantMessageCount,
+        });
         // Reset token counts so only tokens from the NEW conversation are shown.
         // Historical tokens from the resumed session don't count against this run.
         accRef.current = { ...accRef.current, inputTokens: 0, outputTokens: 0 };

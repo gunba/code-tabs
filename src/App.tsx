@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, formatTokenCount } from "./lib/claude";
+import { dirToTabName, formatTokenCount, sessionColor } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
 import { ActivityFeed } from "./components/ActivityFeed/ActivityFeed";
@@ -34,6 +34,8 @@ export default function App() {
   const createSession = useSessionStore((s) => s.createSession);
   const persist = useSessionStore((s) => s.persist);
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
+  const updateSubagent = useSessionStore((s) => s.updateSubagent);
+  const reorderTabs = useSessionStore((s) => s.reorderTabs);
   const showLauncher = useSettingsStore((s) => s.showLauncher);
   const setShowLauncher = useSettingsStore((s) => s.setShowLauncher);
   const setLastConfig = useSettingsStore((s) => s.setLastConfig);
@@ -43,6 +45,7 @@ export default function App() {
   const [showResumePicker, setShowResumePicker] = useState(false);
   const [inspectedSubagent, setInspectedSubagent] = useState<{ sessionId: string; subagentId: string } | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; sessionId: string } | null>(null);
+  const dragTabRef = useRef<string | null>(null);
   const initRef = useRef(false);
 
   useCliWatcher();
@@ -107,10 +110,11 @@ export default function App() {
           console.error("Failed to revive session:", err);
         }
       } else {
-        // Clicking the already-active tab dismisses the subagent inspector
-        if (id === activeTabId && inspectedSubagent) {
+        // Always dismiss subagent inspector when switching tabs
+        if (inspectedSubagent) {
           setInspectedSubagent(null);
-        } else {
+        }
+        if (id !== activeTabId) {
           setActiveTab(id);
         }
       }
@@ -202,10 +206,26 @@ export default function App() {
                 <button
                   key={session.id}
                   className={`tab${isActive ? " tab-active" : ""}${isDead ? " tab-dead" : ""}`}
+                  draggable
+                  onDragStart={() => { dragTabRef.current = session.id; }}
+                  onDragOver={(e) => { e.preventDefault(); }}
+                  onDrop={() => {
+                    const from = dragTabRef.current;
+                    if (from && from !== session.id) {
+                      const order = regularSessions.map((s) => s.id);
+                      const fromIdx = order.indexOf(from);
+                      const toIdx = order.indexOf(session.id);
+                      if (fromIdx >= 0 && toIdx >= 0) {
+                        order.splice(fromIdx, 1);
+                        order.splice(toIdx, 0, from);
+                        reorderTabs(order);
+                      }
+                    }
+                    dragTabRef.current = null;
+                  }}
+                  onDragEnd={() => { dragTabRef.current = null; }}
                   onClick={(e) => {
                     if (e.shiftKey) {
-                      // Shift+Click: open launcher to relaunch with new settings
-                      // Session stays alive until user confirms launch
                       const resumeId = session.config.resumeSession || session.config.sessionId || session.id;
                       setLastConfig({
                         ...session.config,
@@ -228,7 +248,7 @@ export default function App() {
                 >
                   <span className={`tab-dot state-${session.state}`} />
                   <span className="tab-label">
-                    <span className="tab-name">{name}</span>
+                    <span className="tab-name" style={{ textShadow: `0 0 8px ${sessionColor(name)}40` }}>{name}</span>
                     {summary && <span className="tab-summary">{summary}</span>}
                   </span>
                   <button
@@ -273,7 +293,7 @@ export default function App() {
                 onClick={() => activeTabId && setInspectedSubagent({ sessionId: activeTabId, subagentId: sub.id })}
                 title={sub.description}
               >
-                <span className={`subagent-dot state-${sub.state}`} />
+                <span className="subagent-icon">→</span>
                 <span className="subagent-label">
                   <span className="subagent-name">{sub.description}</span>
                   <span className="subagent-last-msg">
@@ -282,6 +302,13 @@ export default function App() {
                 </span>
                 {sub.tokenCount > 0 && (
                   <span className="subagent-tokens">{formatTokenCount(sub.tokenCount)}</span>
+                )}
+                {!isActive && (
+                  <span
+                    className="subagent-close"
+                    onClick={(e) => { e.stopPropagation(); activeTabId && updateSubagent(activeTabId, sub.id, { state: "dead" }); }}
+                    title="Dismiss"
+                  >×</span>
                 )}
               </button>
             );
