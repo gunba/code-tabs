@@ -111,6 +111,9 @@ export function useClaudeState(sessionId: string | null) {
         });
         // Also sync the state so the first post-replay state doesn't flicker
         lastStateRef.current = acc.state;
+        // Reset token counts so only tokens from the NEW conversation are shown.
+        // Historical tokens from the resumed session don't count against this run.
+        accRef.current = { ...accRef.current, inputTokens: 0, outputTokens: 0 };
         caughtUpRef.current = true;
       }
     );

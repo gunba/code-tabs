@@ -161,6 +161,25 @@
   white-space: nowrap;
 }
 
+.launcher-sandbox-label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.launcher-sandbox-label input[type="checkbox"] {
+  accent-color: var(--warning);
+  margin: 0;
+}
+
+.launcher-sandbox-text {
+  color: var(--warning);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .launcher-save-defaults {
   background: transparent;
   border: 1px solid var(--border-subtle);

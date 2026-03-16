@@ -298,13 +298,13 @@ export function SessionLauncher() {
             </select>
           </label>
 
-          <label className="launcher-skip-label" title="Restrict Claude to the working directory (--project-dir)">
+          <label className="launcher-sandbox-label" title="Restrict Claude to the working directory (--project-dir)">
             <input
               type="checkbox"
               checked={config.projectDir}
               onChange={(e) => updateConfig("projectDir", e.target.checked)}
             />
-            <span className="launcher-skip-text">Sandbox</span>
+            <span className="launcher-sandbox-text">Sandbox</span>
           </label>
 
           <label className="launcher-skip-label" title="Skip all permission prompts (--dangerously-skip-permissions)">
