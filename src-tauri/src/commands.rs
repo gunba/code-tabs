@@ -678,6 +678,11 @@ pub fn build_claude_args(config: SessionConfig) -> Result<Vec<String>, String> {
         args.push(budget.to_string());
     }
 
+    if config.project_dir {
+        args.push("--project-dir".into());
+        args.push(config.working_dir.clone());
+    }
+
     if config.continue_session {
         args.push("--continue".into());
     } else if let Some(ref session_id) = config.resume_session {

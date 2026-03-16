@@ -45,6 +45,8 @@ pub struct SessionConfig {
     pub resume_session: Option<String>,
     pub fork_session: bool,
     pub continue_session: bool,
+    #[serde(default)]
+    pub project_dir: bool,
     pub extra_flags: Option<String>,
     #[serde(default)]
     pub session_id: Option<String>,
@@ -71,6 +73,7 @@ impl Default for SessionConfig {
             resume_session: None,
             fork_session: false,
             continue_session: false,
+            project_dir: false,
             extra_flags: None,
             session_id: None,
         }

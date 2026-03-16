@@ -22,6 +22,7 @@ const DEFAULT_CONFIG: SessionConfig = {
   resumeSession: null,
   forkSession: false,
   continueSession: false,
+  projectDir: false,
   extraFlags: null,
   sessionId: null,
 };

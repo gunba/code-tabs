@@ -34,6 +34,7 @@ export interface SessionConfig {
   resumeSession: string | null;
   forkSession: boolean;
   continueSession: boolean;
+  projectDir: boolean;
   extraFlags: string | null;
   sessionId: string | null;
 }
@@ -117,6 +118,7 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   resumeSession: null,
   forkSession: false,
   continueSession: false,
+  projectDir: false,
   extraFlags: null,
   sessionId: null,
 };
