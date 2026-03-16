@@ -366,60 +366,6 @@ pub fn write_ui_config(config_json: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to write ui-config.json: {}", e))
 }
 
-/// Invoke Claude CLI in pipe mode and return the response.
-/// Spawns `claude -p --model <model> --append-system-prompt <system_prompt>`,
-/// writes the prompt to stdin, collects stdout, returns the response.
-#[tauri::command]
-pub async fn invoke_claude_pipe(
-    claude_path: String,
-    prompt: String,
-    system_prompt: String,
-    model: String,
-    working_dir: String,
-) -> Result<String, String> {
-    use tokio::io::AsyncWriteExt;
-    use tokio::process::Command;
-
-    let mut cmd = Command::new(&claude_path);
-    cmd.args([
-        "-p",
-        "--model", &model,
-        "--append-system-prompt", &system_prompt,
-        "--dangerously-skip-permissions",
-    ])
-    .current_dir(&working_dir)
-    .stdin(std::process::Stdio::piped())
-    .stdout(std::process::Stdio::piped())
-    .stderr(std::process::Stdio::piped());
-
-    // Prevent cmd.exe console window flash on Windows
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to spawn claude: {}", e))?;
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(prompt.as_bytes()).await.map_err(|e| format!("stdin write error: {}", e))?;
-        drop(stdin); // Close stdin to signal EOF
-    }
-
-    let output = child.wait_with_output().await.map_err(|e| format!("wait error: {}", e))?;
-
-    if output.status.success() {
-        let response = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        Ok(response)
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        if !stderr.trim().is_empty() {
-            Err(format!("Claude error: {}", stderr.trim()))
-        } else {
-            Err("Claude exited with non-zero status".into())
-        }
-    }
-}
-
 /// Scan the Claude Code binary for built-in slash commands.
 /// Extracts from the command registration pattern: name:"cmd",description:"..."
 #[tauri::command]

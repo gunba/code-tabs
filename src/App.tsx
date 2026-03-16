@@ -15,7 +15,6 @@ import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { HooksManager } from "./components/HooksManager/HooksManager";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
-import { useMetaAgent } from "./hooks/useMetaAgent";
 import { useNotifications } from "./hooks/useNotifications";
 import { useCommandDiscovery } from "./hooks/useCommandDiscovery";
 
@@ -49,7 +48,6 @@ export default function App() {
   const initRef = useRef(false);
 
   useCliWatcher();
-  useMetaAgent();
   useNotifications();
   useCommandDiscovery();
 

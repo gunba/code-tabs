@@ -1,5 +1,4 @@
 mod commands;
-mod haiku_proc;
 mod jsonl_watcher;
 mod session;
 
@@ -25,7 +24,6 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(SessionManager::new())
         .manage(Arc::new(Mutex::new(WatcherState::new())))
-        .manage(Arc::new(tokio::sync::Mutex::new(haiku_proc::HaikuState::new())))
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
             commands::close_session,
@@ -48,7 +46,6 @@ pub fn run() {
             commands::get_cli_help,
             commands::read_ui_config,
             commands::write_ui_config,
-            commands::invoke_claude_pipe,
             commands::get_first_user_message,
             commands::discover_hooks,
             commands::save_hooks,
@@ -61,8 +58,6 @@ pub fn run() {
             jsonl_watcher::stop_jsonl_watcher,
             jsonl_watcher::start_subagent_watcher,
             jsonl_watcher::stop_subagent_watcher,
-            haiku_proc::haiku_query,
-            haiku_proc::haiku_set_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Claude Tabs");
