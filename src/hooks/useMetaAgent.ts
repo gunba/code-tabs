@@ -1,4 +1,6 @@
 import { useEffect, useRef, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { sessionFingerprint } from "../lib/metaAgentUtils";
@@ -9,19 +11,19 @@ import { spawn as ptySpawn } from "tauri-pty";
 const DEBOUNCE_MS = 15_000;
 const MIN_SESSIONS = 1;
 const RESUMMARISE_INTERVAL = 15;
-// Max time to wait for a Haiku response before giving up (ms)
 const RESPONSE_TIMEOUT = 30_000;
 
 /**
  * Persistent Haiku summariser — spawns ONE long-lived Claude session
- * with --model haiku and reuses it for all summarisation requests.
+ * with --model haiku. Response detection uses JSONL events (structured
+ * data written by Claude Code), not terminal output parsing.
+ *
  * Between requests, sends /clear to reset context. No process restarts.
  */
 export function useMetaAgent(): { isRunning: boolean } {
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
 
   const isRunningRef = useRef(false);
-  const lastFingerprintRef = useRef("");
   const lastTriggerRef = useRef(0);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef(false);
@@ -30,9 +32,10 @@ export function useMetaAgent(): { isRunning: boolean } {
   // Persistent Haiku session state
   const metaSessionIdRef = useRef<string | null>(null);
   const metaReadyRef = useRef(false);
-  const responseBufferRef = useRef("");
-  const responseResolveRef = useRef<((text: string) => void) | null>(null);
   const spawnAttemptedRef = useRef(false);
+  // Resolves with the assistant response text when an end_turn event arrives
+  const jsonlResolveRef = useRef<((text: string) => void) | null>(null);
+  const jsonlUnlistenRef = useRef<(() => void) | null>(null);
 
   // Spawn the persistent Haiku session (once)
   const ensureMetaSession = useCallback(async (): Promise<boolean> => {
@@ -70,43 +73,22 @@ export function useMetaAgent(): { isRunning: boolean } {
         sessionId: null,
       }, { isMetaAgent: true });
 
-      metaSessionIdRef.current = session.id;
+      const sid = session.id;
+      metaSessionIdRef.current = sid;
 
-      // Spawn PTY for the meta-agent
+      // Spawn PTY
       const args = ["--model", "haiku", "--dangerously-skip-permissions",
         "--append-system-prompt", "You summarize Claude Code sessions. Return only valid JSON, no markdown, no explanation."];
-
       const pty = ptySpawn(claudePath, args, { cwd, cols: 200, rows: 50 });
 
-      // Register PTY writer
-      registerPtyWriter(session.id, (data: string) => pty.write(data));
+      registerPtyWriter(sid, (data: string) => pty.write(data));
 
-      // Collect output for response detection
-      const decoder = new TextDecoder();
+      // Respond to DSR queries so ink can render
       pty.onData((data: Uint8Array) => {
         const bytes = data instanceof Uint8Array ? data : Uint8Array.from(data as unknown as number[]);
-        const text = decoder.decode(bytes, { stream: true });
-        // Strip ALL ANSI/VT escape sequences (CSI, OSC, DEC private modes, etc.)
-        // Respond to DSR (Device Status Report) queries — ink needs this
-        // to know the terminal size before it can render the prompt.
+        const text = new TextDecoder().decode(bytes);
         if (text.includes("\x1b[6n")) {
-          pty.write("\x1b[50;200R"); // Report cursor at row 50, col 200
-        }
-
-        const clean = text.replace(/\x1b[\[\]()#;?]*[0-9;]*[a-zA-Z@`]/g, "")
-          .replace(/\x1b\][^\x07]*\x07/g, "") // OSC sequences
-          .replace(/\x1b[()][0-9A-B]/g, ""); // Character set sequences
-        responseBufferRef.current += clean;
-
-        // Check if response is complete (idle prompt appeared anywhere in buffer)
-        if (responseBufferRef.current.includes("❯")) {
-          if (responseResolveRef.current) {
-            const response = responseBufferRef.current;
-            responseBufferRef.current = "";
-            const resolve = responseResolveRef.current;
-            responseResolveRef.current = null;
-            resolve(response);
-          }
+          pty.write("\x1b[50;200R");
         }
       });
 
@@ -114,25 +96,48 @@ export function useMetaAgent(): { isRunning: boolean } {
         metaReadyRef.current = false;
         metaSessionIdRef.current = null;
         spawnAttemptedRef.current = false;
-        unregisterPtyWriter(session.id);
-        useSessionStore.getState().updateState(session.id, "dead");
+        unregisterPtyWriter(sid);
+        jsonlUnlistenRef.current?.();
+        useSessionStore.getState().updateState(sid, "dead");
       });
 
-      // Wait for initial idle prompt (❯)
-      await new Promise<void>((resolve) => {
-        const check = setInterval(() => {
-          if (responseBufferRef.current.includes("❯")) {
-            clearInterval(check);
-            responseBufferRef.current = "";
-            resolve();
-          }
-        }, 200);
-        // Timeout after 15s
-        setTimeout(() => { clearInterval(check); responseBufferRef.current = ""; resolve(); }, 15_000);
+      // Start JSONL watcher for the Haiku session
+      invoke("start_jsonl_watcher", {
+        sessionId: sid,
+        workingDir: cwd,
+        jsonlSessionId: null,
       });
 
+      // Listen for JSONL events from the Haiku session.
+      // When we see an assistant message with stop_reason: "end_turn",
+      // extract the text and resolve the pending query.
+      const unlisten = await listen<{ sessionId: string; line: string }>(
+        "jsonl-event",
+        (event) => {
+          if (event.payload.sessionId !== sid) return;
+          try {
+            const parsed = JSON.parse(event.payload.line);
+            if (parsed.type === "assistant" && parsed.message?.stop_reason === "end_turn") {
+              const content = parsed.message.content || [];
+              const textBlocks = content.filter((b: { type: string }) => b.type === "text");
+              const responseText = textBlocks.map((b: { text: string }) => b.text || "").join("\n");
+              if (jsonlResolveRef.current && responseText) {
+                const resolve = jsonlResolveRef.current;
+                jsonlResolveRef.current = null;
+                resolve(responseText);
+              }
+            }
+          } catch { /* skip invalid JSON */ }
+        }
+      );
+      jsonlUnlistenRef.current = unlisten;
+
+      // The Haiku session is ready immediately — no history to replay,
+      // and the JSONL file won't exist until the first message is sent.
+      // The JSONL event listener above will capture the response.
       metaReadyRef.current = true;
-      useSessionStore.getState().updateState(session.id, "idle");
+      useSessionStore.getState().updateState(sid, "idle");
+
       return true;
     } catch (err) {
       console.error("[useMetaAgent] Failed to spawn Haiku session:", err);
@@ -141,38 +146,26 @@ export function useMetaAgent(): { isRunning: boolean } {
     }
   }, []);
 
-  // Send a prompt to the persistent session and wait for response
+  // Send a prompt to the persistent session and wait for JSONL response
   const queryHaiku = useCallback(async (prompt: string): Promise<string | null> => {
     const sid = metaSessionIdRef.current;
     if (!sid || !metaReadyRef.current) return null;
 
-    // Clear context — \r triggers Enter in the PTY (ink's input submit).
-    // Wait for the idle prompt (❯) to confirm clear is complete before sending.
-    console.log("[useMetaAgent] Sending /clear to", sid.slice(0, 8));
+    // Clear context
     writeToPty(sid, "/clear\r");
-    responseBufferRef.current = "";
-    await new Promise<void>((resolve) => {
-      responseResolveRef.current = () => resolve();
-      setTimeout(() => {
-        if (responseResolveRef.current) {
-          responseResolveRef.current = null;
-          resolve(); // Timeout fallback
-        }
-      }, RESPONSE_TIMEOUT);
-    });
-    responseBufferRef.current = "";
+    // Brief yield to let /clear process before sending the prompt
+    await new Promise((r) => requestAnimationFrame(r));
 
     // Send prompt
-    console.log("[useMetaAgent] Sending prompt to", sid.slice(0, 8), "length:", prompt.length);
     writeToPty(sid, prompt + "\r");
 
-    // Wait for response (idle prompt signals completion)
+    // Wait for JSONL assistant response with end_turn
     return new Promise<string | null>((resolve) => {
-      responseResolveRef.current = (text) => resolve(text);
+      jsonlResolveRef.current = resolve;
       setTimeout(() => {
-        if (responseResolveRef.current) {
-          responseResolveRef.current = null;
-          resolve(null); // Timeout
+        if (jsonlResolveRef.current) {
+          jsonlResolveRef.current = null;
+          resolve(null);
         }
       }, RESPONSE_TIMEOUT);
     });
@@ -180,12 +173,9 @@ export function useMetaAgent(): { isRunning: boolean } {
 
   const processResponse = useCallback((response: string) => {
     const renameSession = useSessionStore.getState().renameSession;
-    // Try to extract JSON from the response (Haiku may wrap in markdown code fences)
     let jsonStr = response.trim();
     const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenceMatch) jsonStr = fenceMatch[1].trim();
-
-    // Try to find JSON object in the response
     const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (jsonMatch) jsonStr = jsonMatch[0];
 
@@ -205,9 +195,7 @@ export function useMetaAgent(): { isRunning: boolean } {
       if (names && typeof names === "object") {
         for (const [sessionId, name] of Object.entries(names)) {
           if (typeof name === "string" && name.length > 0 && name.length <= 30) {
-            const session = useSessionStore
-              .getState()
-              .sessions.find((s) => s.id === sessionId);
+            const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
             if (session) {
               const defaultName = dirToTabName(session.config.workingDir);
               if (session.name === defaultName) {
@@ -225,16 +213,9 @@ export function useMetaAgent(): { isRunning: boolean } {
   const sendPrompt = useCallback(async () => {
     const sessions = useSessionStore.getState().sessions;
     const targetSessions = sessions.filter((s) => !s.isMetaAgent && s.state !== "dead");
-
     if (targetSessions.length === 0) return;
 
-    // Check fingerprint
-    const fp = sessionFingerprint(targetSessions);
-    if (fp === lastFingerprintRef.current) return;
-    lastFingerprintRef.current = fp;
-
     const lastSummarisedAtMap = lastSummarisedAtRef.current;
-
     const needsNaming = targetSessions.filter(
       (s) => s.metadata.assistantMessageCount >= 1 && s.name === dirToTabName(s.config.workingDir)
     );
@@ -246,13 +227,9 @@ export function useMetaAgent(): { isRunning: boolean } {
 
     if (needsNaming.length === 0 && needsSummary.length === 0) return;
 
-    console.log("[useMetaAgent] sendPrompt: naming=" + needsNaming.length + " summary=" + needsSummary.length);
-
-    // Ensure persistent session exists
     const ready = await ensureMetaSession();
     if (!ready) return;
 
-    // Build prompt
     const allNeeded = new Set([...needsNaming.map((s) => s.id), ...needsSummary.map((s) => s.id)]);
     const sessionsJson = targetSessions
       .filter((s) => allNeeded.has(s.id))
@@ -265,14 +242,11 @@ export function useMetaAgent(): { isRunning: boolean } {
         summary: s.metadata.nodeSummary || "none",
       }));
 
-    const needsNamingIds = needsNaming.map((s) => s.id);
-    const needsSummaryIds = needsSummary.map((s) => s.id);
-
-    const namingPart = needsNamingIds.length > 0
-      ? ` Give a 2-4 word title for sessions: ${needsNamingIds.join(",")}.`
+    const namingPart = needsNaming.length > 0
+      ? ` Give a 2-4 word title for sessions: ${needsNaming.map((s) => s.id).join(",")}.`
       : "";
-    const summaryPart = needsSummaryIds.length > 0
-      ? ` Summarize these sessions briefly: ${needsSummaryIds.join(",")}.`
+    const summaryPart = needsSummary.length > 0
+      ? ` Summarize these sessions briefly: ${needsSummary.map((s) => s.id).join(",")}.`
       : "";
 
     const prompt = `Sessions: ${JSON.stringify(sessionsJson)}.${namingPart}${summaryPart} Return JSON: {"names":{...},"summaries":{...}}`;
@@ -293,36 +267,26 @@ export function useMetaAgent(): { isRunning: boolean } {
     }
   }, [processResponse, ensureMetaSession, queryHaiku]);
 
-  // Debounced trigger
   const triggerSummary = useCallback(() => {
     const now = Date.now();
     const elapsed = now - lastTriggerRef.current;
-
     if (elapsed >= DEBOUNCE_MS) {
       lastTriggerRef.current = now;
       sendPrompt();
-    } else {
-      if (!pendingRef.current) {
-        pendingRef.current = true;
-        debounceTimerRef.current = setTimeout(() => {
-          pendingRef.current = false;
-          lastTriggerRef.current = Date.now();
-          sendPrompt();
-        }, DEBOUNCE_MS - elapsed);
-      }
+    } else if (!pendingRef.current) {
+      pendingRef.current = true;
+      debounceTimerRef.current = setTimeout(() => {
+        pendingRef.current = false;
+        lastTriggerRef.current = Date.now();
+        sendPrompt();
+      }, DEBOUNCE_MS - elapsed);
     }
   }, [sendPrompt]);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
+    return () => { if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current); };
   }, []);
 
-  // Subscribe to session state changes
   useEffect(() => {
     let prevFingerprint = "";
     const namedSessions = new Set<string>();
@@ -330,26 +294,16 @@ export function useMetaAgent(): { isRunning: boolean } {
 
     const unsub = useSessionStore.subscribe((state) => {
       const sessions = state.sessions.filter((s) => !s.isMetaAgent);
-
-      if (
-        sessions.length < MIN_SESSIONS ||
-        sessions.every((s) => s.state === "starting")
-      ) {
-        return;
-      }
+      if (sessions.length < MIN_SESSIONS || sessions.every((s) => s.state === "starting")) return;
 
       const fp = sessionFingerprint(sessions);
       if (fp === prevFingerprint) return;
 
-      const prevSessions = prevFingerprint.split("|").reduce(
-        (acc, pair) => {
-          const [id, st] = pair.split(":");
-          if (id) acc[id] = st;
-          return acc;
-        },
-        {} as Record<string, string>
-      );
-
+      const prevSessions = prevFingerprint.split("|").reduce((acc, pair) => {
+        const [id, st] = pair.split(":");
+        if (id) acc[id] = st;
+        return acc;
+      }, {} as Record<string, string>);
       prevFingerprint = fp;
 
       const hasNewFirstResponse = sessions.some((s) => {
@@ -360,28 +314,19 @@ export function useMetaAgent(): { isRunning: boolean } {
         return false;
       });
 
-      const needsInitialSummary = sessions.some((s) => {
-        return s.metadata.assistantMessageCount >= 1
-          && !s.metadata.nodeSummary
-          && s.state !== "dead"
-          && s.state !== "starting"
-          && !(lastSummarisedAt[s.id]);
-      });
+      const needsInitialSummary = sessions.some((s) =>
+        s.metadata.assistantMessageCount >= 1 && !s.metadata.nodeSummary
+        && s.state !== "dead" && s.state !== "starting" && !(lastSummarisedAt[s.id])
+      );
 
       const hasDriftedSession = sessions.some((s) => {
-        const count = s.metadata.assistantMessageCount;
         const lastAt = lastSummarisedAt[s.id] ?? 0;
-        return count >= 1 && count - lastAt >= RESUMMARISE_INTERVAL;
+        return s.metadata.assistantMessageCount >= 1 && s.metadata.assistantMessageCount - lastAt >= RESUMMARISE_INTERVAL;
       });
 
       const hasIdleTransitionNeedingSummary = sessions.some((s) => {
         const prev = prevSessions[s.id];
-        if (
-          prev &&
-          (prev === "thinking" || prev === "toolUse") &&
-          s.state === "idle" &&
-          s.metadata.assistantMessageCount >= 1
-        ) {
+        if (prev && (prev === "thinking" || prev === "toolUse") && s.state === "idle" && s.metadata.assistantMessageCount >= 1) {
           const lastAt = lastSummarisedAt[s.id] ?? 0;
           return !s.metadata.nodeSummary || (s.metadata.assistantMessageCount - lastAt >= RESUMMARISE_INTERVAL);
         }
