@@ -70,7 +70,7 @@ describe("processJsonlEvent", () => {
       },
     };
     const result = processJsonlEvent(acc, event);
-    expect(result.lastAssistantText).toBe("Third line");
+    expect(result.lastAssistantText).toBe("First line\nSecond line\nThird line");
   });
 
   it("extracts subagent activity from Agent tool_use blocks", () => {
@@ -317,10 +317,10 @@ describe("formatToolAction", () => {
       .toBe("WebFetch");
   });
 
-  it("truncates long actions to 80 chars", () => {
-    const longPath = "/very/long/" + "x".repeat(100) + "/file.ts";
+  it("truncates long actions to 200 chars", () => {
+    const longPath = "/very/long/" + "x".repeat(300) + "/file.ts";
     const result = formatToolAction({ name: "Read", input: { file_path: longPath } });
-    expect(result.length).toBeLessThanOrEqual(80);
+    expect(result.length).toBeLessThanOrEqual(200);
   });
 });
 

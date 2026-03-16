@@ -84,10 +84,9 @@ export function ActivityFeed() {
       if (currentOutput && currentOutput !== existing.recentOutput && session.state !== "dead") {
         // Only show in feed after the session has settled
         if (existing.settled) {
-          const lines = currentOutput.split("\n").filter((l) => l.trim());
-          const lastLine = lines[lines.length - 1]?.trim().slice(0, 200);
-          if (lastLine) {
-            addEntry({ timestamp: now, sessionName, type: "output", message: lastLine });
+          const trimmed = currentOutput.trim().slice(0, 500);
+          if (trimmed) {
+            addEntry({ timestamp: now, sessionName, type: "output", message: trimmed });
           }
         }
         // Always track the latest value (even before settled) so we don't

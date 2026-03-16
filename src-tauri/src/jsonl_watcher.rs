@@ -21,10 +21,12 @@ impl WatcherState {
 
 fn encode_dir(dir: &str) -> String {
     // Mirrors Claude Code's project directory encoding:
+    // replaces ALL non-alphanumeric characters with hyphens.
     // C:\Users\jorda\Desktop\Obsidian -> C--Users-jorda-Desktop-Obsidian
-    dir.replace(":\\", "--")
-        .replace(":/", "--")
-        .replace(['\\', '/'], "-")
+    // C:\Users\Jordan.Graham\Desktop  -> C--Users-Jordan-Graham-Desktop
+    dir.chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
+        .collect::<String>()
         .trim_end_matches('-')
         .to_string()
 }

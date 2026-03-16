@@ -111,8 +111,8 @@ function processAssistant(acc: JsonlAccumulator, event: any): JsonlAccumulator {
   let lastText = acc.lastAssistantText;
   if (textBlocks.length > 0) {
     const raw: string = textBlocks[textBlocks.length - 1].text || "";
-    const lastLine = raw.split("\n").filter((l: string) => l.trim()).pop()?.trim().slice(0, 120);
-    if (lastLine) lastText = lastLine;
+    const trimmed = raw.trim().slice(0, 500);
+    if (trimmed) lastText = trimmed;
   }
 
   // Extract tool use blocks
@@ -140,7 +140,7 @@ function processAssistant(acc: JsonlAccumulator, event: any): JsonlAccumulator {
   // Subagent tracking
   const subagentActivity = agentBlocks.map(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (b: any) => `${b.input?.subagent_type || "Agent"}: ${b.input?.description || "working"}`.slice(0, 80)
+    (b: any) => `${b.input?.subagent_type || "Agent"}: ${(b.input?.description || "working").replace(/\n/g, " ")}`.slice(0, 200)
   );
 
   return {
@@ -170,12 +170,12 @@ export function modelPricing(model: string): [number, number] {
 export function formatToolAction(block: any): string {
   const name: string = block.name;
   const input = block.input || {};
-  if (name === "Bash") return `Bash: ${(input.command || "").slice(0, 60)}`;
-  if (name === "Read") return `Read ${input.file_path || ""}`.slice(0, 80);
-  if (name === "Write") return `Write ${input.file_path || ""}`.slice(0, 80);
-  if (name === "Edit") return `Edit ${input.file_path || ""}`.slice(0, 80);
-  if (name === "Grep") return `Grep "${input.pattern || ""}"`.slice(0, 80);
-  if (name === "Glob") return `Glob ${input.pattern || ""}`.slice(0, 80);
-  if (name === "Agent") return `Agent: ${input.description || ""}`.slice(0, 80);
+  if (name === "Bash") return `Bash: ${(input.command || "").slice(0, 200)}`;
+  if (name === "Read") return `Read ${input.file_path || ""}`.slice(0, 200);
+  if (name === "Write") return `Write ${input.file_path || ""}`.slice(0, 200);
+  if (name === "Edit") return `Edit ${input.file_path || ""}`.slice(0, 200);
+  if (name === "Grep") return `Grep "${input.pattern || ""}"`.slice(0, 200);
+  if (name === "Glob") return `Glob ${input.pattern || ""}`.slice(0, 200);
+  if (name === "Agent") return `Agent: ${(input.description || "").replace(/\n/g, " ")}`.slice(0, 200);
   return name;
 }

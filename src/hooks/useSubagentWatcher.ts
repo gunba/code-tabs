@@ -133,11 +133,11 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string)
             if (parsed.type === "user") {
               const content = parsed.message?.content;
               if (typeof content === "string") {
-                name = content.split("\n")[0].trim().slice(0, 80);
+                name = content.replace(/\n/g, " ").trim().slice(0, 200);
               } else if (Array.isArray(content)) {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const text = content.find((b: any) => b.type === "text")?.text;
-                if (text) name = text.split("\n")[0].trim().slice(0, 80);
+                if (text) name = text.replace(/\n/g, " ").trim().slice(0, 200);
               }
             }
 
