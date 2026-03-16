@@ -53,9 +53,12 @@
   display: none !important;
 }
 
-/* Hide the legacy viewport scrollbar (v6 uses .xterm-scrollable-element instead) */
+/* Hide the legacy viewport scrollbar (v6 uses .xterm-scrollable-element instead).
+   Override the hardcoded background-color: #000 so the gap between the terminal
+   canvas and the container edge shows --term-bg instead of pure black. */
 .terminal-container .xterm-viewport {
   overflow: hidden !important;
+  background-color: transparent !important;
 }
 
 /* ── State Banner Overlay ──────────────────────────────────────────── */
