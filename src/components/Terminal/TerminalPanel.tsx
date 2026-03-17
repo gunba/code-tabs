@@ -253,23 +253,30 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   }, [visible]);
 
   // Reclaim focus when terminal is visible but loses it to non-interactive elements.
+  // Uses termRef directly instead of terminal (which is a new object every render).
   useEffect(() => {
     if (!visible) return;
 
+    let cancelled = false;
     const handleFocusOut = () => {
       requestAnimationFrame(() => {
+        if (cancelled) return;
         const active = document.activeElement;
         if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) return;
         // Don't reclaim focus if a modal overlay is open
         if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .hooks-overlay, .palette-overlay')) return;
-        terminal.focus();
+        terminal.termRef.current?.focus();
       });
     };
 
     const container = containerRef.current;
     container?.addEventListener("focusout", handleFocusOut);
-    return () => container?.removeEventListener("focusout", handleFocusOut);
-  }, [visible, terminal]);
+    return () => {
+      cancelled = true;
+      container?.removeEventListener("focusout", handleFocusOut);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, session.id]);
 
   return (
     <div

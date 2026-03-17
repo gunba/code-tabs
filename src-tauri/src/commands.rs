@@ -152,18 +152,55 @@ fn detect_claude_cli_sync() -> Result<String, String> {
 }
 
 /// Decode a Claude projects directory name back to a filesystem path.
-/// Claude encodes paths like "C--Users-jorda-Desktop-Project" → "C:/Users/jorda/Desktop/Project"
+/// Claude encodes paths by replacing ALL non-alphanumeric chars with hyphens,
+/// so the encoding is lossy (periods, spaces, slashes all become '-').
+/// We resolve ambiguity by probing the filesystem to find which path exists.
 fn decode_project_dir(encoded: &str) -> String {
-    // The encoding replaces path separators with '-' and ':' with '-'
-    // First segment before '--' is the drive letter (on Windows)
-    if let Some((drive, rest)) = encoded.split_once("--") {
-        // Reconstruct: "C" + ":/" + rest with '-' → '/'
-        let path = rest.replace('-', "/");
-        format!("{}:/{}", drive, path)
+    // Split drive letter on Windows: "C--Users-..." → ("C", "Users-...")
+    let (prefix, segments_str) = if let Some((drive, rest)) = encoded.split_once("--") {
+        (format!("{}:\\", drive), rest)
     } else {
-        // Unix-style: just replace '-' with '/'
-        format!("/{}", encoded.replace('-', "/"))
+        ("/".to_string(), encoded)
+    };
+
+    let parts: Vec<&str> = segments_str.split('-').collect();
+    if parts.is_empty() {
+        return prefix;
     }
+
+    // Greedy filesystem walk: at each position, try joining multiple parts
+    // with non-slash separators (period, hyphen, space) and check if the
+    // resulting directory exists. Uses longest match first to handle names
+    // like "Jordan.Graham" (2 parts joined with '.') correctly.
+    let mut current = std::path::PathBuf::from(&prefix);
+    let mut i = 0;
+
+    while i < parts.len() {
+        let mut matched = false;
+
+        // Try multi-part names (longest first), with each separator
+        let max_j = std::cmp::min(i + 6, parts.len());
+        for j in (i + 2..=max_j).rev() {
+            for sep in &[".", "-", " "] {
+                let candidate = current.join(parts[i..j].join(sep));
+                if candidate.exists() {
+                    current = candidate;
+                    i = j;
+                    matched = true;
+                    break;
+                }
+            }
+            if matched { break; }
+        }
+
+        if !matched {
+            // Single part as path segment (original behavior)
+            current = current.join(parts[i]);
+            i += 1;
+        }
+    }
+
+    current.to_string_lossy().to_string()
 }
 
 /// Scan ~/.claude/projects/ for past Claude conversation files.
