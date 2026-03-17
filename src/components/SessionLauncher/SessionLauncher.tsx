@@ -336,62 +336,59 @@ export function SessionLauncher() {
             <span className="launcher-skip-text">Skip</span>
           </label>
 
-          <button
-            className={`launcher-save-defaults${defaultsSaved ? " launcher-save-defaults-saved" : ""}`}
-            onClick={() => { setLastConfig(launchConfig); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}
-            type="button"
-          >
-            {defaultsSaved ? "Saved" : "Save defaults"}
-          </button>
         </div>
 
-        {/* CLI Options — collapsible */}
-        {(filteredCliOptions.length > 0 || (cliCapabilities.commands || []).length > 0) && (
-          <div className="launcher-section">
+        {/* CLI Options header (always shown) with save defaults on the right */}
+        <div className="launcher-section">
+          <div className="launcher-cli-header">
+            {(filteredCliOptions.length > 0 || (cliCapabilities.commands || []).length > 0) ? (
+              <button
+                className="launcher-cli-toggle"
+                onClick={() => setShowCliOptions((v) => !v)}
+                type="button"
+              >
+                {showCliOptions ? "\u25BE" : "\u25B8"} CLI Options
+              </button>
+            ) : <span />}
             <button
-              className="launcher-cli-toggle"
-              onClick={() => setShowCliOptions((v) => !v)}
+              className={`launcher-save-defaults${defaultsSaved ? " launcher-save-defaults-saved" : ""}`}
+              onClick={() => { setLastConfig(launchConfig); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}
               type="button"
             >
-              {showCliOptions ? "\u25BE" : "\u25B8"} CLI Options
+              {defaultsSaved ? "Saved" : "Save defaults"}
             </button>
-            {showCliOptions && (
-              <>
-                {filteredCliOptions.length > 0 && (
-                  <div className="launcher-cli-grid">
-                    {filteredCliOptions.map((opt) => (
-                      <button
-                        key={opt.flag}
-                        className="launcher-cli-pill"
-                        onClick={() => handleCliPillClick(opt)}
-                        title={opt.description}
-                        type="button"
-                      >
-                        {opt.flag}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {/* CLI Subcommands */}
-                {(cliCapabilities.commands || []).length > 0 && (
-                  <div className="launcher-cli-grid" style={{ marginTop: 4 }}>
-                    {[...(cliCapabilities.commands || [])].sort((a, b) => a.name.localeCompare(b.name)).map((cmd) => (
-                      <button
-                        key={cmd.name}
-                        className="launcher-cli-pill launcher-cli-pill-cmd"
-                        onClick={() => setCommandLine(prev => prev.trimEnd() + ` ${cmd.name}`)}
-                        title={cmd.description}
-                        type="button"
-                      >
-                        {cmd.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
           </div>
-        )}
+          {showCliOptions && filteredCliOptions.length > 0 && (
+            <div className="launcher-cli-grid">
+              {filteredCliOptions.map((opt) => (
+                <button
+                  key={opt.flag}
+                  className="launcher-cli-pill"
+                  onClick={() => handleCliPillClick(opt)}
+                  title={opt.description}
+                  type="button"
+                >
+                  {opt.flag}
+                </button>
+              ))}
+            </div>
+          )}
+          {showCliOptions && (cliCapabilities.commands || []).length > 0 && (
+            <div className="launcher-cli-grid" style={{ marginTop: 4 }}>
+              {[...(cliCapabilities.commands || [])].sort((a, b) => a.name.localeCompare(b.name)).map((cmd) => (
+                <button
+                  key={cmd.name}
+                  className="launcher-cli-pill launcher-cli-pill-cmd"
+                  onClick={() => setCommandLine(prev => prev.trimEnd() + ` ${cmd.name}`)}
+                  title={cmd.description}
+                  type="button"
+                >
+                  {cmd.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Command input — single editable command line */}
         <div className="launcher-cmd">
@@ -412,10 +409,15 @@ export function SessionLauncher() {
           </button>
         </div>
 
-        {/* Enter hint */}
-        <div className="launcher-enter-hint">
-          <kbd>Enter</kbd>
-        </div>
+        {/* Launch button */}
+        <button
+          className="launcher-launch-btn"
+          onClick={handleLaunch}
+          disabled={!launchConfig.workingDir.trim()}
+          type="button"
+        >
+          {isResuming ? "Resume" : "Launch"}
+        </button>
       </div>
     </div>
   );

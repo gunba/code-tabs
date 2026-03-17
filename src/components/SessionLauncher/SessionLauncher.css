@@ -189,7 +189,6 @@
   font-size: 10px;
   cursor: pointer;
   transition: all 0.15s;
-  margin-left: auto;
   white-space: nowrap;
 }
 
@@ -204,6 +203,12 @@
 }
 
 /* ── CLI Options (collapsible grid) ──────────────────────── */
+
+.launcher-cli-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 
 .launcher-cli-toggle {
   background: transparent;
@@ -450,35 +455,30 @@
   color: var(--text-primary);
 }
 
-/* ── Launch Hint ─────────────────────────────────────────── */
+/* ── Launch Button ───────────────────────────────────────── */
 
-.launcher-enter-hint {
-  text-align: center;
-  margin-top: 14px;
-  font-size: 11px;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+.launcher-launch-btn {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 0;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: var(--text-on-accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
 }
 
-.launcher-enter-hint::before,
-.launcher-enter-hint::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border-subtle);
+.launcher-launch-btn:hover {
+  background: var(--accent-hover);
 }
 
-.launcher-enter-hint kbd {
-  background: var(--bg-selection);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 1px 6px;
-  font-size: 10px;
-  font-family: inherit;
-  color: var(--text-secondary);
+.launcher-launch-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* ── Error State ─────────────────────────────────────────── */
