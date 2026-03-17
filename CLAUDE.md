@@ -77,8 +77,8 @@ React UI (WebView2) ←→ Tauri IPC ←→ Rust Backend ←→ ConPTY ←→ Cl
 | **Persistence** | Sessions → `%LOCALAPPDATA%/claude-tabs/sessions.json` | Frontend-owned via `persist_sessions_json` |
 | **Settings** | Zustand + `localStorage` | Recent dirs, CLI capabilities, command usage |
 | **Discovery** | `claude --help` + binary scan + plugin/skill file scan | Options, commands, slash commands, hooks |
-| **Summariser** | `useMetaAgent()` → `invoke_claude_pipe` (Haiku, one-shot) | 15s debounce, fingerprint-based skip |
-| **Dir encoding** | `encode_dir()` — ALL non-alphanumeric → hyphen | Must match Claude Code's encoding exactly |
+| **Colors** | Sequential assignment in `claude.ts` | Avoids collisions, preserved across revival |
+| **Dir encoding** | `encode_dir()` — ALL non-alphanumeric → hyphen | `decode_project_dir()` probes filesystem to resolve ambiguity |
 
 ### Rust Backend
 
@@ -89,8 +89,8 @@ React UI (WebView2) ←→ Tauri IPC ←→ Rust Backend ←→ ConPTY ←→ Cl
 | `start_jsonl_watcher` / `stop_jsonl_watcher` | Tail JSONL files, emit events |
 | `start_subagent_watcher` / `stop_subagent_watcher` | Watch subagent JSONL directory |
 | `detect_claude_cli` / `check_cli_version` / `get_cli_help` | CLI discovery |
-| `invoke_claude_pipe` | One-shot `claude -p` for Haiku summariser |
-| `list_past_sessions` | Scan `~/.claude/projects/` for resumable sessions |
+| `list_past_sessions` | Scan `~/.claude/projects/` for resumable sessions (async) |
+| `get_first_user_message` | Read first user message from session JSONL |
 | `persist_sessions_json` / `load_persisted_sessions` | Save/restore sessions |
 | `discover_builtin_commands` / `discover_plugin_commands` | Slash command discovery |
 | `discover_hooks` / `save_hooks` | Hook configuration |
@@ -105,9 +105,8 @@ src/
 ├── hooks/
 │   ├── useTerminal.ts                   # xterm.js lifecycle, debounced write batching
 │   ├── usePty.ts                        # PTY spawn (tauri-pty npm wrapper)
-│   ├── useClaudeState.ts                # JSONL event listener + permission PTY scan
-│   ├── useMetaAgent.ts                  # Haiku summariser (pipe mode, 15s debounce)
-│   ├── useSubagentWatcher.ts            # Subagent JSONL tracking
+│   ├── useClaudeState.ts                # JSONL event listener + permission PTY scan + first message
+│   ├── useSubagentWatcher.ts            # Subagent JSONL tracking + local elapsed timer
 │   ├── useCliWatcher.ts                 # CLI version + capabilities
 │   └── useNotifications.ts              # Desktop notifications
 ├── components/
@@ -123,11 +122,11 @@ src/
 ├── lib/
 │   ├── jsonlState.ts                    # JSONL event processor (state machine + cost + metadata)
 │   ├── theme.ts                         # Theme definitions, CSS variable setter, xterm theme
-│   ├── claude.ts                        # CLI helpers (buildClaudeArgs, dirToTabName, formatTokenCount)
+│   ├── claude.ts                        # CLI helpers, color assignment, dirToTabName, formatTokenCount
 │   ├── ptyRegistry.ts                   # Global PTY writer registry
 │   ├── terminalRegistry.ts             # Terminal buffer reader registry
 │   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
-│   └── metaAgentUtils.ts               # Session fingerprinting for summariser
+│   └── uiConfig.ts                     # Persisted UI configuration (dead session age, resume settings)
 └── types/session.ts                     # TypeScript types mirroring Rust (camelCase)
 ```
 
@@ -190,7 +189,7 @@ All Rust commands that spawn subprocesses MUST:
 PTY data is debounce-batched in `useTerminal.ts` before writing to xterm.js (4ms quiet / 50ms max). xterm.js 6.0's native DEC 2026 synchronized output handles ink's redraw sequences. The batching is defense-in-depth for data outside sync blocks.
 
 ### Directory Encoding
-`encode_dir()` replaces ALL non-alphanumeric characters with hyphens (matching Claude Code). `decode_project_dir()` is lossy — can't distinguish periods from path separators. The resume filter normalizes both sides for comparison.
+`encode_dir()` replaces ALL non-alphanumeric characters with hyphens (matching Claude Code). `decode_project_dir()` resolves ambiguity by probing the filesystem — at each hyphen, it tries period/hyphen/space-joined directory names (longest match first) before falling back to treating hyphens as path separators.
 
 ### State Detection
 State MUST be derived from real signals (JSONL events, PTY output patterns), never from arbitrary timers. **DO NOT** use setTimeout/setInterval to guess state transitions (e.g. "if no JSONL for 15s, assume idle"). If you can't determine the state from the data, that's a gap in the data — fix the data source, don't paper over it with timers. Timer-based heuristics are unreliable, untestable, and always wrong in edge cases.
@@ -211,9 +210,9 @@ State MUST be derived from real signals (JSONL events, PTY output patterns), nev
 - **DO NOT** try to fix terminal flash by removing WebGL or memoizing useTerminal (the fix is xterm.js 6.0 DEC 2026 sync + debounced batching)
 - **DO NOT** use xterm.js 5.x — v6.0 is required for synchronized output support
 
-## Unit Tests (67 across 6 files)
+## Unit Tests
 
-- `jsonlState` 31, `claude` 14, `deadSession` 10, `metaAgent` 5, `theme` 4, `ptyRegistry` 3
+- `jsonlState` 43, `claude` 22, `deadSession` 18, `theme` 4, `ptyRegistry` 6
 
 Run with `npm test`. Add tests for any new pure-logic functions in `src/lib/`.
 

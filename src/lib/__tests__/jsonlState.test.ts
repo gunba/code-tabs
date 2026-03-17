@@ -4,6 +4,7 @@ import {
   createAccumulator,
   modelPricing,
   formatToolAction,
+  extractUserText,
 } from "../jsonlState";
 
 describe("processJsonlEvent", () => {
@@ -129,7 +130,7 @@ describe("processJsonlEvent", () => {
     expect(acc.costUsd).toBeGreaterThan(cost1);
   });
 
-  it("excludes cache_read_input_tokens from token count", () => {
+  it("excludes cache_read but includes cache_creation tokens", () => {
     const acc = createAccumulator();
     const result = processJsonlEvent(acc, {
       type: "assistant",
@@ -137,12 +138,13 @@ describe("processJsonlEvent", () => {
         model: "claude-opus-4-6",
         content: [{ type: "text", text: "ok" }],
         stop_reason: "end_turn",
-        usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 500 },
+        usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 500, cache_creation_input_tokens: 200 },
       },
     });
 
-    // Only non-cached input tokens are counted to avoid inflated totals
-    expect(result.inputTokens).toBe(100);
+    // input_tokens + cache_creation, but NOT cache_read
+    expect(result.inputTokens).toBe(300);
+    expect(result.outputTokens).toBe(50);
   });
 
   // ── user events ─────────────────────────────────────────────────────
@@ -374,5 +376,86 @@ describe("assistantMessageCount", () => {
     expect(acc.assistantMessageCount).toBe(0);
     acc = processJsonlEvent(acc, { type: "result", total_cost_usd: 0.5 });
     expect(acc.assistantMessageCount).toBe(0);
+  });
+});
+
+describe("extractUserText", () => {
+  it("extracts string content", () => {
+    const event = { message: { content: "Fix the login bug please" } };
+    expect(extractUserText(event)).toBe("Fix the login bug please");
+  });
+
+  it("extracts text blocks from array content", () => {
+    const event = { message: { content: [{ type: "text", text: "Refactor the auth module" }] } };
+    expect(extractUserText(event)).toBe("Refactor the auth module");
+  });
+
+  it("filters out command-name noise", () => {
+    const event = { message: { content: "command-name: some internal thing here" } };
+    expect(extractUserText(event)).toBeNull();
+  });
+
+  it("filters out local-command noise", () => {
+    const event = { message: { content: [{ type: "text", text: "local-command execution result data" }] } };
+    expect(extractUserText(event)).toBeNull();
+  });
+
+  it("returns null for short text", () => {
+    const event = { message: { content: "hi" } };
+    expect(extractUserText(event)).toBeNull();
+  });
+
+  it("replaces newlines with spaces", () => {
+    const event = { message: { content: "Line one of my prompt\nLine two of my prompt" } };
+    expect(extractUserText(event)).toBe("Line one of my prompt Line two of my prompt");
+  });
+
+  it("truncates to 150 chars", () => {
+    const longText = "x".repeat(200);
+    const event = { message: { content: longText } };
+    expect(extractUserText(event)!.length).toBe(150);
+  });
+
+  it("returns null for missing content", () => {
+    expect(extractUserText({ message: {} })).toBeNull();
+    expect(extractUserText({})).toBeNull();
+  });
+});
+
+describe("firstUserMessage accumulation", () => {
+  it("starts as null", () => {
+    const acc = createAccumulator();
+    expect(acc.firstUserMessage).toBeNull();
+  });
+
+  it("captures first user message text", () => {
+    const acc = createAccumulator();
+    const result = processJsonlEvent(acc, {
+      type: "user",
+      message: { content: [{ type: "text", text: "Build a REST API for users" }] },
+    });
+    expect(result.firstUserMessage).toBe("Build a REST API for users");
+  });
+
+  it("does not overwrite with subsequent user messages", () => {
+    let acc = createAccumulator();
+    acc = processJsonlEvent(acc, {
+      type: "user",
+      message: { content: [{ type: "text", text: "First message is important" }] },
+    });
+    acc = processJsonlEvent(acc, {
+      type: "user",
+      message: { content: [{ type: "text", text: "Second message should not replace" }] },
+    });
+    expect(acc.firstUserMessage).toBe("First message is important");
+  });
+
+  it("skips tool_result user events for first message", () => {
+    const acc = createAccumulator();
+    const result = processJsonlEvent(acc, {
+      type: "user",
+      message: { content: [{ type: "tool_result", content: "Test output" }] },
+    });
+    expect(result.firstUserMessage).toBeNull();
   });
 });

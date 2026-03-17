@@ -79,17 +79,15 @@ describe("dead session tab visibility", () => {
     expect(regularSessions[0].id).toBe(regular.id);
   });
 
-  it("dead sessions are excluded from TerminalPanel rendering", () => {
+  it("dead sessions remain in TerminalPanel list (kept mounted for error visibility)", () => {
     const dead = mockSession({ state: "dead" });
     const live = mockSession({ state: "idle" });
     const sessions = [dead, live];
 
-    const terminalSessions = sessions
-      .filter((s) => !s.isMetaAgent)
-      .filter((s) => s.state !== "dead");
+    // Dead terminals stay mounted so users can see error output
+    const terminalSessions = sessions.filter((s) => !s.isMetaAgent);
 
-    expect(terminalSessions).toHaveLength(1);
-    expect(terminalSessions[0].id).toBe(live.id);
+    expect(terminalSessions).toHaveLength(2);
   });
 });
 
@@ -160,16 +158,16 @@ describe("dead session revive flow", () => {
     expect(config.resumeSession).toBe("conv-id");
   });
 
-  it("revive preserves Haiku-generated session name", () => {
+  it("revive preserves custom session name over directory fallback", () => {
     const dead = mockSession({
       state: "dead",
-      name: "Haiku Named Session",
+      name: "My Custom Name",
       config: { ...DEFAULT_CONFIG, workingDir: "/my-project" },
     });
 
     const dirToTabName = (dir: string) => dir.split("/").pop() || dir;
     const name = dead.name || dirToTabName(dead.config.workingDir);
-    expect(name).toBe("Haiku Named Session");
+    expect(name).toBe("My Custom Name");
   });
 
   it("after revive, new session passes TerminalPanel filter", () => {

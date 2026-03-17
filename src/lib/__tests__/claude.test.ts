@@ -1,5 +1,15 @@
-import { describe, it, expect } from "vitest";
-import { dirToTabName, modelLabel, formatTokenCount } from "../claude";
+import { describe, it, expect, beforeEach } from "vitest";
+import {
+  dirToTabName,
+  modelLabel,
+  formatTokenCount,
+  SESSION_COLORS,
+  assignSessionColor,
+  sessionColor,
+  releaseSessionColor,
+  getSessionColorIndex,
+  forceSessionColor,
+} from "../claude";
 
 describe("dirToTabName", () => {
   it("extracts last path segment (Unix)", () => {
@@ -66,5 +76,73 @@ describe("formatTokenCount", () => {
   it("formats millions with one decimal", () => {
     expect(formatTokenCount(1200000)).toBe("1.2M");
     expect(formatTokenCount(5000000)).toBe("5.0M");
+  });
+});
+
+describe("session color assignment", () => {
+  beforeEach(() => {
+    // Clean up any state from previous tests
+    for (let i = 0; i < 20; i++) {
+      releaseSessionColor(`test-${i}`);
+    }
+  });
+
+  it("assigns sequential colors to new sessions", () => {
+    assignSessionColor("s1", []);
+    assignSessionColor("s2", ["s1"]);
+    const c1 = sessionColor("s1");
+    const c2 = sessionColor("s2");
+    expect(c1).not.toBe(c2);
+    expect(SESSION_COLORS).toContain(c1);
+    expect(SESSION_COLORS).toContain(c2);
+    releaseSessionColor("s1");
+    releaseSessionColor("s2");
+  });
+
+  it("avoids colors in use by existing sessions", () => {
+    assignSessionColor("a", []);
+    assignSessionColor("b", ["a"]);
+    assignSessionColor("c", ["a", "b"]);
+    const colors = [sessionColor("a"), sessionColor("b"), sessionColor("c")];
+    // All three should be different
+    expect(new Set(colors).size).toBe(3);
+    releaseSessionColor("a");
+    releaseSessionColor("b");
+    releaseSessionColor("c");
+  });
+
+  it("does not reassign if already assigned", () => {
+    assignSessionColor("x", []);
+    const first = sessionColor("x");
+    assignSessionColor("x", []); // second call should be no-op
+    expect(sessionColor("x")).toBe(first);
+    releaseSessionColor("x");
+  });
+
+  it("releaseSessionColor frees the color", () => {
+    assignSessionColor("r", []);
+    expect(getSessionColorIndex("r")).toBeGreaterThanOrEqual(0);
+    releaseSessionColor("r");
+    expect(getSessionColorIndex("r")).toBe(-1);
+  });
+
+  it("forceSessionColor overrides assignment", () => {
+    assignSessionColor("f", []);
+    forceSessionColor("f", 3);
+    expect(sessionColor("f")).toBe(SESSION_COLORS[3]);
+    releaseSessionColor("f");
+  });
+
+  it("sessionColor falls back to hash for unassigned sessions", () => {
+    const color = sessionColor("never-assigned-session-id");
+    expect(SESSION_COLORS).toContain(color);
+  });
+
+  it("getSessionColorIndex returns -1 for unassigned", () => {
+    expect(getSessionColorIndex("nonexistent")).toBe(-1);
+  });
+
+  it("SESSION_COLORS has 8 entries", () => {
+    expect(SESSION_COLORS).toHaveLength(8);
   });
 });

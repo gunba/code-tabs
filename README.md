@@ -1,17 +1,16 @@
 # Claude Tabs
 
-A desktop app for managing multiple Claude Code CLI sessions in tabs, with an IRC-style activity feed, slash command bar, and Haiku-powered session summaries.
+A desktop app for managing multiple Claude Code CLI sessions in tabs, with an IRC-style activity feed, slash command bar, and session management.
 
 ![Screenshot](ss.png)
 
 ## Features
 
-- **Terminal tabs** — Run multiple Claude Code sessions side by side with dense, informative tabs
+- **Terminal tabs** — Run multiple Claude Code sessions side by side with fixed-width tabs, inline rename, and drag-to-reorder
 - **Activity feed** — IRC-style right pane showing real-time agent output across all sessions
-- **Subagent display** — Live subagent status bar with descriptions and state animations
+- **Subagent display** — Live subagent status bar with elapsed time, token counts, and conversation inspector
 - **Slash command bar** — All commands auto-discovered from your Claude Code installation, with queued execution
-- **Session resume** — Resume past conversations with full CLI config persistence
-- **Haiku summariser** — Background AI-generated session names and summaries
+- **Session resume** — Resume past conversations with full CLI config persistence and first-message preview
 - **Hooks manager** — View and configure Claude Code hooks across all scopes
 - **CLI builder** — Visual launcher with every CLI option as clickable pills, live command preview
 
@@ -39,7 +38,7 @@ Or run the portable exe directly: `src-tauri/target/release/claude-tabs.exe`.
 ```bash
 npm run tauri dev      # Dev mode with hot-reload
 npx tsc --noEmit       # Type-check
-npm test               # Unit tests (67 across 6 files)
+npm test               # Unit tests
 node scripts/e2e-test.cjs  # Full E2E self-test (launches the app)
 ```
 
