@@ -168,8 +168,15 @@ fn decode_project_dir(encoded: &str) -> String {
 
 /// Scan ~/.claude/projects/ for past Claude conversation files.
 /// Returns a list of { id, path, directory, lastModified, sizeBytes } entries.
+/// Async to avoid blocking the WebView event loop on large project directories.
 #[tauri::command]
-pub fn list_past_sessions() -> Result<Vec<serde_json::Value>, String> {
+pub async fn list_past_sessions() -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(list_past_sessions_sync)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("Could not determine home directory")?;
     let projects_dir = home.join(".claude").join("projects");
 

@@ -80,6 +80,7 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string)
   const accumulators = useRef<Map<string, JsonlAccumulator>>(new Map());
   const messageBuffers = useRef<Map<string, SubagentMessage[]>>(new Map());
   const lastEventTime = useRef<Map<string, number>>(new Map());
+  const startTimes = useRef<Map<string, number>>(new Map());
 
   // Start subagent watcher once on mount.
   useEffect(() => {
@@ -141,6 +142,7 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string)
               }
             }
 
+            startTimes.current.set(subagentId, Date.now());
             addSubagent(sessionId, {
               id: subagentId,
               parentSessionId: sessionId,
@@ -168,12 +170,22 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string)
             messageBuffers.current.set(subagentId, buffer);
           }
 
+          // Compute elapsed time locally since progress events may lack elapsedTimeSeconds
+          const startTime = startTimes.current.get(subagentId);
+          const elapsed = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+          // Override currentAction with locally computed time for active states
+          let currentAction = acc.currentAction;
+          if (acc.state === "toolUse" || acc.state === "thinking") {
+            const toolName = acc.currentToolName || (acc.state === "thinking" ? "Thinking" : "Working");
+            currentAction = `${toolName} (${elapsed}s)`;
+          }
+
           // Update state (don't overwrite the name from the first user message
           // with random assistant text)
           updateSubagent(sessionId, subagentId, {
             state: acc.state as SessionState,
             tokenCount: acc.inputTokens + acc.outputTokens,
-            currentAction: acc.currentAction,
+            currentAction,
             messages: messageBuffers.current.get(subagentId) || [],
           });
         } catch {

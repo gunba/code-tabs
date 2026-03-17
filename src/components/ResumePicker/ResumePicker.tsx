@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
@@ -51,18 +50,18 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
   const storeSessions = useSessionStore((s) => s.sessions);
   const { lastConfig, addRecentDir, setShowLauncher, setLastConfig } = useSettingsStore();
 
-  const [pastSessions, setPastSessions] = useState<PastSession[]>([]);
+  const pastSessions = useSettingsStore((s) => s.pastSessions);
+  const pastSessionsLoading = useSettingsStore((s) => s.pastSessionsLoading);
+  const loadPastSessions = useSettingsStore((s) => s.loadPastSessions);
   const [dirFilter, setDirFilter] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const filterRef = useRef<HTMLInputElement>(null);
 
-  // Load past sessions on mount
+  // Refresh past sessions on mount (background, non-blocking — data may already be preloaded)
   useEffect(() => {
-    invoke<PastSession[]>("list_past_sessions")
-      .then((sessions) => setPastSessions(sessions))
-      .catch(() => {});
+    loadPastSessions();
     filterRef.current?.focus();
-  }, []);
+  }, [loadPastSessions]);
 
   // Dead session map: CLI session ID -> { nodeSummary, model, permissionMode, effort }
   const deadSessionMap = useMemo(() => {
@@ -224,7 +223,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         <div className="resume-picker-list">
           {filteredPastSessions.length === 0 && (
             <div className="resume-picker-empty">
-              {pastSessions.length === 0 ? "No past sessions found" : "No sessions match filter"}
+              {pastSessionsLoading ? "Loading sessions..." : pastSessions.length === 0 ? "No past sessions found" : "No sessions match filter"}
             </div>
           )}
           {filteredPastSessions.map((ps, idx) => {

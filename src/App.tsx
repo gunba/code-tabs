@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
 import { dirToTabName, formatTokenCount, sessionColor, getSessionColorIndex, forceSessionColor } from "./lib/claude";
@@ -61,6 +62,7 @@ export default function App() {
     initRef.current = true;
     init();
     useUiConfigStore.getState().loadConfig();
+    useSettingsStore.getState().loadPastSessions();
     startTestHarness();
   }, [init]);
 
@@ -140,6 +142,11 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "t") {
         e.preventDefault();
+        // Clear resume/continue flags so the launcher opens fresh
+        const lc = useSettingsStore.getState().lastConfig;
+        if (lc.resumeSession || lc.continueSession) {
+          setLastConfig({ ...lc, resumeSession: null, continueSession: false });
+        }
         setShowLauncher(true);
       }
 
@@ -475,6 +482,15 @@ export default function App() {
                     }}
                   >
                     Copy Working Directory
+                  </button>
+                  <button
+                    className="tab-context-menu-item"
+                    onClick={() => {
+                      shellOpen(ctxSession.config.workingDir);
+                      setTabContextMenu(null);
+                    }}
+                  >
+                    Open in Explorer
                   </button>
                   {isDead && (
                     <button

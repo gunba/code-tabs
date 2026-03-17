@@ -104,10 +104,9 @@ function processAssistant(acc: JsonlAccumulator, event: any): JsonlAccumulator {
   const stopReason: string | undefined = msg?.stop_reason;
   const usage = msg?.usage;
 
-  // Accumulate tokens — only non-cached tokens.
-  // cache_read and cache_creation tokens represent the same context re-sent
-  // across turns, so including them inflates the count to millions.
-  const inputTokens = acc.inputTokens + (usage?.input_tokens || 0);
+  // Accumulate tokens — include cache_creation (new context written to cache)
+  // but not cache_read (same context re-sent across turns, would inflate to millions).
+  const inputTokens = acc.inputTokens + (usage?.input_tokens || 0) + (usage?.cache_creation_input_tokens || 0);
   const outputTokens = acc.outputTokens + (usage?.output_tokens || 0);
 
   // Calculate cost from tokens

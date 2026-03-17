@@ -27,7 +27,7 @@ const IDLE_PROMPT = /❯\s*$/;
  * emitted by the Rust file watcher. Keeps a minimal PTY scan
  * only for permission detection (the one thing JSONL doesn't capture).
  */
-export function useClaudeState(sessionId: string | null, _isResumed = false) {
+export function useClaudeState(sessionId: string | null, isResumed = false) {
   const updateState = useSessionStore((s) => s.updateState);
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
   const accRef = useRef<JsonlAccumulator>(createAccumulator());
@@ -37,7 +37,7 @@ export function useClaudeState(sessionId: string | null, _isResumed = false) {
   // Suppress state/metadata updates until the JSONL watcher has caught up.
   // Only needed for resumed sessions (which have history to replay).
   // New sessions start caught-up — no replay to suppress.
-  const caughtUpRef = useRef(false);
+  const caughtUpRef = useRef(!isResumed);
 
   // Listen to JSONL events from Rust watcher
   useEffect(() => {
@@ -102,11 +102,15 @@ export function useClaudeState(sessionId: string | null, _isResumed = false) {
       "jsonl-caught-up",
       (event) => {
         if (event.payload.sessionId !== sessionId) return;
-        // Set fingerprint to current accumulated state so only genuinely
-        // NEW changes after this point trigger metadata updates.
+        // Only handle the first caught-up signal (initial replay).
+        // Subsequent caught-up signals are from new data batches and should
+        // NOT reset tokens or fingerprints.
+        if (caughtUpRef.current) return;
+        // Set fingerprint to match the RESET metadata we're about to push,
+        // so the next new event will correctly trigger an update.
         const acc = accRef.current;
         lastFingerprintRef.current = JSON.stringify({
-          costUsd: acc.costUsd,
+          costUsd: 0,
           currentAction: acc.currentAction,
           currentToolName: acc.currentToolName,
           subagentCount: acc.subagentCount,
@@ -114,8 +118,8 @@ export function useClaudeState(sessionId: string | null, _isResumed = false) {
           recentOutput: acc.lastAssistantText,
           contextWarning: acc.contextWarning,
           taskProgress: acc.taskProgress,
-          inputTokens: acc.inputTokens,
-          outputTokens: acc.outputTokens,
+          inputTokens: 0,
+          outputTokens: 0,
           assistantMessageCount: acc.assistantMessageCount,
         });
         // Sync state and push accumulated metadata to the store so the
@@ -124,7 +128,7 @@ export function useClaudeState(sessionId: string | null, _isResumed = false) {
         lastStateRef.current = acc.state;
         updateState(sessionId, acc.state);
         updateMetadata(sessionId, {
-          costUsd: acc.costUsd,
+          costUsd: 0,
           currentAction: acc.currentAction,
           currentToolName: acc.currentToolName,
           subagentCount: acc.subagentCount,
@@ -138,9 +142,9 @@ export function useClaudeState(sessionId: string | null, _isResumed = false) {
           // Preserve first user message from replay for tab naming
           ...(acc.firstUserMessage ? { nodeSummary: acc.firstUserMessage } : {}),
         });
-        // Reset token counts so only tokens from the NEW conversation are shown.
+        // Reset token counts and cost so only the NEW conversation's usage is shown.
         // Historical tokens from the resumed session don't count against this run.
-        accRef.current = { ...accRef.current, inputTokens: 0, outputTokens: 0 };
+        accRef.current = { ...accRef.current, inputTokens: 0, outputTokens: 0, costUsd: 0 };
         caughtUpRef.current = true;
       }
     );

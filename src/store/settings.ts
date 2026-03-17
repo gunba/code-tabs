@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { LaunchPreset, SessionConfig } from "../types/session";
+import { invoke } from "@tauri-apps/api/core";
+import type { LaunchPreset, SessionConfig, PastSession } from "../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../types/session";
 
 export interface CliOption {
@@ -42,6 +43,8 @@ interface SettingsState {
   commandUsage: Record<string, number>;
   showHooksManager: boolean;
   replaceSessionId: string | null; // Session to close when launcher launches (Shift+Click relaunch)
+  pastSessions: PastSession[];
+  pastSessionsLoading: boolean;
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -56,6 +59,7 @@ interface SettingsState {
   setSlashCommands: (cmds: SlashCommand[]) => void;
   setReplaceSessionId: (id: string | null) => void;
   setShowHooksManager: (show: boolean) => void;
+  loadPastSessions: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -74,11 +78,20 @@ export const useSettingsStore = create<SettingsState>()(
       commandUsage: {},
       showHooksManager: false,
       replaceSessionId: null,
+      pastSessions: [],
+      pastSessionsLoading: false,
 
       addRecentDir: (dir) =>
-        set((s) => ({
-          recentDirs: [dir, ...s.recentDirs.filter((d) => d !== dir)].slice(0, 20),
-        })),
+        set((s) => {
+          // Normalize: backslashes on Windows, deduplicate case-insensitively
+          const norm = dir.replace(/\//g, "\\").replace(/\\+$/, "");
+          const normLower = norm.toLowerCase();
+          return {
+            recentDirs: [norm, ...s.recentDirs.filter((d) =>
+              d.replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase() !== normLower
+            )].slice(0, 20),
+          };
+        }),
 
       savePreset: (name, config) =>
         set((s) => ({
@@ -93,7 +106,12 @@ export const useSettingsStore = create<SettingsState>()(
           presets: s.presets.filter((p) => p.id !== id),
         })),
 
-      setLastConfig: (config) => set({ lastConfig: config }),
+      setLastConfig: (config) => set({
+        lastConfig: {
+          ...config,
+          workingDir: config.workingDir.replace(/\//g, "\\").replace(/\\+$/, ""),
+        },
+      }),
 
       setShowLauncher: (show) => set({ showLauncher: show }),
 
@@ -119,6 +137,15 @@ export const useSettingsStore = create<SettingsState>()(
       setSlashCommands: (cmds) => set({ slashCommands: cmds }),
       setShowHooksManager: (show) => set({ showHooksManager: show }),
       setReplaceSessionId: (id) => set({ replaceSessionId: id }),
+      loadPastSessions: async () => {
+        set({ pastSessionsLoading: true });
+        try {
+          const sessions = await invoke<PastSession[]>("list_past_sessions");
+          set({ pastSessions: sessions, pastSessionsLoading: false });
+        } catch {
+          set({ pastSessionsLoading: false });
+        }
+      },
     }),
     {
       name: "claude-tabs-settings",
