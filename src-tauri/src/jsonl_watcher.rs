@@ -152,12 +152,13 @@ pub fn start_jsonl_watcher(
 ) {
     // For resumed sessions, the JSONL file uses the original session's ID,
     // but events are tagged with the app's internal session ID.
-    let file_sid = jsonl_session_id.unwrap_or_else(|| session_id.clone());
+    let file_sid = jsonl_session_id.as_deref().unwrap_or(&session_id).to_string();
+    let is_resumed = jsonl_session_id.is_some();
     let path = jsonl_path(&file_sid, &working_dir);
     let sid = session_id.clone();
     let state = watcher_state.inner().clone();
 
-    eprintln!("[jsonl_watcher] Starting watcher for session {} at {}", sid, path.display());
+    eprintln!("[jsonl_watcher] Starting watcher for session {} at {} (resumed={})", sid, path.display(), is_resumed);
 
     // Mark as active
     if let Ok(mut s) = state.lock() {
@@ -168,6 +169,7 @@ pub fn start_jsonl_watcher(
     std::thread::spawn(move || {
         let mut offset: u64 = 0;
         let mut retries = 0;
+        let mut did_fast_scan = false;
 
         loop {
             // Check if stopped
@@ -181,7 +183,61 @@ pub fn start_jsonl_watcher(
             if let Ok(file) = File::open(&path) {
                 retries = 0;
                 let len = file.metadata().map(|m| m.len()).unwrap_or(0);
-                if len > offset {
+
+                // For resumed sessions on first read: fast two-point scan instead of
+                // reading the entire file. Emit only the first 30 lines (for first user
+                // message / tab naming) and the last 100 lines (for current state,
+                // cost, tokens). Then skip to end and watch for new events.
+                if is_resumed && !did_fast_scan && len > 0 {
+                    did_fast_scan = true;
+                    eprintln!("[jsonl_watcher] Fast scan: {} bytes for session {}", len, sid);
+
+                    // HEAD: read first 30 lines for first user message / tab naming
+                    {
+                        let head_file = File::open(&path).unwrap();
+                        let reader = BufReader::new(head_file);
+                        let mut line = String::new();
+                        let mut count = 0;
+                        let mut r = reader;
+                        while count < 30 && r.read_line(&mut line).unwrap_or(0) > 0 {
+                            let trimmed = line.trim();
+                            if !trimmed.is_empty() {
+                                app.emit("jsonl-event", serde_json::json!({
+                                    "sessionId": sid, "line": trimmed
+                                })).ok();
+                                count += 1;
+                            }
+                            line.clear();
+                        }
+                    }
+
+                    // TAIL: seek to last ~256KB and read last 100 lines for state/cost/tokens
+                    {
+                        let tail_file = File::open(&path).unwrap();
+                        let mut reader = BufReader::new(tail_file);
+                        let seek_pos = if len > 256_000 { len - 256_000 } else { 0 };
+                        reader.seek(SeekFrom::Start(seek_pos)).ok();
+                        // Collect lines, keep last 100
+                        let mut tail_lines: Vec<String> = Vec::new();
+                        let mut line = String::new();
+                        while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                            let trimmed = line.trim().to_string();
+                            if !trimmed.is_empty() {
+                                tail_lines.push(trimmed);
+                            }
+                            line.clear();
+                        }
+                        let start = if tail_lines.len() > 100 { tail_lines.len() - 100 } else { 0 };
+                        for tl in &tail_lines[start..] {
+                            app.emit("jsonl-event", serde_json::json!({
+                                "sessionId": sid, "line": tl
+                            })).ok();
+                        }
+                    }
+
+                    app.emit("jsonl-caught-up", serde_json::json!({ "sessionId": sid })).ok();
+                    offset = len;
+                } else if len > offset {
                     let mut reader = BufReader::new(file);
                     if reader.seek(SeekFrom::Start(offset)).is_ok() {
                         let mut line = String::new();
