@@ -1,42 +1,39 @@
 # Claude Tabs — Development Guide
 
-## Iteration Speed is Everything
+## What is this?
 
-Fast builds and manual verification are the core workflow. Never do a full NSIS build just to test — use quick builds.
+A Tauri v2 desktop app that manages multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
+
+## Build & Test
 
 ```bash
-npm run build:quick     # Release binary, no installer (~30s after first build)
+npm run build:quick     # Release binary, no installer (~30s incremental)
 npm run build:debug     # Debug binary, fastest (~10-15s incremental)
-npm run tauri dev       # Dev mode with hot-reload (frontend only, Rust recompiles on change)
+npm run tauri dev       # Dev mode with hot-reload
 npm run tauri build     # Full NSIS installer (only for releases)
 ```
-
-The portable exe is at `src-tauri/target/release/claude-tabs.exe` (quick) or `src-tauri/target/debug/claude-tabs.exe` (debug).
 
 ### Validation (before every commit)
 
 ```bash
 npx tsc --noEmit           # Zero TypeScript errors
-npm test                   # All Vitest unit tests pass
+npm test                   # All Vitest unit tests pass (101 across 5 files)
 cargo check (in src-tauri) # Zero Rust errors
 ```
 
-### Manual Testing (MANDATORY for every change)
+### Manual Testing (MANDATORY)
 
-You MUST personally test every change before delivering. Do NOT guess at fixes or theorize without evidence. The workflow is:
+You MUST test every change before delivering. Do NOT guess at fixes.
 
 1. Add logging/instrumentation to observe actual behavior
 2. Launch the app (`build:quick` or `tauri dev`) and reproduce the issue
-3. Read the test harness state (`%LOCALAPPDATA%/claude-tabs/test-state.json`) to understand what's happening
+3. Read test harness state (`%LOCALAPPDATA%/claude-tabs/test-state.json`)
 4. Make a targeted fix based on observed evidence
 5. Re-run the same reproduction to verify the fix works
 6. Only then commit and deliver
 
-If the test harness can't observe an issue, EXTEND IT. Never say "I can't test this."
-
-## What is this?
-
-A Tauri v2 desktop app that manages multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
+**For visual issues that the test harness can't observe, take a screenshot and visually inspect.**
+If the harness can't observe an issue, EXTEND IT. Never say "I can't test this."
 
 ## Architecture
 
@@ -48,56 +45,43 @@ React UI (WebView2) ←→ Tauri IPC ←→ Rust Backend ←→ ConPTY ←→ Cl
 ┌──────────────────────────────────────────────────────────────┐
 │ Tab Bar  [● session1 | ● session2 | + ]                      │
 ├──────────────────────────────────────────────────────────────┤
-│ Subagent Bar  [▐ agent-task-1  12K] [▐ agent-task-2  8K]    │
+│ Subagent Bar  [▐ agent-task-1  12K] [▐ agent-task-2  8K]     │
 ├────────────────────────────────────────────┬─────────────────┤
 │  Terminal (xterm.js 6.0)                   │  ActivityFeed   │
-│  (active session, CSS display toggle)      │  (IRC-style)    │
+│  (active session, CSS display toggle)      │  (actions log)  │
 ├────────────────────────────────────────────┴─────────────────┤
 │ Command Bar (slash commands)                                  │
 ├──────────────────────────────────────────────────────────────┤
-│ StatusBar (model, cost, tokens, duration)                    │
+│ StatusBar (model, cost, tokens, duration)                     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
 
 1. User types in xterm.js → `onData` → PTY `write` → ConPTY → Claude stdin
-2. Claude stdout → ConPTY → `tauri-pty` npm `onData` callback → `Uint8Array`
-3. PTY data handler: `writeBytes(data)` to xterm.js (debounce-batched) + `feed(text)` for permission detection
-4. Rust JSONL watcher tails `~/.claude/projects/{encoded_dir}/{session}.jsonl` → Tauri events → `useClaudeState` updates Zustand store
-5. React re-renders from store: tab state dots, status bar, activity feed, subagent cards
+2. Claude stdout → ConPTY → `tauri-pty` npm `onData` → `Uint8Array`
+3. PTY data: `writeBytes(data)` to xterm.js (debounce-batched) + `feed(text)` for permission detection
+4. Background tabs: PTY data buffered in `bgBufferRef`, flushed as single write on tab focus
+5. Rust JSONL watcher tails `~/.claude/projects/{encoded_dir}/{session}.jsonl` → Tauri events → `useClaudeState` → Zustand store
+6. React re-renders from store: tab dots, status bar, activity feed, subagent cards
 
 ### Key Subsystems
 
 | Subsystem | Implementation | Notes |
 |-----------|---------------|-------|
 | **PTY** | `tauri-plugin-pty` (Rust) + `tauri-pty` npm | Do NOT pass `env: {}` — omit to inherit |
-| **Terminal** | xterm.js 6.0 + WebGL + FitAddon | Native DEC 2026 sync output prevents ink flash |
-| **State detection** | JSONL-based (Rust watcher) | PTY scan only for permission detection |
-| **Persistence** | Sessions → `%LOCALAPPDATA%/claude-tabs/sessions.json` | Frontend-owned via `persist_sessions_json` |
+| **Terminal** | xterm.js 6.0 + WebGL + FitAddon | DEC 2026 sync output prevents ink flash |
+| **State** | JSONL-based (Rust watcher) | PTY scan only for permission/idle detection |
+| **Persistence** | `%LOCALAPPDATA%/claude-tabs/sessions.json` | Frontend-owned via `persist_sessions_json` |
 | **Settings** | Zustand + `localStorage` | Recent dirs, CLI capabilities, command usage |
 | **Discovery** | `claude --help` + binary scan + plugin/skill file scan | Options, commands, slash commands, hooks |
 | **Colors** | Sequential assignment in `claude.ts` | Avoids collisions, preserved across revival |
-| **Background buffering** | TerminalPanel visibleRef + bgBufferRef | PTY data buffered when tab hidden, flushed on focus |
-| **Scrollback** | useTerminal onScroll handler | 5K default, grows 10K on scroll-to-top, shrinks at bottom |
-| **Dir encoding** | `encode_dir()` — ALL non-alphanumeric → hyphen | `decode_project_dir()` probes filesystem to resolve ambiguity |
+| **Buffering** | TerminalPanel `visibleRef` + `bgBufferRef` | O(1) rendering — only active tab writes to xterm |
+| **Scrollback** | useTerminal `onScroll` handler | 5K default, +10K on scroll-to-top, shrinks at bottom |
+| **Dir encoding** | `encode_dir()` — ALL non-alphanumeric → hyphen | `decode_project_dir()` probes filesystem for ambiguity |
+| **JSONL resume** | Fast two-point scan | First 30 + last 100 lines, skip middle. O(1) not O(file) |
 
-### Rust Backend
-
-| Command | Purpose |
-|---------|---------|
-| `create_session` / `close_session` | Session CRUD |
-| `build_claude_args` | SessionConfig → CLI args (`--resume`, `--session-id`, `--project-dir`, etc.) |
-| `start_jsonl_watcher` / `stop_jsonl_watcher` | Tail JSONL files, emit events |
-| `start_subagent_watcher` / `stop_subagent_watcher` | Watch subagent JSONL directory |
-| `detect_claude_cli` / `check_cli_version` / `get_cli_help` | CLI discovery |
-| `list_past_sessions` | Scan `~/.claude/projects/` for resumable sessions (async) |
-| `get_first_user_message` | Read first user message from session JSONL |
-| `persist_sessions_json` / `load_persisted_sessions` | Save/restore sessions |
-| `discover_builtin_commands` / `discover_plugin_commands` | Slash command discovery |
-| `discover_hooks` / `save_hooks` | Hook configuration |
-
-### Frontend Structure
+## Frontend Structure
 
 ```
 src/
@@ -105,107 +89,88 @@ src/
 ├── store/sessions.ts                    # Zustand: sessions, active tab, subagents
 ├── store/settings.ts                    # Zustand: preferences, CLI info (persisted to localStorage)
 ├── hooks/
-│   ├── useTerminal.ts                   # xterm.js lifecycle, debounced write batching
+│   ├── useTerminal.ts                   # xterm.js lifecycle, write batching, dynamic scrollback
 │   ├── usePty.ts                        # PTY spawn (tauri-pty npm wrapper)
-│   ├── useClaudeState.ts                # JSONL event listener + permission PTY scan + first message
+│   ├── useClaudeState.ts               # JSONL events + permission scan + first message + plan-mode continuation
 │   ├── useSubagentWatcher.ts            # Subagent JSONL tracking + local elapsed timer
 │   ├── useCliWatcher.ts                 # CLI version + capabilities
+│   ├── useCommandDiscovery.ts           # Slash command discovery (binary scan + --help fallback + plugins)
 │   └── useNotifications.ts              # Desktop notifications
 ├── components/
-│   ├── Terminal/TerminalPanel.tsx        # PTY + terminal + JSONL watcher per session
-│   ├── ActivityFeed/ActivityFeed.tsx     # IRC-style event feed
-│   ├── SessionLauncher/SessionLauncher.tsx  # New/resume session modal
-│   ├── ResumePicker/ResumePicker.tsx     # Browse past sessions to resume
-│   ├── CommandBar/CommandBar.tsx         # Slash command buttons
-│   ├── StatusBar/StatusBar.tsx           # Model, cost, tokens, duration
-│   ├── CommandPalette/CommandPalette.tsx # Ctrl+K search
-│   ├── SubagentInspector/SubagentInspector.tsx  # Subagent conversation viewer
-│   └── HooksManager/HooksManager.tsx    # Hook configuration UI
+│   ├── Terminal/TerminalPanel.tsx        # PTY + terminal + JSONL watcher + background buffering
+│   ├── ActivityFeed/ActivityFeed.tsx     # Action-oriented event feed (state changes, tool uses, subagents)
+│   ├── SessionLauncher/SessionLauncher.tsx
+│   ├── ResumePicker/ResumePicker.tsx
+│   ├── CommandBar/CommandBar.tsx         # Slash commands with usage-based sorting
+│   ├── StatusBar/StatusBar.tsx
+│   ├── CommandPalette/CommandPalette.tsx
+│   ├── SubagentInspector/SubagentInspector.tsx  # Markdown-rendered conversation viewer
+│   └── HooksManager/HooksManager.tsx
 ├── lib/
-│   ├── jsonlState.ts                    # JSONL event processor (state machine + cost + metadata)
-│   ├── theme.ts                         # Theme definitions, CSS variable setter, xterm theme
-│   ├── claude.ts                        # CLI helpers, color assignment, dirToTabName, formatTokenCount
+│   ├── jsonlState.ts                    # JSONL state machine (state + cost + metadata + first message)
+│   ├── claude.ts                        # Color assignment, dirToTabName, formatTokenCount
+│   ├── theme.ts                         # Theme definitions, CSS variables, xterm theme
 │   ├── ptyRegistry.ts                   # Global PTY writer registry
 │   ├── terminalRegistry.ts             # Terminal buffer reader registry
-│   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
-│   ├── uiConfig.ts                     # Persisted UI configuration (dead session age, resume settings)
-│   └── perfTrace.ts                    # Performance tracing utilities
+│   ├── testHarness.ts                   # Test bridge (state snapshots + command polling)
+│   ├── uiConfig.ts                     # Persisted UI config
+│   └── perfTrace.ts                    # Performance tracing
 └── types/session.ts                     # TypeScript types mirroring Rust (camelCase)
 ```
 
-### Theme System
+## Rust Backend Commands
 
-All colors are CSS custom properties on `:root`. Components never use hardcoded hex. Theme is applied at startup via `applyTheme()`. xterm.js colors come from `getXtermTheme()` reading CSS variables.
-
-Key variables: `--bg-primary`, `--bg-surface`, `--accent` (clay), `--accent-secondary` (blue), `--accent-tertiary` (purple), `--term-bg`, `--term-fg`.
+| Command | Purpose |
+|---------|---------|
+| `create_session` / `close_session` | Session CRUD |
+| `build_claude_args` | SessionConfig → CLI args |
+| `start_jsonl_watcher` / `stop_jsonl_watcher` | Tail JSONL files (fast scan for resumed sessions) |
+| `start_subagent_watcher` / `stop_subagent_watcher` | Watch subagent JSONL directory |
+| `find_continuation_session` | Detect plan-mode forks via sessionId linking |
+| `detect_claude_cli` / `check_cli_version` / `get_cli_help` | CLI discovery |
+| `list_past_sessions` | Scan `~/.claude/projects/` (async) |
+| `get_first_user_message` | First user message from JSONL |
+| `persist_sessions_json` / `load_persisted_sessions` | Save/restore sessions |
+| `discover_builtin_commands` / `discover_plugin_commands` | Slash command discovery |
+| `discover_hooks` / `save_hooks` | Hook configuration |
 
 ## Test Harness
 
-The app includes a test bridge (`src/lib/testHarness.ts`) that writes a JSON snapshot of app state to `%LOCALAPPDATA%/claude-tabs/test-state.json` every 2 seconds. It also polls for commands from `test-commands.json`.
-
-### Reading State
+State snapshot at `%LOCALAPPDATA%/claude-tabs/test-state.json` (every 2s). Commands via `test-commands.json`.
 
 ```bash
 cat "$LOCALAPPDATA/claude-tabs/test-state.json"
 ```
 
-Contains: session count/states/metadata, CLI version, option count, slash command count, active tab, subagents, activity feed entries, console logs.
+Commands: `createSession`, `closeSession`, `reviveSession`, `setActiveTab`, `getSubagents`, `listSessions`, `sendInput`.
 
-### Sending Commands
+To extend: add state to `captureState()` in `testHarness.ts`, or add command handlers in the polling loop.
 
-Write a JSON command to `test-commands.json`:
+## Rules
 
-```json
-{ "command": "createSession", "args": { "name": "test", "config": { "workingDir": "C:/path" } } }
-```
-
-Available commands: `createSession`, `closeSession`, `reviveSession`, `setActiveTab`, `getSubagents`, `listSessions`, `sendInput`.
-
-### Extending the Harness
-
-1. Add state to the `captureState()` function in `testHarness.ts`
-2. Read it from `test-state.json` after launching the app
-3. For new commands, add a handler in the command polling loop
-
-## Key Conventions
-
-### Code Structure
+### Design Principles
+- **All colors use CSS custom properties** — never hardcode hex
+- **State from real signals only** — JSONL events, PTY output, filesystem structure. Never setTimeout/setInterval to guess state.
+- **Fix root causes** — no retries-with-delay, no timer-based heuristics, no buffer-size band-aids
+- **Deterministic linking** — Claude Code embeds the old sessionId in continuation JSONL files. Use that, don't scan by timestamp.
+- Components in `src/components/<Name>/<Name>.tsx` with co-located CSS
 - Rust IPC commands in `commands.rs`, registered in `lib.rs` via `generate_handler!`
 - TypeScript types in `src/types/` mirror Rust types with camelCase
-- Zustand stores in `src/store/`, hooks in `src/hooks/`
-- Components in `src/components/<Name>/<Name>.tsx` with co-located CSS
-- **All colors use CSS custom properties** — never hardcode hex
 
-### Subprocess Spawns
-All Rust commands that spawn subprocesses MUST:
+### Subprocess Spawns (Rust)
 1. Use `tokio::task::spawn_blocking()` to avoid blocking the WebView event loop
 2. Add `CREATE_NO_WINDOW` flag on Windows (`cmd.creation_flags(0x08000000)`)
 
 ### Session Revival
-- Use `resumeSession || sessionId || id` for the resume target (chains through multiple revivals)
-- Check JSONL file existence via `session_has_conversation` (not `assistantMessageCount`)
-- Skip `--session-id` when using `--resume` or `--continue`
-- Preserve metadata (nodeSummary, tokens) across revival
-- `resumeSession` and `continueSession` are one-shot — never persist them in `lastConfig`
+- Resume target: `resumeSession || sessionId || id` (chains through multiple revivals)
+- Create new session BEFORE closing old one (avoids visual flash)
+- Preserve color, metadata (nodeSummary, tokens) across revival
+- `resumeSession` and `continueSession` are one-shot — never persist in `lastConfig`
+- Interrupted sessions (replay ends in thinking/toolUse) force to idle after caught-up
+- Historical subagents suppressed during initial replay for resumed sessions
 
-### Terminal Write Batching
-PTY data is debounce-batched in `useTerminal.ts` before writing to xterm.js (4ms quiet / 50ms max). xterm.js 6.0's native DEC 2026 synchronized output handles ink's redraw sequences. The batching is defense-in-depth for data outside sync blocks.
-
-### Directory Encoding
-`encode_dir()` replaces ALL non-alphanumeric characters with hyphens (matching Claude Code). `decode_project_dir()` resolves ambiguity by probing the filesystem — at each hyphen, it tries period/hyphen/space-joined directory names (longest match first) before falling back to treating hyphens as path separators.
-
-### State Detection
-State MUST be derived from real signals (JSONL events, PTY output patterns), never from arbitrary timers. **DO NOT** use setTimeout/setInterval to guess state transitions (e.g. "if no JSONL for 15s, assume idle"). If you can't determine the state from the data, that's a gap in the data — fix the data source, don't paper over it with timers. Timer-based heuristics are unreliable, untestable, and always wrong in edge cases.
-
-### No Hacky Solutions
-Every fix must address the root cause. If a behavior can be derived from real data (JSONL events, filesystem structure, PTY output), use that signal. Never:
-- Retry after a delay hoping the second attempt works (fix why the first attempt fails)
-- Use timers/polling to guess when something happened (find the event that signals it)
-- Use heuristics when deterministic linking is possible (e.g. Claude Code links continued sessions by embedding the old sessionId in the new JSONL file's first events — use that, don't scan by timestamp)
-- Increase buffer sizes instead of implementing proper lazy loading (xterm.js supports dynamic `scrollback` via `terminal.options.scrollback`)
-
-### Things that broke before (don't repeat)
-- **DO NOT** use arbitrary timers/timeouts to infer session state (see State Detection above)
+### Don't Repeat These Mistakes
+- **DO NOT** use timers to infer session state
 - **DO NOT** use Tauri event listeners for PTY data — use `tauri-pty` npm wrapper
 - **DO NOT** use React `key=` to swap terminals — destroys xterm.js + PTY
 - **DO NOT** pass `env: {}` to PTY spawn — wipes environment
@@ -213,19 +178,10 @@ Every fix must address the root cause. If a behavior can be derived from real da
 - **DO NOT** put React hooks after conditional early returns
 - **DO NOT** let `CLAUDECODE` env var leak into spawned PTYs
 - **DO NOT** use `|| []` in Zustand selectors (creates new references, causes render storms)
-- **DO NOT** sync Rust subprocess spawns on main thread (blocks WebView for seconds)
-- **DO NOT** seed the ActivityFeed with persisted state on startup (users see it as noise)
-- **DO NOT** persist sessions from the Rust session manager (metadata is stale — frontend owns persistence via `persist_sessions_json`)
-- **DO NOT** persist `resumeSession`/`continueSession` in `lastConfig` (one-shot fields, causes launcher to stick in resume mode)
-- **DO NOT** try to fix terminal flash by removing WebGL or memoizing useTerminal (the fix is xterm.js 6.0 DEC 2026 sync + debounced batching)
-- **DO NOT** use xterm.js 5.x — v6.0 is required for synchronized output support
-- **DO NOT** set xterm.js scrollback on every onScroll event (triggers buffer reconstruction, kills performance)
-
-## Unit Tests
-
-- `jsonlState` 50, `claude` 23, `deadSession` 18, `theme` 4, `ptyRegistry` 6
-
-Run with `npm test`. Add tests for any new pure-logic functions in `src/lib/`.
+- **DO NOT** sync Rust subprocess spawns on main thread (blocks WebView)
+- **DO NOT** seed ActivityFeed with persisted state on startup
+- **DO NOT** persist sessions from Rust session manager (metadata is stale)
+- **DO NOT** set xterm.js scrollback on every onScroll event (triggers buffer reconstruction)
 
 ## Keyboard Shortcuts
 
