@@ -135,7 +135,9 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // Start subagent JSONL watcher — uses the app's session ID directly.
   // For new sessions: --session-id matches, subagents go under our ID's dir.
   // For resumed sessions: subagents from the NEW conversation go under the new ID.
-  useSubagentWatcher(session.id, session.config.workingDir);
+  // Pass resumeSession as the JSONL session ID for subagent directory lookup.
+  // Subagents live under the CLI's session ID, not our internal app ID.
+  useSubagentWatcher(session.id, session.config.workingDir, session.config.resumeSession || session.config.sessionId || null);
 
   // Duration timer
   useDurationTimer(session.id, session.createdAt, session.state);

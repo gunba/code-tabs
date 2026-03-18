@@ -61,8 +61,8 @@
 
 .scroll-to-bottom-btn {
   position: absolute;
-  bottom: 36px;
-  right: 24px;
+  bottom: 8px;
+  right: 28px;
   z-index: 11;
   width: 28px;
   height: 28px;
@@ -87,8 +87,8 @@
 
 .clear-input-btn {
   position: absolute;
-  bottom: 36px;
-  right: 24px;
+  bottom: 8px;
+  right: 28px;
   z-index: 11;
   width: 28px;
   height: 28px;

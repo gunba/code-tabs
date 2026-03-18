@@ -74,7 +74,7 @@ const STALE_TIMEOUT = 30_000;
  * Hook that watches for subagent JSONL events and maintains subagent state.
  * Accumulates conversation messages for inspection.
  */
-export function useSubagentWatcher(sessionId: string | null, workingDir: string) {
+export function useSubagentWatcher(sessionId: string | null, workingDir: string, jsonlSessionId: string | null = null) {
   const addSubagent = useSessionStore((s) => s.addSubagent);
   const updateSubagent = useSessionStore((s) => s.updateSubagent);
   const accumulators = useRef<Map<string, JsonlAccumulator>>(new Map());
@@ -89,13 +89,13 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string)
     invoke("start_subagent_watcher", {
       sessionId,
       workingDir,
-      jsonlSessionId: null,
+      jsonlSessionId: jsonlSessionId,
     });
 
     return () => {
       invoke("stop_subagent_watcher", { sessionId });
     };
-  }, [sessionId, workingDir]);
+  }, [sessionId, workingDir, jsonlSessionId]);
 
   // Listen for subagent JSONL events
   useEffect(() => {

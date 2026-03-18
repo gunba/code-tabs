@@ -24,8 +24,8 @@ interface PrevSession {
   state: string;
   name: string;
   currentAction: string | null;
-  subagentCount: number;
-  settled: boolean; // true after first idle transition from an active state (not initial state)
+  subagentActivity: string[];
+  settled: boolean;
 }
 
 export function ActivityFeed() {
@@ -56,12 +56,14 @@ export function ActivityFeed() {
       const existing = prev.get(session.id);
 
       if (!existing) {
+        // Initialize with CURRENT values so restored/revived sessions don't
+        // generate spurious entries (e.g. "Spawned 5 subagents" from historical count)
         prev.set(session.id, {
           state: session.state,
           name: sessionName,
           currentAction: session.metadata.currentAction ?? null,
-          subagentCount: session.metadata.subagentCount,
-          settled: false,
+          subagentActivity: [...(session.metadata.subagentActivity || [])],
+          settled: session.metadata.assistantMessageCount > 0,
         });
         continue;
       }
@@ -103,12 +105,14 @@ export function ActivityFeed() {
       }
       existing.currentAction = currentAction;
 
-      // Subagent creation
-      if (session.metadata.subagentCount > existing.subagentCount && existing.settled) {
-        const newCount = session.metadata.subagentCount - existing.subagentCount;
-        addEntry({ timestamp: now, sessionId: session.id, sessionName, type: "action", message: `Spawned ${newCount} subagent${newCount > 1 ? "s" : ""}` });
+      // Subagent creation — show each new subagent individually
+      const currentActivity = session.metadata.subagentActivity || [];
+      if (currentActivity.length > existing.subagentActivity.length && existing.settled) {
+        for (let i = existing.subagentActivity.length; i < currentActivity.length; i++) {
+          addEntry({ timestamp: now, sessionId: session.id, sessionName, type: "action", message: `Subagent: ${currentActivity[i]}` });
+        }
       }
-      existing.subagentCount = session.metadata.subagentCount;
+      existing.subagentActivity = [...currentActivity];
 
       existing.state = session.state;
 

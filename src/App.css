@@ -51,7 +51,7 @@
   width: 200px;
   min-width: 200px;
   max-width: 200px;
-  height: 56px;
+  height: 62px;
   overflow: hidden;
 }
 
@@ -166,11 +166,11 @@
 }
 
 .tab-summary {
-  font-size: 11px;
+  font-size: 9px;
   color: var(--text-muted);
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   line-height: 1.3;
   word-break: break-word;

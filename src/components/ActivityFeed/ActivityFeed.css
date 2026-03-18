@@ -8,9 +8,9 @@
   flex-direction: column;
   background: var(--bg-surface);
   border-left: 1px solid var(--border);
-  width: 20%;
-  min-width: 180px;
-  max-width: 320px;
+  width: 14%;
+  min-width: 140px;
+  max-width: 220px;
   flex-shrink: 0;
 }
 
