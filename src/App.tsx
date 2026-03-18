@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
 import { dirToTabName, formatTokenCount, sessionColor, getSessionColorIndex, forceSessionColor } from "./lib/claude";
@@ -235,8 +234,8 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Tab bar + title bar (custom window chrome) */}
-      <div className="tab-bar" data-tauri-drag-region>
+      {/* Tab bar */}
+      <div className="tab-bar">
           <div className="tab-bar-scroll">
             {regularSessions.map((session) => {
               const isActive = session.id === activeTabId;
@@ -383,11 +382,6 @@ export default function App() {
           >
             +
           </button>
-          <div className="window-controls">
-            <button className="window-btn window-btn-minimize" onClick={() => getCurrentWindow().minimize()} title="Minimize">─</button>
-            <button className="window-btn window-btn-maximize" onClick={() => getCurrentWindow().toggleMaximize()} title="Maximize">□</button>
-            <button className="window-btn window-btn-close" onClick={() => getCurrentWindow().close()} title="Close">×</button>
-          </div>
         </div>
 
       {/* Subagent row — conditional, only for active session */}
