@@ -31,8 +31,8 @@ pub fn run() {
                         let hwnd = hwnd.0 as *mut std::ffi::c_void;
                         use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
                         // DWMWA_CAPTION_COLOR = 35
-                        // Color is COLORREF (0x00BBGGRR) — dark surface color matching --bg-surface (#262523)
-                        let color: u32 = 0x00232526;
+                        // Color is COLORREF (0x00BBGGRR) — matches --bg-primary (#1f1e1c), darker than tab bar
+                        let color: u32 = 0x001C1E1F;
                         let hr = unsafe {
                             DwmSetWindowAttribute(
                                 hwnd,
