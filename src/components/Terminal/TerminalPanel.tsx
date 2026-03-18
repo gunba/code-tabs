@@ -146,12 +146,23 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // handlePtyData needs terminal, terminal needs handleTermData, which needs pty,
   // and pty needs handlePtyData. We use terminalRef to avoid forward-referencing.
   const terminalRef = useRef<ReturnType<typeof useTerminal> | null>(null);
+  // Buffer PTY data for background tabs — skip xterm.js writes when not visible,
+  // flush in one write when the tab becomes visible. Saves O(N) rendering cost.
+  const visibleRef = useRef(visible);
+  const bgBufferRef = useRef<Uint8Array[]>([]);
+  visibleRef.current = visible;
 
   const handlePtyData = useCallback(
     (data: Uint8Array) => {
       const text = decoder.current.decode(data, { stream: true });
-      terminalRef.current?.writeBytes(data);
+      // Always feed text for JSONL state/permission detection regardless of visibility
       feed(text);
+      // Only write to xterm.js if the tab is visible; buffer otherwise
+      if (visibleRef.current) {
+        terminalRef.current?.writeBytes(data);
+      } else {
+        bgBufferRef.current.push(data);
+      }
     },
     [feed]
   );
@@ -280,8 +291,18 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // repeatedly and flashing the terminal.
   useEffect(() => {
     if (visible) {
+      // Flush background buffer — write all buffered data in one batch
+      const chunks = bgBufferRef.current;
+      if (chunks.length > 0) {
+        bgBufferRef.current = [];
+        let totalLen = 0;
+        for (const c of chunks) totalLen += c.length;
+        const merged = new Uint8Array(totalLen);
+        let offset = 0;
+        for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+        terminal.termRef.current?.write(merged);
+      }
       terminal.fit();
-      // Scroll to bottom after fit to prevent showing top of scrollback
       terminal.termRef.current?.scrollToBottom();
       terminal.focus();
     }
