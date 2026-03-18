@@ -6,7 +6,7 @@ import { useClaudeState } from "../../hooks/useClaudeState";
 import { useSubagentWatcher } from "../../hooks/useSubagentWatcher";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
-import { buildClaudeArgs } from "../../lib/claude";
+import { buildClaudeArgs, getResumeId } from "../../lib/claude";
 import { registerPtyWriter, unregisterPtyWriter } from "../../lib/ptyRegistry";
 import { registerBufferReader, unregisterBufferReader } from "../../lib/terminalRegistry";
 import type { Session, SessionState } from "../../types/session";
@@ -24,26 +24,28 @@ interface TerminalPanelProps {
 function StateBanner({ session }: { session: Session }) {
   const tool = session.metadata.currentToolName;
 
-  const bannerContent = (): { icon: string; text: string | null; className: string } | null => {
-    switch (session.state) {
-      case "thinking":
-        return { icon: "●", text: null, className: "banner-thinking" };
-      case "toolUse":
-        return {
-          icon: "⚙",
-          text: tool || null,
-          className: `banner-tool banner-tool-${(tool || "").toLowerCase()}`,
-        };
-      case "waitingPermission":
-        return { icon: "⏸", text: null, className: "banner-permission" };
-      case "error":
-        return { icon: "⚠", text: null, className: "banner-error" };
-      default:
-        return null;
-    }
-  };
+  let content: { icon: string; text: string | null; className: string } | null;
+  switch (session.state) {
+    case "thinking":
+      content = { icon: "●", text: null, className: "banner-thinking" };
+      break;
+    case "toolUse":
+      content = {
+        icon: "⚙",
+        text: tool || null,
+        className: `banner-tool banner-tool-${(tool || "").toLowerCase()}`,
+      };
+      break;
+    case "waitingPermission":
+      content = { icon: "⏸", text: null, className: "banner-permission" };
+      break;
+    case "error":
+      content = { icon: "⚠", text: null, className: "banner-error" };
+      break;
+    default:
+      content = null;
+  }
 
-  const content = bannerContent();
   if (!content) return null;
 
   return (
@@ -58,7 +60,7 @@ function StateBanner({ session }: { session: Session }) {
 
 const ACTIVE_STATES = new Set<SessionState>(["thinking", "toolUse", "waitingPermission", "error"]);
 
-function useDurationTimer(sessionId: string, _createdAt: string, state: SessionState) {
+function useDurationTimer(sessionId: string, state: SessionState) {
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
   const accumulatedRef = useRef(0);
   const lastTickRef = useRef(Date.now());
@@ -96,7 +98,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const spawnedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const isResumed = !!session.config.resumeSession;
-  const watchedJsonlIdRef = useRef(session.config.resumeSession || session.config.sessionId || session.id);
+  const watchedJsonlIdRef = useRef(getResumeId(session));
 
   // When a result event fires (conversation ended) but the PTY is still alive,
   // check if Claude forked into a new JSONL file (plan mode, continuation).
@@ -119,18 +121,11 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     }).catch(() => {});
   }, [session.id, session.state, session.config.workingDir]);
 
-  const { feed, caughtUp } = useClaudeState(session.id, isResumed, { onConversationEnd: handleConversationEnd });
+  const handleCaughtUp = useCallback(() => setLoading(false), []);
+  const { feed } = useClaudeState(session.id, isResumed, { onConversationEnd: handleConversationEnd, onCaughtUp: handleCaughtUp });
   const [loading, setLoading] = useState(isResumed);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-
-  useEffect(() => {
-    if (!isResumed) return;
-    if (caughtUp.current) { setLoading(false); return; }
-    const interval = setInterval(() => {
-      if (caughtUp.current) { setLoading(false); clearInterval(interval); }
-    }, 200);
-    return () => clearInterval(interval);
-  }, [caughtUp, isResumed]);
+  const [queuedInput, setQueuedInput] = useState<string | null>(null);
 
   // Start subagent JSONL watcher — uses the app's session ID directly.
   // For new sessions: --session-id matches, subagents go under our ID's dir.
@@ -140,7 +135,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   useSubagentWatcher(session.id, session.config.workingDir, session.config.resumeSession || session.config.sessionId || null);
 
   // Duration timer
-  useDurationTimer(session.id, session.createdAt, session.state);
+  useDurationTimer(session.id, session.state);
 
   const decoder = useRef(new TextDecoder());
 
@@ -208,14 +203,18 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         }
       }
     },
-    [pty.handle, recordCommandUsage]
+    // pty.handle is a stable ref — omitted from deps intentionally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [recordCommandUsage]
   );
 
   const handleResize = useCallback(
     (cols: number, rows: number) => {
       pty.handle.current?.resize(cols, rows);
     },
-    [pty.handle]
+    // pty.handle is a stable ref — omitted from deps intentionally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   const terminal = useTerminal({
@@ -311,6 +310,35 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, session.id]);
 
+  // Queue input handler: capture typed text, or cancel if already queued
+  const handleQueueInput = useCallback(() => {
+    if (queuedInput) {
+      setQueuedInput(null);
+      return;
+    }
+    const text = inputBufRef.current.trim();
+    if (!text) return;
+    inputBufRef.current = "";
+    pty.handle.current?.write("\x15"); // Clear terminal input line
+    setQueuedInput(text);
+    // pty.handle is a stable ref — omitted from deps intentionally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queuedInput]);
+
+  // Auto-send queued input when session becomes idle, clear if session dies
+  useEffect(() => {
+    if (!queuedInput) return;
+    if (session.state === "dead") { setQueuedInput(null); return; }
+    if (session.state !== "idle") return;
+    const timer = setTimeout(() => {
+      pty.handle.current?.write(queuedInput + "\r");
+      setQueuedInput(null);
+    }, 800);
+    return () => clearTimeout(timer);
+    // pty.handle is a stable ref — omitted from deps intentionally
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.state, queuedInput]);
+
   // Poll scroll position to show/hide scroll-to-bottom button
   useEffect(() => {
     if (!visible) return;
@@ -359,7 +387,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         </div>
       )}
       <div className="terminal-container" ref={setContainer} />
-      {showScrollBtn ? (
+      {showScrollBtn && (
         <button
           className="scroll-to-bottom-btn"
           onClick={() => terminal.scrollToBottom()}
@@ -367,8 +395,16 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         >
           ↓
         </button>
-      ) : session.state === "idle" && visible ? (
+      )}
+      {!showScrollBtn && visible && (
         <div className="clear-input-zone">
+          <button
+            className={`queue-input-btn${queuedInput ? " queue-input-btn-active" : ""}`}
+            onClick={handleQueueInput}
+            title={queuedInput ? `Queued: "${queuedInput}" (click to cancel)` : "Queue input for idle send"}
+          >
+            ⏎
+          </button>
           <button
             className="clear-input-btn"
             onClick={() => pty.handle.current?.write("\x15")}
@@ -377,7 +413,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
             ⌫
           </button>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

@@ -85,20 +85,21 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string,
   // to avoid showing historical subagents from resumed sessions.
   const initialReplayDone = useRef(!jsonlSessionId); // New sessions: no replay
 
+  // Listen for caught-up signal to mark initial replay as done.
+  // Replaces the fragile 2s timer — reliable regardless of replay duration.
+  useEffect(() => {
+    if (!sessionId || !jsonlSessionId) return;
+    const unlisten = listen<{ sessionId: string }>("jsonl-caught-up", (event) => {
+      if (event.payload.sessionId !== sessionId) return;
+      initialReplayDone.current = true;
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [sessionId, jsonlSessionId]);
+
   // Start subagent watcher once on mount.
   useEffect(() => {
     if (!sessionId) return;
-
-    // Mark initial replay as done after a short delay — the Rust watcher
-    // scans existing files immediately on start. Any subagent events
-    // arriving within the first 2s are from historical files.
-    if (jsonlSessionId) {
-      const timer = setTimeout(() => { initialReplayDone.current = true; }, 2000);
-      invoke("start_subagent_watcher", { sessionId, workingDir, jsonlSessionId });
-      return () => { clearTimeout(timer); invoke("stop_subagent_watcher", { sessionId }); };
-    }
-
-    invoke("start_subagent_watcher", { sessionId, workingDir, jsonlSessionId: null });
+    invoke("start_subagent_watcher", { sessionId, workingDir, jsonlSessionId: jsonlSessionId || null });
     return () => { invoke("stop_subagent_watcher", { sessionId }); };
   }, [sessionId, workingDir, jsonlSessionId]);
 
@@ -112,7 +113,6 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string,
         if (event.payload.sessionId !== sessionId) return;
 
         const { subagentId, line } = event.payload;
-        console.log("[subagentWatcher] Event for", subagentId, "session:", sessionId);
 
         try {
           const parsed = JSON.parse(line);

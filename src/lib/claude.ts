@@ -1,10 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { SessionConfig } from "../types/session";
+import type { Session, SessionConfig } from "../types/session";
 
 export async function buildClaudeArgs(
   config: SessionConfig
 ): Promise<string[]> {
   return invoke<string[]>("build_claude_args", { config });
+}
+
+/** Resume target: chains through revivals to find the original CLI session ID. */
+export function getResumeId(session: Session): string {
+  return session.config.resumeSession || session.config.sessionId || session.id;
 }
 
 /** Derive a short tab name from the working directory */

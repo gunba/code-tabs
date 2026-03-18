@@ -85,20 +85,23 @@
 
 /* ── Clear input button ──────────────────────────────────────────── */
 
-/* Invisible hover zone that triggers the clear button */
+/* Invisible hover zone that triggers the clear/queue buttons */
 .clear-input-zone {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 80px;
+  width: 115px;
   height: 60px;
   z-index: 11;
+  pointer-events: none;
 }
 
-.clear-input-btn {
+/* Shared styles for clear/queue buttons */
+.clear-input-btn,
+.queue-input-btn {
+  pointer-events: auto;
   position: absolute;
   bottom: 8px;
-  right: 28px;
   width: 28px;
   height: 28px;
   padding: 0;
@@ -112,14 +115,31 @@
   transition: opacity 0.15s;
 }
 
-.clear-input-zone:hover .clear-input-btn {
+.clear-input-zone:hover .clear-input-btn,
+.clear-input-zone:hover .queue-input-btn {
   opacity: 0.6;
 }
 
-.clear-input-btn:hover {
+.clear-input-btn:hover,
+.queue-input-btn:hover {
   opacity: 1 !important;
   background: var(--bg-surface-hover);
   color: var(--text-primary);
+}
+
+.clear-input-btn { right: 28px; }
+.queue-input-btn { right: 60px; }
+
+.queue-input-btn-active {
+  opacity: 1 !important;
+  border-color: var(--accent);
+  color: var(--accent);
+  animation: queue-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes queue-pulse {
+  0%, 100% { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  50% { border-color: var(--accent); }
 }
 
 /* ── State Banner Overlay ──────────────────────────────────────────── */

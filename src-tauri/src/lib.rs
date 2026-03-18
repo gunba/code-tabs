@@ -22,6 +22,33 @@ pub fn run() {
         .plugin(tauri_plugin_pty::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .setup(|app| {
+            #[cfg(target_os = "windows")]
+            {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    if let Ok(hwnd) = window.hwnd() {
+                        let hwnd = hwnd.0 as *mut std::ffi::c_void;
+                        use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+                        // DWMWA_CAPTION_COLOR = 35
+                        // Color is COLORREF (0x00BBGGRR) — dark surface color matching --bg-surface (#262523)
+                        let color: u32 = 0x00232526;
+                        let hr = unsafe {
+                            DwmSetWindowAttribute(
+                                hwnd,
+                                35,
+                                &color as *const _ as *const _,
+                                std::mem::size_of::<u32>() as u32,
+                            )
+                        };
+                        if hr != 0 {
+                            log::warn!("DwmSetWindowAttribute(CAPTION_COLOR) failed: HRESULT 0x{:08X}", hr);
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })
         .manage(SessionManager::new())
         .manage(Arc::new(Mutex::new(WatcherState::new())))
         .invoke_handler(tauri::generate_handler![

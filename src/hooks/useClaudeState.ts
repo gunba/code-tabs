@@ -30,6 +30,8 @@ const IDLE_PROMPT = /❯\s*$/;
 interface UseClaudeStateOptions {
   /** Called when a result event indicates the conversation ended (plan mode, compaction). */
   onConversationEnd?: () => void;
+  /** Called when the JSONL watcher has caught up after initial replay. */
+  onCaughtUp?: () => void;
 }
 
 export function useClaudeState(sessionId: string | null, isResumed = false, opts: UseClaudeStateOptions = {}) {
@@ -45,6 +47,8 @@ export function useClaudeState(sessionId: string | null, isResumed = false, opts
   const caughtUpRef = useRef(!isResumed);
   const onConversationEndRef = useRef(opts.onConversationEnd);
   onConversationEndRef.current = opts.onConversationEnd;
+  const onCaughtUpRef = useRef(opts.onCaughtUp);
+  onCaughtUpRef.current = opts.onCaughtUp;
 
   // Listen to JSONL events from Rust watcher
   useEffect(() => {
@@ -118,22 +122,23 @@ export function useClaudeState(sessionId: string | null, isResumed = false, opts
         // Subsequent caught-up signals are from new data batches and should
         // NOT reset tokens or fingerprints.
         if (caughtUpRef.current) return;
-        // Set fingerprint to match the RESET metadata we're about to push,
-        // so the next new event will correctly trigger an update.
+        // Build reset metadata — tokens/cost zeroed so only NEW conversation usage shows.
+        // Set fingerprint to match so the next new event correctly triggers an update.
         const acc = accRef.current;
-        lastFingerprintRef.current = JSON.stringify({
+        const resetMetadata = {
           costUsd: 0,
-          currentAction: acc.currentAction,
-          currentToolName: acc.currentToolName,
+          currentAction: null,
+          currentToolName: null,
           subagentCount: acc.subagentCount,
-          subagentActivity: acc.subagentActivity,
+          subagentActivity: [] as string[],
           recentOutput: acc.lastAssistantText,
           contextWarning: acc.contextWarning,
           taskProgress: acc.taskProgress,
           inputTokens: 0,
           outputTokens: 0,
           assistantMessageCount: acc.assistantMessageCount,
-        });
+        };
+        lastFingerprintRef.current = JSON.stringify(resetMetadata);
         // Sync state to store. For resumed sessions, if replay ends in an
         // active state (thinking/toolUse), the session was likely interrupted.
         // The PTY is now showing the idle prompt, so force idle.
@@ -141,24 +146,24 @@ export function useClaudeState(sessionId: string | null, isResumed = false, opts
         lastStateRef.current = replayState;
         updateState(sessionId, replayState);
         updateMetadata(sessionId, {
-          costUsd: 0,
-          currentAction: acc.currentAction,
-          currentToolName: acc.currentToolName,
-          subagentCount: acc.subagentCount,
-          subagentActivity: acc.subagentActivity,
-          recentOutput: acc.lastAssistantText,
-          contextWarning: acc.contextWarning,
-          taskProgress: acc.taskProgress,
-          inputTokens: 0, // Reset — only count NEW tokens
-          outputTokens: 0,
-          assistantMessageCount: acc.assistantMessageCount,
+          ...resetMetadata,
           // Preserve first user message from replay for tab naming
           ...(acc.firstUserMessage ? { nodeSummary: acc.firstUserMessage } : {}),
         });
         // Reset token counts and cost so only the NEW conversation's usage is shown.
         // Historical tokens from the resumed session don't count against this run.
-        accRef.current = { ...accRef.current, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+        accRef.current = {
+          ...accRef.current,
+          state: replayState,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+          currentAction: null,
+          currentToolName: null,
+          subagentActivity: [],
+        };
         caughtUpRef.current = true;
+        onCaughtUpRef.current?.();
       }
     );
 
@@ -167,7 +172,6 @@ export function useClaudeState(sessionId: string | null, isResumed = false, opts
       unlistenCaughtUp.then((fn) => fn());
     };
   }, [sessionId, updateState, updateMetadata]);
-
 
   // PTY feed — detects idle prompt and permission patterns from terminal output.
   // This is how we read the actual state of the Claude Code instance: by parsing
@@ -206,5 +210,5 @@ export function useClaudeState(sessionId: string | null, isResumed = false, opts
     [sessionId, updateState]
   );
 
-  return { feed, caughtUp: caughtUpRef };
+  return { feed };
 }

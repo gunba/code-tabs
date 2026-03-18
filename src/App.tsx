@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, formatTokenCount, sessionColor, getSessionColorIndex, forceSessionColor } from "./lib/claude";
+import { dirToTabName, formatTokenCount, sessionColor, getSessionColorIndex, forceSessionColor, getResumeId } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
 import { ActivityFeed } from "./components/ActivityFeed/ActivityFeed";
@@ -51,6 +51,7 @@ export default function App() {
   const [editingTabName, setEditingTabName] = useState("");
   const [revivingTabId, setRevivingTabId] = useState<string | null>(null);
   const [flashingTabs, setFlashingTabs] = useState<Set<string>>(new Set());
+  const [shiftHeld, setShiftHeld] = useState(false);
   const prevStatesRef = useRef<Map<string, string>>(new Map());
   const dragTabRef = useRef<string | null>(null);
   const initRef = useRef(false);
@@ -88,6 +89,39 @@ export default function App() {
     startTestHarness();
   }, [init]);
 
+  // Track Shift key state for visual indicators
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(true); };
+    const up = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
+    const blur = () => setShiftHeld(false);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, []);
+
+  // Quick launch with saved defaults (Shift+click "+" or Ctrl+Shift+T)
+  const quickLaunch = useCallback(async () => {
+    const defaults = useSettingsStore.getState().savedDefaults;
+    if (!defaults || !defaults.workingDir.trim()) {
+      setShowLauncher(true);
+      return;
+    }
+    const cleanConfig = { ...defaults, resumeSession: null, continueSession: false, sessionId: null };
+    const name = dirToTabName(cleanConfig.workingDir);
+    useSettingsStore.getState().addRecentDir(cleanConfig.workingDir);
+    useSettingsStore.getState().setLastConfig(cleanConfig);
+    try {
+      await createSession(name, cleanConfig);
+    } catch {
+      // Fall back to modal on failure
+      setShowLauncher(true);
+    }
+  }, [createSession, setShowLauncher]);
 
   // Auto-persist sessions on changes (debounced)
   useEffect(() => {
@@ -99,9 +133,8 @@ export default function App() {
 
   // Flush persist on window close so sessions survive app restart
   useEffect(() => {
-    const handler = () => { persist(); };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
+    window.addEventListener("beforeunload", persist);
+    return () => window.removeEventListener("beforeunload", persist);
   }, [persist]);
 
   // Revive dead sessions or switch to live ones
@@ -115,7 +148,7 @@ export default function App() {
         // Use the original CLI session ID for resume. After a revival,
         // resumeSession holds the original ID while sessionId gets overwritten
         // to the app's internal ID. The JSONL file lives under the original.
-        const resumeId = session.config.resumeSession || session.config.sessionId || session.id;
+        const resumeId = getResumeId(session);
         const hasConversation = await invoke<boolean>("session_has_conversation", {
           sessionId: resumeId,
           workingDir: session.config.workingDir,
@@ -167,12 +200,16 @@ export default function App() {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "t") {
         e.preventDefault();
-        // Clear resume/continue flags so the launcher opens fresh
-        const lc = useSettingsStore.getState().lastConfig;
-        if (lc.resumeSession || lc.continueSession) {
-          setLastConfig({ ...lc, resumeSession: null, continueSession: false });
+        if (e.shiftKey) {
+          quickLaunch();
+        } else {
+          // Clear resume/continue flags so the launcher opens fresh
+          const lc = useSettingsStore.getState().lastConfig;
+          if (lc.resumeSession || lc.continueSession) {
+            setLastConfig({ ...lc, resumeSession: null, continueSession: false });
+          }
+          setShowLauncher(true);
         }
-        setShowLauncher(true);
       }
 
       if (e.ctrlKey && e.key === "w") {
@@ -221,7 +258,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, sessions, setActiveTab, closeSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showHooksManager, setShowHooksManager, inspectedSubagent, tabContextMenu]);
+  }, [activeTabId, sessions, setActiveTab, closeSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showHooksManager, setShowHooksManager, inspectedSubagent, tabContextMenu, quickLaunch]);
 
   const regularSessions = sessions.filter((s) => !s.isMetaAgent);
   const subagentMap = useSessionStore((s) => s.subagents);
@@ -237,7 +274,7 @@ export default function App() {
   const activeSubs = allSubs.filter((s) => s.state !== "dead");
 
   return (
-    <div className="app">
+    <div className={`app${shiftHeld ? " shift-held" : ""}`}>
       {/* Tab bar */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
@@ -291,11 +328,9 @@ export default function App() {
                   onDragEnd={() => { dragTabRef.current = null; setDragOverTabId(null); }}
                   onClick={(e) => {
                     if (e.shiftKey) {
-                      const resumeId = session.config.resumeSession || session.config.sessionId || session.id;
                       setLastConfig({
                         ...session.config,
-                        workingDir: session.config.workingDir,
-                        resumeSession: resumeId,
+                        resumeSession: getResumeId(session),
                         continueSession: false,
                       });
                       useSettingsStore.getState().setReplaceSessionId(session.id);
@@ -317,7 +352,7 @@ export default function App() {
                     e.stopPropagation();
                     setTabContextMenu({ x: e.clientX, y: e.clientY, sessionId: session.id });
                   }}
-                  title={`${name} — ${session.state}\n${session.config.workingDir}`}
+                  title={shiftHeld ? `Shift+Click: Relaunch ${name}` : `${name} — ${session.state}\n${session.config.workingDir}`}
                 >
                   <span className={`tab-dot state-${session.state}`} />
                   <span className="tab-label">
@@ -383,8 +418,8 @@ export default function App() {
           </button>
           <button
             className="tab-add"
-            onClick={() => setShowLauncher(true)}
-            title="New session (Ctrl+T)"
+            onClick={(e) => e.shiftKey ? quickLaunch() : setShowLauncher(true)}
+            title={shiftHeld ? "Quick launch with saved defaults (Ctrl+Shift+T)" : "New session (Ctrl+T)"}
           >
             +
           </button>
@@ -532,11 +567,9 @@ export default function App() {
                     <button
                       className="tab-context-menu-item"
                       onClick={() => {
-                        const resumeId = ctxSession.config.resumeSession || ctxSession.config.sessionId || ctxSession.id;
                         setLastConfig({
                           ...ctxSession.config,
-                          resumeSession: resumeId,
-                          workingDir: ctxSession.config.workingDir,
+                          resumeSession: getResumeId(ctxSession),
                         });
                         setTabContextMenu(null);
                         setShowLauncher(true);

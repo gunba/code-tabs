@@ -1,6 +1,6 @@
 [package]
 name = "claude-tabs"
-version = "0.4.1"
+version = "0.4.3"
 edition = "2021"
 
 [lib]
@@ -28,6 +28,9 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
 regex = "1"
 log = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Graphics_Dwm", "Win32_Foundation"] }
 
 [profile.dev]
 incremental = true

@@ -24,18 +24,17 @@ npm test                   # All Vitest unit tests pass
 cargo check (in src-tauri) # Zero Rust errors
 ```
 
-## Manual Testing (MANDATORY)
+## Agents
 
-You MUST personally test every change before delivering. Do NOT guess at fixes or theorize without evidence.
+Role-specific agents in `.claude/agents/`. Use these for specialized tasks:
 
-1. Add logging/instrumentation to observe actual behavior
-2. Launch the app (`build:quick` or `tauri dev`) and reproduce the issue
-3. Read `%LOCALAPPDATA%/claude-tabs/test-state.json` to understand what's happening
-4. Make a targeted fix based on observed evidence
-5. Re-run the same reproduction to verify the fix works
-
-**For visual issues that the test harness can't observe, take a screenshot and visually inspect.**
-If the test harness can't observe a non-visual issue, EXTEND IT. Never say "I can't test this."
+| Agent | When to use |
+|-------|-------------|
+| **test-runner** | Run tests, find coverage gaps, write new tests |
+| **code-reviewer** | Review changes for bugs, anti-patterns, CLAUDE.md compliance |
+| **qa** | Build app, **launch it**, reproduce/verify via test harness or screenshots — never just compile |
+| **code-simplifier** | Clean up dead code, simplify logic, fix naming |
+| **builder** | Build releases, bump versions, create GitHub releases |
 
 ## Architecture
 
@@ -153,60 +152,8 @@ All Rust commands that spawn subprocesses MUST:
 1. Use `tokio::task::spawn_blocking()` to avoid blocking the WebView event loop
 2. Add `CREATE_NO_WINDOW` flag on Windows (`cmd.creation_flags(0x08000000)`)
 
-### Session Revival
-- Resume target: `resumeSession || sessionId || id` (chains through multiple revivals)
-- Create new session BEFORE closing old one (avoids visual flash)
-- Check JSONL file existence via `session_has_conversation` (not `assistantMessageCount`)
-- Skip `--session-id` when using `--resume` or `--continue`
-- Preserve color, metadata (nodeSummary, tokens) across revival
-- `resumeSession` and `continueSession` are one-shot — never persist in `lastConfig`
-- Interrupted sessions (replay ends in thinking/toolUse) force to idle after caught-up
-- Historical subagents suppressed during initial replay for resumed sessions
-
-### State Detection
-State MUST be derived from real signals (JSONL events, PTY output patterns), never from arbitrary timers. If you can't determine the state from the data, fix the data source.
-
-### Root Cause Fixes Only
-Every fix must address the root cause. Never:
-- Retry after a delay hoping the second attempt works — fix why the first attempt fails
-- Use timers/polling to guess when something happened — find the event that signals it
-- Use heuristics when deterministic linking is possible (e.g. Claude Code embeds the old sessionId in continued session JSONL — use that, don't scan by timestamp)
-- Increase buffer sizes instead of implementing proper lazy loading
-
-### DO NOT (things that broke before)
-- **DO NOT** use timers/timeouts to infer session state
-- **DO NOT** use Tauri event listeners for PTY data — use `tauri-pty` npm wrapper
-- **DO NOT** use React `key=` to swap terminals — destroys xterm.js + PTY
-- **DO NOT** pass `env: {}` to PTY spawn — wipes environment
-- **DO NOT** conditionally render stateful components (xterm.js) — use CSS `display:none`
-- **DO NOT** put React hooks after conditional early returns
-- **DO NOT** let `CLAUDECODE` env var leak into spawned PTYs
-- **DO NOT** use `|| []` in Zustand selectors — creates new references, causes render storms
-- **DO NOT** sync Rust subprocess spawns on main thread — blocks WebView
-- **DO NOT** seed ActivityFeed with persisted state on startup — users see it as noise
-- **DO NOT** persist sessions from Rust session manager — metadata is stale, frontend owns persistence
-- **DO NOT** persist `resumeSession`/`continueSession` in `lastConfig` — causes launcher to stick in resume mode
-- **DO NOT** fix terminal flash by removing WebGL or memoizing useTerminal — fix is xterm.js 6.0 DEC 2026 sync + batching
-- **DO NOT** use xterm.js 5.x — v6.0 required for synchronized output
-- **DO NOT** set xterm.js scrollback on every onScroll event — triggers buffer reconstruction
-
-## Test Harness
-
-`src/lib/testHarness.ts` writes app state to `%LOCALAPPDATA%/claude-tabs/test-state.json` every 2s and polls for commands from `test-commands.json`.
-
-```bash
-cat "$LOCALAPPDATA/claude-tabs/test-state.json"
-```
-
-Contains: session count/states/metadata/colors, CLI version, slash commands, active tab, subagents, activity feed entries, console logs.
-
-Commands: `createSession`, `closeSession`, `reviveSession`, `setActiveTab`, `getSubagents`, `listSessions`, `sendInput`.
-
-To extend: add state to `captureState()` in `testHarness.ts`, or add command handlers in the polling loop.
-
-## Unit Tests
-
-`jsonlState` 50, `claude` 23, `deadSession` 18, `theme` 4, `ptyRegistry` 6 — run with `npm test`.
+### Behavioral Contracts
+See **FEATURES.md** for expected behaviors (session resume, revival, activity feed, tab sizing, terminal rendering, etc.). All agents must read FEATURES.md before modifying or removing code.
 
 ## Keyboard Shortcuts
 

@@ -4,6 +4,11 @@ import { invoke } from "@tauri-apps/api/core";
 import type { LaunchPreset, SessionConfig, PastSession } from "../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../types/session";
 
+/** Normalize a Windows path: forward slashes to backslashes, strip trailing backslashes. */
+function normalizePath(p: string): string {
+  return p.replace(/\//g, "\\").replace(/\\+$/, "");
+}
+
 export interface CliOption {
   flag: string;        // e.g. "--model"
   argName?: string;    // e.g. "<model>"
@@ -32,6 +37,7 @@ interface SettingsState {
   recentDirs: string[];
   presets: LaunchPreset[];
   lastConfig: SessionConfig;
+  savedDefaults: SessionConfig | null;
   showLauncher: boolean;
   themeName: string;
   notificationsEnabled: boolean;
@@ -52,6 +58,7 @@ interface SettingsState {
   savePreset: (name: string, config: Partial<SessionConfig>) => void;
   removePreset: (id: string) => void;
   setLastConfig: (config: SessionConfig) => void;
+  setSavedDefaults: (config: SessionConfig) => void;
   setShowLauncher: (show: boolean) => void;
   setThemeName: (name: string) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
@@ -69,6 +76,7 @@ export const useSettingsStore = create<SettingsState>()(
       recentDirs: [],
       presets: [],
       lastConfig: DEFAULT_SESSION_CONFIG,
+      savedDefaults: null,
       showLauncher: false,
       themeName: "Claude",
       notificationsEnabled: true,
@@ -84,22 +92,21 @@ export const useSettingsStore = create<SettingsState>()(
 
       addRecentDir: (dir) =>
         set((s) => {
-          // Normalize: backslashes on Windows, deduplicate case-insensitively
-          const norm = dir.replace(/\//g, "\\").replace(/\\+$/, "");
+          const norm = normalizePath(dir);
           const normLower = norm.toLowerCase();
           return {
             recentDirs: [norm, ...s.recentDirs.filter((d) =>
-              d.replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase() !== normLower
+              normalizePath(d).toLowerCase() !== normLower
             )].slice(0, 20),
           };
         }),
 
       removeRecentDir: (dir) =>
         set((s) => {
-          const normLower = dir.replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase();
+          const normLower = normalizePath(dir).toLowerCase();
           return {
             recentDirs: s.recentDirs.filter((d) =>
-              d.replace(/\//g, "\\").replace(/\\+$/, "").toLowerCase() !== normLower
+              normalizePath(d).toLowerCase() !== normLower
             ),
           };
         }),
@@ -120,7 +127,17 @@ export const useSettingsStore = create<SettingsState>()(
       setLastConfig: (config) => set({
         lastConfig: {
           ...config,
-          workingDir: config.workingDir.replace(/\//g, "\\").replace(/\\+$/, ""),
+          workingDir: normalizePath(config.workingDir),
+        },
+      }),
+
+      setSavedDefaults: (config) => set({
+        savedDefaults: {
+          ...config,
+          workingDir: normalizePath(config.workingDir),
+          resumeSession: null,
+          continueSession: false,
+          sessionId: null,
         },
       }),
 
@@ -166,6 +183,7 @@ export const useSettingsStore = create<SettingsState>()(
         recentDirs: state.recentDirs,
         presets: state.presets,
         lastConfig: state.lastConfig,
+        savedDefaults: state.savedDefaults,
         themeName: state.themeName,
         notificationsEnabled: state.notificationsEnabled,
         cliVersion: state.cliVersion,

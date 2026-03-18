@@ -37,14 +37,12 @@ const EFFORT_OPTIONS: { value: string | null; label: string }[] = [
   { value: "max", label: "Max" },
 ];
 
-const EXCLUDED_FLAGS = new Set<string>();
-
 // ── Main component ──────────────────────────────────────────────────
 
 export function SessionLauncher() {
   const createSession = useSessionStore((s) => s.createSession);
   const claudePath = useSessionStore((s) => s.claudePath);
-  const { recentDirs, lastConfig, setShowLauncher, addRecentDir, removeRecentDir, setLastConfig } =
+  const { recentDirs, lastConfig, setShowLauncher, addRecentDir, removeRecentDir, setLastConfig, setSavedDefaults } =
     useSettingsStore();
   const cliCapabilities = useSettingsStore((s) => s.cliCapabilities);
 
@@ -105,10 +103,8 @@ export function SessionLauncher() {
     []
   );
 
-  // Filter CLI options to only show non-excluded ones, sorted alphabetically
   const filteredCliOptions = useMemo((): CliOption[] => {
     return (cliCapabilities.options || [])
-      .filter((opt) => !EXCLUDED_FLAGS.has(opt.flag))
       .sort((a, b) => a.flag.localeCompare(b.flag));
   }, [cliCapabilities.options]);
 
@@ -162,21 +158,24 @@ export function SessionLauncher() {
     if (selected) updateConfig("workingDir", selected);
   }, [config.workingDir, updateConfig]);
 
+  // Dismiss launcher: clears replace target and one-shot resume flags
+  const dismissLauncher = useCallback(() => {
+    const store = useSettingsStore.getState();
+    store.setReplaceSessionId(null);
+    if (store.lastConfig.resumeSession) {
+      store.setLastConfig({ ...store.lastConfig, resumeSession: null, continueSession: false });
+    }
+    setShowLauncher(false);
+  }, [setShowLauncher]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Enter" && !(e.target instanceof HTMLTextAreaElement)) handleLaunch();
-      if (e.key === "Escape") {
-        useSettingsStore.getState().setReplaceSessionId(null);
-        // Clear one-shot resume state so the launcher isn't stuck in resume mode
-        if (config.resumeSession) {
-          setLastConfig({ ...lastConfig, resumeSession: null, continueSession: false });
-        }
-        setShowLauncher(false);
-      }
+      if (e.key === "Escape") dismissLauncher();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleLaunch, setShowLauncher]);
+  }, [handleLaunch, dismissLauncher]);
 
   const handleCliPillClick = useCallback(
     (opt: CliOption) => {
@@ -198,7 +197,7 @@ export function SessionLauncher() {
 
   if (!claudePath) {
     return (
-      <div className="launcher-overlay" onClick={() => setShowLauncher(false)}>
+      <div className="launcher-overlay" onClick={dismissLauncher}>
         <div className="launcher" onClick={(e) => e.stopPropagation()}>
           <div className="launcher-error-content">
             <h2>Claude CLI Not Found</h2>
@@ -208,7 +207,7 @@ export function SessionLauncher() {
             <p>
               Install it with: <code>npm install -g @anthropic-ai/claude-code</code>
             </p>
-            <button className="btn-secondary launcher-error-close" onClick={() => setShowLauncher(false)}>
+            <button className="btn-secondary launcher-error-close" onClick={dismissLauncher}>
               Close
             </button>
           </div>
@@ -222,7 +221,7 @@ export function SessionLauncher() {
   // ── Main launcher ──
 
   return (
-    <div className="launcher-overlay" onClick={() => { useSettingsStore.getState().setReplaceSessionId(null); if (config.resumeSession) setLastConfig({ ...lastConfig, resumeSession: null, continueSession: false }); setShowLauncher(false); }}>
+    <div className="launcher-overlay" onClick={dismissLauncher}>
       <div className="launcher" onClick={(e) => e.stopPropagation()}>
 
         {/* Resume banner or path input */}
@@ -234,22 +233,20 @@ export function SessionLauncher() {
             </span>
           </div>
         ) : (
-          <>
-            <div className="launcher-path-row">
-              <input
-                id="launcher-path"
-                className="launcher-path-input"
-                type="text"
-                value={config.workingDir}
-                onChange={(e) => updateConfig("workingDir", e.target.value)}
-                placeholder="Path to project..."
-                autoComplete="off"
-              />
-              <button className="launcher-browse-btn" onClick={handleBrowse} title="Browse" type="button">
-                📂
-              </button>
-            </div>
-          </>
+          <div className="launcher-path-row">
+            <input
+              id="launcher-path"
+              className="launcher-path-input"
+              type="text"
+              value={config.workingDir}
+              onChange={(e) => updateConfig("workingDir", e.target.value)}
+              placeholder="Path to project..."
+              autoComplete="off"
+            />
+            <button className="launcher-browse-btn" onClick={handleBrowse} title="Browse" type="button">
+              📂
+            </button>
+          </div>
         )}
 
         {/* Recent directories — only for new sessions */}
@@ -272,7 +269,7 @@ export function SessionLauncher() {
           </div>
         )}
 
-        {/* Compact selects row: Model, Permissions, Effort, Skip checkbox, Save defaults */}
+        {/* Compact selects row: Model, Permissions, Effort, toggle pills */}
         <div className="launcher-selects">
           <label className="launcher-select-group">
             <span className="launcher-select-icon" title="Model">◈</span>
@@ -319,23 +316,25 @@ export function SessionLauncher() {
             </select>
           </label>
 
-          <label className="launcher-sandbox-label" title="Restrict Claude to the working directory (--project-dir)">
-            <input
-              type="checkbox"
-              checked={config.projectDir}
-              onChange={(e) => updateConfig("projectDir", e.target.checked)}
-            />
-            <span className="launcher-sandbox-text">Sandbox</span>
-          </label>
+          <button
+            className={`launcher-toggle-pill${config.projectDir ? " launcher-toggle-pill-on launcher-toggle-sandbox" : ""}`}
+            onClick={() => updateConfig("projectDir", !config.projectDir)}
+            aria-pressed={config.projectDir}
+            title="Restrict Claude to the working directory (--project-dir)"
+            type="button"
+          >
+            Sandbox
+          </button>
 
-          <label className="launcher-skip-label" title="Skip all permission prompts (--dangerously-skip-permissions)">
-            <input
-              type="checkbox"
-              checked={config.dangerouslySkipPermissions}
-              onChange={(e) => updateConfig("dangerouslySkipPermissions", e.target.checked)}
-            />
-            <span className="launcher-skip-text">Skip</span>
-          </label>
+          <button
+            className={`launcher-toggle-pill${config.dangerouslySkipPermissions ? " launcher-toggle-pill-on launcher-toggle-skip" : ""}`}
+            onClick={() => updateConfig("dangerouslySkipPermissions", !config.dangerouslySkipPermissions)}
+            aria-pressed={config.dangerouslySkipPermissions}
+            title="Skip all permission prompts (--dangerously-skip-permissions)"
+            type="button"
+          >
+            Skip
+          </button>
 
         </div>
 
@@ -353,7 +352,7 @@ export function SessionLauncher() {
             ) : <span />}
             <button
               className={`launcher-save-defaults${defaultsSaved ? " launcher-save-defaults-saved" : ""}`}
-              onClick={() => { setLastConfig(launchConfig); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}
+              onClick={() => { setSavedDefaults(launchConfig); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}
               type="button"
             >
               {defaultsSaved ? "Saved" : "Save defaults"}
@@ -392,22 +391,25 @@ export function SessionLauncher() {
         </div>
 
         {/* Command input — single editable command line */}
-        <div className="launcher-cmd">
-          <textarea
-            className="launcher-cmd-input"
-            value={commandLine}
-            onChange={(e) => setCommandLine(e.target.value)}
-            spellCheck={false}
-            rows={2}
-          />
-          <button
-            className="launcher-cmd-reset"
-            onClick={handleResetCommand}
-            title="Reset to generated command"
-            type="button"
-          >
-            ↺
-          </button>
+        <div className="launcher-cmd-block">
+          <span className="launcher-cmd-label">CLI Command</span>
+          <div className="launcher-cmd">
+            <textarea
+              className="launcher-cmd-input"
+              value={commandLine}
+              onChange={(e) => setCommandLine(e.target.value)}
+              spellCheck={false}
+              rows={2}
+            />
+            <button
+              className="launcher-cmd-reset"
+              onClick={handleResetCommand}
+              title="Reset to generated command"
+              type="button"
+            >
+              ↺
+            </button>
+          </div>
         </div>
 
         {/* Launch button */}
