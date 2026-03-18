@@ -134,10 +134,12 @@ export function useClaudeState(sessionId: string | null, isResumed = false, opts
           outputTokens: 0,
           assistantMessageCount: acc.assistantMessageCount,
         });
-        // Sync state and push accumulated metadata to the store.
-        // Without this, metadata from replay stays invisible to other hooks.
-        lastStateRef.current = acc.state;
-        updateState(sessionId, acc.state);
+        // Sync state to store. For resumed sessions, if replay ends in an
+        // active state (thinking/toolUse), the session was likely interrupted.
+        // The PTY is now showing the idle prompt, so force idle.
+        const replayState = (acc.state === "thinking" || acc.state === "toolUse") ? "idle" : acc.state;
+        lastStateRef.current = replayState;
+        updateState(sessionId, replayState);
         updateMetadata(sessionId, {
           costUsd: 0,
           currentAction: acc.currentAction,

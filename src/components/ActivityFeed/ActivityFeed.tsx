@@ -24,7 +24,7 @@ interface PrevSession {
   state: string;
   name: string;
   currentAction: string | null;
-  subagentActivity: string[];
+  seenSubagents: Set<string>;
   settled: boolean;
 }
 
@@ -62,7 +62,7 @@ export function ActivityFeed() {
           state: session.state,
           name: sessionName,
           currentAction: session.metadata.currentAction ?? null,
-          subagentActivity: [...(session.metadata.subagentActivity || [])],
+          seenSubagents: new Set(session.metadata.subagentActivity || []),
           settled: session.metadata.assistantMessageCount > 0,
         });
         continue;
@@ -105,14 +105,14 @@ export function ActivityFeed() {
       }
       existing.currentAction = currentAction;
 
-      // Subagent creation — show each new subagent individually
+      // Subagent creation — show unseen subagents in one message
       const currentActivity = session.metadata.subagentActivity || [];
-      if (currentActivity.length > existing.subagentActivity.length && existing.settled) {
-        for (let i = existing.subagentActivity.length; i < currentActivity.length; i++) {
-          addEntry({ timestamp: now, sessionId: session.id, sessionName, type: "action", message: `Subagent: ${currentActivity[i]}` });
-        }
+      const newAgents = currentActivity.filter((a) => !existing.seenSubagents.has(a));
+      if (newAgents.length > 0 && existing.settled) {
+        const names = newAgents.map((a) => a.split(": ").slice(1).join(": ") || a).join(", ");
+        addEntry({ timestamp: now, sessionId: session.id, sessionName, type: "action", message: `Subagent${newAgents.length > 1 ? "s" : ""}: ${names}` });
       }
-      existing.subagentActivity = [...currentActivity];
+      for (const a of currentActivity) existing.seenSubagents.add(a);
 
       existing.state = session.state;
 

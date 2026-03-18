@@ -273,7 +273,6 @@
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s;
-  aspect-ratio: 1;
 }
 
 .tab-add:hover {
@@ -293,7 +292,6 @@
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s, color 0.15s;
-  aspect-ratio: 1;
 }
 
 .tab-resume:hover {
@@ -338,7 +336,6 @@
 .subagent-bar {
   display: flex;
   gap: 1px;
-  padding-left: 8px;
   background: var(--border-subtle);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;

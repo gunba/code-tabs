@@ -81,20 +81,25 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string,
   const messageBuffers = useRef<Map<string, SubagentMessage[]>>(new Map());
   const lastEventTime = useRef<Map<string, number>>(new Map());
   const startTimes = useRef<Map<string, number>>(new Map());
+  // Track whether initial replay is done — suppress UI creation during replay
+  // to avoid showing historical subagents from resumed sessions.
+  const initialReplayDone = useRef(!jsonlSessionId); // New sessions: no replay
 
   // Start subagent watcher once on mount.
   useEffect(() => {
     if (!sessionId) return;
 
-    invoke("start_subagent_watcher", {
-      sessionId,
-      workingDir,
-      jsonlSessionId: jsonlSessionId,
-    });
+    // Mark initial replay as done after a short delay — the Rust watcher
+    // scans existing files immediately on start. Any subagent events
+    // arriving within the first 2s are from historical files.
+    if (jsonlSessionId) {
+      const timer = setTimeout(() => { initialReplayDone.current = true; }, 2000);
+      invoke("start_subagent_watcher", { sessionId, workingDir, jsonlSessionId });
+      return () => { clearTimeout(timer); invoke("stop_subagent_watcher", { sessionId }); };
+    }
 
-    return () => {
-      invoke("stop_subagent_watcher", { sessionId });
-    };
+    invoke("start_subagent_watcher", { sessionId, workingDir, jsonlSessionId: null });
+    return () => { invoke("stop_subagent_watcher", { sessionId }); };
   }, [sessionId, workingDir, jsonlSessionId]);
 
   // Listen for subagent JSONL events
@@ -118,6 +123,12 @@ export function useSubagentWatcher(sessionId: string | null, workingDir: string,
             acc = createAccumulator();
             accumulators.current.set(subagentId, acc);
             messageBuffers.current.set(subagentId, []);
+
+            // Skip UI creation during initial replay of historical subagents
+            if (!initialReplayDone.current) {
+              accumulators.current.set(subagentId, processJsonlEvent(acc, parsed));
+              return;
+            }
 
             // Clear old completed subagents when a new batch starts
             const existing = useSessionStore.getState().subagents.get(sessionId) || [];
