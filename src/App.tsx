@@ -17,6 +17,7 @@ import { HooksManager } from "./components/HooksManager/HooksManager";
 import { useCliWatcher } from "./hooks/useCliWatcher";
 import { useNotifications } from "./hooks/useNotifications";
 import { useCommandDiscovery } from "./hooks/useCommandDiscovery";
+import { useShiftKey } from "./hooks/useShiftKey";
 
 import { useUiConfigStore } from "./lib/uiConfig";
 import { startTestHarness } from "./lib/testHarness";
@@ -48,7 +49,7 @@ export default function App() {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState("");
   const [flashingTabs, setFlashingTabs] = useState<Set<string>>(new Set());
-  const [shiftHeld, setShiftHeld] = useState(false);
+  const shiftHeld = useShiftKey();
   const prevStatesRef = useRef<Map<string, string>>(new Map());
   const dragTabRef = useRef<string | null>(null);
   const initRef = useRef(false);
@@ -81,21 +82,6 @@ export default function App() {
     useSettingsStore.getState().loadPastSessions();
     startTestHarness();
   }, [init]);
-
-  // Track Shift key state for visual indicators
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(true); };
-    const up = (e: KeyboardEvent) => { if (e.key === "Shift") setShiftHeld(false); };
-    const blur = () => setShiftHeld(false);
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    window.addEventListener("blur", blur);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-      window.removeEventListener("blur", blur);
-    };
-  }, []);
 
   // Quick launch with saved defaults (Shift+click "+" or Ctrl+Shift+T)
   const quickLaunch = useCallback(async () => {

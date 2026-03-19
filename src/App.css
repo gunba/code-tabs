@@ -45,7 +45,7 @@
   font-size: 11px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.1s, color 0.1s;
+  transition: background 0.1s, color 0.1s, box-shadow 0.15s;
   position: relative;
   text-align: left;
   width: 200px;
@@ -102,15 +102,28 @@
   opacity: 0.8;
 }
 
-/* Shift-held visual indicators */
+/* ── Shift-held: unified blue top-bar + tint ──────────── */
 .shift-held .tab:not(.tab-dead):not(.tab-active) {
-  border-color: color-mix(in srgb, var(--accent-secondary) 30%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 15%, transparent);
+  background: color-mix(in srgb, var(--accent-secondary) 8%, var(--bg-surface));
+  box-shadow: inset 0 2px 0 var(--accent-secondary);
+}
+
+.shift-held .tab-active:not(.tab-dead) {
+  background: color-mix(in srgb, var(--accent-secondary) 8%, var(--bg-primary));
+  box-shadow: inset 0 -2px 0 var(--accent), inset 0 2px 0 var(--accent-secondary);
+}
+
+.shift-held .tab-active.tab-permission {
+  animation: none;
+  box-shadow: inset 0 -2px 0 var(--permission), inset 0 2px 0 var(--accent-secondary);
 }
 
 .shift-held .tab-add {
-  border-color: var(--accent-secondary);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-secondary) 40%, transparent);
+  background: var(--accent-secondary);
+}
+
+.shift-held .tab-add:hover {
+  background: color-mix(in srgb, var(--accent-secondary) 80%, white);
 }
 
 .tab-dot {

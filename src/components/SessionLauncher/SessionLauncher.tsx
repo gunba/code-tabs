@@ -37,6 +37,16 @@ const EFFORT_OPTIONS: { value: string | null; label: string }[] = [
   { value: "max", label: "Max" },
 ];
 
+// Flags with dedicated UI controls — exclude from the options grid
+const DEDICATED_FLAGS = new Set([
+  "--model", "--permission-mode", "--effort",
+  "--dangerously-skip-permissions", "--project-dir",
+  "--resume", "--session-id", "--continue",
+]);
+
+// Flags that don't start an interactive session
+const NON_SESSION_FLAGS = new Set(["--version", "-V", "--help", "-h"]);
+
 // ── Main component ──────────────────────────────────────────────────
 
 export function SessionLauncher() {
@@ -106,8 +116,33 @@ export function SessionLauncher() {
 
   const filteredCliOptions = useMemo((): CliOption[] => {
     return (cliCapabilities.options || [])
+      .filter((opt) => !DEDICATED_FLAGS.has(opt.flag) && !NON_SESSION_FLAGS.has(opt.flag))
       .sort((a, b) => a.flag.localeCompare(b.flag));
   }, [cliCapabilities.options]);
+
+  const commandTokens = useMemo((): string[] => {
+    return commandLine.split(/\s+/);
+  }, [commandLine]);
+
+  const activeFlags = useMemo((): Set<string> => {
+    return new Set(commandTokens.filter((t) => t.startsWith("-")));
+  }, [commandTokens]);
+
+  const nonSessionFlags = useMemo((): CliOption[] => {
+    return (cliCapabilities.options || []).filter((opt) => NON_SESSION_FLAGS.has(opt.flag));
+  }, [cliCapabilities.options]);
+
+  const isNonSessionCommand = useMemo((): boolean => {
+    for (const flag of NON_SESSION_FLAGS) {
+      if (activeFlags.has(flag)) return true;
+    }
+    const afterClaude = commandTokens.slice(commandTokens.indexOf("claude") + 1);
+    const firstNonFlag = afterClaude.find((t) => !t.startsWith("-"));
+    if (firstNonFlag) {
+      return (cliCapabilities.commands || []).some((c) => c.name === firstNonFlag);
+    }
+    return false;
+  }, [commandTokens, activeFlags, cliCapabilities.commands]);
 
   // CLI subcommands sorted by usage frequency (most-used first, then alphabetical)
   const sortedCliCommands = useMemo((): CliCommand[] => {
@@ -143,9 +178,9 @@ export function SessionLauncher() {
   const closeSession = useSessionStore((s) => s.closeSession);
 
   const handleLaunch = useCallback(async () => {
-    if (!launchConfig.workingDir.trim()) return;
-    const name = dirToTabName(launchConfig.workingDir);
-    addRecentDir(launchConfig.workingDir);
+    if (!isNonSessionCommand && !launchConfig.workingDir.trim()) return;
+    const name = launchConfig.workingDir ? dirToTabName(launchConfig.workingDir) : "run";
+    if (launchConfig.workingDir) addRecentDir(launchConfig.workingDir);
     // Save config as defaults but strip one-shot resume fields —
     // these are per-launch, not persistent defaults.
     setLastConfig({ ...launchConfig, resumeSession: null, continueSession: false });
@@ -161,7 +196,7 @@ export function SessionLauncher() {
     } catch (err) {
       console.error("Failed to create session:", err);
     }
-  }, [launchConfig, createSession, closeSession, setShowLauncher, addRecentDir, setLastConfig]);
+  }, [launchConfig, isNonSessionCommand, createSession, closeSession, setShowLauncher, addRecentDir, setLastConfig]);
 
   const handleBrowse = useCallback(async () => {
     const selected = await open({
@@ -192,17 +227,17 @@ export function SessionLauncher() {
     return () => window.removeEventListener("keydown", handler);
   }, [handleLaunch, dismissLauncher]);
 
-  const handleCliPillClick = useCallback(
-    (opt: CliOption) => {
-      const flag = opt.flag;
-      const append = opt.argName ? ` ${flag} ` : ` ${flag}`;
-      setCommandLine((prev) => {
-        if (prev.includes(flag)) return prev;
-        return prev + append;
-      });
-    },
-    []
-  );
+  const handleCliPillClick = useCallback(({ flag, argName }: CliOption) => {
+    setCommandLine((prev) => {
+      const tokens = prev.split(/\s+/);
+      const idx = tokens.indexOf(flag);
+      if (idx !== -1) {
+        tokens.splice(idx, argName ? 2 : 1);
+        return tokens.join(" ");
+      }
+      return prev + (argName ? ` ${flag} ` : ` ${flag}`);
+    });
+  }, []);
 
   const handleResetCommand = useCallback(() => {
     setCommandLine(buildFullCommand(config));
@@ -232,6 +267,10 @@ export function SessionLauncher() {
   }
 
   const isResuming = !!config.resumeSession;
+
+  let launchLabel = "Launch";
+  if (isResuming) launchLabel = "Resume";
+  else if (isNonSessionCommand) launchLabel = "Run";
 
   // ── Main launcher ──
 
@@ -375,10 +414,21 @@ export function SessionLauncher() {
           </div>
           {showCliOptions && filteredCliOptions.length > 0 && (
             <div className="launcher-cli-grid">
+              {nonSessionFlags.map((opt) => (
+                <button
+                  key={opt.flag}
+                  className={`launcher-cli-pill launcher-cli-pill-nonsession${activeFlags.has(opt.flag) ? " launcher-cli-pill-active" : ""}`}
+                  onClick={() => handleCliPillClick(opt)}
+                  title={opt.description}
+                  type="button"
+                >
+                  {opt.flag}
+                </button>
+              ))}
               {filteredCliOptions.map((opt) => (
                 <button
                   key={opt.flag}
-                  className="launcher-cli-pill"
+                  className={`launcher-cli-pill${activeFlags.has(opt.flag) ? " launcher-cli-pill-active" : ""}`}
                   onClick={() => handleCliPillClick(opt)}
                   title={opt.description}
                   type="button"
@@ -397,7 +447,10 @@ export function SessionLauncher() {
                     key={cmd.name}
                     className="launcher-cli-pill launcher-cli-pill-cmd"
                     style={getHeatStyle(heat)}
-                    onClick={() => setCommandLine(prev => prev.trimEnd() + ` ${cmd.name}`)}
+                    onClick={() => setCommandLine((prev) => {
+                      const base = buildFullCommand(config);
+                      return prev.trim() === `claude ${cmd.name}` ? base : `claude ${cmd.name}`;
+                    })}
                     title={cmd.description}
                     type="button"
                   >
@@ -433,12 +486,12 @@ export function SessionLauncher() {
 
         {/* Launch button */}
         <button
-          className="launcher-launch-btn"
+          className={`launcher-launch-btn${isNonSessionCommand ? " launcher-launch-btn-run" : ""}`}
           onClick={handleLaunch}
-          disabled={!launchConfig.workingDir.trim()}
+          disabled={!isNonSessionCommand && !launchConfig.workingDir.trim()}
           type="button"
         >
-          {isResuming ? "Resume" : "Launch"}
+          {launchLabel}
         </button>
       </div>
     </div>

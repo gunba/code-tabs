@@ -55,10 +55,10 @@ export function CommandBar({ sessionId, sessionState, shiftHeld }: CommandBarPro
   }, [sessionState]);
 
   const handleClick = useCallback(
-    (command: string) => {
+    (command: string, e: React.MouseEvent) => {
       if (!sessionId) return;
 
-      if (shiftHeld) {
+      if (e.shiftKey) {
         // Shift+click: queue for auto-send when idle (for when Claude is busy)
         setQueuedCommand((prev) => {
           if (prev === command) return null; // Toggle off
@@ -70,7 +70,7 @@ export function CommandBar({ sessionId, sessionState, shiftHeld }: CommandBarPro
         recordCommandUsage(command);
       }
     },
-    [sessionId, shiftHeld, recordCommandUsage]
+    [sessionId, recordCommandUsage]
   );
 
   // Don't render if there's no active session
@@ -79,7 +79,7 @@ export function CommandBar({ sessionId, sessionState, shiftHeld }: CommandBarPro
   const discovering = slashCommands.length === 0;
 
   return (
-    <div className={`command-bar${shiftHeld ? " shift-held" : ""}`}>
+    <div className="command-bar">
       <div className="command-bar-scroll">
         {discovering ? (
           <span className="command-bar-discovering">Discovering commands...</span>
@@ -95,9 +95,9 @@ export function CommandBar({ sessionId, sessionState, shiftHeld }: CommandBarPro
                   "command-btn" +
                   (isQueued ? " command-btn-queued" : "")
                 }
-                style={isQueued ? undefined : getHeatStyle(heat)}
-                onClick={() => handleClick(cmd.cmd)}
-                title={cmd.desc}
+                style={isQueued || shiftHeld ? undefined : getHeatStyle(heat)}
+                onClick={(e) => handleClick(cmd.cmd, e)}
+                title={shiftHeld ? `Shift+Click: Queue "${cmd.cmd}"` : cmd.desc}
                 type="button"
               >
                 {cmd.cmd}

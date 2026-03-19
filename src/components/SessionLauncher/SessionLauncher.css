@@ -245,6 +245,24 @@
   background: var(--bg-surface-hover);
 }
 
+.launcher-cli-pill-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.launcher-cli-pill-nonsession {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.launcher-cli-pill-nonsession:hover,
+.launcher-cli-pill-nonsession.launcher-cli-pill-active {
+  opacity: 1;
+  color: var(--text-secondary);
+  border-color: var(--text-muted);
+}
+
 .launcher-cli-pill-cmd {
   color: var(--accent-secondary);
   border-color: var(--border-subtle);
@@ -375,6 +393,14 @@
 .launcher-launch-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.launcher-launch-btn-run {
+  background: var(--accent-secondary);
+}
+
+.launcher-launch-btn-run:hover {
+  background: color-mix(in srgb, var(--accent-secondary) 85%, white);
 }
 
 /* ── Error State ─────────────────────────────────────────── */

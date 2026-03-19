@@ -4,6 +4,7 @@ import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { getResumeId } from "../../lib/claude";
 import { dirToTabName, abbreviatePath, normalizeForFilter } from "../../lib/paths";
+import { useShiftKey } from "../../hooks/useShiftKey";
 import {
   type PastSession,
   type SessionConfig,
@@ -38,6 +39,7 @@ interface ResumePickerProps {
 // ── Component ───────────────────────────────────────────────────────
 
 export function ResumePicker({ onClose }: ResumePickerProps) {
+  const shiftHeld = useShiftKey();
   const createSession = useSessionStore((s) => s.createSession);
   const storeSessions = useSessionStore((s) => s.sessions);
   const activeSession = useSessionStore((s) => s.sessions.find((x) => x.id === s.activeTabId));
@@ -244,7 +246,9 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                   }
                 }}
                 onMouseEnter={() => setSelectedIndex(idx)}
-                title={`${ps.directory}\nSession: ${ps.id}\nShift+Click to configure`}
+                title={shiftHeld
+                  ? `Shift+Click: Configure & relaunch\n${ps.directory}`
+                  : `${ps.directory}\nSession: ${ps.id}\nShift+Click to configure`}
               >
                 <div className="resume-picker-card-top">
                   <span className="resume-picker-card-name">

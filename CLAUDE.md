@@ -109,7 +109,8 @@ src/
 │   ├── useSubagentWatcher.ts            # Subagent JSONL tracking, local elapsed timer
 │   ├── useCommandDiscovery.ts           # Slash command discovery (binary scan + --help fallback + plugins)
 │   ├── useCliWatcher.ts                 # CLI version + capabilities
-│   └── useNotifications.ts              # Desktop notifications
+│   ├── useNotifications.ts              # Desktop notifications
+│   └── useShiftKey.ts                   # Shared shift-key held state
 ├── components/
 │   ├── Terminal/TerminalPanel.tsx        # PTY + terminal + JSONL watcher + background buffering
 │   ├── ActivityFeed/ActivityFeed.tsx     # Action-oriented feed (state changes, tool uses, subagents)

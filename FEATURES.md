@@ -11,7 +11,7 @@ Expected behaviors that MUST be preserved. **Agents: read this before modifying 
 - State dot colors: idle=green, thinking=clay pulse, toolUse=blue scale, waitingPermission=orange pulse, error=red, dead=muted, starting=muted pulse
 - Non-active tabs flash green briefly when transitioning to idle from an active state
 - Dead tabs dimmed (opacity 0.45), clickable to switch (overlay provides actions)
-- Shift+click tab opens relaunch modal; visual border hint when Shift is held
+- Shift+click tab opens relaunch modal; unified blue top-bar + tint when Shift is held (active tab shows both clay bottom bar and blue top bar; permission-pulsing tabs pause animation)
 - Tabs draggable for reorder via native drag-and-drop
 - Right-click context menu: Rename, Copy Session ID, Copy Working Dir, Open in Explorer, Revive/Close
 
@@ -87,9 +87,14 @@ Expected behaviors that MUST be preserved. **Agents: read this before modifying 
 ## Session Launcher
 
 - Modal for new session or resume — Ctrl+T opens fresh (clears resume/continue flags)
-- Quick launch: Shift+click "+" or Ctrl+Shift+T uses saved defaults without showing modal
-- Ctrl+R opens resume picker (browse past Claude sessions)
+- Quick launch: Shift+click "+" or Ctrl+Shift+T uses saved defaults without showing modal; "+" button swaps to blue background when Shift is held
+- Ctrl+R opens resume picker (browse past Claude sessions); cards show blue top-bar + tint when Shift is held
 - CLI command pills sorted by usage frequency (same heat gradient as Command Bar)
+- **CLI option pills**: flags from `claude --help` shown as clickable pills; flags with dedicated UI controls (model, permissions, effort, etc.) are excluded from the grid
+- **Active flag indicators**: pills highlight with accent color when their flag is present in the command line (reactive to manual edits in textarea)
+- **Toggle behavior**: clicking an active pill removes the flag; clicking an inactive pill adds it
+- **Non-session flags** (`--version`, `--help`): rendered at start of grid with muted styling; selecting them changes Launch button to "Run" (blue) and removes the working directory requirement
+- **Subcommand toggle**: clicking a subcommand replaces command line with `claude <cmd>`; clicking again resets to generated command
 
 ## Command Bar
 
@@ -100,7 +105,7 @@ Expected behaviors that MUST be preserved. **Agents: read this before modifying 
 - **Click** a pill → sends the command to the PTY immediately (records usage)
 - **Shift+click** a pill → queues the command for auto-send when Claude becomes idle (records usage only when dispatched, not on queue)
 - Queued command shows a pulsing indicator; clicking the same queued command again toggles it off
-- Holding Shift triggers a WoW-style animated glow on all pills (pulsing accent-colored box-shadow)
+- Holding Shift shows unified blue top-bar + tint on non-queued pills (no animation); heat gradient suppressed while Shift is held; tooltips show queue hint
 - Queue auto-clears when session dies
 
 ## Window
