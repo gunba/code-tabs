@@ -72,12 +72,6 @@ export interface LaunchPreset {
   config: Partial<SessionConfig>;
 }
 
-export interface ThinkingBlock {
-  text: string;
-  timestamp: number;
-  redacted?: boolean;
-}
-
 export interface SubagentMessage {
   role: "assistant" | "tool";
   text: string;

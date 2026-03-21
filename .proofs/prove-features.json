@@ -28,9 +28,7 @@
     "CM-16",
     "CM-17",
     "CM-18",
-    "CM-19",
     "CM-20",
-    "CM-21",
     "CM-22",
     "CM-23",
     "DP-01",
@@ -53,6 +51,7 @@
     "DS-06",
     "DS-07",
     "DS-08",
+    "DS-09",
     "HM-01",
     "HM-02",
     "HM-03",
@@ -129,9 +128,7 @@
     "TP-07",
     "TP-08",
     "TP-09",
-    "TP-10",
     "TP-11",
-    "TP-12",
     "TR-01",
     "TR-02",
     "TR-03",
@@ -147,37 +144,24 @@
     "WN-03"
   ],
   "unchecked": [
-    "CB-01",
     "CB-02",
     "CB-03",
-    "CB-04",
     "CB-05",
-    "CB-07",
-    "CB-08",
-    "CB-09",
     "CM-01",
     "CM-02",
     "CM-03",
-    "CM-04",
     "CM-05",
     "CM-06",
-    "CM-07",
-    "CM-09",
     "CM-10",
-    "CM-11",
     "CM-12",
     "CM-13",
-    "CM-14",
     "CM-15",
     "CM-16",
     "CM-17",
     "CM-18",
-    "CM-19",
     "CM-22",
-    "CM-23",
     "DP-01",
     "DP-02",
-    "DP-04",
     "DP-05",
     "DP-07",
     "DP-08",
@@ -185,63 +169,37 @@
     "DP-10",
     "DP-11",
     "DP-12",
-    "DS-01",
-    "DS-02",
     "DS-03",
     "DS-04",
     "DS-06",
     "DS-07",
     "DS-08",
-    "HM-01",
     "HM-02",
-    "HM-03",
-    "HM-04",
-    "HM-05",
     "HM-06",
-    "HM-07",
     "HM-08",
-    "KB-01",
     "KB-02",
     "KB-03",
-    "KB-04",
-    "KB-05",
-    "KB-06",
     "KB-07",
     "KB-08",
-    "KB-09",
-    "KB-10",
     "MO-01",
     "SL-01",
     "SL-03",
     "SL-04",
     "SL-05",
     "SL-07",
-    "SL-09",
-    "SL-10",
-    "SL-12",
     "SL-13",
     "SL-15",
     "SL-16",
     "SR-01",
     "SR-02",
     "SR-03",
-    "TB-01",
-    "TB-02",
-    "TB-04",
     "TB-05",
     "TB-06",
-    "TB-07",
-    "TB-08",
-    "TB-09",
-    "TB-10",
-    "TB-12",
     "TB-13",
     "TB-14",
     "TB-16",
-    "TB-17",
     "TB-19",
     "TB-20",
-    "TB-21",
     "TB-22",
     "TB-23",
     "TB-24",
@@ -250,27 +208,18 @@
     "TP-02",
     "TP-03",
     "TP-05",
-    "TP-07",
     "TP-08",
-    "TP-09",
-    "TP-10",
-    "TP-12",
     "TR-01",
-    "TR-02",
     "TR-03",
     "TR-04",
-    "TR-06",
     "TR-07",
     "TR-08",
     "TR-09",
-    "TR-10",
-    "WN-01",
-    "WN-02",
-    "WN-03"
+    "TR-10"
   ],
   "citations": {
     "CB-01": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CB-02": {
@@ -282,7 +231,7 @@
       "down": 0
     },
     "CB-04": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CB-05": {
@@ -294,11 +243,11 @@
       "down": 0
     },
     "CB-07": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CB-08": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CM-01": {
@@ -310,11 +259,11 @@
       "down": 0
     },
     "CM-03": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "CM-04": {
-      "up": 1,
+      "up": 3,
       "down": 0
     },
     "CM-05": {
@@ -334,7 +283,7 @@
       "down": 0
     },
     "CM-09": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "CM-10": {
@@ -354,7 +303,7 @@
       "down": 0
     },
     "DP-04": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "DP-05": {
@@ -382,7 +331,7 @@
       "down": 0
     },
     "DP-11": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "DP-12": {
@@ -390,15 +339,15 @@
       "down": 0
     },
     "DS-01": {
-      "up": 0,
-      "down": 0
-    },
-    "DS-02": {
       "up": 1,
       "down": 0
     },
+    "DS-02": {
+      "up": 2,
+      "down": 0
+    },
     "DS-03": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "DS-04": {
@@ -410,7 +359,7 @@
       "down": 0
     },
     "DS-06": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "DS-07": {
@@ -418,7 +367,7 @@
       "down": 0
     },
     "HM-01": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "HM-02": {
@@ -426,15 +375,15 @@
       "down": 0
     },
     "HM-03": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "HM-04": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "HM-05": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "HM-06": {
@@ -442,7 +391,7 @@
       "down": 0
     },
     "HM-07": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "HM-08": {
@@ -454,7 +403,7 @@
       "down": 0
     },
     "KB-01": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "KB-02": {
@@ -466,15 +415,15 @@
       "down": 0
     },
     "KB-04": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "KB-05": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "KB-06": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "KB-07": {
@@ -498,11 +447,11 @@
       "down": 0
     },
     "SL-03": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SL-04": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SL-05": {
@@ -514,7 +463,7 @@
       "down": 0
     },
     "SL-07": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SL-08": {
@@ -522,11 +471,11 @@
       "down": 0
     },
     "SL-09": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "SL-10": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SL-11": {
@@ -534,11 +483,11 @@
       "down": 0
     },
     "SL-12": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "SL-13": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SL-14": {
@@ -554,7 +503,7 @@
       "down": 0
     },
     "SR-01": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SR-02": {
@@ -574,11 +523,11 @@
       "down": 0
     },
     "TB-01": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TB-02": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TB-03": {
@@ -586,7 +535,7 @@
       "down": 0
     },
     "TB-04": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "TB-05": {
@@ -598,19 +547,19 @@
       "down": 0
     },
     "TB-07": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TB-08": {
-      "up": 1,
-      "down": 0
-    },
-    "TB-09": {
       "up": 2,
       "down": 0
     },
+    "TB-09": {
+      "up": 3,
+      "down": 0
+    },
     "TB-10": {
-      "up": 1,
+      "up": 3,
       "down": 0
     },
     "TB-11": {
@@ -618,7 +567,7 @@
       "down": 0
     },
     "TB-12": {
-      "up": 1,
+      "up": 3,
       "down": 0
     },
     "TB-13": {
@@ -638,7 +587,7 @@
       "down": 0
     },
     "TB-17": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TB-18": {
@@ -650,11 +599,11 @@
       "down": 0
     },
     "TB-20": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TB-21": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TP-01": {
@@ -666,7 +615,7 @@
       "down": 0
     },
     "TP-03": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TP-04": {
@@ -682,7 +631,7 @@
       "down": 0
     },
     "TP-07": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TP-08": {
@@ -690,18 +639,10 @@
       "down": 0
     },
     "TP-09": {
-      "up": 1,
-      "down": 0
-    },
-    "TP-10": {
-      "up": 0,
+      "up": 2,
       "down": 0
     },
     "TP-11": {
-      "up": 1,
-      "down": 0
-    },
-    "TP-12": {
       "up": 1,
       "down": 0
     },
@@ -710,7 +651,7 @@
       "down": 0
     },
     "TR-02": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TR-03": {
@@ -726,15 +667,15 @@
       "down": 0
     },
     "TR-06": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "WN-01": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "WN-02": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TR-07": {
@@ -750,7 +691,7 @@
       "down": 0
     },
     "KB-10": {
-      "up": 2,
+      "up": 1,
       "down": 0
     },
     "MO-01": {
@@ -762,15 +703,15 @@
       "down": 0
     },
     "CM-12": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "CM-13": {
-      "up": 3,
+      "up": 2,
       "down": 0
     },
     "CM-14": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "CM-15": {
@@ -802,35 +743,27 @@
       "down": 0
     },
     "TR-10": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "WN-03": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "CB-09": {
       "up": 1,
       "down": 0
     },
-    "CM-19": {
-      "up": 2,
-      "down": 0
-    },
     "CM-20": {
       "up": 5,
       "down": 0
     },
-    "CM-21": {
+    "CM-22": {
       "up": 4,
       "down": 0
     },
-    "CM-22": {
-      "up": 3,
-      "down": 0
-    },
     "CM-23": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "TB-23": {
@@ -844,10 +777,14 @@
     "TB-25": {
       "up": 1,
       "down": 0
+    },
+    "DS-09": {
+      "up": 2,
+      "down": 0
     }
   },
   "cycle": 3,
-  "last_run": "2026-03-21T13:32:26.678068+00:00",
+  "last_run": "2026-03-21T17:25:02.053049+00:00",
   "metadata": {
     "TB-22": {
       "files": [
@@ -882,17 +819,20 @@
     },
     "TR-10": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:435"
+        "src/components/Terminal/TerminalPanel.tsx:435",
+        "src/components/Terminal/TerminalPanel.tsx:439",
+        "src/components/Terminal/TerminalPanel.tsx:440",
+        "src/components/Terminal/TerminalPanel.tsx:458"
       ],
       "verified": "2026-03-21",
-      "notes": "Added during change documentation"
+      "notes": "Double rAF: outer rAF at 439, inner rAF at 440. fit() called inside inner frame at 442. Cancellation via cancelled flag at 437 and cleanup at 458-461 cancels both frames on rapid tab switching."
     },
     "KB-10": {
       "files": [
-        "src/hooks/useTerminal.ts:75"
+        "src/hooks/useTerminal.ts:79"
       ],
       "verified": "2026-03-21",
-      "notes": "attachCustomKeyEventHandler: Alt+digit (0-9) returns false (line 75-78), blocking the keypress from reaching the PTY. Handled by App.tsx global keydown for tab switching."
+      "notes": "Edited via tag-edit.sh"
     },
     "MO-01": {
       "files": [
@@ -904,11 +844,11 @@
     },
     "CM-11": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:14",
-        "src/store/settings.ts:49"
+        "src/components/ConfigManager/ConfigManager.css:7",
+        "src/components/ConfigManager/ConfigManager.tsx:64"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: 5 tabs (settings/claudemd/hooks/plugins/agents), 92vw max-1400px 88vh from CSS, showConfigManager is string|false controlling which tab opens"
+      "notes": "96vw/1900px/88vh confirmed in CSS; 5 tabs in TABS array; ModalOverlay at line 64"
     },
     "CM-12": {
       "files": [
@@ -921,10 +861,13 @@
     "CM-13": {
       "files": [
         "src/components/ConfigManager/SettingsPane.tsx:8",
-        "src/components/ConfigManager/ConfigManager.css:866"
+        "src/components/ConfigManager/SettingsPane.tsx:94",
+        "src/components/ConfigManager/ConfigManager.css:852",
+        "src/components/ConfigManager/ConfigManager.css:876",
+        "src/components/ConfigManager/ConfigManager.css:885"
       ],
       "verified": "2026-03-21",
-      "notes": "Edited via tag-edit.sh"
+      "notes": "sh-container with position:relative at CSS:852; sh-pre absolute inset:0 at CSS:860; sh-textarea absolute inset:0 at CSS:880. Keys=sh-key clay, strings=sh-string blue, numbers/bools=sh-number/sh-bool purple at CSS:885-888. Scroll synced via syncScroll() at TSX:81. Ctrl+S save at TSX:109."
     },
     "CM-14": {
       "files": [
@@ -1014,29 +957,20 @@
       "verified": "2026-03-21",
       "notes": "verified: Open Inspector opens debug.bun.sh URL via shellOpen, disconnects internal WS via disconnectInspectorForSession, marks inspectorOff"
     },
-    "TP-12": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:291",
-        "src/store/sessions.ts:121"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: triggerRespawn calls clearThinkingBlocks; closeSession deletes thinkingBlocks Map entry"
-    },
     "TR-02": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:583",
-        "src/components/Terminal/TerminalPanel.tsx:586"
+        "src/components/Terminal/TerminalPanel.tsx:599-605",
+        "src/components/Terminal/TerminalPanel.css:66-76"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: terminal-token-badge shown when visible, not dead, and totalTokens>0; tooltip shows input/output breakdown"
+      "notes": "Token badge: absolute positioned top-left (top:6px, left:8px), semi-transparent bg (70% bg-surface), shows total tokens with input/output tooltip, hidden when dead or zero"
     },
     "WN-02": {
       "files": [
-        "src-tauri/tauri.conf.json:21",
-        "src-tauri/tauri.conf.json:22"
+        "src-tauri/tauri.conf.json:21"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: decorations:true and theme:Dark in tauri.conf.json windows config"
+      "notes": "decorations: true and theme: Dark at lines 21-22"
     },
     "KB-09": {
       "files": [
@@ -1062,10 +996,12 @@
     },
     "CM-04": {
       "files": [
-        "src/components/ModalOverlay/ModalOverlay.tsx:14-19"
+        "src/components/ModalOverlay/ModalOverlay.tsx:14",
+        "src/components/ModalOverlay/ModalOverlay.tsx:16",
+        "src/components/ModalOverlay/ModalOverlay.tsx:17"
       ],
       "verified": "2026-03-21",
-      "notes": "PASS: onKeyDown returns for Escape and Ctrl+comma, stopPropagation for all other keys"
+      "notes": "ModalOverlay onKeyDown stopPropagation blocks all keys except Escape (line 16) and Ctrl+comma (line 17)"
     },
     "CM-05": {
       "files": [
@@ -1084,10 +1020,10 @@
     },
     "CB-01": {
       "files": [
-        "src/components/CommandBar/CommandBar.tsx:22"
+        "src/components/CommandBar/CommandBar.tsx:36"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: sort by count desc then alphabetical"
+      "notes": "sortedCommands useMemo: count desc then localeCompare"
     },
     "CB-02": {
       "files": [
@@ -1099,17 +1035,18 @@
     },
     "CB-04": {
       "files": [
-        "src/components/CommandBar/CommandBar.tsx:67"
+        "src/components/CommandBar/CommandBar.tsx:25",
+        "src/components/CommandBar/CommandBar.tsx:80"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: normal click writes command+CR to PTY and records usage"
+      "notes": "sendCommand writes to PTY and records usage; handleClick else branch"
     },
     "CB-08": {
       "files": [
-        "src/components/CommandBar/CommandBar.tsx:51"
+        "src/components/CommandBar/CommandBar.tsx:64"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: dead state sets queuedCommand to null"
+      "notes": "useEffect watches sessionState=dead, sets queuedCommand null"
     },
     "CM-08": {
       "files": [
@@ -1129,10 +1066,11 @@
     },
     "HM-01": {
       "files": [
-        "src/components/ConfigManager/ThreePaneEditor.tsx:20-38"
+        "src-tauri/src/commands.rs:938",
+        "src-tauri/src/commands.rs:978"
       ],
       "verified": "2026-03-21",
-      "notes": "scopePath returns ~/.claude/settings.json, .claude/settings.json, .claude/settings.local.json"
+      "notes": "discover_hooks reads 3 scopes; save_hooks maps scope to correct path"
     },
     "SL-03": {
       "files": [
@@ -1143,11 +1081,11 @@
     },
     "SL-10": {
       "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:157",
-        "src/components/SessionLauncher/SessionLauncher.tsx:493"
+        "src/components/SessionLauncher/SessionLauncher.tsx:157-169",
+        "494-499"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: sortedCliCommands by usage, computeHeatLevel+getHeatStyle applied"
+      "notes": "CLI command pills sorted by usage via sortedCliCommands (usage desc then alpha), heat gradient via computeHeatLevel/getHeatStyle same as CommandBar"
     },
     "SL-11": {
       "files": [
@@ -1178,10 +1116,10 @@
     "CM-07": {
       "files": [
         "src/components/ConfigManager/AgentEditor.tsx:6",
-        "src/components/ConfigManager/ConfigManager.tsx:113"
+        "src/components/ConfigManager/ConfigManager.css:705"
       ],
       "verified": "2026-03-21",
-      "notes": "AgentEditor component at :6, agents tab rendering at ConfigManager:113"
+      "notes": "ThreePaneEditor scoped, pills+editor, auto-select, dashed new-agent pill, duplicate check, Ctrl+S"
     },
     "TP-02": {
       "files": [
@@ -1207,42 +1145,44 @@
     },
     "TB-09": {
       "files": [
-        "src/App.tsx:247"
+        "src/App.tsx:239",
+        "src/App.tsx:377"
       ],
       "verified": "2026-03-21",
-      "notes": "Edited via tag-edit.sh"
+      "notes": "Ctrl+E handler at 239; inline input with Enter/Esc at 377-401"
     },
     "CM-03": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:43",
-        "src/components/ConfigManager/ConfigManager.tsx:52",
-        "src/components/ConfigManager/ConfigManager.tsx:83"
+        "src/components/ConfigManager/ConfigManager.tsx:83",
+        "src/components/ConfigManager/ConfigManager.tsx:56"
       ],
       "verified": "2026-03-21",
-      "notes": "Project dirs from sessions (useMemo line 43), defaults to active session dir (useEffect line 52), selector shown only when >1 dir (line 83)."
+      "notes": "Project dir selector shown at line 83 when projectDirs.length > 1; defaults to active session's workingDir at line 54-57"
     },
     "TB-08": {
       "files": [
-        "src/App.tsx:296",
-        "src/lib/claude.ts:25"
+        "src/App.tsx:293",
+        "src/lib/claude.ts:30"
       ],
       "verified": "2026-03-21",
-      "notes": "Edited via tag-edit.sh"
+      "notes": "Meta spans use modelColor for hardcoded hex; MODEL_FAMILIES at line 30"
     },
     "HM-05": {
       "files": [
-        "src/components/ConfigManager/HooksPane.tsx:188",
-        "src/components/ConfigManager/HooksPane.tsx:234-252"
+        "src/components/ConfigManager/HooksPane.tsx:242",
+        "src/components/ConfigManager/HooksPane.tsx:244"
       ],
       "verified": "2026-03-21",
-      "notes": "PASS: Custom event option at :242, isCustomEvent check at :188, freeform input at :244-251"
+      "notes": "Custom... option at line 242, freeform input when isCustomEvent at line 244"
     },
     "SL-13": {
       "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:247-257"
+        "src/components/SessionLauncher/SessionLauncher.tsx:248",
+        "src/components/SessionLauncher/SessionLauncher.tsx:251",
+        "src/components/SessionLauncher/SessionLauncher.tsx:264"
       ],
       "verified": "2026-03-21",
-      "notes": "PASS: handleCliPillClick toggles: removes flag if found in tokens, appends if not"
+      "notes": "handleCliPillClick toggles: active pill (idx!=-1) splices flag off at line 252; inactive pill appends flag at line 255. handleNonSessionFlagClick similar toggle at lines 260-268."
     },
     "SL-15": {
       "files": [
@@ -1275,12 +1215,11 @@
     },
     "TB-20": {
       "files": [
-        "src/App.css:153-157",
-        "src/components/StatusBar/StatusBar.tsx:40-47",
-        "src/components/StatusBar/StatusBar.css:116-118"
+        "src/App.css:165",
+        "src/App.tsx:384"
       ],
       "verified": "2026-03-21",
-      "notes": "PASS: tab dot hollow via transparent bg+inset border+no animation; status bar shows IconCircleOutline+Inspector off with reconnect tooltip"
+      "notes": "inspector-off class at CSS:165-169: transparent bg, inset box-shadow 1.5px, animation:none. Applied in TSX:384 when inspectorOffSessions.has(session.id). Status bar indicator verified separately."
     },
     "DP-05": {
       "files": [
@@ -1361,10 +1300,11 @@
     },
     "WN-03": {
       "files": [
-        "src/hooks/useNotifications.ts:1"
+        "src/hooks/useNotifications.ts:89",
+        "src/hooks/useNotifications.ts:44"
       ],
       "verified": "2026-03-21",
-      "notes": "Added during change documentation"
+      "notes": "State change notifications at line 89-101; click handler at line 44; 30s cooldown"
     },
     "DS-05": {
       "files": [
@@ -1378,21 +1318,10 @@
     "CB-09": {
       "files": [
         "src/components/CommandBar/CommandBar.tsx:95",
-        "src/store/sessions.ts:306"
+        "src/store/sessions.ts:283"
       ],
       "verified": "2026-03-21",
       "notes": "Edited via tag-edit.sh"
-    },
-    "CM-19": {
-      "files": [
-        "src/components/ConfigManager/ThreePaneEditor.tsx:16",
-        "src/components/ConfigManager/ThreePaneEditor.tsx:48",
-        "src/components/ConfigManager/ConfigManager.tsx:109",
-        "src/components/ConfigManager/ConfigManager.tsx:112",
-        "src/components/ConfigManager/ConfigManager.css:140"
-      ],
-      "verified": "2026-03-21",
-      "notes": "compact prop on ThreePaneEditor (line 16 interface, line 48 usage), hooks/plugins pass compact (lines 109,112). CSS .three-pane-grid-compact max-width 1300px (line 140-142). Settings/claudemd/agents do not pass compact."
     },
     "CM-20": {
       "files": [
@@ -1400,14 +1329,6 @@
       ],
       "verified": "2026-03-21",
       "notes": "Tab label is 'Claude' not 'CLAUDE.md'"
-    },
-    "CM-21": {
-      "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:62",
-        "src/components/ConfigManager/ConfigManager.css:13"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: isCompact for hooks/plugins applies config-modal-compact, max-width 1400px"
     },
     "CM-22": {
       "files": [
@@ -1421,12 +1342,10 @@
     "CM-23": {
       "files": [
         "src/components/ConfigManager/MarkdownPane.tsx:60",
-        "src/components/ConfigManager/MarkdownPane.tsx:85",
-        "src/components/ConfigManager/ConfigManager.css:910",
-        "src/components/ConfigManager/ConfigManager.css:919"
+        "src/components/ConfigManager/ConfigManager.css:895"
       ],
       "verified": "2026-03-21",
-      "notes": "Preview toggle: preview state (line 16), ReactMarkdown render (line 60-63). Footer button left-aligned via margin-right:auto (CSS line 919). Preview/Edit text (line 89). Dark-themed styles for headings/code/tables/blockquotes/lists/links in CSS lines 932-1041."
+      "notes": "Preview toggle at line 60-63; margin-right:auto at CSS line 895; ReactMarkdown with dark styles"
     },
     "SL-04": {
       "files": [
@@ -1437,10 +1356,11 @@
     },
     "SL-05": {
       "files": [
-        "src/components/ResumePicker/ResumePicker.tsx:159"
+        "src/components/ResumePicker/ResumePicker.tsx:159",
+        "src-tauri/src/commands.rs:330"
       ],
       "verified": "2026-03-21",
-      "notes": "mergedList useMemo: chain building, member sorting, name resolution, message filtering"
+      "notes": "Edited via tag-edit.sh"
     },
     "CB-06": {
       "files": [
@@ -1454,12 +1374,12 @@
     },
     "DS-02": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:280",
-        "src/components/Terminal/TerminalPanel.tsx:283",
-        "src/components/Terminal/TerminalPanel.tsx:318"
+        "src/components/Terminal/TerminalPanel.tsx:57",
+        "src/components/Terminal/TerminalPanel.tsx:82",
+        "src/components/Terminal/TerminalPanel.tsx:283"
       ],
       "verified": "2026-03-21",
-      "notes": "triggerRespawnRef respawns PTY in same tab (line 280-320). updateState/updateConfig modify existing session, no new tab created or old destroyed. DeadOverlay Resume/New both call triggerRespawnRef. Enter on dead tab also calls it (line 326-328)."
+      "notes": "All DeadOverlay actions call triggerRespawnRef (in-place respawn)"
     },
     "DS-06": {
       "files": [
@@ -1471,11 +1391,10 @@
     },
     "TP-09": {
       "files": [
-        "src/components/ThinkingPanel/ThinkingPanel.tsx:30",
-        "src/components/ThinkingPanel/ThinkingPanel.tsx:32"
+        "src/components/ThinkingPanel/ThinkingPanel.tsx:31-33"
       ],
       "verified": "2026-03-21",
-      "notes": "setInterval every 10000ms (10s) triggers setTick to force re-render (line 30-33). formatRelativeTime (line 14-21) recalculates on each render."
+      "notes": "setInterval with 10000ms (10s) triggers state tick to force re-render of formatRelativeTime"
     },
     "TB-04": {
       "files": [
@@ -1486,11 +1405,15 @@
     },
     "TB-10": {
       "files": [
-        "src/App.tsx:74-110",
-        "src/App.css:83-94"
+        "src/App.tsx:76",
+        "src/App.tsx:81",
+        "src/App.tsx:86",
+        "src/App.tsx:89",
+        "src/App.tsx:104",
+        "src/App.tsx:381"
       ],
       "verified": "2026-03-21",
-      "notes": "5s flash timer, green success color, dismissFlash on hover/click"
+      "notes": "Flash on idle transition from active state at line 81 (prevState not idle/dead/starting and s.state===idle); 5000ms timeout at line 89; dismissFlash on hover at line 381; click dismisses via handleTabActivate calling dismissFlash at line 165."
     },
     "SR-02": {
       "files": [
@@ -1612,6 +1535,167 @@
       ],
       "verified": "2026-03-21",
       "notes": "verified: showThinkingPanel defaults false, not in partialize list"
+    },
+    "DS-01": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:49-95"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Dead overlay renders Resume (conditional on canResume), Resume other, and New session buttons as documented"
+    },
+    "HM-07": {
+      "files": [
+        "src/components/StatusBar/StatusBar.tsx:87-98"
+      ],
+      "verified": "2026-03-21",
+      "notes": "countHookEntries iterates MatcherGroups and sums hooks[] array lengths, not group count"
+    },
+    "KB-01": {
+      "files": [
+        "src/App.tsx:176"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Ctrl+T handler calls setShowLauncher(true) for new session"
+    },
+    "KB-06": {
+      "files": [
+        "src/App.tsx:195"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Ctrl+K toggles showPalette state for command palette"
+    },
+    "SL-09": {
+      "files": [
+        "src/components/SessionLauncher/SessionLauncher.tsx:67-74"
+      ],
+      "verified": "2026-03-21",
+      "notes": "SessionLauncher spreads DEFAULT_SESSION_CONFIG then lastConfig, clearing only continueSession, sessionId, runMode"
+    },
+    "TB-01": {
+      "files": [
+        "src/App.css:53-55"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Tab CSS: height 66px, box-sizing border-box confirmed in .tab rule"
+    },
+    "TB-21": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:290"
+      ],
+      "verified": "2026-03-21",
+      "notes": "triggerRespawn calls setInspectorOff(session.id, false) to clear inspector-off state on respawn"
+    },
+    "TP-07": {
+      "files": [
+        "src/components/ThinkingPanel/ThinkingPanel.tsx:67-73",
+        "src/components/ThinkingPanel/ThinkingPanel.css:103-111"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Redacted blocks render muted italic [redacted thinking] text; CSS opacity 0.6 + font-style italic + text-muted color"
+    },
+    "WN-01": {
+      "files": [
+        "src-tauri/tauri.conf.json:21-22"
+      ],
+      "verified": "2026-03-21",
+      "notes": "decorations: true and theme: Dark in tauri.conf.json window config; no custom HTML titlebar in codebase"
+    },
+    "DP-11": {
+      "files": [
+        "src/App.tsx:223"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Escape chain in App.tsx handler: contextMenu(221) -> palette(222) -> debug(223) -> thinking(224) -> config(225) -> resume(226) -> launcher(227) -> inspector(228). Debug checked before ThinkingPanel as claimed."
+    },
+    "DS-03": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:48"
+      ],
+      "verified": "2026-03-21",
+      "notes": "canResume derived from nodeSummary or resumeSession at line 48: const canResume = !!session.metadata.nodeSummary || !!session.config.resumeSession. No JSONL file check."
+    },
+    "SR-01": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:171",
+        "src/components/Terminal/TerminalPanel.tsx:179"
+      ],
+      "verified": "2026-03-21",
+      "notes": "loading state initialized true when resumeSession is set (line 171); cleared when inspector.connected becomes true (line 179). Loading spinner shown during this interval."
+    },
+    "TB-12": {
+      "files": [
+        "src/App.tsx:357",
+        "src/App.tsx:110",
+        "src/App.css:109"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Ctrl+Click at line 357 opens relaunch modal with session config and resume ID. Blue top-bar/tint when Ctrl held via CSS .ctrl-held .tab at App.css:110-118."
+    },
+    "TP-03": {
+      "files": [
+        "src/App.tsx:572",
+        "src/App.css:614",
+        "src/App.css:620",
+        "src/components/ThinkingPanel/ThinkingPanel.css:1",
+        "src/hooks/useTerminal.ts:194"
+      ],
+      "verified": "2026-03-21",
+      "notes": "ThinkingPanel rendered as flex sibling of terminal-area inside app-main (display:flex at CSS:616). terminal-area is flex:1 at CSS:621. ThinkingPanel has fixed width:350px, min:250px, max:50% at CSS:1-4. ResizeObserver on container at useTerminal.ts:194 auto-fires fit() on size changes."
+    },
+    "DS-09": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:396"
+      ],
+      "verified": "2026-03-21",
+      "notes": "prevVisibleRef tracks hidden->visible; only fires on becameVisible && state=dead && canResume"
+    },
+    "CB-07": {
+      "files": [
+        "src/components/CommandBar/CommandBar.tsx:125",
+        "src/components/CommandBar/CommandBar.css:93"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Heat suppressed via ctrlHeld conditional, blue border via .ctrl-held CSS, queue hint in title"
+    },
+    "TB-07": {
+      "files": [
+        "src/App.css:158",
+        "src/App.css:171"
+      ],
+      "verified": "2026-03-21",
+      "notes": "All pulsing dots use dot-pulse 2s ease infinite; keyframes min opacity 0.5"
+    },
+    "TR-06": {
+      "files": [
+        "src/hooks/useTerminal.ts:42"
+      ],
+      "verified": "2026-03-21",
+      "notes": "scrollback: 100000, no dynamic resizing"
+    },
+    "CM-09": {
+      "files": [
+        "src/components/ModalOverlay/ModalOverlay.tsx:13",
+        "src/App.tsx:216"
+      ],
+      "verified": "2026-03-21",
+      "notes": "ModalOverlay onClick=onClose; Escape propagates to App.tsx global handler"
+    },
+    "SL-12": {
+      "files": [
+        "src/components/SessionLauncher/SessionLauncher.tsx:135",
+        "src/components/SessionLauncher/SessionLauncher.css:294"
+      ],
+      "verified": "2026-03-21",
+      "notes": "activeFlags from commandTokens; pill-active class with accent color"
+    },
+    "TB-02": {
+      "files": [
+        "src/App.css:333",
+        "src/App.css:354",
+        "src/App.css:375"
+      ],
+      "verified": "2026-03-21",
+      "notes": "tab-add 66x66 at 333, tab-resume 66x66 at 354, tab-config 66x66 at 375"
     }
   }
 }

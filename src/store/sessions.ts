@@ -8,7 +8,6 @@ import type {
   SessionState,
   SessionMetadata,
   Subagent,
-  ThinkingBlock,
 } from "../types/session";
 
 interface SessionsState {
@@ -17,7 +16,6 @@ interface SessionsState {
   claudePath: string | null;
   initialized: boolean;
   subagents: Map<string, Subagent[]>; // sessionId -> subagents
-  thinkingBlocks: Map<string, ThinkingBlock[]>; // sessionId -> thinking blocks
   commandHistory: Map<string, string[]>; // sessionId -> commands (newest first)
   respawnRequest: { tabId: string; config: SessionConfig; name?: string } | null;
   killRequest: string | null; // sessionId to kill
@@ -44,8 +42,6 @@ interface SessionsState {
   addSubagent: (sessionId: string, subagent: Subagent) => void;
   updateSubagent: (sessionId: string, subagentId: string, updates: Partial<Subagent>) => void;
   removeDeadSubagents: (sessionId: string) => void;
-  appendThinkingBlocks: (sessionId: string, blocks: ThinkingBlock[]) => void;
-  clearThinkingBlocks: (sessionId: string) => void;
   addCommandHistory: (sessionId: string, command: string) => void;
 }
 
@@ -55,7 +51,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
   claudePath: null,
   initialized: false,
   subagents: new Map(),
-  thinkingBlocks: new Map(),
   commandHistory: new Map(),
   respawnRequest: null,
   killRequest: null,
@@ -140,13 +135,11 @@ export const useSessionStore = create<SessionsState>((set) => ({
           : s.activeTabId;
       const subagents = new Map(s.subagents);
       subagents.delete(id);
-      const thinkingBlocks = new Map(s.thinkingBlocks);
-      thinkingBlocks.delete(id);
       const commandHistory = new Map(s.commandHistory);
       commandHistory.delete(id);
       const inspectorOffSessions = new Set(s.inspectorOffSessions);
       inspectorOffSessions.delete(id);
-      return { sessions, activeTabId, subagents, thinkingBlocks, commandHistory, inspectorOffSessions };
+      return { sessions, activeTabId, subagents, commandHistory, inspectorOffSessions };
     });
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();
@@ -284,24 +277,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
       if (alive.length === list.length) return s;
       map.set(sessionId, alive);
       return { subagents: map };
-    });
-  },
-
-  appendThinkingBlocks: (sessionId, blocks) => {
-    set((s) => {
-      const map = new Map(s.thinkingBlocks);
-      const existing = map.get(sessionId) || [];
-      const combined = [...existing, ...blocks];
-      map.set(sessionId, combined.length > 50 ? combined.slice(-50) : combined);
-      return { thinkingBlocks: map };
-    });
-  },
-
-  clearThinkingBlocks: (sessionId) => {
-    set((s) => {
-      const map = new Map(s.thinkingBlocks);
-      map.delete(sessionId);
-      return { thinkingBlocks: map };
     });
   },
 

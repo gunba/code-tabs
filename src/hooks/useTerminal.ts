@@ -48,6 +48,10 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
 
     // Custom key handlers: Ctrl+C copy, Ctrl+V paste
     term.attachCustomKeyEventHandler((ev) => {
+      // Block all input when a modal overlay is open
+      if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .modal-overlay, .palette-overlay, .inspector-overlay')) {
+        return false;
+      }
       if (ev.ctrlKey && ev.key === "c" && ev.type === "keydown") {
         if (term.hasSelection()) {
           navigator.clipboard.writeText(term.getSelection());

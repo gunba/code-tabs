@@ -99,6 +99,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
   const sessionConfigs = useSettingsStore((s) => s.sessionConfigs);
   const [dirFilter, setDirFilter] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [expandedChains, setExpandedChains] = useState<Set<string>>(new Set());
   const filterRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -171,14 +172,26 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
       }
     }
 
+    // Recursively collect all descendants of a session (visited set guards against cycles)
+    const collectDescendants = (id: string, visited = new Set<string>()): PastSession[] => {
+      if (visited.has(id)) return [];
+      visited.add(id);
+      const direct = childrenOf.get(id) || [];
+      const all: PastSession[] = [...direct];
+      for (const child of direct) {
+        all.push(...collectDescendants(child.id, visited));
+      }
+      return all;
+    };
+
     const chains: MergedChain[] = [];
     for (const ps of filteredPastSessions) {
-      // Skip children — they'll be merged into their parent chain
+      // Skip children — they'll be merged into their root chain
       if (childIds.has(ps.id)) continue;
 
-      const children = childrenOf.get(ps.id) || [];
-      // All members: parent + children, sorted newest-first
-      const members = [ps, ...children].sort(
+      const descendants = collectDescendants(ps.id);
+      // All members: root + all descendants, sorted newest-first
+      const members = [ps, ...descendants].sort(
         (a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
       );
       const latest = members[0];
@@ -192,11 +205,22 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         }
       }
 
-      // Pick firstMessage: iterate parent then children, skip suppressed
+      // Pick firstMessage: check root first, then descendants, skip suppressed
       let firstMessage = "";
-      for (const m of [ps, ...children]) {
+      if (ps.firstMessage && !SUPPRESSED_FIRST_MESSAGES.includes(ps.firstMessage)) {
+        firstMessage = ps.firstMessage;
+      } else for (const m of descendants) {
         if (m.firstMessage && !SUPPRESSED_FIRST_MESSAGES.includes(m.firstMessage)) {
           firstMessage = m.firstMessage;
+          break;
+        }
+      }
+
+      // Pick lastMessage: prefer latest, fall back through members
+      let lastMessage = "";
+      for (const m of members) {
+        if (m.lastMessage && !SUPPRESSED_FIRST_MESSAGES.includes(m.lastMessage)) {
+          lastMessage = m.lastMessage;
           break;
         }
       }
@@ -208,7 +232,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         latestDate: latest.lastModified,  // members sorted newest-first
         totalSize: members.reduce((sum, m) => sum + m.sizeBytes, 0),
         firstMessage,
-        lastMessage: latest.lastMessage,
+        lastMessage,
         model: latest.model,
         chainLength: members.length,
       });
@@ -230,14 +254,12 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
     card?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
-  // Resume a past session — reuse active dead tab if available, with config fallback
-  const handleResume = useCallback(
-    async (chain: MergedChain) => {
-      const ps = chain.resumeSession;
+  // Resume a specific PastSession by ID
+  const resumeById = useCallback(
+    async (ps: PastSession) => {
       const workingDir = ps.directory || ".";
-      const dead = findDead(chain);
+      const dead = deadSessionMap.get(ps.id);
       const cached = sessionConfigs[ps.id];
-      // Use dead tab config, then cached config, then defaults
       const baseConfig = dead?.config ?? { ...DEFAULT_SESSION_CONFIG, ...cached };
       const resumeConfig: SessionConfig = {
         ...baseConfig,
@@ -260,7 +282,13 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         console.error("Failed to resume session:", err);
       }
     },
-    [findDead, sessionConfigs, activeIsDead, activeSession, createSession, addRecentDir, requestRespawn, onClose]
+    [deadSessionMap, sessionConfigs, activeIsDead, activeSession, createSession, addRecentDir, requestRespawn, onClose]
+  );
+
+  // Resume a chain (latest member)
+  const handleResume = useCallback(
+    (chain: MergedChain) => resumeById(chain.resumeSession),
+    [resumeById]
   );
 
   // Open the main launcher with this session pre-filled (Ctrl+Click / Configure)
@@ -427,8 +455,19 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                     <span key={b.mod} className={`resume-picker-badge ${b.mod}`}>{b.label}</span>
                   ))}
                   {chain.chainLength > 1 && (
-                    <span className="resume-picker-card-chain-count">
-                      {chain.chainLength} sessions
+                    <span
+                      className={`resume-picker-card-chain-count${expandedChains.has(ps.id) ? " resume-picker-card-chain-count-active" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedChains((s) => {
+                          const next = new Set(s);
+                          next.has(ps.id) ? next.delete(ps.id) : next.add(ps.id);
+                          return next;
+                        });
+                      }}
+                      title="Click to show chain members"
+                    >
+                      {expandedChains.has(ps.id) ? "\u25BE" : "\u25B8"} {chain.chainLength} sessions
                     </span>
                   )}
                   <span className="resume-picker-card-size">
@@ -457,6 +496,29 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                     </>
                   )}
                 </div>
+                {/* Expanded chain members */}
+                {chain.chainLength > 1 && expandedChains.has(ps.id) && (
+                  <div className="resume-picker-chain-members">
+                    {chain.members.map((m) => (
+                      <div
+                        key={m.id}
+                        className={`resume-picker-chain-member${m.id === chain.resumeSession.id ? " resume-picker-chain-member-latest" : ""}`}
+                        onClick={(e) => { e.stopPropagation(); resumeById(m); }}
+                        title={`Resume this session\n${m.id}`}
+                      >
+                        <span className="resume-picker-chain-member-date">
+                          {formatRelativeDate(m.lastModified)}
+                        </span>
+                        <span className="resume-picker-chain-member-msg">
+                          {m.firstMessage || "(no message)"}
+                        </span>
+                        <span className="resume-picker-card-size">
+                          {formatSize(m.sizeBytes)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

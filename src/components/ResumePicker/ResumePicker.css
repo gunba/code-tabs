@@ -75,6 +75,7 @@
   border-radius: 8px;
   padding: 0 10px;
   cursor: pointer;
+  color: var(--accent);
   font-size: 14px;
   transition: all 0.15s;
   flex-shrink: 0;
@@ -159,6 +160,60 @@
   padding: 1px 5px;
   border-radius: 4px;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.resume-picker-card-chain-count:hover,
+.resume-picker-card-chain-count-active {
+  background: color-mix(in srgb, var(--accent-tertiary) 25%, transparent);
+}
+
+/* ── Expanded chain members ──────────────────────────────────── */
+
+.resume-picker-chain-members {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.resume-picker-chain-member {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-size: 10px;
+}
+
+.resume-picker-chain-member:hover {
+  background: var(--bg-surface);
+}
+
+.resume-picker-chain-member-latest {
+  border-left: 2px solid var(--accent);
+}
+
+.resume-picker-chain-member-date {
+  font-size: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 50px;
+}
+
+.resume-picker-chain-member-msg {
+  color: var(--text-secondary);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 /* ── Card rows ────────────────────────────────────────────────── */

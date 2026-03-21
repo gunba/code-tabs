@@ -59,10 +59,9 @@ export function ConfigManager() {
   }, [projectDir, activeTabId, sessions, projectDirs]);
 
   const onClose = () => setShowConfigManager(false);
-  const isCompact = tab === "hooks" || tab === "plugins";
 
   return (
-    <ModalOverlay onClose={onClose} className={`config-modal${isCompact ? " config-modal-compact" : ""}`}>
+    <ModalOverlay onClose={onClose} className="config-modal">
       {/* Header with tabs */}
       <div className="config-header">
         <span className="config-title">Config</span>
@@ -106,10 +105,10 @@ export function ConfigManager() {
           <ThreePaneEditor component={MarkdownPane} projectDir={projectDir} onStatus={setStatusMsg} tabId="claudemd" />
         )}
         {tab === "hooks" && (
-          <ThreePaneEditor component={HooksPane} projectDir={projectDir} onStatus={setStatusMsg} compact tabId="hooks" />
+          <ThreePaneEditor component={HooksPane} projectDir={projectDir} onStatus={setStatusMsg} tabId="hooks" />
         )}
         {tab === "plugins" && (
-          <ThreePaneEditor component={PluginsPane} projectDir={projectDir} onStatus={setStatusMsg} compact tabId="plugins" />
+          <ThreePaneEditor component={PluginsPane} projectDir={projectDir} onStatus={setStatusMsg} tabId="plugins" />
         )}
         {tab === "agents" && (
           <ThreePaneEditor component={AgentEditor} projectDir={projectDir} onStatus={setStatusMsg} tabId="agents" />

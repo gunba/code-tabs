@@ -175,11 +175,13 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
     struct RawEntry {
         modified: std::time::SystemTime,
         session_id: String,
-        first_event_session_id: Option<String>,
+        source_tool_uuid: Option<String>,
         json: serde_json::Value,
     }
 
     let mut raw_entries: Vec<RawEntry> = Vec::new();
+    // Global map: message UUID → session_id (for resolving chain parents)
+    let mut uuid_to_session: std::collections::HashMap<String, String> = std::collections::HashMap::new();
 
     // Walk project dirs
     let entries = std::fs::read_dir(&projects_dir)
@@ -241,19 +243,23 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                 .format("%Y-%m-%dT%H:%M:%SZ")
                 .to_string();
 
-            // --- Head pass: BufReader, first 30 lines → firstMessage + first-event sessionId ---
+            // --- Head pass: BufReader, first 30 lines → firstMessage + sourceToolAssistantUUID ---
             let mut first_msg = String::new();
-            let mut first_event_sid: Option<String> = None;
+            let mut source_tool_uuid: Option<String> = None;
             if let Ok(file_handle) = std::fs::File::open(&fpath) {
                 use std::io::BufRead;
                 let reader = std::io::BufReader::new(file_handle);
                 for line in reader.lines().take(30).flatten() {
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
-                        // Capture sessionId from first event that has one
-                        if first_event_sid.is_none() {
-                            if let Some(sid) = parsed.get("sessionId").and_then(|v| v.as_str()) {
-                                if !sid.is_empty() {
-                                    first_event_sid = Some(sid.to_string());
+                        // Collect message UUIDs for chain resolution
+                        if let Some(uuid) = parsed.get("uuid").and_then(|v| v.as_str()) {
+                            uuid_to_session.insert(uuid.to_string(), session_id.clone());
+                        }
+                        // Capture sourceToolAssistantUUID (plan-mode fork link)
+                        if source_tool_uuid.is_none() {
+                            if let Some(stid) = parsed.get("sourceToolAssistantUUID").and_then(|v| v.as_str()) {
+                                if !stid.is_empty() {
+                                    source_tool_uuid = Some(stid.to_string());
                                 }
                             }
                         }
@@ -264,8 +270,7 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                             }
                         }
                     }
-                    // Stop early if we have both
-                    if !first_msg.is_empty() && first_event_sid.is_some() { break; }
+                    if !first_msg.is_empty() && source_tool_uuid.is_some() { break; }
                 }
             }
 
@@ -280,6 +285,14 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                 let mut tail_bytes = Vec::new();
                 let _ = reader.read_to_end(&mut tail_bytes);
                 let tail_buf = String::from_utf8_lossy(&tail_bytes);
+                // Forward pass through tail: collect UUIDs for chain resolution
+                for line in tail_buf.lines() {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+                        if let Some(uuid) = parsed.get("uuid").and_then(|v| v.as_str()) {
+                            uuid_to_session.insert(uuid.to_string(), session_id.clone());
+                        }
+                    }
+                }
                 // Reverse scan lines for last user message and model
                 for line in tail_buf.lines().rev() {
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
@@ -305,7 +318,7 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
             raw_entries.push(RawEntry {
                 modified,
                 session_id: session_id.clone(),
-                first_event_session_id: first_event_sid,
+                source_tool_uuid,
                 json: serde_json::json!({
                     "id": session_id,
                     "path": project_name,
@@ -321,15 +334,16 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
         }
     }
 
-    // --- Chain detection: if a file's first-event sessionId differs from its own ID
-    //     and exists in the result set, set parentId to that ID. ---
+    // --- Chain detection: resolve sourceToolAssistantUUID → parent session via UUID map ---
     let id_set: std::collections::HashSet<String> = raw_entries.iter()
         .map(|e| e.session_id.clone())
         .collect();
     for entry in &mut raw_entries {
-        if let Some(ref fesid) = entry.first_event_session_id {
-            if fesid != &entry.session_id && id_set.contains(fesid) {
-                entry.json["parentId"] = serde_json::Value::String(fesid.clone());
+        if let Some(ref stid) = entry.source_tool_uuid {
+            if let Some(parent_sid) = uuid_to_session.get(stid) {
+                if parent_sid != &entry.session_id && id_set.contains(parent_sid) {
+                    entry.json["parentId"] = serde_json::Value::String(parent_sid.clone());
+                }
             }
         }
     }

@@ -126,20 +126,6 @@
   animation: queue-pulse 1.5s ease-in-out infinite;
 }
 
-.bar-btn-thinking-active {
-  color: var(--accent-tertiary);
-}
-
-.bar-btn-thinking-dot {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent-tertiary);
-}
-
 .bar-spacer { flex: 1; }
 
 @keyframes queue-pulse {

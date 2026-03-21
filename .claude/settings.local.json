@@ -7,7 +7,15 @@
       "Bash(claude plugin:*)",
       "Bash(npx tsc:*)",
       "Bash(cd:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "Read(//c/Users/jorda/PycharmProjects/claude_tabs/$USERPROFILE/.claude/**)",
+      "Bash(ls -d */)",
+      "Bash(PROJ=\"C:/Users/jorda/.claude/projects/C--Users-jorda-PycharmProjects-claude-tabs\")",
+      "Read(//c/Users/jorda/PycharmProjects/claude_tabs/$PROJ/**)",
+      "Bash(python3 -m json.tool)",
+      "Bash(ls:*)",
+      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.readline\\(\\)\\); print\\(''''sessionId:'''', d.get\\(''''sessionId'''',''''NONE''''\\)\\)\")",
+      "Bash(npm run:*)"
     ]
   },
   "hooks": {

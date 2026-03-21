@@ -48,3 +48,7 @@ Version must be bumped in all three files:
    ```
 
 **IMPORTANT**: Always include BOTH the NSIS installer AND the portable exe in releases. The portable exe should be uploaded with the display name `claude-tabs-portable.exe`.
+
+## Build Notes
+
+Build optimization log. `/b` appends findings and improvements here.

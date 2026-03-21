@@ -58,6 +58,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [DS-07] Session-in-use auto-recovery: own orphans killed automatically and resume retries; external processes show "Session in use externally" overlay with "Kill and resume" / "Cancel" — never killed without user confirmation
 - [DS-08] Proactive orphan cleanup on startup: init() collects all persisted session IDs, calls kill_orphan_sessions to kill leftover CLI processes before any PTY spawning. Prevents 'session ID already in use' and port conflicts on app restart after crash/force-close
   - Files: src/store/sessions.ts:83
+- [DS-09] Auto-resume: switching to a dead tab with a resumable conversation (sessionId/resumeSession/nodeSummary) automatically triggers respawn; only fires on hidden→visible transitions, not when session dies while visible
+  - Files: src/components/Terminal/TerminalPanel.tsx:396
 
 ## Terminal
 
@@ -84,8 +86,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/components/SessionLauncher/SessionLauncher.css:402
 - [SL-04] Resume picker enriched data: each session card shows firstMessage, lastMessage (from tail scan), settings badges (model, skip-perms, permission mode, effort, agent), and file size
   - Files: src/components/ResumePicker/ResumePicker.tsx:364
-- [SL-05] Chain merging: sessions linked by parentId merged into a single card — latest session used for resume, names resolved from any member, suppressed plan-mode artifact messages skipped, sizes summed; stacked box-shadow when chainLength > 1
-  - Files: src/components/ResumePicker/ResumePicker.tsx:155
+- [SL-05] Chain merging: sessions linked by parentId (resolved via sourceToolAssistantUUID -> message UUID map in Rust) merged into a single card; latest session used for resume, names resolved from any member, suppressed plan-mode artifact messages skipped, sizes summed; stacked box-shadow when chainLength > 1; clickable chain count badge expands to show individual members for resuming older sessions
+  - Files: src/components/ResumePicker/ResumePicker.tsx:159, src-tauri/src/commands.rs:330
 - [SL-06] Custom names: tab renames persist in `sessionNames` map (localStorage); shown as bold primary name with directory as secondary text in resume picker
 - [SL-07] Config caching: session configs cached in sessionConfigs map (localStorage) when inspector connects (model, permissionMode, dangerouslySkipPermissions, effort, agent, maxBudget, runMode); used as fallback when resuming sessions not in the dead tab map
   - Files: src/store/settings.ts:201
@@ -111,7 +113,7 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [CB-07] Holding Ctrl shows blue border on non-queued pills; heat gradient suppressed while Ctrl is held; tooltips show queue hint
 - [CB-08] Queue auto-clears when session dies
 - [CB-09] Command history strip: horizontal scrollable row above command pills showing per-session command execution history (newest left). Clicking a history pill re-sends that command. Strip only visible when history exists. Per-session -- switching tabs shows different history. Cleaned up on session close.
-  - Files: src/components/CommandBar/CommandBar.tsx:95, src/store/sessions.ts:306
+  - Files: src/components/CommandBar/CommandBar.tsx:95, src/store/sessions.ts:283
 
 ## Hooks Manager
 
@@ -137,16 +139,17 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [CM-05] All five content tabs (Settings/Claude/Hooks/Plugins/Agents) use ThreePaneEditor: 3-column grid showing User/Project/Local scopes side by side with color-coded borders and tinted headers.
   - Files: src/components/ConfigManager/ConfigManager.tsx:103
 - [CM-06] Per-scope raw JSON settings editor (SettingsPane) and CLAUDE.md editor (MarkdownPane) with own dirty tracking and Save per pane. Tab key inserts 2 spaces in markdown.
-- [CM-07] Agent editor: scoped via ThreePaneEditor (user/project/local) with agent pills at top, editor below. User scope scans ~/.claude/agents/, project scans {wd}/.claude/agents/, local scans {wd}/.claude/local/agents/. Create, edit, delete per scope.
-  - Files: src/components/ConfigManager/AgentEditor.tsx:6, src/components/ConfigManager/ConfigManager.tsx:116
+- [CM-07] Agent editor: scoped via ThreePaneEditor (user/project/local) with agent pills at top, editor below. Auto-selects first agent on load (or enters new-agent mode if none). Textarea always visible — no empty state. Dashed "+ new agent" pill replaces old + New button/inline form. Duplicate name validation on create. Ctrl+S dispatches to create or save based on mode. User scope scans ~/.claude/agents/, project scans {wd}/.claude/agents/, local scans {wd}/.claude/local/agents/.
+  - Files: src/components/ConfigManager/AgentEditor.tsx:6, src/components/ConfigManager/ConfigManager.css:705
 - [CM-08] Save via Rust `read_config_file`/`write_config_file` commands (JSON validated before write, parent dirs auto-created)
 - [CM-09] Escape closes modal; clicking overlay closes modal
 - [CM-10] Settings schema cached in localStorage (`binarySettingsSchema`) to avoid re-scanning on every startup
-- [CM-11] Wide modal (96vw, max 1900px, 88vh) with 5 tabs: Settings, Claude, Hooks, Plugins, Agents. Store value controls which tab opens.
+- [CM-11] Wide modal (96vw, max 1900px, 88vh) with 5 tabs: Settings, Claude, Hooks, Plugins, Agents. All tabs render at full width. Store value controls which tab opens.
+  - Files: src/components/ConfigManager/ConfigManager.tsx:65, src/components/ConfigManager/ConfigManager.css:1
 - [CM-12] ThreePaneEditor: Settings/CLAUDE.md/Hooks/Plugins tabs use 3-column grid showing User/Project/Local scopes side by side. Color coded: User=clay, Project=blue, Local=purple (left border + tinted header).
   - Files: src/components/ConfigManager/ThreePaneEditor.tsx:1, src/components/ConfigManager/ConfigManager.css:133
-- [CM-13] SettingsPane: JSON textarea with syntax highlighting overlay (pre behind transparent textarea). Keys=clay, strings=blue, numbers/bools=purple. Scroll synced between layers. Ctrl+S to save.
-  - Files: src/components/ConfigManager/SettingsPane.tsx:8, src/components/ConfigManager/ConfigManager.css:866
+- [CM-13] SettingsPane: JSON textarea with syntax highlighting overlay (pre behind transparent textarea). Both layers use position: absolute; inset: 0 inside sh-container for proper fill. Keys=clay, strings=blue, numbers/bools=purple. Scroll synced between layers. Ctrl+S to save.
+  - Files: src/components/ConfigManager/SettingsPane.tsx:8, src/components/ConfigManager/ConfigManager.css:872
 - [CM-14] MarkdownPane: per-scope CLAUDE.md textarea. Tab key inserts 2 spaces. Scope-to-fileType mapping: user=claudemd-user, project=claudemd-root, project-local=claudemd-dotclaude.
   - Files: src/components/ConfigManager/MarkdownPane.tsx:1
 - [CM-15] HooksPane: per-scope CRUD absorbed from standalone HooksManager. Hook cards, inline Add/Edit form. Scope is a prop, not a dropdown. Calls bumpHookChange() after save.
@@ -157,12 +160,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/components/StatusBar/StatusBar.tsx:139, src/store/settings.ts:49
 - [CM-18] Config tabs use inline SVG icons (gear, document, hook, puzzle, bot) instead of emoji — monochrome, consistent cross-platform
   - Files: src/components/ConfigManager/ConfigManager.tsx:17
-- [CM-19] ThreePaneEditor compact mode: Hooks and Plugins tabs pass compact prop, constraining grid to max-width 1300px centered. Settings, CLAUDE.md, and Agents fill full modal width (up to 1900px) for wider text editing.
-  - Files: src/components/ConfigManager/ThreePaneEditor.tsx:16, src/components/ConfigManager/ConfigManager.tsx:109, src/components/ConfigManager/ConfigManager.css:140
 - [CM-20] Tab label reads "Claude" instead of "CLAUDE.md" for the markdown editor tab.
   - Files: src/components/ConfigManager/ConfigManager.tsx:19
-- [CM-21] Compact modal: Hooks/Plugins tabs apply config-modal-compact class (max-width 1400px) to the ModalOverlay, narrowing the entire modal — not just the grid. Settings/Claude/Agents remain at full 1900px width.
-  - Files: src/components/ConfigManager/ConfigManager.tsx:63, src/components/ConfigManager/ConfigManager.css:13
 - [CM-22] ThreePaneEditor scope headers show actual file paths per tab (e.g. ~/.claude/settings.json, {dir}/CLAUDE.md, {dir}/.claude/agents/) instead of generic directory stubs. Paths normalized to forward slashes via formatScopePath().
   - Files: src/components/ConfigManager/ThreePaneEditor.tsx:21, src/lib/paths.ts:40
 - [CM-23] MarkdownPane preview toggle: footer has Preview/Edit button (left-aligned via margin-right:auto). Preview mode renders markdown via ReactMarkdown with dark-themed styles for headings, code, tables, blockquotes, lists, and links.
@@ -180,9 +179,7 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [TP-07] Redacted thinking blocks shown as muted italic `[redacted thinking]` placeholder
 - [TP-08] Auto-scrolls to bottom on new blocks (same pattern as SubagentInspector)
 - [TP-09] Relative timestamps refreshed every 10s
-- [TP-10] Escape dismisses panel (checked before config/hooks/resume in Escape chain)
 - [TP-11] Not persisted — resets to closed on app restart (follows hooks/config manager pattern)
-- [TP-12] Thinking blocks cleared on respawn (`clearThinkingBlocks` in `triggerRespawn`) and session close (Map entry deleted in `closeSession`)
 
 ## Debug Panel
 
@@ -217,9 +214,9 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [KB-06] Ctrl+K — Command palette
 - [KB-07] Ctrl+Shift+U — Clear all input lines
 - [KB-08] Ctrl+, — Open Config Manager
-- [KB-09] Esc — Close modal / dismiss inspector (ordered: contextMenu -> palette -> debug -> thinking -> config -> resume -> launcher -> inspector)
+- [KB-09] Esc — Close modal / dismiss inspector (ordered: contextMenu -> palette -> debug -> config -> resume -> launcher -> inspector)
 - [KB-10] Alt+1-9 blocked from PTY (return false in attachCustomKeyEventHandler) -- handled by App.tsx global tab-switch handler without escape code artifacts
-  - Files: src/hooks/useTerminal.ts:74
+  - Files: src/hooks/useTerminal.ts:79
 
 ## Modal Overlay
 

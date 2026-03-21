@@ -17,26 +17,33 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [DF-08] Icons module: src/components/Icons/Icons.tsx exports 24 inline SVG icon components (stroke-based, 16x16 viewBox, currentColor inheritance, pointerEvents none). No dependencies. All UI icons are monochrome SVGs — no emoji or unicode icon chars.
   - Files: src/components/Icons/Icons.tsx:1
 - [DF-09] groupSessionsByDir() and swapWithinGroup() in paths.ts: pure functions for tab grouping by normalized workingDir (Map-based, O(n) single pass, insertion-order groups) and position swapping within group boundaries. TabGroup type exported.
-  - Files: src/lib/paths.ts:53, src/lib/paths.ts:68
+  - Files: src/lib/paths.ts:49, src/lib/paths.ts:64
 
 ## State Inspection
 
 - [SI-01] Sole source: BUN_INSPECT WebSocket inspector via JSON.stringify interception (~2-6ms latency)
 - [SI-02] Inspector connects after 1s delay (Bun init time), retries 3x with backoff on failure
-- [SI-03] `deriveStateFromPoll()` — pure function for direct state derivation from inspector data
+- [SI-03] `deriveStateFromPush()` — pure function for state derivation from push payloads; replaces poll-based derivation
+  - Files: src/hooks/useInspectorState.ts:20
 - [SI-04] Permission detection via `permPending` notification flag (not PTY regex)
-- [SI-05] Idle detection via `idleDetected` notification flag (not PTY regex); sticky across polls, cleared only by user event
-- [SI-06] `choiceHint` detection: POLL_STATE checks for numbered list items (`\n\s*[1-9]\.\s`) in last 200 chars of assistant text when `stop === 'end_turn'`; auto-clears on user input
+- [SI-05] Idle detection via `idleDetected` notification flag (not PTY regex); sticky, cleared only by user event; pushed in real-time via `__ispPush`
+  - Files: src/lib/inspectorHooks.ts:82
+- [SI-06] `choiceHint` detection: push payload checks for numbered list items in last 200 chars of assistant text when stop=end_turn; auto-clears on user input
+  - Files: src/hooks/useInspectorState.ts:49
 - [SI-07] Tool actions, user prompts, assistant text, subagent descriptions captured inline
 - [SI-08] State is NEVER inferred from timers or arbitrary delays — only from real signals
 - [SI-09] Subagent descriptions, state, tokens, actions, and messages all captured via inspector (no JSONL subagent watcher)
 - [SI-10] No JSONL file watching for state — Rust JSONL utilities kept only for `session_has_conversation` and `list_past_sessions`
 - [SI-11] Sealed flag (`_sealed`) on result event prevents post-completion JSON.stringify re-serializations (JSONL persistence, hook dispatch) from overwriting `state.stop` back to `tool_use`; tokens/model still accumulate while sealed; cleared on user event
-  - Files: src/lib/inspectorHooks.ts:57, src/lib/inspectorHooks.ts:215, src/lib/inspectorHooks.ts:239
-- [SI-12] `idleDetected` is sticky (not reset by POLL_STATE) — cleared only by user events in the hook; prevents state oscillation between idle and stale tool_use
-  - Files: src/lib/inspectorHooks.ts:239, src/lib/inspectorHooks.ts:363
-- [SI-13] `deriveStateFromPoll` override chain: ExitPlanMode refines toolUse→actionNeeded; idleDetected overrides to idle; choiceHint refines idle→actionNeeded; permPending always wins (waitingPermission)
-  - Files: src/hooks/useInspectorState.ts:82
+  - Files: src/lib/inspectorHooks.ts:53, src/lib/inspectorHooks.ts:200, src/lib/inspectorHooks.ts:230, src/lib/inspectorHooks.ts:254
+- [SI-12] idleDetected is sticky: cleared only by user events in the hook; prevents state oscillation between idle and stale tool_use
+  - Files: src/lib/inspectorHooks.ts:250
+- [SI-13] `deriveStateFromPush` override chain: ExitPlanMode refines toolUse to actionNeeded; idleDetected overrides to idle; choiceHint refines idle to actionNeeded; permPending always wins (waitingPermission)
+  - Files: src/hooks/useInspectorState.ts:47
+- [SI-14] Poll-based architecture: INSTALL_HOOK wraps JSON.stringify/JSON.parse to capture state into globalThis.__inspectorState; useInspectorState polls via POLL_STATE expression every 250ms, draining events and transient flags each cycle. No push binding; state detection disabled if hook install fails.
+  - Files: src/hooks/useInspectorState.ts:203, src/lib/inspectorHooks.ts:27
+- [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (computed from lastText)
+  - Files: src/lib/inspectorHooks.ts:350, src/hooks/useInspectorState.ts:7
 
 ## PTY Internals
 
@@ -50,9 +57,11 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [PT-07] OS PID registered in global cleanup registry (`ptyProcess.ts`) immediately on PTY spawn; unregistered on explicit kill. Dual-layer: frontend fires `kill_process_tree` on `beforeunload`, Rust `ActivePids` state kills on `RunEvent::Exit` as backstop
   - Files: src/lib/ptyProcess.ts:9, src-tauri/src/lib.rs:14
 - [PT-08] Scroll desync fix: xterm-viewport uses overflow-y:scroll with hidden scrollbar (scrollbar-width:none + ::-webkit-scrollbar) instead of overflow:hidden. isAtBottom/wasAtBottom use 2-line tolerance for near-bottom snap.
-  - Files: src/components/Terminal/TerminalPanel.css:55, src/hooks/useTerminal.ts:211, src/hooks/useTerminal.ts:295
+  - Files: src/components/Terminal/TerminalPanel.css:55, src/hooks/useTerminal.ts:224, src/hooks/useTerminal.ts:309, src/hooks/useTerminal.ts:313
 - [PT-09] FitAddon dimension guard: fit() calls check proposeDimensions() first — if rows <= 1, container is not laid out yet and fit is skipped. Applied in useTerminal wrapper, initial attach, and ResizeObserver.
-  - Files: src/hooks/useTerminal.ts:176, src/hooks/useTerminal.ts:183, src/hooks/useTerminal.ts:312
+  - Files: src/hooks/useTerminal.ts:189, src/hooks/useTerminal.ts:196, src/hooks/useTerminal.ts:326
+- [PT-10] Parallel exit waiter: fire-and-forget invoke('plugin:pty|exitstatus') runs alongside read loop. On Windows ConPTY, read pipe may hang after Ctrl+C; exitstatus uses WaitForSingleObject which reliably returns. exitFired guard ensures exactly one callback fires
+  - Files: src/lib/ptyProcess.ts:112
 
 ## Persistence
 
@@ -72,6 +81,12 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [RS-04] `resumeSession` and `continueSession` are one-shot flags — never persist in `lastConfig`
 - [RS-05] Skip `--session-id` CLI arg when using `--resume` or `--continue`
 - [RS-06] Session-in-use auto-recovery: checks process ancestry to distinguish own orphans from external processes; own descendants (stale orphans from crashed tabs) killed automatically and resume retries
+- [RS-07] Spawn effect guards against dead sessions (session.state === 'dead') -- prevents restored dead sessions from auto-spawning with --session-id on startup. Respawns still work because triggerRespawn sets state to 'starting' before incrementing respawnCounter
+  - Files: src/components/Terminal/TerminalPanel.tsx:365
+- [RS-08] Auto-resume effect uses prevVisibleRef to detect hidden-to-visible transitions; only fires when tab becomes visible AND session is dead AND conversation is resumable; 150ms delay for render settling
+  - Files: src/components/Terminal/TerminalPanel.tsx:396
+- [RS-09] Terminal reset on respawn: writes ANSI RIS (\x1bc) to clear content and scrollback, then fit() to sync xterm.js dimensions before spawning new PTY
+  - Files: src/components/Terminal/TerminalPanel.tsx:306
 
 ## Session Switch
 
@@ -82,11 +97,15 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 ## Inspector
 
 - [IN-01] Inspector port allocation and registry in `inspectorPort.ts`
-- [IN-02] `INSTALL_HOOK` + `POLL_STATE` JS expressions in `inspectorHooks.ts`
+- [IN-02] `INSTALL_HOOK` JS expression in `inspectorHooks.ts`; pushes events via `Runtime.addBinding` (`__ispPush`). No polling.
+  - Files: src/lib/inspectorHooks.ts:27
 - [IN-03] Subagent tracking: inspector detects Agent tool_use -> queues description -> matches with new session ID system event -> routes events to subagent entry
-- [IN-04] Subagent messages drained on poll and appended to store for SubagentInspector
-- [IN-05] Stale subagents (no events for 30s while active) auto-marked dead
-- [IN-06] Dead subagent purge: when new subagent appears and no subs are actively running (thinking/toolUse/starting), idle subs are marked dead and physically removed from store
+- [IN-04] Subagent messages pushed in real-time (`k:sm`) and appended to store for SubagentInspector
+  - Files: src/lib/inspectorHooks.ts:184
+- [IN-05] Stale subagent detection removed -- push-based architecture handles subagent lifecycle via real-time state events only
+  - Files: src/hooks/useInspectorState.ts:149
+- [IN-06] Dead subagent purge removed -- push-based architecture relies on real-time state transitions; idle subs remain visible until session ends
+  - Files: src/hooks/useInspectorState.ts:149
 - [IN-07] Inspector port allocator uses random start offset (Date.now() mod range) to reduce collisions with orphan processes during the brief window between app startup and cleanup
   - Files: src/lib/inspectorPort.ts:9
 
@@ -108,11 +127,11 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [RC-09] `discover_builtin_commands` / `discover_plugin_commands` — Slash command discovery
 - [RC-10] `discover_hooks` / `save_hooks` — Hook configuration
 - [RC-11] register_active_pid / unregister_active_pid — frontend registers OS PIDs of PTY children; RunEvent::Exit handler iterates ActivePids and calls kill_process_tree_sync for each
-  - Files: src-tauri/src/commands.rs:1098, src-tauri/src/lib.rs:114
+  - Files: src-tauri/src/commands.rs:1113, src-tauri/src/lib.rs:114
 - [RC-12] Config files read/write: read_config_file and write_config_file handle settings JSON, CLAUDE.md (3 scopes), and agent files (3 scopes: user=~/.claude/agents/, project={wd}/.claude/agents/, local={wd}/.claude/local/agents/). list_agents takes scope param. Parent dirs auto-created on write.
   - Files: src-tauri/src/commands.rs:1487, src-tauri/src/commands.rs:1498
 - [RC-13] kill_orphan_sessions: takes Vec<String> session IDs, finds processes by command line match (WMIC on Windows, pgrep on Unix), kills all without ancestry check (safe at startup since no live sessions exist yet). Returns count of killed processes
-  - Files: src-tauri/src/commands.rs:1366, src-tauri/src/lib.rs:101
+  - Files: src-tauri/src/commands.rs:1380, src/store/sessions.ts:90
 - [RC-14] send_notification: Custom WinRT toast command bypassing Tauri notification plugin. Uses tauri-winrt-notification Toast with on_activated callback that emits 'notification-clicked' event to frontend. Dev mode uses PowerShell app ID, production uses bundle identifier. spawn_blocking + CREATE_NO_WINDOW compliant.
   - Files: src-tauri/src/commands.rs:1565, src/hooks/useNotifications.ts:44
 

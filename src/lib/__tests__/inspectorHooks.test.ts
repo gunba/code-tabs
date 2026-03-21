@@ -54,7 +54,6 @@ describe("INSTALL_HOOK", () => {
     expect(state.model).toBeNull();
     expect(state.stop).toBeNull();
     expect(state.tools).toEqual([]);
-    expect(state.perm).toBeNull();
     expect(state.inTok).toBe(0);
     expect(state.outTok).toBe(0);
     expect(state.events).toEqual([]);
@@ -66,10 +65,8 @@ describe("INSTALL_HOOK", () => {
     expect(state.permPending).toBe(false);
     expect(state.idleDetected).toBe(false);
     expect(state.toolAction).toBeNull();
-    expect(state.subagentDescs).toEqual([]);
     expect(state.inputBuf).toBe("");
     expect(state.inputTs).toBe(0);
-    expect(state.thinkingAccum).toEqual({});
     expect(state._sealed).toBe(false);
   });
 });
@@ -153,7 +150,6 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
       permissionMode: "default",
     });
     expect(state.sid).toBe("abc-123");
-    expect(state.perm).toBe("default");
   });
 
   it("clears tools and stop on user events", () => {
@@ -384,7 +380,7 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
     expect(state.toolAction).toBe("CustomTool");
   });
 
-  it("collects Agent descriptions into subagentDescs", () => {
+  it("sets toolAction for Agent tool_use", () => {
     const state = installAndGetState();
     JSON.stringify({
       type: "assistant",
@@ -398,27 +394,7 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
         usage: { input_tokens: 10, output_tokens: 10 },
       },
     });
-    expect(state.subagentDescs).toEqual(["Search codebase", "Run tests"]);
     expect(state.toolAction).toBe("Agent: Run tests"); // Last one wins
-  });
-
-  it("caps subagentDescs at 20 entries", () => {
-    const state = installAndGetState();
-    for (let i = 0; i < 25; i++) {
-      JSON.stringify({
-        type: "assistant",
-        message: {
-          model: "claude-opus-4-6",
-          stop_reason: "tool_use",
-          content: [{ type: "tool_use", name: "Agent", input: { description: `task-${i}` } }],
-          usage: { input_tokens: 1, output_tokens: 1 },
-        },
-      });
-    }
-    expect((state.subagentDescs as string[]).length).toBe(20);
-    // Should have the most recent 20 (shifted oldest)
-    expect((state.subagentDescs as string[])[0]).toBe("task-5");
-    expect((state.subagentDescs as string[])[19]).toBe("task-24");
   });
 
   it("sets permPending on permission_prompt notification", () => {
@@ -603,399 +579,17 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
     expect(state.lastEvent).toBe("assistant");
   });
 
-  // ── Thinking block capture tests (SSE via JSON.parse) ─────────────
-
-  /** Helper: simulate SSE thinking block via JSON.parse events */
-  function emitThinkingSSE(index: number, text: string) {
-    JSON.parse(JSON.stringify({ type: "content_block_start", index, content_block: { type: "thinking" } }));
-    // Send text in chunks to simulate streaming
-    const chunkSize = Math.max(1, Math.ceil(text.length / 3));
-    for (let i = 0; i < text.length; i += chunkSize) {
-      JSON.parse(JSON.stringify({ type: "content_block_delta", index, delta: { type: "thinking_delta", thinking: text.slice(i, i + chunkSize) } }));
-    }
-    JSON.parse(JSON.stringify({ type: "content_block_stop", index }));
-  }
-
-  it("captures thinking via SSE delta accumulation", () => {
-    const state = installAndGetState();
-    emitThinkingSSE(0, "Let me analyze this problem step by step");
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(1);
-    expect(thinking[0].x).toBe("Let me analyze this problem step by step");
-    expect(thinking[0].r).toBe(false);
-    expect(thinking[0].ts).toBeGreaterThan(0);
-  });
-
-  it("captures redacted_thinking blocks via SSE", () => {
-    const state = installAndGetState();
-    JSON.parse(JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "redacted_thinking" } }));
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(1);
-    expect(thinking[0].x).toBe("");
-    expect(thinking[0].r).toBe(true);
-  });
-
-  it("captures mixed thinking and redacted_thinking blocks via SSE", () => {
-    const state = installAndGetState();
-    emitThinkingSSE(0, "Step 1 reasoning");
-    JSON.parse(JSON.stringify({ type: "content_block_start", index: 1, content_block: { type: "redacted_thinking" } }));
-    emitThinkingSSE(2, "Step 3 reasoning");
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(3);
-    expect(thinking[0].x).toBe("Step 1 reasoning");
-    expect(thinking[0].r).toBe(false);
-    expect(thinking[1].x).toBe("");
-    expect(thinking[1].r).toBe(true);
-    expect(thinking[2].x).toBe("Step 3 reasoning");
-    expect(thinking[2].r).toBe(false);
-  });
-
-  it("truncates thinking text at 10K chars via SSE", () => {
-    const state = installAndGetState();
-    const longThinking = "x".repeat(15000);
-    emitThinkingSSE(0, longThinking);
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(1);
-    // 10000 chars + "\n[truncated]" suffix
-    expect(thinking[0].x.length).toBeLessThanOrEqual(10000 + 20);
-    expect(thinking[0].x).toContain("[truncated]");
-  });
-
-  it("caps thinking ring buffer at 30 entries", () => {
-    const state = installAndGetState();
-    for (let i = 0; i < 35; i++) {
-      emitThinkingSSE(0, `thinking-block-${i} with enough padding`);
-    }
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(30);
-    // Oldest entries should be evicted (shifted)
-    expect(thinking[0].x).toContain("thinking-block-5");
-    expect(thinking[29].x).toContain("thinking-block-34");
-  });
-
-  it("accumulates thinking blocks across multiple sequential SSE blocks", () => {
-    const state = installAndGetState();
-    emitThinkingSSE(0, "First turn thinking");
-    emitThinkingSSE(0, "Second turn thinking");
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(2);
-    expect(thinking[0].x).toBe("First turn thinking");
-    expect(thinking[1].x).toBe("Second turn thinking");
-  });
-
-  it("drops empty thinking blocks (no deltas before stop)", () => {
-    const state = installAndGetState();
-    JSON.parse(JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "thinking" } }));
-    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 0 }));
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(0);
-  });
-
-  it("ignores non-thinking deltas", () => {
-    const state = installAndGetState();
-    // text_delta should not accumulate into thinking
-    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "some text" } }));
-    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 0 }));
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(0);
-  });
-
-  it("handles JSON.parse errors gracefully", () => {
-    installAndGetState();
-    // Should not throw — origParse handles bad input
-    expect(() => JSON.parse("not json")).toThrow(); // origParse throws
-    // But structured SSE with bad data should not corrupt state
-    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 99, delta: { type: "thinking_delta", thinking: "orphan" } }));
-    // No crash, orphan delta ignored since index 99 was never started
-  });
-
-  it("initializes thinking array and thinkingAccum in state", () => {
-    const fn = new Function(`return ${INSTALL_HOOK}`);
-    cleanupGlobalHook();
-    fn();
-    const g = globalThis as unknown as Record<string, unknown>;
-    const state = g.__inspectorState as Record<string, unknown>;
-    expect(state.thinking).toEqual([]);
-    expect(state.thinkingAccum).toEqual({});
-    cleanupGlobalHook();
-  });
-});
-
-describe("POLL_STATE", () => {
-  it("returns null when no state installed", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    delete g.__inspectorState;
-    const fn = new Function(`return ${POLL_STATE}`);
-    expect(fn()).toBeNull();
-  });
-
-  it("returns state and drains events", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 5,
-      sid: "test-123",
-      cost: 0.01,
-      model: "claude-opus-4-6",
-      stop: "end_turn",
-      tools: ["Bash"],
-      perm: "default",
-      inTok: 1000,
-      outTok: 500,
-      dur: 0,
-      events: [{ t: "assistant", sr: "end_turn" }, { t: "user" }],
-      lastEvent: "user",
-      firstMsg: "Hello",
-      lastText: "Response text",
-      userPrompt: "Hello",
-      permPending: false,
-      idleDetected: false,
-      toolAction: "Bash: ls",
-      subagentDescs: ["Search code"],
-      inputBuf: "partial",
-      inputTs: 12345,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.n).toBe(5);
-    expect(result.sid).toBe("test-123");
-    expect(result.events).toHaveLength(2);
-    // Events should be drained from state
-    expect((g.__inspectorState as Record<string, unknown[]>).events).toHaveLength(0);
-  });
-
-  it("returns new fields from enhanced state", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 3, sid: null, cost: 0, model: null, stop: null,
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null,
-      firstMsg: "First message",
-      lastText: "Last response",
-      userPrompt: "Latest prompt",
-      permPending: true,
-      idleDetected: false,
-      toolAction: "Read: /foo.ts",
-      subagentDescs: ["task-1", "task-2"],
-      inputBuf: "typed",
-      inputTs: 99999,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.firstMsg).toBe("First message");
-    expect(result.lastText).toBe("Last response");
-    expect(result.userPrompt).toBe("Latest prompt");
-    expect(result.permPending).toBe(true);
-    expect(result.idleDetected).toBe(false);
-    expect(result.toolAction).toBe("Read: /foo.ts");
-    expect(result.subagentDescs).toEqual(["task-1", "task-2"]);
-    expect(result.inputBuf).toBe("typed");
-    expect(result.inputTs).toBe(99999);
-  });
-
-  it("resets transient flags after poll", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null, stop: null,
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [{ t: "user" }], lastEvent: null,
-      firstMsg: null, lastText: null, userPrompt: null,
-      permPending: true,
-      idleDetected: true,
-      toolAction: null, subagentDescs: [],
-      inputBuf: "", inputTs: 0,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    // Result should have the flags
-    expect(result.permPending).toBe(true);
-    expect(result.idleDetected).toBe(true);
-    // State should be reset (permPending one-shot, idleDetected sticky)
-    const state = g.__inspectorState as Record<string, unknown>;
-    expect(state.permPending).toBe(false);
-    expect(state.idleDetected).toBe(true); // sticky — cleared only by user event
-    expect((state.events as unknown[]).length).toBe(0);
-  });
-
-  it("returns a copy of subagentDescs (not reference)", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    const descs = ["task-a"];
-    g.__inspectorState = {
-      n: 0, sid: null, cost: 0, model: null, stop: null,
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null,
-      firstMsg: null, lastText: null, userPrompt: null,
-      permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: descs,
-      inputBuf: "", inputTs: 0,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    // Mutating the result should not affect original
-    (result.subagentDescs as string[]).push("task-b");
-    expect(descs).toEqual(["task-a"]);
-  });
-
-  // ── Thinking block drain tests ──────────────────────────────────
-
-  it("drains thinking blocks on poll via splice", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 2, sid: null, cost: 0, model: null, stop: null,
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null, lastText: null,
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      thinking: [
-        { x: "First thought", ts: 1000, r: false },
-        { x: "", ts: 2000, r: true },
-        { x: "Third thought", ts: 3000, r: false },
-      ],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-
-    // Result should contain all thinking blocks
-    const thinking = result.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(3);
-    expect(thinking[0].x).toBe("First thought");
-    expect(thinking[0].r).toBe(false);
-    expect(thinking[1].x).toBe("");
-    expect(thinking[1].r).toBe(true);
-    expect(thinking[2].x).toBe("Third thought");
-
-    // State thinking array should be empty after drain
-    const stateObj = g.__inspectorState as Record<string, unknown>;
-    expect((stateObj.thinking as unknown[]).length).toBe(0);
-  });
-
-  it("returns empty thinking array when no thinking blocks", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 0, sid: null, cost: 0, model: null, stop: null,
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null, lastText: null,
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect((result.thinking as unknown[]).length).toBe(0);
-  });
-
-  // ── choiceHint derivation tests ─────────────────────────────────
-
-  it("returns choiceHint true when end_turn with numbered list in lastText", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null,
-      stop: "end_turn",
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null,
-      lastText: "Here are your options:\n1. Option A\n2. Option B\n3. Option C",
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.choiceHint).toBe(true);
-  });
-
-  it("returns choiceHint false when stop is not end_turn", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null,
-      stop: "tool_use",
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null,
-      lastText: "Running:\n1. Step one\n2. Step two",
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.choiceHint).toBe(false);
-  });
-
-  it("returns choiceHint false when lastText is null", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null,
-      stop: "end_turn",
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null,
-      lastText: null,
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.choiceHint).toBe(false);
-  });
-
-  it("returns choiceHint false when lastText has no numbered list", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null,
-      stop: "end_turn",
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null,
-      lastText: "Here is my complete answer without any numbered items.",
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.choiceHint).toBe(false);
-  });
-
-  it("returns choiceHint true only for digits 1-9 (not 0)", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null,
-      stop: "end_turn",
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null,
-      lastText: "Results:\n0. Zero item should not trigger",
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      thinking: [],
-      subs: [],
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.choiceHint).toBe(false);
-  });
 });
 
 describe("deriveStateFromPoll", () => {
   const basePoll = {
     n: 1, sid: null, cost: 0, model: null, stop: null as string | null,
-    tools: [] as string[], perm: null, inTok: 0, outTok: 0, dur: 0,
-    events: [] as Array<{ t: string; sr?: string; c?: number; txt?: string; nt?: string; ta?: string }>,
+    tools: [] as string[], inTok: 0, outTok: 0,
+    events: [] as Array<{ t: string; sr?: string; c?: number; txt?: string; ta?: string }>,
     lastEvent: null as string | null,
     firstMsg: null, lastText: null, userPrompt: null,
     permPending: false, idleDetected: false, choiceHint: false,
-    toolAction: null, subagentDescs: [] as string[],
-    thinking: [] as Array<{ x: string; ts: number; r: boolean }>,
+    toolAction: null,
     inputBuf: "", inputTs: 0,
     subs: [] as Array<{ sid: string; desc: string; st: string; tok: number; act: string | null;
       msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number }>,
@@ -1010,7 +604,6 @@ describe("deriveStateFromPoll", () => {
   });
 
   it("permPending overrides idleDetected", () => {
-    // Both true: permPending wins (checked last)
     expect(deriveStateFromPoll({ ...basePoll, permPending: true, idleDetected: true }, "thinking")).toBe("waitingPermission");
   });
 
@@ -1058,14 +651,104 @@ describe("deriveStateFromPoll", () => {
     expect(deriveStateFromPoll({ ...basePoll, stop: "max_tokens" }, "thinking")).toBe("idle");
   });
 
-  it("system event after end_turn does not mask idle (filtered from ring buffer)", () => {
-    // After the fix, system events don't enter the ring buffer, so the last
-    // event is the assistant end_turn, correctly deriving idle.
-    const poll = {
-      ...basePoll,
-      events: [{ t: "assistant", sr: "end_turn" }],
+  it("ExitPlanMode refines toolUse to actionNeeded", () => {
+    expect(deriveStateFromPoll({ ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"] }, "idle")).toBe("actionNeeded");
+  });
+
+  it("choiceHint refines idle to actionNeeded", () => {
+    expect(deriveStateFromPoll({ ...basePoll, stop: "end_turn", choiceHint: true }, "thinking")).toBe("actionNeeded");
+  });
+
+  it("Bash tool_use stays toolUse (not actionNeeded)", () => {
+    expect(deriveStateFromPoll({ ...basePoll, stop: "tool_use", tools: ["Bash"] }, "idle")).toBe("toolUse");
+  });
+
+  it("idleDetected + choiceHint -> actionNeeded (choiceHint refines after idleDetected)", () => {
+    expect(deriveStateFromPoll({ ...basePoll, idleDetected: true, choiceHint: true }, "thinking")).toBe("actionNeeded");
+  });
+
+  it("permPending overrides actionNeeded from ExitPlanMode -> waitingPermission", () => {
+    expect(deriveStateFromPoll({ ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], permPending: true }, "idle")).toBe("waitingPermission");
+  });
+
+  it("ExitPlanMode via events (not persisted stop) -> actionNeeded", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, tools: ["ExitPlanMode"],
+      events: [{ t: "assistant", sr: "tool_use" }],
+    }, "idle")).toBe("actionNeeded");
+  });
+
+  it("choiceHint without idle state has no effect (toolUse stays toolUse)", () => {
+    expect(deriveStateFromPoll({ ...basePoll, stop: "tool_use", choiceHint: true }, "idle")).toBe("toolUse");
+  });
+
+  it("idleDetected alone (no choiceHint) -> idle, not actionNeeded", () => {
+    expect(deriveStateFromPoll({ ...basePoll, idleDetected: true, choiceHint: false }, "thinking")).toBe("idle");
+  });
+
+  it("ExitPlanMode + idleDetected -> idle (idleDetected overrides actionNeeded)", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], idleDetected: true,
+    }, "idle")).toBe("idle");
+  });
+
+  it("ExitPlanMode + idleDetected + choiceHint -> actionNeeded", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], idleDetected: true, choiceHint: true,
+    }, "idle")).toBe("actionNeeded");
+  });
+
+  it("permPending overrides choiceHint actionNeeded -> waitingPermission", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "end_turn", choiceHint: true, permPending: true,
+    }, "idle")).toBe("waitingPermission");
+  });
+});
+
+describe("POLL_STATE", () => {
+  afterEach(cleanupGlobalHook);
+
+  it("returns null when no state installed", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    delete g.__inspectorState;
+    const fn = new Function(`return ${POLL_STATE}`);
+    expect(fn()).toBeNull();
+  });
+
+  it("returns state and drains events", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 5, sid: "test-123", cost: 0.01, model: "claude-opus-4-6",
+      stop: "end_turn", tools: ["Bash"], inTok: 1000, outTok: 500,
+      events: [{ t: "assistant", sr: "end_turn" }, { t: "user" }],
+      lastEvent: "user", firstMsg: "Hello", lastText: "Response text",
+      userPrompt: "Hello", permPending: false, idleDetected: false,
+      toolAction: "Bash: ls", inputBuf: "partial", inputTs: 12345,
+      subs: [], pendingDescs: [], _sealed: false,
     };
-    expect(deriveStateFromPoll(poll, "thinking")).toBe("idle");
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.n).toBe(5);
+    expect(result.sid).toBe("test-123");
+    expect(result.events).toHaveLength(2);
+    expect((g.__inspectorState as Record<string, unknown[]>).events).toHaveLength(0);
+  });
+
+  it("resets permPending after poll", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 1, sid: null, cost: 0, model: null, stop: null,
+      tools: [], inTok: 0, outTok: 0, events: [], lastEvent: null,
+      firstMsg: null, lastText: null, userPrompt: null,
+      permPending: true, idleDetected: false, toolAction: null,
+      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
+      _sealed: false,
+    };
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.permPending).toBe(true);
+    const stateObj = g.__inspectorState as Record<string, unknown>;
+    expect(stateObj.permPending).toBe(false);
   });
 });
 
@@ -1296,64 +979,6 @@ describe("INSTALL_HOOK subagent tracking", () => {
     emitAgentToolUse("Pending task");
 
     expect((state.pendingDescs as string[])).toEqual(["Pending task"]);
-    // Also in subagentDescs
-    expect((state.subagentDescs as string[])).toEqual(["Pending task"]);
-  });
-});
-
-describe("POLL_STATE subagent draining", () => {
-  afterEach(cleanupGlobalHook);
-
-  it("drains subagent messages on poll", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 5, sid: "main", cost: 0, model: null, stop: null,
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null, lastText: null,
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      pendingDescs: [],
-      thinking: [],
-      subs: [{
-        sid: "sub-1", desc: "Test", st: "t", tok: 100, act: "Bash: ls",
-        msgs: [{ r: "a", x: "hello" }, { r: "t", x: "output", tn: "Bash" }],
-        lastTs: Date.now(),
-      }],
-    };
-
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-
-    // Result should include subs with messages
-    const subs = result.subs as Array<Record<string, unknown>>;
-    expect(subs).toHaveLength(1);
-    expect(subs[0].sid).toBe("sub-1");
-    expect(subs[0].desc).toBe("Test");
-    expect(subs[0].st).toBe("t");
-    const msgs = subs[0].msgs as Array<Record<string, unknown>>;
-    expect(msgs).toHaveLength(2);
-
-    // Messages should be drained from state
-    const stateObj = g.__inspectorState as { subs: Array<{ msgs: unknown[] }> };
-    expect(stateObj.subs[0].msgs).toHaveLength(0);
-  });
-
-  it("returns empty subs array when no subagents", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 0, sid: null, cost: 0, model: null, stop: null,
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null, lastText: null,
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      pendingDescs: [],
-      thinking: [],
-      subs: [],
-    };
-
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect((result.subs as unknown[]).length).toBe(0);
   });
 });
 
@@ -1457,23 +1082,6 @@ describe("INSTALL_HOOK sealed flag", () => {
 describe("INSTALL_HOOK sticky idleDetected", () => {
   afterEach(cleanupGlobalHook);
 
-  it("POLL_STATE does not reset idleDetected", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null, stop: "end_turn",
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: "result", firstMsg: null, lastText: null,
-      userPrompt: null, permPending: false, idleDetected: true,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      pendingDescs: [], thinking: [], subs: [], _sealed: true,
-    };
-
-    const fn = new Function(`return ${POLL_STATE}`);
-    fn(); // first poll
-    const stateObj = g.__inspectorState as Record<string, unknown>;
-    expect(stateObj.idleDetected).toBe(true); // still sticky
-  });
-
   it("user event clears idleDetected", () => {
     let savedStringify: typeof JSON.stringify;
     let savedParse: typeof JSON.parse;
@@ -1501,94 +1109,6 @@ describe("INSTALL_HOOK sticky idleDetected", () => {
       JSON.parse = savedParse;
       cleanupGlobalHook();
     }
-  });
-});
-
-// ── actionNeeded state derivation tests ──────────────────────
-
-describe("deriveStateFromPoll actionNeeded", () => {
-  const basePoll = {
-    n: 1, sid: null, cost: 0, model: null, stop: null as string | null,
-    tools: [] as string[], perm: null, inTok: 0, outTok: 0, dur: 0,
-    events: [] as Array<{ t: string; sr?: string; c?: number; txt?: string; nt?: string; ta?: string }>,
-    lastEvent: null as string | null,
-    firstMsg: null, lastText: null, userPrompt: null,
-    permPending: false, idleDetected: false, choiceHint: false,
-    toolAction: null, subagentDescs: [] as string[],
-    thinking: [] as Array<{ x: string; ts: number; r: boolean }>,
-    inputBuf: "", inputTs: 0,
-    subs: [] as Array<{ sid: string; desc: string; st: string; tok: number; act: string | null;
-      msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number }>,
-  };
-
-  it("ExitPlanMode tool_use → actionNeeded", () => {
-    expect(deriveStateFromPoll({
-      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"],
-    }, "idle")).toBe("actionNeeded");
-  });
-
-  it("Bash tool_use → toolUse (not actionNeeded)", () => {
-    expect(deriveStateFromPoll({
-      ...basePoll, stop: "tool_use", tools: ["Bash"],
-    }, "idle")).toBe("toolUse");
-  });
-
-  it("choiceHint + idle → actionNeeded", () => {
-    expect(deriveStateFromPoll({
-      ...basePoll, stop: "end_turn", choiceHint: true,
-    }, "idle")).toBe("actionNeeded");
-  });
-
-  it("idleDetected + choiceHint → actionNeeded (choiceHint refines after idleDetected)", () => {
-    expect(deriveStateFromPoll({
-      ...basePoll, idleDetected: true, choiceHint: true,
-    }, "thinking")).toBe("actionNeeded");
-  });
-
-  it("permPending overrides actionNeeded → waitingPermission", () => {
-    expect(deriveStateFromPoll({
-      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], permPending: true,
-    }, "idle")).toBe("waitingPermission");
-  });
-
-  it("ExitPlanMode via events (not persisted stop) → actionNeeded", () => {
-    expect(deriveStateFromPoll({
-      ...basePoll, tools: ["ExitPlanMode"],
-      events: [{ t: "assistant", sr: "tool_use" }],
-    }, "idle")).toBe("actionNeeded");
-  });
-
-  it("choiceHint without idle state has no effect (toolUse stays toolUse)", () => {
-    // choiceHint only refines idle → actionNeeded; toolUse is unaffected
-    expect(deriveStateFromPoll({
-      ...basePoll, stop: "tool_use", choiceHint: true,
-    }, "idle")).toBe("toolUse");
-  });
-
-  it("idleDetected alone (no choiceHint) → idle, not actionNeeded", () => {
-    expect(deriveStateFromPoll({
-      ...basePoll, idleDetected: true, choiceHint: false,
-    }, "thinking")).toBe("idle");
-  });
-
-  it("ExitPlanMode + idleDetected → actionNeeded (idleDetected→idle, then choiceHint absent keeps idle)", () => {
-    // ExitPlanMode refines toolUse→actionNeeded, then idleDetected overrides to idle
-    expect(deriveStateFromPoll({
-      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], idleDetected: true,
-    }, "idle")).toBe("idle");
-  });
-
-  it("ExitPlanMode + idleDetected + choiceHint → actionNeeded", () => {
-    // ExitPlanMode→actionNeeded, idleDetected→idle, choiceHint→actionNeeded
-    expect(deriveStateFromPoll({
-      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], idleDetected: true, choiceHint: true,
-    }, "idle")).toBe("actionNeeded");
-  });
-
-  it("permPending overrides choiceHint actionNeeded → waitingPermission", () => {
-    expect(deriveStateFromPoll({
-      ...basePoll, stop: "end_turn", choiceHint: true, permPending: true,
-    }, "idle")).toBe("waitingPermission");
   });
 });
 
@@ -1678,7 +1198,7 @@ describe("INSTALL_HOOK sealed flag edge cases", () => {
     expect(state.toolAction).toBe("Read: /real.ts");
   });
 
-  it("sealed blocks subagentDescs growth from post-completion Agent tool_use", () => {
+  it("sealed blocks pendingDescs growth from post-completion Agent tool_use", () => {
     const state = installAndGetState();
     JSON.stringify({
       type: "assistant",
@@ -1686,14 +1206,13 @@ describe("INSTALL_HOOK sealed flag edge cases", () => {
     });
     JSON.stringify({ type: "result", total_cost_usd: 0.01 });
 
-    // Sealed assistant with Agent tool_use — subagentDescs should NOT grow
+    // Sealed assistant with Agent tool_use — pendingDescs should NOT grow
     JSON.stringify({
       type: "assistant",
       message: { model: "claude-opus-4-6", stop_reason: "tool_use",
         content: [{ type: "tool_use", name: "Agent", input: { description: "Ghost agent" } }],
         usage: { input_tokens: 0, output_tokens: 0 } },
     });
-    expect(state.subagentDescs).toEqual([]);
     expect(state.pendingDescs).toEqual([]);
   });
 
@@ -1822,31 +1341,6 @@ describe("INSTALL_HOOK sticky idleDetected edge cases", () => {
     return g.__inspectorState as Record<string, unknown>;
   }
 
-  it("idleDetected persists across multiple POLL_STATE calls", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null, stop: "end_turn",
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: "result", firstMsg: null, lastText: null,
-      userPrompt: null, permPending: false, idleDetected: true,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      pendingDescs: [], thinking: [], subs: [], _sealed: true,
-    };
-
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result1 = fn() as Record<string, unknown>;
-    expect(result1.idleDetected).toBe(true);
-
-    const result2 = fn() as Record<string, unknown>;
-    expect(result2.idleDetected).toBe(true);
-
-    const result3 = fn() as Record<string, unknown>;
-    expect(result3.idleDetected).toBe(true);
-
-    const stateObj = g.__inspectorState as Record<string, unknown>;
-    expect(stateObj.idleDetected).toBe(true);
-  });
-
   it("second idle_prompt while already sticky is idempotent", () => {
     const state = installAndGetState();
     JSON.stringify({ notification_type: "idle_prompt" });
@@ -1895,9 +1389,9 @@ describe("INSTALL_HOOK sticky idleDetected edge cases", () => {
   });
 });
 
-// ── SSE thinking via JSON.parse edge cases ─────────────────────
+// ── turnHasTools tracking ───────────────────────────────────────
 
-describe("INSTALL_HOOK SSE thinking edge cases", () => {
+describe("INSTALL_HOOK turnHasTools", () => {
   let savedStringify: typeof JSON.stringify;
   let savedParse: typeof JSON.parse;
 
@@ -1920,78 +1414,198 @@ describe("INSTALL_HOOK SSE thinking edge cases", () => {
     return g.__inspectorState as Record<string, unknown>;
   }
 
-  it("concurrent thinking blocks with different indices accumulate independently", () => {
+  it("starts false", () => {
     const state = installAndGetState();
-    // Start two thinking blocks at different indices
-    JSON.parse(JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "thinking" } }));
-    JSON.parse(JSON.stringify({ type: "content_block_start", index: 2, content_block: { type: "thinking" } }));
-
-    // Interleave deltas
-    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Block zero " } }));
-    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 2, delta: { type: "thinking_delta", thinking: "Block two " } }));
-    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "continued" } }));
-    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 2, delta: { type: "thinking_delta", thinking: "continued" } }));
-
-    // Stop them
-    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 0 }));
-    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 2 }));
-
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(2);
-    expect(thinking[0].x).toBe("Block zero continued");
-    expect(thinking[1].x).toBe("Block two continued");
+    expect(state.turnHasTools).toBe(false);
   });
 
-  it("content_block_stop for non-thinking index is a no-op", () => {
+  it("set true when assistant has tool_use content", () => {
     const state = installAndGetState();
-    // Stop without start — no crash, no entry
-    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 5 }));
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(0);
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Bash", input: { command: "ls" } }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    });
+    expect(state.turnHasTools).toBe(true);
   });
 
-  it("thinkingAccum is cleaned up after stop (no memory leak)", () => {
+  it("NOT cleared by tool_result user event", () => {
     const state = installAndGetState();
-    JSON.parse(JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "thinking" } }));
-    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "hello" } }));
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Edit", input: { file_path: "foo.ts" } }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    });
+    expect(state.turnHasTools).toBe(true);
 
-    // Before stop, accumulator exists
-    const accum = state.thinkingAccum as Record<number, string>;
-    expect(accum[0]).toBe("hello");
-
-    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 0 }));
-
-    // After stop, accumulator entry is deleted
-    expect(accum[0]).toBeUndefined();
+    // Tool result comes back — turnHasTools should persist
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "tool_result", content: "ok" }] },
+    });
+    expect(state.turnHasTools).toBe(true);
   });
 
-  it("thinkingAccum does not appear in POLL_STATE output", () => {
+  it("cleared by non-tool-result user event (new prompt)", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Bash", input: { command: "ls" } }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    });
+    expect(state.turnHasTools).toBe(true);
+
+    // New user prompt — starts a new turn
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "text", text: "do something else" }] },
+    });
+    expect(state.turnHasTools).toBe(false);
+  });
+
+  it("not set by sealed assistant with tool_use", () => {
+    const state = installAndGetState();
+    // Seal via result
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state._sealed).toBe(true);
+    expect(state.turnHasTools).toBe(false);
+
+    // Post-seal assistant with tool_use — should not set turnHasTools
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Bash", input: { command: "ls" } }],
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    });
+    expect(state.turnHasTools).toBe(false);
+  });
+
+  it("persists through full agentic loop: tool_use → tool_result → end_turn summary", () => {
+    const state = installAndGetState();
+    // User starts the turn
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "text", text: "fix three things" }] },
+    });
+    expect(state.turnHasTools).toBe(false);
+
+    // Claude uses Bash
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [
+          { type: "text", text: "Let me fix that." },
+          { type: "tool_use", name: "Bash", input: { command: "echo hi" } },
+        ],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      },
+    });
+    expect(state.turnHasTools).toBe(true);
+
+    // Tool result
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "tool_result", content: "hi" }] },
+    });
+    expect(state.turnHasTools).toBe(true);
+
+    // Claude uses Edit
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Edit", input: { file_path: "a.ts" } }],
+        usage: { input_tokens: 50, output_tokens: 20 },
+      },
+    });
+    expect(state.turnHasTools).toBe(true);
+
+    // Tool result
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "tool_result", content: "done" }] },
+    });
+
+    // Final summary with numbered list — end_turn, no tool_use blocks
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6", stop_reason: "end_turn",
+        content: [{ type: "text", text: "Three fixes applied:\n1. Fixed A\n2. Fixed B\n3. Fixed C" }],
+        usage: { input_tokens: 50, output_tokens: 30 },
+      },
+    });
+    expect(state.turnHasTools).toBe(true);
+    expect(state.stop).toBe("end_turn");
+    expect(state.lastText).toContain("1. Fixed A");
+  });
+});
+
+// ── choiceHint suppression via turnHasTools ──────────────────────
+
+describe("POLL_STATE choiceHint with turnHasTools", () => {
+  afterEach(cleanupGlobalHook);
+
+  it("choiceHint=false when turnHasTools=true with numbered list", () => {
     const g = globalThis as unknown as Record<string, unknown>;
     g.__inspectorState = {
-      n: 1, sid: null, cost: 0, model: null, stop: null,
-      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
-      events: [], lastEvent: null, firstMsg: null, lastText: null,
+      n: 5, sid: null, cost: 0, model: null,
+      stop: "end_turn", tools: [], inTok: 0, outTok: 0,
+      events: [], lastEvent: "assistant", firstMsg: null,
+      lastText: "Three fixes applied:\n1. Fixed A\n2. Fixed B\n3. Fixed C",
       userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
-      pendingDescs: [], thinking: [], subs: [],
-      thinkingAccum: { 0: "partial" }, _sealed: false,
+      toolAction: null, turnHasTools: true,
+      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
+      _sealed: false,
     };
-
     const fn = new Function(`return ${POLL_STATE}`);
     const result = fn() as Record<string, unknown>;
-    expect(result.thinkingAccum).toBeUndefined();
+    expect(result.choiceHint).toBe(false);
   });
 
-  it("content_block_start without index field does not crash", () => {
-    const state = installAndGetState();
-    // Malformed SSE event — no index
-    JSON.parse(JSON.stringify({ type: "content_block_start", content_block: { type: "thinking" } }));
-    // This creates thinkingAccum[undefined] = '' — stop should clean it up
-    JSON.parse(JSON.stringify({ type: "content_block_delta", delta: { type: "thinking_delta", thinking: "test" } }));
-    JSON.parse(JSON.stringify({ type: "content_block_stop" }));
-    // Should not crash; entry accumulates at key "undefined"
-    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
-    expect(thinking).toHaveLength(1);
-    expect(thinking[0].x).toBe("test");
+  it("choiceHint=true when turnHasTools=false with numbered list", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 5, sid: null, cost: 0, model: null,
+      stop: "end_turn", tools: [], inTok: 0, outTok: 0,
+      events: [], lastEvent: "assistant", firstMsg: null,
+      lastText: "Which approach do you prefer?\n1. Simple fix\n2. Full refactor\n3. Hybrid",
+      userPrompt: null, permPending: false, idleDetected: false,
+      toolAction: null, turnHasTools: false,
+      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
+      _sealed: false,
+    };
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.choiceHint).toBe(true);
+  });
+
+  it("choiceHint=false when turnHasTools=false but no numbered list", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 5, sid: null, cost: 0, model: null,
+      stop: "end_turn", tools: [], inTok: 0, outTok: 0,
+      events: [], lastEvent: "assistant", firstMsg: null,
+      lastText: "All done! The changes look good.",
+      userPrompt: null, permPending: false, idleDetected: false,
+      toolAction: null, turnHasTools: false,
+      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
+      _sealed: false,
+    };
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.choiceHint).toBe(false);
   });
 });

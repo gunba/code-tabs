@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTerminal } from "../../hooks/useTerminal";
 import { usePty } from "../../hooks/usePty";
 import { useSessionStore } from "../../store/sessions";
-import { buildClaudeArgs, getResumeId, formatTokenCount } from "../../lib/claude";
+import { buildClaudeArgs, getResumeId, formatTokenCount, canResumeSession } from "../../lib/claude";
 import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, registerInspectorCallbacks, unregisterInspectorCallbacks } from "../../lib/inspectorPort";
 import { useInspectorState } from "../../hooks/useInspectorState";
 import { registerPtyWriter, unregisterPtyWriter } from "../../lib/ptyRegistry";
@@ -45,7 +45,7 @@ function DeadOverlay({ session, triggerRespawnRef, closeSession }: DeadOverlayPr
     );
   }
 
-  const canResume = !!session.metadata.nodeSummary || !!session.config.resumeSession;
+  const canResume = canResumeSession(session);
   return (
     <div className="dead-overlay">
       <div className="dead-overlay-card">
@@ -288,10 +288,9 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     unregisterPtyWriter(session.id);
     unregisterInspectorPort(session.id);
     useSessionStore.getState().setInspectorOff(session.id, false);
-    useSessionStore.getState().clearThinkingBlocks(session.id);
 
     // 2. Determine config (default: resume if conversation exists)
-    const canResume = !!session.metadata.nodeSummary || !!session.config.resumeSession;
+    const canResume = canResumeSession(session);
     const newConfig: SessionConfig = config ?? {
       ...session.config,
       resumeSession: canResume ? getResumeId(session) : null,
@@ -303,7 +302,9 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     if (name) renameSession(session.id, name);
 
     // 4. Visual feedback + loading spinner for resumed sessions
-    terminalRef.current?.write("\r\n\x1b[90m[Resuming...]\x1b[0m\r\n");
+    terminalRef.current?.write("\x1bc");  // RIS: full terminal reset
+    terminal.fit();
+    terminalRef.current?.write("\x1b[90m[Resuming...]\x1b[0m\r\n");
     setLoading(!!newConfig.resumeSession);
 
     // 5. Reset internal state and inspector port
@@ -361,7 +362,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
   // Spawn PTY once (respawnCounter triggers re-spawn)
   useEffect(() => {
-    if (spawnedRef.current || !claudePath) return;
+    if (spawnedRef.current || !claudePath || session.state === "dead") return;
 
     const doSpawn = async () => {
       spawnedRef.current = true;
@@ -390,6 +391,19 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claudePath, session.id, respawnCounter]);
+
+  // Auto-resume dead tabs when they become visible (tab switch or startup).
+  // Only fires on hidden→visible transitions, NOT when state changes to "dead"
+  // while the tab is already visible (user should see the dead overlay in that case).
+  const prevVisibleRef = useRef(false);
+  useEffect(() => {
+    const becameVisible = visible && !prevVisibleRef.current;
+    prevVisibleRef.current = visible;
+    if (!becameVisible || session.state !== "dead" || !claudePath) return;
+    if (!canResumeSession(session)) return;
+    const timer = setTimeout(() => triggerRespawnRef.current(), 150);
+    return () => clearTimeout(timer);
+  }, [visible, session.state, claudePath]);
 
   // Register terminal buffer reader for transcript export
   useEffect(() => {
@@ -579,10 +593,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // terminal.scrollToLastUserMessage is a stable useCallback — safe in deps
   }, [visible, terminal.scrollToLastUserMessage]);
 
-  const showThinkingPanel = useSettingsStore((s) => s.showThinkingPanel);
-  const setShowThinkingPanel = useSettingsStore((s) => s.setShowThinkingPanel);
-  const thinkingBlockCount = useSessionStore((s) => s.thinkingBlocks.get(session.id)?.length ?? 0);
-
   const totalTokens = session.metadata.inputTokens + session.metadata.outputTokens;
 
   return (
@@ -670,21 +680,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
                 <line x1="12" y1="9" x2="18" y2="15" />
                 <line x1="2" y1="22" x2="22" y2="22" />
               </svg>
-            </button>
-            <button
-              className={`bar-btn${showThinkingPanel ? " bar-btn-thinking-active" : ""}`}
-              onClick={() => setShowThinkingPanel(!showThinkingPanel)}
-              title="Toggle thinking panel (Ctrl+I)"
-              aria-label="Toggle thinking panel"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-                <ellipse cx="7" cy="6" rx="5.5" ry="4.5" />
-                <circle cx="4" cy="11.5" r="1" />
-                <circle cx="2.5" cy="13" r="0.6" />
-              </svg>
-              {thinkingBlockCount > 0 && (
-                <span className="bar-btn-thinking-dot" />
-              )}
             </button>
             <button
               className="bar-btn"

@@ -13,7 +13,7 @@ vi.mock("../../lib/claude", () => ({
 
 import { useSessionStore } from "../sessions";
 import { DEFAULT_SESSION_CONFIG } from "../../types/session";
-import type { Session, Subagent, ThinkingBlock } from "../../types/session";
+import type { Session, Subagent } from "../../types/session";
 
 /**
  * Tests for pure-logic Zustand actions in the sessions store.
@@ -29,7 +29,6 @@ function resetStore() {
     claudePath: null,
     initialized: false,
     subagents: new Map(),
-    thinkingBlocks: new Map(),
     commandHistory: new Map(),
     respawnRequest: null,
     killRequest: null,
@@ -72,10 +71,6 @@ function makeSub(id: string, state: Subagent["state"] = "thinking"): Subagent {
     tokenCount: 0,
     currentAction: null,
   };
-}
-
-function makeBlock(text: string, ts: number): ThinkingBlock {
-  return { text, timestamp: ts };
 }
 
 describe("addCommandHistory", () => {
@@ -126,39 +121,6 @@ describe("addCommandHistory", () => {
   });
 });
 
-describe("appendThinkingBlocks", () => {
-  beforeEach(resetStore);
-
-  it("appends blocks to empty session", () => {
-    useSessionStore.getState().appendThinkingBlocks("s1", [makeBlock("step 1", 1)]);
-    const blocks = useSessionStore.getState().thinkingBlocks.get("s1");
-    expect(blocks).toHaveLength(1);
-    expect(blocks![0].text).toBe("step 1");
-  });
-
-  it("caps at 50 blocks (keeps newest)", () => {
-    const bulkBlocks = Array.from({ length: 55 }, (_, i) => makeBlock(`block-${i}`, i));
-    useSessionStore.getState().appendThinkingBlocks("s1", bulkBlocks);
-    const blocks = useSessionStore.getState().thinkingBlocks.get("s1");
-    expect(blocks).toHaveLength(50);
-    expect(blocks![0].text).toBe("block-5");
-    expect(blocks![49].text).toBe("block-54");
-  });
-});
-
-describe("clearThinkingBlocks", () => {
-  beforeEach(resetStore);
-
-  it("removes thinking blocks for a session", () => {
-    useSessionStore.getState().appendThinkingBlocks("s1", [makeBlock("test", 1)]);
-    useSessionStore.getState().clearThinkingBlocks("s1");
-    expect(useSessionStore.getState().thinkingBlocks.get("s1")).toBeUndefined();
-  });
-
-  it("does not throw for nonexistent session", () => {
-    expect(() => useSessionStore.getState().clearThinkingBlocks("nope")).not.toThrow();
-  });
-});
 
 describe("subagent actions", () => {
   beforeEach(resetStore);

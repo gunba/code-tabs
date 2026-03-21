@@ -13,7 +13,6 @@ interface ThreePaneEditorProps {
   component: React.ComponentType<PaneComponentProps>;
   projectDir: string;
   onStatus: (msg: StatusMessage | null) => void;
-  compact?: boolean;
   tabId: TabId;
 }
 
@@ -43,9 +42,9 @@ const SCOPES: { value: PaneComponentProps["scope"]; label: string; colorVar: str
   { value: "project-local", label: "LOCAL", colorVar: "var(--accent-tertiary)" },
 ];
 
-export function ThreePaneEditor({ component: PaneComponent, projectDir, onStatus, compact, tabId }: ThreePaneEditorProps) {
+export function ThreePaneEditor({ component: PaneComponent, projectDir, onStatus, tabId }: ThreePaneEditorProps) {
   return (
-    <div className={`three-pane-grid${compact ? " three-pane-grid-compact" : ""}`}>
+    <div className="three-pane-grid">
       {SCOPES.map(({ value, label, colorVar }) => (
         <div key={value} className="three-pane-column" style={{ "--scope-color": colorVar } as React.CSSProperties}>
           <div className="three-pane-header">

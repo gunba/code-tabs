@@ -72,6 +72,15 @@ export async function spawnPty(
   let exitCallback: ((info: { exitCode: number }) => void) | null = null;
   let exitFired = false;
 
+  const fireExit = (code: number) => {
+    if (osPid) unregisterActivePid(osPid);
+    if (exitFired) return;
+    exitFired = true;
+    aborted = true;
+    console.log(`[pty] exit callback fired pid=${pid} code=${code}`);
+    exitCallback?.({ exitCode: code });
+  };
+
   // Start read loop
   const readLoop = async () => {
     while (!aborted) {
@@ -87,22 +96,22 @@ export async function spawnPty(
       }
     }
     console.log(`[pty] read loop exited pid=${pid} aborted=${aborted}`);
-    // Always attempt exit status + callback, guarded by exitFired
     let exitCode = -1;
     try {
       exitCode = await invoke("plugin:pty|exitstatus", { pid });
     } catch {
       // Process already cleaned up — use default -1
     }
-    // Unregister from cleanup registry on natural exit (prevents stale PID kills)
-    if (osPid) unregisterActivePid(osPid);
-    if (!exitFired) {
-      exitFired = true;
-      console.log(`[pty] exit callback fired pid=${pid} code=${exitCode}`);
-      exitCallback?.({ exitCode });
-    }
+    fireExit(exitCode);
   };
   readLoop();
+
+  // Parallel exit waiter — catches Ctrl+C exits where ConPTY pipe stays open.
+  // exitstatus calls child.wait() on the Rust side (WaitForSingleObject), which
+  // reliably returns when the child exits regardless of ConPTY pipe state.
+  void invoke<number>("plugin:pty|exitstatus", { pid })
+    .then((code) => fireExit(code))
+    .catch(() => { /* process already cleaned up */ });
 
   return {
     pid,
@@ -166,12 +175,7 @@ export async function spawnPty(
       }
 
       console.log(`[pty] kill completed pid=${pid}`);
-      // Ensure exit callback fires even if read loop hasn't finished
-      if (!exitFired) {
-        exitFired = true;
-        console.log(`[pty] exit callback fired from kill pid=${pid}`);
-        exitCallback?.({ exitCode: -1 });
-      }
+      fireExit(-1);
     },
 
     onData(cb) {

@@ -16,6 +16,11 @@ export function getResumeId(session: Session): string {
   return session.config.resumeSession || session.config.sessionId || session.id;
 }
 
+/** Whether a session has a conversation that can be resumed. */
+export function canResumeSession(session: Session): boolean {
+  return !!session.config.sessionId || !!session.config.resumeSession || !!session.metadata.nodeSummary;
+}
+
 /** Effective model: user-configured model, falling back to runtime-detected model. */
 export function effectiveModel(session: Session): string | null {
   return session.config.model || session.metadata.runtimeModel || null;

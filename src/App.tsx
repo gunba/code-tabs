@@ -13,7 +13,6 @@ import { StatusBar } from "./components/StatusBar/StatusBar";
 import { CommandBar } from "./components/CommandBar/CommandBar";
 import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { ConfigManager } from "./components/ConfigManager/ConfigManager";
-import { ThinkingPanel } from "./components/ThinkingPanel/ThinkingPanel";
 import { DebugPanel } from "./components/DebugPanel/DebugPanel";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
@@ -50,8 +49,6 @@ export default function App() {
   const setLastConfig = useSettingsStore((s) => s.setLastConfig);
   const showConfigManager = useSettingsStore((s) => s.showConfigManager);
   const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
-  const showThinkingPanel = useSettingsStore((s) => s.showThinkingPanel);
-  const setShowThinkingPanel = useSettingsStore((s) => s.setShowThinkingPanel);
   const [showPalette, setShowPalette] = useState(false);
   const [showResumePicker, setShowResumePicker] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
@@ -207,11 +204,6 @@ export default function App() {
         setShowConfigManager(showConfigManager ? false : "settings");
       }
 
-      if (e.ctrlKey && e.key === "i") {
-        e.preventDefault();
-        setShowThinkingPanel(!showThinkingPanel);
-      }
-
       if (e.ctrlKey && e.shiftKey && e.key === "D") {
         e.preventDefault();
         setShowDebugPanel((v) => !v);
@@ -221,7 +213,6 @@ export default function App() {
         if (tabContextMenu) { setTabContextMenu(null); return; }
         if (showPalette) return;
         if (showDebugPanel) { setShowDebugPanel(false); return; }
-        if (showThinkingPanel) { setShowThinkingPanel(false); return; }
         if (showConfigManager) { setShowConfigManager(false); return; }
         if (showResumePicker) { setShowResumePicker(false); return; }
         if (showLauncher) { setShowLauncher(false); return; }
@@ -266,7 +257,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, sessions, setActiveTab, closeSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showThinkingPanel, setShowThinkingPanel, showDebugPanel, inspectedSubagent, tabContextMenu, quickLaunch]);
+  }, [activeTabId, sessions, setActiveTab, closeSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showDebugPanel, inspectedSubagent, tabContextMenu, quickLaunch]);
 
   const regularSessions = useMemo(() => sessions.filter((s) => !s.isMetaAgent), [sessions]);
   const groups = useMemo(() => groupSessionsByDir(regularSessions), [regularSessions]);
@@ -569,9 +560,6 @@ export default function App() {
             </div>
           )}
         </div>
-        {showThinkingPanel && activeTabId && (
-          <ThinkingPanel sessionId={activeTabId} onClose={() => setShowThinkingPanel(false)} />
-        )}
         {showDebugPanel && (
           <DebugPanel onClose={() => setShowDebugPanel(false)} />
         )}

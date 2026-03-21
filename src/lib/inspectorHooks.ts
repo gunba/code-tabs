@@ -1,7 +1,7 @@
 /**
  * JavaScript expressions evaluated via Runtime.evaluate on the BUN_INSPECT
  * WebSocket connection. These intercept JSON.stringify to capture Claude Code's
- * internal state transitions with ~2-6ms latency (vs 500ms JSONL polling).
+ * internal state transitions with ~2-6ms latency.
  *
  * INSTALL_HOOK: Wraps JSON.stringify to capture serializations >30 chars.
  *   Also hooks process.stdin for raw keystroke capture.
@@ -35,10 +35,8 @@ export const INSTALL_HOOK = `(function() {
     model: null,
     stop: null,
     tools: [],
-    perm: null,
     inTok: 0,
     outTok: 0,
-    dur: 0,
     events: [],
     lastEvent: null,
     firstMsg: null,
@@ -47,13 +45,11 @@ export const INSTALL_HOOK = `(function() {
     permPending: false,
     idleDetected: false,
     toolAction: null,
-    subagentDescs: [],
+    turnHasTools: false,
     inputBuf: '',
     inputTs: 0,
     pendingDescs: [],
     subs: [],
-    thinking: [],
-    thinkingAccum: {},
     _sealed: false
   };
   globalThis.__inspectorState = state;
@@ -172,7 +168,6 @@ export const INSTALL_HOOK = `(function() {
               // System event for main session
               if (obj.type === 'system' && obj.sessionId) {
                 state.sid = obj.sessionId;
-                if (obj.permissionMode) state.perm = obj.permissionMode;
               }
 
               // Assistant message
@@ -195,8 +190,6 @@ export const INSTALL_HOOK = `(function() {
                         var inp = content[i].input || {};
                         toolAct = fmtToolAction(tn, inp);
                         if (tn === 'Agent' && inp.description) {
-                          state.subagentDescs.push(inp.description.slice(0, 100));
-                          if (state.subagentDescs.length > 20) state.subagentDescs.shift();
                           state.pendingDescs.push(inp.description.slice(0, 100));
                         }
                       }
@@ -204,7 +197,7 @@ export const INSTALL_HOOK = `(function() {
                         txtSnippet = content[i].text;
                       }
                     }
-                    if (toolNames.length > 0) state.tools = toolNames;
+                    if (toolNames.length > 0) { state.tools = toolNames; state.turnHasTools = true; }
                     if (txtSnippet) state.lastText = txtSnippet.slice(-300);
                     if (toolAct) state.toolAction = toolAct;
                   }
@@ -241,11 +234,11 @@ export const INSTALL_HOOK = `(function() {
                 state.tools = [];
                 state._sealed = false;
                 state.idleDetected = false;
+                state.permPending = false;
+                if (!isToolResult) state.turnHasTools = false;
               }
 
               // Ring buffer of last 50 state-carrying main events.
-              // Only user/assistant/result — system/progress/notification events
-              // would mask real state signals in deriveStateFromPoll.
               if (obj.type === 'user' || obj.type === 'result' || (obj.type === 'assistant' && !state._sealed)) {
                 state.lastEvent = obj.type;
                 var evt = { t: obj.type };
@@ -261,41 +254,6 @@ export const INSTALL_HOOK = `(function() {
                 if (state.events.length > 50) state.events.shift();
               }
             }
-          }
-        }
-      }
-    } catch(e) {}
-    return result;
-  };
-
-  var origParse = JSON.parse;
-  JSON.parse = function(text) {
-    var result = origParse.apply(this, arguments);
-    try {
-      if (result && typeof result === 'object' && result.type) {
-        if (result.type === 'content_block_start' && result.content_block) {
-          if (result.content_block.type === 'thinking') {
-            state.thinkingAccum[result.index] = '';
-          }
-          if (result.content_block.type === 'redacted_thinking') {
-            state.thinking.push({ x: '', ts: Date.now(), r: true });
-            if (state.thinking.length > 30) state.thinking.shift();
-          }
-        }
-        if (result.type === 'content_block_delta' && result.delta
-            && result.delta.type === 'thinking_delta'
-            && typeof state.thinkingAccum[result.index] === 'string') {
-          state.thinkingAccum[result.index] += result.delta.thinking;
-        }
-        if (result.type === 'content_block_stop'
-            && typeof state.thinkingAccum[result.index] === 'string') {
-          var accumulated = state.thinkingAccum[result.index];
-          delete state.thinkingAccum[result.index];
-          if (accumulated) {
-            var thinkText = accumulated;
-            if (thinkText.length > 10000) thinkText = thinkText.slice(0, 10000) + '\\n[truncated]';
-            state.thinking.push({ x: thinkText, ts: Date.now(), r: false });
-            if (state.thinking.length > 30) state.thinking.shift();
           }
         }
       }
@@ -342,10 +300,8 @@ export const POLL_STATE = `(function() {
     model: s.model,
     stop: s.stop,
     tools: s.tools.slice(),
-    perm: s.perm,
     inTok: s.inTok,
     outTok: s.outTok,
-    dur: s.dur,
     events: s.events.slice(),
     lastEvent: s.lastEvent,
     firstMsg: s.firstMsg,
@@ -354,11 +310,9 @@ export const POLL_STATE = `(function() {
     permPending: s.permPending,
     idleDetected: s.idleDetected,
     toolAction: s.toolAction,
-    subagentDescs: s.subagentDescs.slice(),
     inputBuf: s.inputBuf,
     inputTs: s.inputTs,
-    choiceHint: s.stop === 'end_turn' && !!s.lastText && /\\n\\s*[1-9]\\.\\s/.test(s.lastText.slice(-200)),
-    thinking: s.thinking.splice(0),
+    choiceHint: s.stop === 'end_turn' && !!s.lastText && !s.turnHasTools && /\\n\\s*[1-9]\\.\\s/.test(s.lastText.slice(-200)),
     subs: s.subs.map(function(sub) {
       var msgs = sub.msgs.splice(0);
       return { sid: sub.sid, desc: sub.desc, st: sub.st, tok: sub.tok, act: sub.act, msgs: msgs, lastTs: sub.lastTs };

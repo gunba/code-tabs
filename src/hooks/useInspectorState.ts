@@ -5,29 +5,13 @@ import type { SessionState, SubagentMessage } from "../types/session";
 
 /** Compact state returned by POLL_STATE expression. */
 interface InspectorPollResult {
-  n: number;
-  sid: string | null;
-  cost: number;
-  model: string | null;
-  stop: string | null;
-  tools: string[];
-  perm: string | null;
-  inTok: number;
-  outTok: number;
-  dur: number;
-  events: Array<{ t: string; sr?: string; c?: number; txt?: string; nt?: string; ta?: string }>;
-  lastEvent: string | null;
-  firstMsg: string | null;
-  lastText: string | null;
-  userPrompt: string | null;
-  permPending: boolean;
-  idleDetected: boolean;
-  toolAction: string | null;
-  choiceHint: boolean;
-  thinking: Array<{ x: string; ts: number; r: boolean }>;
-  subagentDescs: string[];
-  inputBuf: string;
-  inputTs: number;
+  n: number; sid: string | null; cost: number; model: string | null;
+  stop: string | null; tools: string[]; inTok: number; outTok: number;
+  events: Array<{ t: string; sr?: string; c?: number; txt?: string; ta?: string }>;
+  lastEvent: string | null; firstMsg: string | null; lastText: string | null;
+  userPrompt: string | null; permPending: boolean; idleDetected: boolean;
+  toolAction: string | null; choiceHint: boolean;
+  inputBuf: string; inputTs: number;
   subs: Array<{
     sid: string; desc: string; st: string; tok: number; act: string | null;
     msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number;
@@ -37,13 +21,10 @@ interface InspectorPollResult {
 /** Map inspector sub-state codes to SessionState values. */
 const SUB_STATE_MAP: Record<string, SessionState> = { s: "starting", t: "thinking", u: "toolUse", i: "idle" };
 
-/** States that indicate a subagent is actively running (not idle or dead). */
-const SUBAGENT_ACTIVE_STATES = new Set<string>(["thinking", "toolUse", "starting"]);
-
 /** Delay before first connection attempt (PTY needs ~50ms to spawn, Bun ~1s to init). */
 const CONNECT_DELAY_MS = 1000;
 /** Interval between POLL_STATE evaluations. */
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 250;
 /** Max reconnection attempts before giving up. */
 const MAX_RETRIES = 3;
 /** Backoff delays for reconnection attempts. */
@@ -79,9 +60,7 @@ export function deriveStateFromPoll(
   }
 
   // Refine toolUse → actionNeeded for ExitPlanMode
-  if (state === "toolUse" && data.tools.includes("ExitPlanMode")) {
-    state = "actionNeeded";
-  }
+  if (state === "toolUse" && data.tools.includes("ExitPlanMode")) state = "actionNeeded";
 
   // Notification flags override
   if (data.idleDetected) state = "idle";
@@ -163,63 +142,30 @@ export function useInspectorState(
       updateMetadata(sid, metadata);
     }
 
-    // ── Thinking blocks ──
-    if (data.thinking.length > 0) {
-      const { appendThinkingBlocks } = useSessionStore.getState();
-      appendThinkingBlocks(sid, data.thinking.map(t => ({
-        text: t.x, timestamp: t.ts, redacted: t.r,
-      })));
-    }
-
     // ── Subagent tracking (routed by agentId in the hook) ──
     if (data.subs.length > 0) {
-      const { addSubagent, updateSubagent, removeDeadSubagents, subagents } = useSessionStore.getState();
+      const { addSubagent, updateSubagent, subagents } = useSessionStore.getState();
       const existing = subagents.get(sid) || [];
-
-      // When new subagent appears and no subs are actively running: mark idle as dead, then purge
-      const hasNewSubs = data.subs.some(s => !knownSubsRef.current.has(s.sid));
-      if (hasNewSubs && existing.length > 0) {
-        const anyRunning = existing.some(s => SUBAGENT_ACTIVE_STATES.has(s.state));
-        if (!anyRunning) {
-          for (const old of existing) {
-            if (old.state === "idle") updateSubagent(sid, old.id, { state: "dead" });
-          }
-          removeDeadSubagents(sid);
-        }
-      }
 
       for (const sub of data.subs) {
         const subState = SUB_STATE_MAP[sub.st] || "starting";
         const newMsgs: SubagentMessage[] = sub.msgs.map(m => ({
-          role: m.r === "a" ? "assistant" : "tool",
-          text: m.x,
-          toolName: m.tn,
-          timestamp: Date.now(),
+          role: m.r === "a" ? "assistant" as const : "tool" as const,
+          text: m.x, toolName: m.tn, timestamp: Date.now(),
         }));
 
-        const isNew = !knownSubsRef.current.has(sub.sid);
-        // Mark stale non-idle subs as dead (30s without events)
-        const isStale = !isNew && subState !== "idle" && Date.now() - sub.lastTs > 30000;
-        const effectiveState = isStale ? "dead" as const : subState;
-
-        if (isNew) {
+        if (!knownSubsRef.current.has(sub.sid)) {
           knownSubsRef.current.add(sub.sid);
           addSubagent(sid, {
-            id: sub.sid,
-            parentSessionId: sid,
-            state: effectiveState,
-            description: sub.desc,
-            tokenCount: sub.tok,
-            currentAction: sub.act,
-            messages: newMsgs,
+            id: sub.sid, parentSessionId: sid, state: subState,
+            description: sub.desc, tokenCount: sub.tok,
+            currentAction: sub.act, messages: newMsgs,
           });
         } else {
           const existingSub = existing.find(s => s.id === sub.sid);
           const allMsgs = existingSub ? [...existingSub.messages, ...newMsgs] : newMsgs;
           updateSubagent(sid, sub.sid, {
-            state: effectiveState,
-            tokenCount: sub.tok,
-            currentAction: sub.act,
+            state: subState, tokenCount: sub.tok, currentAction: sub.act,
             messages: allMsgs.length > 200 ? allMsgs.slice(-200) : allMsgs,
           });
         }
