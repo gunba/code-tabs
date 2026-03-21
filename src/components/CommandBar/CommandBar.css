@@ -52,31 +52,19 @@
   50% { opacity: 0.6; }
 }
 
-/* ── Shift-held: unified blue treatment ───────────────── */
+/* ── Ctrl-held: subtle box outline ─────────────────── */
 
-.shift-held .command-btn:not(.command-btn-queued) {
+.ctrl-held .command-btn:not(.command-btn-queued) {
   border-color: var(--accent-secondary);
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--accent-secondary) 8%, var(--bg-primary));
-  box-shadow: inset 0 2px 0 var(--accent-secondary);
 }
 
-.shift-held .command-btn:not(.command-btn-queued):hover {
+.ctrl-held .command-btn:not(.command-btn-queued):hover {
   border-color: var(--accent-secondary);
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-secondary) 15%, var(--bg-primary));
+  background: var(--bg-surface-hover);
 }
 
 /* ── Queue indicator ─────────────────────────────────────── */
-
-.command-bar-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding-left: 4px;
-  border-left: 1px solid var(--border-subtle);
-}
 
 .command-bar-queue-indicator {
   display: flex;

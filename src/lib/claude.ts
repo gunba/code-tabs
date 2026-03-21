@@ -16,13 +16,31 @@ export function getResumeId(session: Session): string {
   return session.config.resumeSession || session.config.sessionId || session.id;
 }
 
+/** Effective model: user-configured model, falling back to runtime-detected model. */
+export function effectiveModel(session: Session): string | null {
+  return session.config.model || session.metadata.runtimeModel || null;
+}
+
+/** Known model families: keyword → display label + CSS color. */
+const MODEL_FAMILIES: Array<{ keyword: string; label: string; color: string }> = [
+  { keyword: "opus", label: "Opus", color: "var(--accent-tertiary)" },
+  { keyword: "sonnet", label: "Sonnet", color: "var(--accent-secondary)" },
+  { keyword: "haiku", label: "Haiku", color: "var(--success)" },
+];
+
+function resolveModelFamily(model: string | null): (typeof MODEL_FAMILIES)[number] | null {
+  if (!model) return null;
+  return MODEL_FAMILIES.find((f) => model.includes(f.keyword)) ?? null;
+}
+
 /** Model display label */
 export function modelLabel(model: string | null): string {
-  if (!model) return "Default";
-  if (model.includes("opus")) return "Opus";
-  if (model.includes("sonnet")) return "Sonnet";
-  if (model.includes("haiku")) return "Haiku";
-  return model;
+  return resolveModelFamily(model)?.label ?? model ?? "Default";
+}
+
+/** CSS color for model name in tab metadata. */
+export function modelColor(model: string | null): string {
+  return resolveModelFamily(model)?.color ?? "var(--text-muted)";
 }
 
 /** Session colors — assigned sequentially, no collisions until wrap-around. */
@@ -68,7 +86,7 @@ export function assignSessionColor(sessionId: string, allSessionIds: string[]): 
 export function sessionColor(sessionId: string): string {
   const idx = colorAssignments.get(sessionId);
   if (idx !== undefined) return SESSION_COLORS[idx];
-  // Fallback for unassigned (e.g. activity feed entries from before assignment)
+  // Fallback for unassigned
   let hash = 0;
   for (let i = 0; i < sessionId.length; i++) {
     hash = ((hash << 5) - hash + sessionId.charCodeAt(i)) | 0;

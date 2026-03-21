@@ -1,11 +1,11 @@
 import { useCallback, useRef } from "react";
-import { spawn as ptySpawn, type IPty, type IDisposable } from "tauri-pty";
+import { spawnPty, type PtyProcess } from "../lib/ptyProcess";
 
 export interface PtyHandle {
   pid: number;
   write: (data: string) => void;
   resize: (cols: number, rows: number) => void;
-  kill: () => void;
+  kill: () => Promise<void>;
 }
 
 interface UsePtyOptions {
@@ -14,51 +14,37 @@ interface UsePtyOptions {
 }
 
 export function usePty({ onData, onExit }: UsePtyOptions) {
-  const ptyRef = useRef<IPty | null>(null);
-  const disposablesRef = useRef<IDisposable[]>([]);
+  const ptyRef = useRef<PtyProcess | null>(null);
   const handleRef = useRef<PtyHandle | null>(null);
 
   const spawn = useCallback(
-    (
+    async (
       file: string,
       args: string[],
       cwd: string,
       cols: number,
-      rows: number
-    ): PtyHandle => {
-      // Spawn PTY — omit env so tauri-pty inherits parent process environment
-      const pty = ptySpawn(file, args, {
+      rows: number,
+      env?: Record<string, string>
+    ): Promise<PtyHandle> => {
+      const pty = await spawnPty(file, args, {
         cwd,
         cols,
         rows,
+        ...(env ? { env } : {}),
       });
 
+      console.log(`[usePty] spawn success pid=${pty.pid} cwd=${cwd}`);
       ptyRef.current = pty;
 
-      // Subscribe to data and exit events.
-      // IMPORTANT: tauri-pty types onData as Uint8Array, but tauri-plugin-pty's
-      // Rust read() returns Vec<u8> which Tauri IPC serializes as a JSON number[].
-      // We must convert to a real Uint8Array so TextDecoder and xterm.js work.
-      const dataSub = pty.onData((data: Uint8Array) => {
-        const bytes =
-          data instanceof Uint8Array ? data : Uint8Array.from(data as unknown as number[]);
-        onData(bytes);
-      });
-      disposablesRef.current.push(dataSub);
-
-      const exitSub = pty.onExit((info) => {
-        onExit?.(info);
-      });
-      disposablesRef.current.push(exitSub);
+      pty.onData(onData);
+      pty.onExit((info) => onExit?.(info));
 
       const handle: PtyHandle = {
         pid: pty.pid,
         write: (data: string) => pty.write(data),
         resize: (cols: number, rows: number) => pty.resize(cols, rows),
-        kill: () => {
-          disposablesRef.current.forEach((d) => d.dispose());
-          disposablesRef.current = [];
-          pty.kill();
+        kill: async () => {
+          await pty.kill();
           ptyRef.current = null;
         },
       };

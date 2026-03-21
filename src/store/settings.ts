@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { LaunchPreset, SessionConfig, PastSession } from "../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../types/session";
 import { normalizePath } from "../lib/paths";
+import type { BinarySettingField } from "../lib/settingsSchema";
 
 export interface CliOption {
   flag: string;        // e.g. "--model"
@@ -40,14 +41,18 @@ interface SettingsState {
   cliVersion: string | null;
   previousCliVersion: string | null;
   cliCapabilities: CliCapabilities;
+  binarySettingsSchema: BinarySettingField[];
   slashCommands: SlashCommand[];
 
   commandUsage: Record<string, number>;
   commandUsageBootstrapped: boolean;
-  showHooksManager: boolean;
-  replaceSessionId: string | null; // Session to close when launcher launches (Shift+Click relaunch)
+  showConfigManager: string | false;
+  showThinkingPanel: boolean;
+  replaceSessionId: string | null; // Session to close when launcher launches (Ctrl+Click relaunch)
   pastSessions: PastSession[];
   pastSessionsLoading: boolean;
+  sessionNames: Record<string, string>;
+  sessionConfigs: Record<string, Partial<SessionConfig>>;
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -63,9 +68,13 @@ interface SettingsState {
   recordCommandUsage: (command: string) => void;
   setSlashCommands: (cmds: SlashCommand[]) => void;
   setReplaceSessionId: (id: string | null) => void;
-  setShowHooksManager: (show: boolean) => void;
+  setShowConfigManager: (show: string | false) => void;
+  setShowThinkingPanel: (show: boolean) => void;
   bootstrapCommandUsage: () => Promise<void>;
+  setSessionName: (id: string, name: string) => void;
+  cacheSessionConfig: (id: string, config: SessionConfig) => void;
   loadPastSessions: () => Promise<void>;
+  loadBinarySettingsSchema: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -81,13 +90,17 @@ export const useSettingsStore = create<SettingsState>()(
       cliVersion: null,
       previousCliVersion: null,
       cliCapabilities: { models: [], permissionModes: [], flags: [], options: [], commands: [] },
+      binarySettingsSchema: [],
       slashCommands: [],
       commandUsage: {},
       commandUsageBootstrapped: false,
-      showHooksManager: false,
+      showConfigManager: false,
+      showThinkingPanel: false,
       replaceSessionId: null,
       pastSessions: [],
       pastSessionsLoading: false,
+      sessionNames: {},
+      sessionConfigs: {},
 
       addRecentDir: (dir) =>
         set((s) => {
@@ -163,7 +176,8 @@ export const useSettingsStore = create<SettingsState>()(
         })),
 
       setSlashCommands: (cmds) => set({ slashCommands: cmds }),
-      setShowHooksManager: (show) => set({ showHooksManager: show }),
+      setShowConfigManager: (show) => set({ showConfigManager: show }),
+      setShowThinkingPanel: (show) => set({ showThinkingPanel: show }),
       bootstrapCommandUsage: async () => {
         try {
           const scanned = await invoke<Record<string, number>>("scan_command_usage");
@@ -179,13 +193,50 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       setReplaceSessionId: (id) => set({ replaceSessionId: id }),
+      setSessionName: (id, name) =>
+        set((s) => ({
+          sessionNames: { ...s.sessionNames, [id]: name },
+        })),
+      cacheSessionConfig: (id, config) =>
+        set((s) => {
+          // Store only non-default fields to keep entries small
+          const partial: Partial<SessionConfig> = {};
+          if (config.model) partial.model = config.model;
+          if (config.permissionMode !== "default") partial.permissionMode = config.permissionMode;
+          if (config.effort) partial.effort = config.effort;
+          if (config.agent) partial.agent = config.agent;
+          if (config.maxBudget !== null) partial.maxBudget = config.maxBudget;
+          if (config.runMode) partial.runMode = config.runMode;
+          if (Object.keys(partial).length === 0) return s;
+          return { sessionConfigs: { ...s.sessionConfigs, [id]: partial } };
+        }),
       loadPastSessions: async () => {
         set({ pastSessionsLoading: true });
         try {
           const sessions = await invoke<PastSession[]>("list_past_sessions");
-          set({ pastSessions: sessions, pastSessionsLoading: false });
+          // Prune sessionNames and sessionConfigs to only IDs present in loaded sessions
+          const idSet = new Set(sessions.map((s) => s.id));
+          set((prev) => {
+            const names: Record<string, string> = {};
+            for (const [k, v] of Object.entries(prev.sessionNames)) {
+              if (idSet.has(k)) names[k] = v;
+            }
+            const configs: Record<string, Partial<SessionConfig>> = {};
+            for (const [k, v] of Object.entries(prev.sessionConfigs)) {
+              if (idSet.has(k)) configs[k] = v;
+            }
+            return { pastSessions: sessions, pastSessionsLoading: false, sessionNames: names, sessionConfigs: configs };
+          });
         } catch {
           set({ pastSessionsLoading: false });
+        }
+      },
+      loadBinarySettingsSchema: async () => {
+        try {
+          const fields = await invoke<BinarySettingField[]>("discover_settings_schema");
+          set({ binarySettingsSchema: fields });
+        } catch {
+          // Binary scan failed — no problem, CLI help + static fields still work
         }
       },
     }),
@@ -203,8 +254,11 @@ export const useSettingsStore = create<SettingsState>()(
         cliVersion: state.cliVersion,
         previousCliVersion: state.previousCliVersion,
         cliCapabilities: state.cliCapabilities,
+        binarySettingsSchema: state.binarySettingsSchema,
         commandUsage: state.commandUsage,
         commandUsageBootstrapped: state.commandUsageBootstrapped,
+        sessionNames: state.sessionNames,
+        sessionConfigs: state.sessionConfigs,
       }),
     }
   )

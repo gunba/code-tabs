@@ -57,6 +57,15 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         onClose();
       },
     }] : []),
+    {
+      id: "toggle-debug-log",
+      label: "Toggle Debug Log",
+      description: "Show/hide the debug log panel (Ctrl+Shift+D)",
+      action: () => {
+        onClose();
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "D", ctrlKey: true, shiftKey: true, bubbles: true }));
+      },
+    },
     ...sessions.map((s) => ({
       id: `tab-${s.id}`,
       label: `Switch to: ${s.name}`,

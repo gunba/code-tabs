@@ -51,9 +51,6 @@ export interface TestState {
   cliVersion: string | null;
   lastCommandResult?: unknown;
   consoleLogs: string[];
-  feedEntryCount: number;
-  feedLastEntry: unknown;
-  feedTracking: unknown;
 }
 
 function captureState(lastResult?: unknown): TestState {
@@ -100,9 +97,6 @@ function captureState(lastResult?: unknown): TestState {
     cliVersion: settings.cliVersion,
     lastCommandResult: lastResult,
     consoleLogs: (globalThis as Record<string, unknown>).__consoleLogs as string[] ?? [],
-    feedEntryCount: (globalThis as Record<string, unknown>).__feedEntryCount as number ?? 0,
-    feedLastEntry: (globalThis as Record<string, unknown>).__feedLastEntry ?? null,
-    feedTracking: (globalThis as Record<string, unknown>).__feedTracking ?? null,
   };
 }
 
@@ -238,27 +232,46 @@ async function pollCommands(): Promise<void> {
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
-// Set up log interception IMMEDIATELY (module load time, before any hooks run)
-const __logs: string[] = [];
-const __origLog = console.log;
-const __origTrace = console.trace;
-console.log = (...args: unknown[]) => {
+// Set up log interception IMMEDIATELY (module load time, before any hooks run).
+// Captures console.log/warn/error/trace with timestamps and severity.
+const logBuffer: string[] = [];
+const origLog = console.log;
+const origWarn = console.warn;
+const origError = console.error;
+const origTrace = console.trace;
+const MAX_LOG_BUFFER = 500;
+
+function formatTimestamp(): string {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  return `${hh}:${mm}:${ss}.${ms}`;
+}
+
+function pushLog(severity: string, args: unknown[]): void {
   const msg = args.map(String).join(" ");
-  if (msg.includes("[terminal]") || msg.includes("[TerminalPanel]") || msg.includes("[pty]") || msg.includes("[useClaudeState]")) {
-    __logs.push(msg);
-    if (__logs.length > 200) __logs.shift();
-  }
-  (globalThis as Record<string, unknown>).__consoleLogs = __logs;
-  __origLog.apply(console, args);
+  logBuffer.push(`[${formatTimestamp()}] [${severity}] ${msg}`);
+  if (logBuffer.length > MAX_LOG_BUFFER) logBuffer.shift();
+  (globalThis as Record<string, unknown>).__consoleLogs = logBuffer;
+}
+
+console.log = (...args: unknown[]) => {
+  pushLog("LOG", args);
+  origLog.apply(console, args);
+};
+console.warn = (...args: unknown[]) => {
+  pushLog("WARN", args);
+  origWarn.apply(console, args);
+};
+console.error = (...args: unknown[]) => {
+  pushLog("ERR", args);
+  origError.apply(console, args);
 };
 console.trace = (...args: unknown[]) => {
-  const msg = args.map(String).join(" ");
-  if (msg.includes("[terminal]")) {
-    __logs.push(msg + " (trace)");
-    if (__logs.length > 200) __logs.shift();
-  }
-  (globalThis as Record<string, unknown>).__consoleLogs = __logs;
-  __origTrace.apply(console, args);
+  pushLog("LOG", args);
+  origTrace.apply(console, args);
 };
 
 export function startTestHarness(): void {

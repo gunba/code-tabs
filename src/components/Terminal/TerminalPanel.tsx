@@ -2,13 +2,13 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTerminal } from "../../hooks/useTerminal";
 import { usePty } from "../../hooks/usePty";
-import { useClaudeState } from "../../hooks/useClaudeState";
-import { useSubagentWatcher } from "../../hooks/useSubagentWatcher";
 import { useSessionStore } from "../../store/sessions";
-import { useSettingsStore } from "../../store/settings";
-import { buildClaudeArgs, getResumeId } from "../../lib/claude";
+import { buildClaudeArgs, getResumeId, formatTokenCount } from "../../lib/claude";
+import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, registerInspectorCallbacks, unregisterInspectorCallbacks } from "../../lib/inspectorPort";
+import { useInspectorState } from "../../hooks/useInspectorState";
 import { registerPtyWriter, unregisterPtyWriter } from "../../lib/ptyRegistry";
 import { registerBufferReader, unregisterBufferReader } from "../../lib/terminalRegistry";
+import { useSettingsStore } from "../../store/settings";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalPanel.css";
@@ -18,40 +18,80 @@ interface TerminalPanelProps {
   visible: boolean;
 }
 
-// ── State Banner ────────────────────────────────────────────────────────
-// Low-text: icon-first, tool name is acceptable (it's a value)
+// ── Dead Session Overlay ─────────────────────────────────────────────────
 
-function StateBanner({ session }: { session: Session }) {
-  const tool = session.metadata.currentToolName;
+interface DeadOverlayProps {
+  session: Session;
+  triggerRespawnRef: React.RefObject<(config?: SessionConfig, name?: string) => void>;
+  closeSession: (id: string) => void;
+}
 
-  let content: { icon: string; text: string | null; className: string } | null;
-  switch (session.state) {
-    case "thinking":
-      content = { icon: "●", text: null, className: "banner-thinking" };
-      break;
-    case "toolUse":
-      content = {
-        icon: "⚙",
-        text: tool || null,
-        className: `banner-tool banner-tool-${(tool || "").toLowerCase()}`,
-      };
-      break;
-    case "waitingPermission":
-      content = { icon: "⏸", text: null, className: "banner-permission" };
-      break;
-    case "error":
-      content = { icon: "⚠", text: null, className: "banner-error" };
-      break;
-    default:
-      content = null;
+function DeadOverlay({ session, triggerRespawnRef, closeSession }: DeadOverlayProps) {
+  if (session.config.runMode) {
+    return (
+      <div className="dead-overlay dead-overlay-run">
+        <div className="dead-overlay-card">
+          <div className="dead-overlay-title">Command complete</div>
+          <div className="dead-overlay-actions">
+            <button className="dead-overlay-btn" onClick={() => closeSession(session.id)}>
+              Close tab
+            </button>
+          </div>
+          <div className="dead-overlay-hint">
+            <kbd>Ctrl+W</kbd> close
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  if (!content) return null;
-
+  const canResume = !!session.metadata.nodeSummary || !!session.config.resumeSession;
   return (
-    <div className={`state-banner ${content.className}`}>
-      <span className="banner-icon">{content.icon}</span>
-      {content.text && <span>{content.text}</span>}
+    <div className="dead-overlay">
+      <div className="dead-overlay-card">
+        <div className="dead-overlay-title">Session ended</div>
+        <div className="dead-overlay-actions">
+          {canResume && (
+            <button
+              className="dead-overlay-btn dead-overlay-btn-primary"
+              onClick={() => triggerRespawnRef.current()}
+            >
+              Resume
+            </button>
+          )}
+          <button
+            className="dead-overlay-btn"
+            onClick={() => {
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true }));
+            }}
+          >
+            Resume other...
+          </button>
+        </div>
+        <div className="dead-overlay-actions">
+          <button
+            className="dead-overlay-btn"
+            onClick={() => {
+              const freshConfig: SessionConfig = {
+                ...session.config,
+                resumeSession: null,
+                continueSession: false,
+                sessionId: null,
+              };
+              triggerRespawnRef.current(freshConfig);
+            }}
+          >
+            New session
+          </button>
+        </div>
+        <div className="dead-overlay-hint">
+          {canResume ? (
+            <><kbd>Enter</kbd> resume &middot; <kbd>Ctrl+R</kbd> browse</>
+          ) : (
+            <><kbd>Ctrl+R</kbd> browse</>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -60,7 +100,7 @@ function StateBanner({ session }: { session: Session }) {
 
 const ACTIVE_STATES = new Set<SessionState>(["thinking", "toolUse", "waitingPermission", "error"]);
 
-function useDurationTimer(sessionId: string, state: SessionState) {
+function useDurationTimer(sessionId: string, state: SessionState): void {
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
   const accumulatedRef = useRef(0);
   const lastTickRef = useRef(Date.now());
@@ -86,8 +126,6 @@ function useDurationTimer(sessionId: string, state: SessionState) {
 
     return () => clearInterval(interval);
   }, [sessionId, state === "dead", updateMetadata]);
-
-  return Math.floor(accumulatedRef.current);
 }
 
 // ── Terminal Panel ──────────────────────────────────────────────────────
@@ -97,93 +135,66 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const updateState = useSessionStore((s) => s.updateState);
   const updateConfig = useSessionStore((s) => s.updateConfig);
   const renameSession = useSessionStore((s) => s.renameSession);
-  const updateMetadata = useSessionStore((s) => s.updateMetadata);
   const respawnRequest = useSessionStore((s) => s.respawnRequest);
   const clearRespawnRequest = useSessionStore((s) => s.clearRespawnRequest);
+  const killRequest = useSessionStore((s) => s.killRequest);
+  const clearKillRequest = useSessionStore((s) => s.clearKillRequest);
   const closeSession = useSessionStore((s) => s.closeSession);
+  const hookChangeCounter = useSessionStore((s) => s.hookChangeCounter);
   const spawnedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const isResumed = !!session.config.resumeSession;
-  const watchedJsonlIdRef = useRef(getResumeId(session));
   const [respawnCounter, setRespawnCounter] = useState(0);
-  const [hasConversation, setHasConversation] = useState(false);
-  const spawnTimestampRef = useRef(Date.now());
-  const resumePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stopResumePolling = useCallback(() => {
-    if (resumePollingRef.current) { clearInterval(resumePollingRef.current); resumePollingRef.current = null; }
-  }, []);
+  const [inspectorReconnectKey, setInspectorReconnectKey] = useState(0);
 
-  // Switch JSONL watcher to a new session file (plan mode, /resume detection)
-  // resumed=true suppresses updates until caught-up (for /resume with history)
-  // resumed=false starts caught-up immediately (for plan-mode continuation with fresh file)
-  const switchJsonlWatcher = useCallback((newJsonlId: string, resumed = true) => {
-    invoke("stop_jsonl_watcher", { sessionId: session.id }).catch(() => {});
-    claudeState.reset(resumed);
-    invoke("start_jsonl_watcher", {
-      sessionId: session.id,
-      workingDir: session.config.workingDir,
-      jsonlSessionId: newJsonlId,
+  // Inspector: allocate port once per session. Always allocate — we spawn the PTY
+  // even for resumed sessions, so BUN_INSPECT is always available.
+  // Uses -1 sentinel to call allocateInspectorPort() only once (it has side effects).
+  const inspectorPortRef = useRef<number | null>(-1);
+  if (inspectorPortRef.current === -1) {
+    inspectorPortRef.current = allocateInspectorPort();
+  }
+  const inspector = useInspectorState(
+    session.state !== "dead" ? session.id : null,
+    inspectorPortRef.current,
+    inspectorReconnectKey
+  );
+
+  // Register inspector disconnect/reconnect callbacks for external debugger support
+  useEffect(() => {
+    registerInspectorCallbacks(session.id, {
+      disconnect: inspector.disconnect,
+      reconnect: () => setInspectorReconnectKey((k) => k + 1),
     });
-    watchedJsonlIdRef.current = newJsonlId;
-    // Pick up tab name from matching dead tab
-    const sessions = useSessionStore.getState().sessions;
-    const match = sessions.find((s) =>
-      s.state === "dead" && s.id !== session.id && getResumeId(s) === newJsonlId
-    );
-    if (match?.metadata.nodeSummary) {
-      renameSession(session.id, match.name);
-      updateMetadata(session.id, { nodeSummary: match.metadata.nodeSummary });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id, session.config.workingDir, renameSession, updateMetadata]);
+    return () => unregisterInspectorCallbacks(session.id);
+  }, [session.id, inspector.disconnect]);
 
-  // When a result event fires (conversation ended) but the PTY is still alive,
-  // check if Claude forked into a new JSONL file (plan mode, continuation).
-  // The new file's first events reference the old sessionId — this is how we link them.
-  const handleConversationEnd = useCallback(() => {
-    if (session.config.runMode) return;
-    if (session.state === "dead") return;
-    invoke<string | null>("find_continuation_session", {
-      sessionId: watchedJsonlIdRef.current,
-      workingDir: session.config.workingDir,
-    }).then((newJsonlId) => {
-      if (newJsonlId && newJsonlId !== watchedJsonlIdRef.current) {
-        // Plan-mode continuation: fresh JSONL file, no history to replay
-        switchJsonlWatcher(newJsonlId, false);
-        return;
-      }
-      // No continuation found — might be /resume, check latest JSONL after short delay
-      setTimeout(() => {
-        invoke<string>("find_active_jsonl_session", {
-          workingDir: session.config.workingDir,
-          sinceMs: spawnTimestampRef.current,
-        }).then((latestId) => {
-          if (latestId && latestId !== watchedJsonlIdRef.current) {
-            switchJsonlWatcher(latestId);
-          }
-        }).catch(() => {});
-      }, 2000);
-    }).catch(() => {});
-  }, [session.state, session.config.workingDir, switchJsonlWatcher]);
-
-  const handleCaughtUp = useCallback(() => setLoading(false), []);
-  const claudeState = useClaudeState(session.id, isResumed, { onConversationEnd: handleConversationEnd, onCaughtUp: handleCaughtUp });
-  const { feed } = claudeState;
-  const [loading, setLoading] = useState(isResumed);
+  const [loading, setLoading] = useState(!!session.config.resumeSession);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
   const [queuedInput, setQueuedInput] = useState<string | null>(null);
+  const lastHookChangeRef = useRef(hookChangeCounter);
 
-  // Start subagent JSONL watcher — uses the app's session ID directly.
-  // For new sessions: --session-id matches, subagents go under our ID's dir.
-  // For resumed sessions: subagents from the NEW conversation go under the new ID.
-  // Pass resumeSession as the JSONL session ID for subagent directory lookup.
-  // Subagents live under the CLI's session ID, not our internal app ID.
-  useSubagentWatcher(session.id, session.config.workingDir, session.config.resumeSession || session.config.sessionId || null);
+  // Hide loading spinner when inspector connects (session is running and responsive)
+  useEffect(() => {
+    if (loading && inspector.connected) setLoading(false);
+  }, [loading, inspector.connected]);
+
+  // Sync Claude's internal session ID into config for persistence (plan-mode forks, compaction)
+  useEffect(() => {
+    if (inspector.claudeSessionId && inspector.claudeSessionId !== session.config.sessionId) {
+      updateConfig(session.id, { sessionId: inspector.claudeSessionId });
+    }
+  }, [inspector.claudeSessionId, session.id, session.config.sessionId, updateConfig]);
+
+  // Cache session config when inspector connects (for resume picker fallback)
+  useEffect(() => {
+    if (inspector.connected) {
+      useSettingsStore.getState().cacheSessionConfig(getResumeId(session), session.config);
+    }
+  }, [inspector.connected, session.id]);
 
   // Duration timer
   useDurationTimer(session.id, session.state);
-
-  const decoder = useRef(new TextDecoder());
 
   // Use a ref to break the circular dependency:
   // handlePtyData needs terminal, terminal needs handleTermData, which needs pty,
@@ -195,11 +206,21 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const bgBufferRef = useRef<Uint8Array[]>([]);
   visibleRef.current = visible;
 
+  // Detect "session already in use" errors in early PTY output
+  const earlyOutputRef = useRef("");
+  const sessionInUseRef = useRef(false);
+  const sessionInUseRetried = useRef(false);
+
   const handlePtyData = useCallback(
     (data: Uint8Array) => {
-      const text = decoder.current.decode(data, { stream: true });
-      // Always feed text for JSONL state/permission detection regardless of visibility
-      feed(text);
+      // Accumulate early output for error detection (first ~4KB)
+      if (earlyOutputRef.current.length < 4096) {
+        const text = new TextDecoder().decode(data);
+        earlyOutputRef.current += text;
+        if (/already in use/i.test(earlyOutputRef.current)) {
+          sessionInUseRef.current = true;
+        }
+      }
       // Only write to xterm.js if the tab is visible; buffer otherwise
       if (visibleRef.current) {
         terminalRef.current?.writeBytes(data);
@@ -207,11 +228,42 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         bgBufferRef.current.push(data);
       }
     },
-    [feed]
+    []
   );
 
+  // External process holding the session — shown when user must confirm kill
+  const [externalHolder, setExternalHolder] = useState<number[] | null>(null);
+
   const handlePtyExit = useCallback(
-    (_info: { exitCode: number }) => {
+    (info: { exitCode: number }) => {
+      console.log(`[TerminalPanel] handlePtyExit session=${session.id} code=${info.exitCode}`);
+      // If the CLI exited because the session is already in use,
+      // try to kill stale orphans (our own descendants) and retry.
+      if (sessionInUseRef.current && !sessionInUseRetried.current) {
+        sessionInUseRef.current = false;
+        sessionInUseRetried.current = true;
+        earlyOutputRef.current = "";
+        const resumeId = getResumeId(session);
+
+        invoke<{ killed: number; external: number[] }>("kill_session_holder", { sessionId: resumeId })
+          .then((result) => {
+            if (result.external.length > 0 && result.killed === 0) {
+              // Held by external process — ask user before killing
+              setExternalHolder(result.external);
+              updateState(session.id, "dead");
+            } else {
+              // Killed our own orphans (or mixed) — retry
+              terminalRef.current?.write(
+                "\r\n\x1b[90m[Killed stale session, retrying...]\x1b[0m\r\n"
+              );
+              setTimeout(() => triggerRespawnRef.current(), 500);
+            }
+          })
+          .catch(() => {
+            updateState(session.id, "dead");
+          });
+        return;
+      }
       // Cascade dead state to all subagents so they get cleaned up from canvas
       const subagents = useSessionStore.getState().subagents.get(session.id) || [];
       const { updateSubagent } = useSessionStore.getState();
@@ -219,14 +271,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         updateSubagent(session.id, sub.id, { state: "dead" });
       }
       updateState(session.id, "dead");
-      // Check if session has conversation content for the overlay's Resume button
-      const resumeId = getResumeId(session);
-      invoke<boolean>("session_has_conversation", {
-        sessionId: resumeId,
-        workingDir: session.config.workingDir,
-      }).then((has) => { setHasConversation(has); }).catch(() => {});
     },
-    [session.id, session.config.resumeSession, session.config.sessionId, session.config.workingDir, updateState]
+    [session.id, session.config.resumeSession, session.config.sessionId, updateState]
   );
 
   const pty = usePty({ onData: handlePtyData, onExit: handlePtyExit });
@@ -235,17 +281,20 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const triggerRespawnRef = useRef<(config?: SessionConfig, name?: string) => void>(() => {});
   // Stable ref so callbacks can call triggerRespawn without stale closures
   triggerRespawnRef.current = (config?: SessionConfig, name?: string) => {
-    // 1. Clean up old PTY, watchers, and active polling
+    console.log(`[TerminalPanel] respawn triggered session=${session.id}`);
+    // 1. Clean up old PTY, watchers, and inspector
     pty.cleanup();
-    invoke("stop_jsonl_watcher", { sessionId: session.id }).catch(() => {});
-    invoke("stop_subagent_watcher", { sessionId: session.id }).catch(() => {});
+    inspector.disconnect();
     unregisterPtyWriter(session.id);
-    stopResumePolling();
+    unregisterInspectorPort(session.id);
+    useSessionStore.getState().setInspectorOff(session.id, false);
+    useSessionStore.getState().clearThinkingBlocks(session.id);
 
-    // 2. Determine config (default: resume same session)
+    // 2. Determine config (default: resume if conversation exists)
+    const canResume = !!session.metadata.nodeSummary || !!session.config.resumeSession;
     const newConfig: SessionConfig = config ?? {
       ...session.config,
-      resumeSession: hasConversation ? getResumeId(session) : null,
+      resumeSession: canResume ? getResumeId(session) : null,
       continueSession: false,
     };
 
@@ -257,45 +306,18 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     terminalRef.current?.write("\r\n\x1b[90m[Resuming...]\x1b[0m\r\n");
     setLoading(!!newConfig.resumeSession);
 
-    // 5. Reset internal state and JSONL accumulator
-    const isResume = !!newConfig.resumeSession;
+    // 5. Reset internal state and inspector port
     spawnedRef.current = false;
-    watchedJsonlIdRef.current = newConfig.resumeSession || newConfig.sessionId || session.id;
-    setHasConversation(false);
-    claudeState.reset(isResume);
-    spawnTimestampRef.current = Date.now();
+    earlyOutputRef.current = "";
+    sessionInUseRef.current = false;
+    sessionInUseRetried.current = false;
+    setExternalHolder(null);
+    inspectorPortRef.current = allocateInspectorPort();
 
     // 6. Trigger re-spawn
     updateState(session.id, "starting");
     setRespawnCounter((c) => c + 1);
   };
-
-  // Track user input for slash command detection
-  const inputBufRef = useRef("");
-  const recordCommandUsage = useSettingsStore((s) => s.recordCommandUsage);
-
-  // Start polling for JSONL session switch (after /resume command)
-  const startJsonlPolling = useCallback(() => {
-    if (resumePollingRef.current) return;
-    let elapsed = 0;
-    resumePollingRef.current = setInterval(() => {
-      elapsed += 3000;
-      if (elapsed > 30000) {
-        // Timeout — stop polling
-        stopResumePolling();
-        return;
-      }
-      invoke<string>("find_active_jsonl_session", {
-        workingDir: session.config.workingDir,
-        sinceMs: spawnTimestampRef.current,
-      }).then((latestId) => {
-        if (latestId && latestId !== watchedJsonlIdRef.current) {
-          switchJsonlWatcher(latestId);
-          stopResumePolling();
-        }
-      }).catch(() => {});
-    }, 3000);
-  }, [session.config.workingDir, switchJsonlWatcher, stopResumePolling]);
 
   const handleTermData = useCallback(
     (data: string) => {
@@ -307,29 +329,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         return;
       }
       pty.handle.current?.write(data);
-      // Buffer user input to detect slash commands typed directly in terminal
-      for (const ch of data) {
-        if (ch === "\r" || ch === "\n") {
-          const trimmed = inputBufRef.current.trim();
-          if (trimmed.startsWith("/") && trimmed.length >= 3 && !trimmed.includes(" ")) {
-            recordCommandUsage(trimmed);
-          }
-          // Detect /resume to start JSONL polling
-          if (trimmed === "/resume") {
-            startJsonlPolling();
-          }
-          inputBufRef.current = "";
-        } else if (ch === "\x7f" || ch === "\b") {
-          // Backspace
-          inputBufRef.current = inputBufRef.current.slice(0, -1);
-        } else if (ch >= " ") {
-          inputBufRef.current += ch;
-        }
-      }
     },
     // pty.handle is a stable ref — omitted from deps intentionally
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session.state, recordCommandUsage, startJsonlPolling]
+    [session.state]
   );
 
   const handleResize = useCallback(
@@ -356,7 +359,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     [terminal]
   );
 
-  // Spawn PTY once + start JSONL watcher (respawnCounter triggers re-spawn)
+  // Spawn PTY once (respawnCounter triggers re-spawn)
   useEffect(() => {
     if (spawnedRef.current || !claudePath) return;
 
@@ -367,20 +370,13 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         const { cols, rows } = terminal.getDimensions();
         // Normalize path slashes for Windows PTY spawn
         const cwd = session.config.workingDir.replace(/\//g, "\\");
-        const handle = pty.spawn(claudePath, args, cwd, cols, rows);
+        // Pass BUN_INSPECT env for inspector-based state detection
+        const inspPort = inspectorPortRef.current;
+        const env = inspPort ? { BUN_INSPECT: `ws://127.0.0.1:${inspPort}/0` } : undefined;
+        const handle = await pty.spawn(claudePath, args, cwd, cols, rows, env);
         registerPtyWriter(session.id, handle.write);
-        spawnTimestampRef.current = Date.now();
+        if (inspPort) registerInspectorPort(session.id, inspPort);
         updateState(session.id, "idle");
-
-        // Start JSONL file watcher for structured metadata (skip for run-mode).
-        // For resumed sessions, watch the original session's JSONL file.
-        if (!session.config.runMode) {
-          invoke("start_jsonl_watcher", {
-            sessionId: session.id,
-            workingDir: session.config.workingDir,
-            jsonlSessionId: session.config.resumeSession || null,
-          });
-        }
       } catch (err) {
         console.error("Failed to spawn PTY:", err);
         updateState(session.id, "error");
@@ -401,15 +397,15 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id, terminal.getBufferText]);
 
-  // Cleanup PTY, JSONL watcher, and terminal registry on unmount
+  // Cleanup PTY and registries on unmount
   useEffect(() => {
     const id = session.id;
     return () => {
-      invoke("stop_jsonl_watcher", { sessionId: id });
       unregisterPtyWriter(id);
       unregisterBufferReader(id);
+      unregisterInspectorPort(id);
+      unregisterInspectorCallbacks(id);
       pty.cleanup();
-      stopResumePolling();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -421,6 +417,16 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       triggerRespawnRef.current(respawnRequest.config, respawnRequest.name);
     }
   }, [respawnRequest, session.state, session.id, clearRespawnRequest]);
+
+  // Watch for kill requests from the tab bar
+  useEffect(() => {
+    if (killRequest === session.id && session.state !== "dead") {
+      clearKillRequest();
+      console.log(`[TerminalPanel] kill effect triggered for session=${session.id}`);
+      pty.cleanup();
+      // pty.kill() fires exitCallback → handlePtyExit → state "dead"
+    }
+  }, [killRequest, session.id, session.state, clearKillRequest, pty]);
 
   // Re-fit and focus when becoming visible — only depends on visible and session.id.
   // terminal is NOT in deps because useTerminal returns a new object on every render,
@@ -465,18 +471,17 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // Queue input handler: capture typed text, or cancel if already queued
+  // Queue input handler: read from xterm.js buffer (authoritative), or cancel if already queued
   const handleQueueInput = useCallback(() => {
     if (queuedInput) {
       setQueuedInput(null);
       return;
     }
-    const text = inputBufRef.current.trim();
+    const text = terminalRef.current?.getCurrentInput() ?? "";
     if (!text) return;
-    inputBufRef.current = "";
     pty.handle.current?.write("\x15"); // Clear terminal input line
     setQueuedInput(text);
-    // pty.handle is a stable ref — omitted from deps intentionally
+    // pty.handle and terminalRef are stable refs — omitted from deps intentionally
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queuedInput]);
 
@@ -494,10 +499,25 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.state, queuedInput]);
 
+  // Auto-restart session when hooks change, same timing as queued input
+  useEffect(() => {
+    if (hookChangeCounter <= lastHookChangeRef.current) return;
+    if (session.state === "dead") { lastHookChangeRef.current = hookChangeCounter; return; }
+    if (session.state !== "idle") return;
+    const timer = setTimeout(() => {
+      lastHookChangeRef.current = hookChangeCounter;
+      triggerRespawnRef.current();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [session.state, hookChangeCounter]);
+
   // Poll scroll position to show/hide scroll-to-bottom button
   useEffect(() => {
     if (!visible) return;
-    const check = () => setShowScrollBtn(!terminal.isAtBottom());
+    const check = () => {
+      setShowScrollBtn(!terminal.isAtBottom());
+      setShowScrollTopBtn(!terminal.isAtTop());
+    };
     const interval = setInterval(check, 300);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -515,7 +535,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         const active = document.activeElement;
         if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) return;
         // Don't reclaim focus if a modal overlay is open
-        if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .hooks-overlay, .palette-overlay')) return;
+        if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .modal-overlay, .palette-overlay')) return;
         terminal.termRef.current?.focus();
       });
     };
@@ -530,110 +550,160 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   }, [visible, session.id]);
 
   const showDeadOverlay = session.state === "dead" && visible;
+  const showButtonBar = visible && session.state !== "dead";
+
+  // Ctrl+middle-mouse: scroll to last user message
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !visible) return;
+    const handler = (ev: MouseEvent) => {
+      if (ev.button === 1 && ev.ctrlKey) {
+        ev.preventDefault();
+        terminal.scrollToLastUserMessage();
+      }
+    };
+    el.addEventListener("mousedown", handler);
+    return () => el.removeEventListener("mousedown", handler);
+    // terminal.scrollToLastUserMessage is a stable useCallback — safe in deps
+  }, [visible, terminal.scrollToLastUserMessage]);
+
+  const totalTokens = session.metadata.inputTokens + session.metadata.outputTokens;
 
   return (
     <div
       className="terminal-panel"
       style={{ display: visible ? "flex" : "none" }}
     >
-      <StateBanner session={session} />
       {loading && visible && (
         <div className="terminal-loading">
           <div className="terminal-loading-spinner" />
           <span>Loading conversation...</span>
         </div>
       )}
-      <div className="terminal-container" ref={setContainer} />
-      {showDeadOverlay && session.config.runMode && (
-        <div className="dead-overlay dead-overlay-run">
-          <div className="dead-overlay-card">
-            <div className="dead-overlay-title">Command complete</div>
-            <div className="dead-overlay-actions">
-              <button className="dead-overlay-btn" onClick={() => closeSession(session.id)}>
-                Close tab
-              </button>
-            </div>
-            <div className="dead-overlay-hint">
-              <kbd>Ctrl+W</kbd> close
-            </div>
-          </div>
+      {visible && session.state !== "dead" && totalTokens > 0 && (
+        <div
+          className="terminal-token-badge"
+          title={`Input: ${formatTokenCount(session.metadata.inputTokens)}\nOutput: ${formatTokenCount(session.metadata.outputTokens)}`}
+        >
+          {formatTokenCount(totalTokens)}
         </div>
       )}
-      {showDeadOverlay && !session.config.runMode && (
+      <div className="terminal-inner">
+        <div className="terminal-container" ref={setContainer} />
+        {showButtonBar && (
+          <div className="terminal-button-bar">
+            <button
+              className="bar-btn"
+              style={{ visibility: showScrollTopBtn ? "visible" : "hidden" }}
+              onClick={() => terminal.scrollToTop()}
+              title="Scroll to top (Ctrl+Home)"
+              aria-label="Scroll to top"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="7" y1="12" x2="7" y2="3" />
+                <polyline points="3 6 7 2 11 6" />
+              </svg>
+            </button>
+            <button
+              className="bar-btn"
+              style={{ visibility: showScrollTopBtn ? "visible" : "hidden" }}
+              onClick={() => terminal.scrollToLastUserMessage()}
+              title="Scroll to last user message (Ctrl+Middle-click)"
+              aria-label="Scroll to last user message"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 5 7 1 11 5" />
+                <line x1="7" y1="1" x2="7" y2="10" />
+                <line x1="3" y1="13" x2="11" y2="13" />
+              </svg>
+            </button>
+            <button
+              className="bar-btn"
+              onClick={() => pty.handle.current?.write("\x15")}
+              title="Clear input line (Ctrl+U)"
+              aria-label="Clear input line"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
+                <line x1="18" y1="9" x2="12" y2="15" />
+                <line x1="12" y1="9" x2="18" y2="15" />
+              </svg>
+            </button>
+            <button
+              className="bar-btn"
+              onClick={() => pty.handle.current?.write("\x15".repeat(20))}
+              title="Clear all input lines (Ctrl+Shift+U)"
+              aria-label="Clear all input lines"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
+                <line x1="18" y1="9" x2="12" y2="15" />
+                <line x1="12" y1="9" x2="18" y2="15" />
+                <line x1="2" y1="22" x2="22" y2="22" />
+              </svg>
+            </button>
+            <button
+              className={`bar-btn${queuedInput ? " bar-btn-active" : ""}`}
+              onClick={handleQueueInput}
+              title={queuedInput ? `Queued: "${queuedInput}" (click to cancel)` : "Queue input for idle send"}
+              aria-label="Queue input"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 3v5a2 2 0 0 1-2 2H4" />
+                <polyline points="6 8 4 10 6 12" />
+              </svg>
+            </button>
+            <div className="bar-spacer" />
+            <button
+              className="bar-btn"
+              style={{ visibility: showScrollBtn ? "visible" : "hidden" }}
+              onClick={() => terminal.scrollToBottom()}
+              title="Scroll to bottom (Ctrl+End)"
+              aria-label="Scroll to bottom"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="7" y1="2" x2="7" y2="11" />
+                <polyline points="3 8 7 12 11 8" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
+      {showDeadOverlay && externalHolder && (
         <div className="dead-overlay">
           <div className="dead-overlay-card">
-            <div className="dead-overlay-title">Session ended</div>
-            <div className="dead-overlay-actions">
-              {hasConversation && (
-                <button
-                  className="dead-overlay-btn dead-overlay-btn-primary"
-                  onClick={() => triggerRespawnRef.current()}
-                >
-                  Resume
-                </button>
-              )}
-              <button
-                className="dead-overlay-btn"
-                onClick={() => {
-                  // Trigger Ctrl+R — App.tsx handles opening the resume picker
-                  window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true }));
-                }}
-              >
-                Resume other...
-              </button>
+            <div className="dead-overlay-title">Session in use externally</div>
+            <div className="dead-overlay-hint" style={{ marginBottom: 8 }}>
+              This session is held by a process outside this app.
             </div>
             <div className="dead-overlay-actions">
               <button
-                className="dead-overlay-btn"
+                className="dead-overlay-btn dead-overlay-btn-primary"
                 onClick={() => {
-                  const freshConfig: SessionConfig = {
-                    ...session.config,
-                    resumeSession: null,
-                    continueSession: false,
-                    sessionId: null,
-                  };
-                  triggerRespawnRef.current(freshConfig);
+                  Promise.all(
+                    externalHolder.map((pid) =>
+                      invoke("force_kill_session_holder", { pid }).catch(() => {})
+                    )
+                  ).then(() => {
+                    setExternalHolder(null);
+                    setTimeout(() => triggerRespawnRef.current(), 500);
+                  });
                 }}
               >
-                New session
+                Kill and resume
               </button>
-            </div>
-            <div className="dead-overlay-hint">
-              {hasConversation ? (
-                <><kbd>Enter</kbd> resume &middot; <kbd>Ctrl+R</kbd> browse</>
-              ) : (
-                <><kbd>Ctrl+R</kbd> browse</>
-              )}
+              <button
+                className="dead-overlay-btn"
+                onClick={() => setExternalHolder(null)}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
       )}
-      {showScrollBtn && (
-        <button
-          className="scroll-to-bottom-btn"
-          onClick={() => terminal.scrollToBottom()}
-          title="Scroll to bottom"
-        >
-          ↓
-        </button>
-      )}
-      {!showScrollBtn && visible && session.state !== "dead" && (
-        <div className="clear-input-zone">
-          <button
-            className={`queue-input-btn${queuedInput ? " queue-input-btn-active" : ""}`}
-            onClick={handleQueueInput}
-            title={queuedInput ? `Queued: "${queuedInput}" (click to cancel)` : "Queue input for idle send"}
-          >
-            ⏎
-          </button>
-          <button
-            className="clear-input-btn"
-            onClick={() => pty.handle.current?.write("\x15")}
-            title="Clear input line (Ctrl+U)"
-          >
-            ⌫
-          </button>
-        </div>
+      {showDeadOverlay && !externalHolder && (
+        <DeadOverlay session={session} triggerRespawnRef={triggerRespawnRef} closeSession={closeSession} />
       )}
     </div>
   );

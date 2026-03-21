@@ -1,0 +1,111 @@
+.thinking-panel {
+  width: 350px;
+  min-width: 250px;
+  max-width: 50%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.thinking-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.thinking-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.thinking-panel-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.thinking-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.thinking-panel-close:hover {
+  color: var(--text-primary);
+}
+
+.thinking-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thinking-panel-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+  padding: 24px 12px;
+}
+
+.thinking-block {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.thinking-block-ts {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.thinking-block-text {
+  font-family: var(--font-mono, "SF Mono", "Cascadia Code", "Consolas", monospace);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.thinking-block-toggle {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-top: 4px;
+}
+
+.thinking-block-toggle:hover {
+  text-decoration: underline;
+}
+
+.thinking-block-redacted {
+  opacity: 0.6;
+}
+
+.thinking-block-redacted-text {
+  font-style: italic;
+  font-size: 11px;
+  color: var(--text-muted);
+}

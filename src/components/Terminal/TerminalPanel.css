@@ -49,188 +49,87 @@
   display: none !important;
 }
 
-/* Hide the legacy viewport scrollbar (v6 uses .xterm-scrollable-element instead).
-   Override the hardcoded background-color: #000 so the gap between the terminal
-   canvas and the container edge shows --term-bg instead of pure black. */
+/* Allow scroll tracking while hiding scrollbar visually.
+   overflow-y: scroll keeps viewport synced with xterm.js internal scroll state
+   (prevents desync on fast scroll-up). scrollbar-width: none hides it. */
 .terminal-container .xterm-viewport {
-  overflow: hidden !important;
+  overflow-y: scroll !important;
+  scrollbar-width: none;
   background-color: transparent !important;
 }
-
-/* ── Scroll-to-bottom button ──────────────────────────────────────── */
-
-.scroll-to-bottom-btn {
-  position: absolute;
-  bottom: 8px;
-  right: 28px;
-  z-index: 11;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 6px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 0.15s;
+.terminal-container .xterm-viewport::-webkit-scrollbar {
+  display: none;
 }
 
-.scroll-to-bottom-btn:hover {
-  opacity: 1;
-  background: var(--bg-surface-hover);
-  color: var(--text-primary);
-}
+/* ── Token badge overlay ─────────────────────────────────────────── */
 
-/* ── Clear input button ──────────────────────────────────────────── */
-
-/* Invisible hover zone that triggers the clear/queue buttons */
-.clear-input-zone {
+.terminal-token-badge {
   position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 115px;
-  height: 60px;
-  z-index: 11;
+  top: 6px;
+  left: 8px;
+  z-index: 10;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-surface) 70%, transparent);
+  padding: 1px 5px;
+  border-radius: 3px;
   pointer-events: none;
-}
-
-/* Shared styles for clear/queue buttons */
-.clear-input-btn,
-.queue-input-btn {
-  pointer-events: auto;
-  position: absolute;
-  bottom: 8px;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 6px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.clear-input-zone:hover .clear-input-btn,
-.clear-input-zone:hover .queue-input-btn {
   opacity: 0.6;
 }
 
-.clear-input-btn:hover,
-.queue-input-btn:hover {
-  opacity: 1 !important;
-  background: var(--bg-surface-hover);
-  color: var(--text-primary);
+/* ── Terminal inner flex wrapper ────────────────────────────────────── */
+
+.terminal-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
 }
 
-.clear-input-btn { right: 28px; }
-.queue-input-btn { right: 60px; }
+/* ── Vertical button bar ───────────────────────────────────────────── */
 
-.queue-input-btn-active {
-  opacity: 1 !important;
-  border-color: var(--accent);
+.terminal-button-bar {
+  display: flex;
+  flex-direction: column;
+  width: 28px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-left: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  padding: 2px 0;
+  gap: 2px;
+  align-items: center;
+}
+
+.bar-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.bar-btn:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+
+.bar-btn-active {
   color: var(--accent);
   animation: queue-pulse 1.5s ease-in-out infinite;
 }
 
+.bar-spacer { flex: 1; }
+
 @keyframes queue-pulse {
-  0%, 100% { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
-  50% { border-color: var(--accent); }
-}
-
-/* ── State Banner Overlay ──────────────────────────────────────────── */
-
-.state-banner {
-  position: absolute;
-  top: 6px;
-  right: 12px;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: 500;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.terminal-panel:hover .state-banner {
-  opacity: 0.7;
-}
-
-@keyframes bannerFadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.banner-icon {
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.banner-thinking {
-  background: color-mix(in srgb, var(--warning) 15%, transparent);
-  color: var(--warning);
-  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
-}
-
-.banner-tool {
-  background: color-mix(in srgb, var(--accent-secondary) 15%, transparent);
-  color: var(--accent-secondary);
-  border: 1px solid color-mix(in srgb, var(--accent-secondary) 30%, transparent);
-}
-
-/* Tool-specific banner colors */
-.banner-tool-bash {
-  background: color-mix(in srgb, var(--success) 15%, transparent);
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 30%, transparent);
-}
-
-.banner-tool-write,
-.banner-tool-edit {
-  background: color-mix(in srgb, var(--accent-tertiary) 15%, transparent);
-  color: var(--accent-tertiary);
-  border-color: color-mix(in srgb, var(--accent-tertiary) 30%, transparent);
-}
-
-.banner-tool-read,
-.banner-tool-glob,
-.banner-tool-grep {
-  background: color-mix(in srgb, var(--accent-secondary) 15%, transparent);
-  color: var(--accent-secondary);
-  border-color: color-mix(in srgb, var(--accent-secondary) 30%, transparent);
-}
-
-.banner-tool-agent {
-  background: color-mix(in srgb, var(--accent-tertiary) 15%, transparent);
-  color: var(--accent-tertiary);
-  border-color: color-mix(in srgb, var(--accent-tertiary) 30%, transparent);
-}
-
-.banner-permission {
-  background: color-mix(in srgb, var(--permission) 15%, transparent);
-  color: var(--permission);
-  border: 1px solid color-mix(in srgb, var(--permission) 30%, transparent);
-  animation: bannerFadeIn 0.2s ease, pulse-border 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-border {
-  0%, 100% { border-color: color-mix(in srgb, var(--permission) 30%, transparent); }
-  50% { border-color: color-mix(in srgb, var(--permission) 70%, transparent); }
-}
-
-.banner-error {
-  background: color-mix(in srgb, var(--error) 15%, transparent);
-  color: var(--error);
-  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+  0%, 100% { color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  50% { color: var(--accent); }
 }
 
 /* ── Dead Session Overlay ──────────────────────────────────────────── */

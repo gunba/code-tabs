@@ -1,0 +1,1078 @@
+{
+  "file": "DOCS/FEATURES.md",
+  "all_tags": [
+    "CB-01",
+    "CB-02",
+    "CB-03",
+    "CB-04",
+    "CB-05",
+    "CB-06",
+    "CB-07",
+    "CB-08",
+    "CM-01",
+    "CM-02",
+    "CM-03",
+    "CM-04",
+    "CM-05",
+    "CM-06",
+    "CM-07",
+    "CM-08",
+    "CM-09",
+    "CM-10",
+    "CM-11",
+    "CM-12",
+    "CM-13",
+    "CM-14",
+    "CM-15",
+    "CM-16",
+    "CM-17",
+    "DP-01",
+    "DP-02",
+    "DP-03",
+    "DP-04",
+    "DP-05",
+    "DP-06",
+    "DP-07",
+    "DP-08",
+    "DP-09",
+    "DP-10",
+    "DP-11",
+    "DP-12",
+    "DS-01",
+    "DS-02",
+    "DS-03",
+    "DS-04",
+    "DS-05",
+    "DS-06",
+    "DS-07",
+    "HM-01",
+    "HM-02",
+    "HM-03",
+    "HM-04",
+    "HM-05",
+    "HM-06",
+    "HM-07",
+    "HM-08",
+    "HM-09",
+    "KB-01",
+    "KB-02",
+    "KB-03",
+    "KB-04",
+    "KB-05",
+    "KB-06",
+    "KB-07",
+    "KB-08",
+    "KB-09",
+    "KB-10",
+    "MO-01",
+    "SL-01",
+    "SL-02",
+    "SL-03",
+    "SL-04",
+    "SL-05",
+    "SL-06",
+    "SL-07",
+    "SL-08",
+    "SL-09",
+    "SL-10",
+    "SL-11",
+    "SL-12",
+    "SL-13",
+    "SL-14",
+    "SL-15",
+    "SL-16",
+    "SR-01",
+    "SR-02",
+    "SR-03",
+    "SR-04",
+    "SR-05",
+    "TB-01",
+    "TB-02",
+    "TB-03",
+    "TB-04",
+    "TB-05",
+    "TB-06",
+    "TB-07",
+    "TB-08",
+    "TB-09",
+    "TB-10",
+    "TB-11",
+    "TB-12",
+    "TB-13",
+    "TB-14",
+    "TB-15",
+    "TB-16",
+    "TB-17",
+    "TB-18",
+    "TB-19",
+    "TB-20",
+    "TB-21",
+    "TP-01",
+    "TP-02",
+    "TP-03",
+    "TP-04",
+    "TP-05",
+    "TP-06",
+    "TP-07",
+    "TP-08",
+    "TP-09",
+    "TP-10",
+    "TP-11",
+    "TP-12",
+    "TR-01",
+    "TR-02",
+    "TR-03",
+    "TR-04",
+    "TR-05",
+    "TR-06",
+    "TR-07",
+    "TR-08",
+    "TR-09",
+    "WN-01",
+    "WN-02"
+  ],
+  "unchecked": [
+    "CB-05",
+    "CB-06",
+    "CB-07",
+    "CM-01",
+    "CM-02",
+    "CM-03",
+    "CM-04",
+    "CM-05",
+    "CM-06",
+    "CM-07",
+    "CM-12",
+    "CM-13",
+    "CM-14",
+    "CM-15",
+    "CM-16",
+    "CM-17",
+    "DP-01",
+    "DP-03",
+    "DP-04",
+    "DP-05",
+    "DP-06",
+    "DP-07",
+    "DP-09",
+    "DP-10",
+    "DP-11",
+    "DP-12",
+    "DS-01",
+    "DS-02",
+    "DS-03",
+    "DS-05",
+    "DS-06",
+    "DS-07",
+    "HM-03",
+    "HM-04",
+    "HM-05",
+    "HM-06",
+    "HM-07",
+    "HM-08",
+    "HM-09",
+    "KB-01",
+    "KB-02",
+    "KB-04",
+    "KB-05",
+    "KB-09",
+    "MO-01",
+    "SL-04",
+    "SL-07",
+    "SL-08",
+    "SL-09",
+    "SL-12",
+    "SL-13",
+    "SL-15",
+    "SL-16",
+    "SR-01",
+    "SR-02",
+    "SR-05",
+    "TB-02",
+    "TB-03",
+    "TB-04",
+    "TB-05",
+    "TB-06",
+    "TB-07",
+    "TB-08",
+    "TB-09",
+    "TB-10",
+    "TB-11",
+    "TB-12",
+    "TB-13",
+    "TB-14",
+    "TB-15",
+    "TB-16",
+    "TB-18",
+    "TB-19",
+    "TB-20",
+    "TB-21",
+    "TP-01",
+    "TP-02",
+    "TP-03",
+    "TP-05",
+    "TP-06",
+    "TP-07",
+    "TP-08",
+    "TP-09",
+    "TP-10",
+    "TP-11",
+    "TR-01",
+    "TR-04",
+    "TR-05",
+    "TR-06",
+    "TR-07",
+    "TR-08",
+    "TR-09",
+    "WN-01"
+  ],
+  "citations": {
+    "CB-01": {
+      "up": 0,
+      "down": 0
+    },
+    "CB-02": {
+      "up": 0,
+      "down": 0
+    },
+    "CB-03": {
+      "up": 0,
+      "down": 0
+    },
+    "CB-04": {
+      "up": 0,
+      "down": 0
+    },
+    "CB-05": {
+      "up": 0,
+      "down": 0
+    },
+    "CB-06": {
+      "up": 0,
+      "down": 0
+    },
+    "CB-07": {
+      "up": 0,
+      "down": 0
+    },
+    "CB-08": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-01": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-02": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-03": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-04": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-05": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-06": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-07": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-08": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-09": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-10": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-01": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-02": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-03": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-04": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-05": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-06": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-07": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-08": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-09": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-10": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-11": {
+      "up": 0,
+      "down": 0
+    },
+    "DP-12": {
+      "up": 0,
+      "down": 0
+    },
+    "DS-01": {
+      "up": 0,
+      "down": 0
+    },
+    "DS-02": {
+      "up": 0,
+      "down": 0
+    },
+    "DS-03": {
+      "up": 0,
+      "down": 0
+    },
+    "DS-04": {
+      "up": 0,
+      "down": 0
+    },
+    "DS-05": {
+      "up": 0,
+      "down": 0
+    },
+    "DS-06": {
+      "up": 0,
+      "down": 0
+    },
+    "DS-07": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-01": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-02": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-03": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-04": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-05": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-06": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-07": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-08": {
+      "up": 0,
+      "down": 0
+    },
+    "HM-09": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-01": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-02": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-03": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-04": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-05": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-06": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-07": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-08": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-09": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-01": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-02": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-03": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-04": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-05": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-06": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-07": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-08": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-09": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-10": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-11": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-12": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-13": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-14": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-15": {
+      "up": 0,
+      "down": 0
+    },
+    "SL-16": {
+      "up": 0,
+      "down": 0
+    },
+    "SR-01": {
+      "up": 0,
+      "down": 0
+    },
+    "SR-02": {
+      "up": 0,
+      "down": 0
+    },
+    "SR-03": {
+      "up": 0,
+      "down": 0
+    },
+    "SR-04": {
+      "up": 0,
+      "down": 0
+    },
+    "SR-05": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-01": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-02": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-03": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-04": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-05": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-06": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-07": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-08": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-09": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-10": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-11": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-12": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-13": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-14": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-15": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-16": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-17": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-18": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-19": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-20": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-21": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-01": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-02": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-03": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-04": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-05": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-06": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-07": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-08": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-09": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-10": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-11": {
+      "up": 0,
+      "down": 0
+    },
+    "TP-12": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-01": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-02": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-03": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-04": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-05": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-06": {
+      "up": 0,
+      "down": 0
+    },
+    "WN-01": {
+      "up": 0,
+      "down": 0
+    },
+    "WN-02": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-07": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-08": {
+      "up": 0,
+      "down": 0
+    },
+    "TR-09": {
+      "up": 0,
+      "down": 0
+    },
+    "KB-10": {
+      "up": 0,
+      "down": 0
+    },
+    "MO-01": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-11": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-12": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-13": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-14": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-15": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-16": {
+      "up": 0,
+      "down": 0
+    },
+    "CM-17": {
+      "up": 0,
+      "down": 0
+    }
+  },
+  "cycle": 1,
+  "last_run": "2026-03-21T09:15:13.297579+00:00",
+  "metadata": {
+    "TB-22": {
+      "files": [
+        "src/App.tsx:1"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "TR-07": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:593",
+        "src/components/Terminal/TerminalPanel.css:91"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Button bar JSX starts at 593, CSS .terminal-button-bar at 91"
+    },
+    "TR-08": {
+      "files": [
+        "src/hooks/useTerminal.ts:265",
+        "src/components/Terminal/TerminalPanel.tsx:555"
+      ],
+      "verified": "2026-03-21",
+      "notes": "scrollToLastUserMessage callback moved to line 265"
+    },
+    "TR-09": {
+      "files": [
+        "src/hooks/useTerminal.ts:82"
+      ],
+      "verified": "2026-03-21",
+      "notes": "attachCustomWheelEventHandler at line 82"
+    },
+    "TR-10": {
+      "files": [
+        "src/hooks/useTerminal.ts:78"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "KB-10": {
+      "files": [
+        "src/hooks/useTerminal.ts:75"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Alt+digit block at line 75"
+    },
+    "MO-01": {
+      "files": [
+        "src/components/ModalOverlay/ModalOverlay.tsx:1",
+        "src/components/ModalOverlay/ModalOverlay.css:1"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "CM-11": {
+      "files": [
+        "src/components/ConfigManager/ConfigManager.tsx:14",
+        "src/store/settings.ts:49"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: 5 tabs (settings/claudemd/hooks/plugins/agents), 92vw max-1400px 88vh from CSS, showConfigManager is string|false controlling which tab opens"
+    },
+    "CM-12": {
+      "files": [
+        "src/components/ConfigManager/ThreePaneEditor.tsx:1",
+        "src/components/ConfigManager/ConfigManager.css:75"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "CM-13": {
+      "files": [
+        "src/components/ConfigManager/SettingsPane.tsx:1"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "CM-14": {
+      "files": [
+        "src/components/ConfigManager/MarkdownPane.tsx:1"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "CM-15": {
+      "files": [
+        "src/components/ConfigManager/HooksPane.tsx:1"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "CM-16": {
+      "files": [
+        "src/components/ConfigManager/PluginsPane.tsx:1"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "CM-17": {
+      "files": [
+        "src/components/StatusBar/StatusBar.tsx:143",
+        "src/store/settings.ts:49"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "CB-03": {
+      "files": [
+        "src-tauri/src/commands.rs:1029",
+        "src-tauri/src/commands.rs:1060",
+        "src/store/settings.ts:181"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: scan_command_usage caps at 200 files by mtime, scans JSONL for command-name patterns, bootstrapCommandUsage merges into commandUsage"
+    },
+    "CM-10": {
+      "files": [
+        "src/store/settings.ts:257",
+        "src/store/settings.ts:234"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: binarySettingsSchema persisted in localStorage via partialize; loadBinarySettingsSchema calls discover_settings_schema"
+    },
+    "SL-01": {
+      "files": [
+        "src/App.tsx:174",
+        "src/components/SessionLauncher/SessionLauncher.tsx:66"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: Ctrl+T clears resume/continue flags (App.tsx:180-182), SessionLauncher shows Resume or New based on config.resumeSession"
+    },
+    "SL-02": {
+      "files": [
+        "src/App.tsx:121",
+        "src/App.tsx:472",
+        "src/store/settings.ts:146"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: quickLaunch uses savedDefaults if set, else lastConfig; Ctrl+Click on + calls quickLaunch; savedDefaults strips one-shot fields"
+    },
+    "SR-03": {
+      "files": [
+        "src/hooks/useInspectorState.ts:148",
+        "src/hooks/useInspectorState.ts:21"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: processPollResult reads data.firstMsg into metadata.nodeSummary which is used for tab naming"
+    },
+    "SR-04": {
+      "files": [
+        "src/App.css:428",
+        "src/App.css:451",
+        "src/App.css:466",
+        "src/App.css:476"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: .subagent-card base=--bg-surface, .subagent-active=--bg-surface-hover + clay border-left, .subagent-idle=0.5 opacity, .subagent-icon=--accent"
+    },
+    "TB-17": {
+      "files": [
+        "src/App.tsx:631",
+        "src/App.tsx:632",
+        "src/App.tsx:633"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: Open Inspector opens debug.bun.sh URL via shellOpen, disconnects internal WS via disconnectInspectorForSession, marks inspectorOff"
+    },
+    "TP-12": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:291",
+        "src/store/sessions.ts:121"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: triggerRespawn calls clearThinkingBlocks; closeSession deletes thinkingBlocks Map entry"
+    },
+    "TR-02": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:583",
+        "src/components/Terminal/TerminalPanel.tsx:586"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: terminal-token-badge shown when visible, not dead, and totalTokens>0; tooltip shows input/output breakdown"
+    },
+    "WN-02": {
+      "files": [
+        "src-tauri/tauri.conf.json:21",
+        "src-tauri/tauri.conf.json:22"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: decorations:true and theme:Dark in tauri.conf.json windows config"
+    },
+    "KB-09": {
+      "files": [
+        "src/App.tsx:218"
+      ],
+      "verified": "2026-03-21",
+      "notes": "DRIFT: text says config->hooks->thinking->debug->resume but actual order is contextMenu->palette->debug->thinking->config->resume->launcher->inspector. hooks no longer separate modal."
+    },
+    "CM-01": {
+      "files": [
+        "src/components/ConfigManager/ConfigManager.tsx:30",
+        "src/App.tsx:207"
+      ],
+      "verified": "2026-03-21",
+      "notes": "DRIFT: says 720px modal but now 92vw/1400px/88vh. Superseded by CM-11."
+    },
+    "CM-02": {
+      "files": [
+        "src/components/ConfigManager/ConfigManager.tsx:18"
+      ],
+      "verified": "2026-03-21",
+      "notes": "DRIFT: says 3 tabs but now 5 tabs. Superseded by CM-11."
+    },
+    "CM-04": {
+      "files": [
+        "src/components/ModalOverlay/ModalOverlay.tsx:14"
+      ],
+      "verified": "2026-03-21",
+      "notes": "DRIFT: references .config-overlay but now .modal-overlay via ModalOverlay component."
+    },
+    "CM-05": {
+      "files": [
+        "src/components/ConfigManager/SettingsPane.tsx:1"
+      ],
+      "verified": "2026-03-21",
+      "notes": "DRIFT: describes form controls but now raw JSON textarea per CM-13."
+    },
+    "CM-06": {
+      "files": [
+        "src/components/ConfigManager/MarkdownPane.tsx:1"
+      ],
+      "verified": "2026-03-21",
+      "notes": "DRIFT: describes stacked view but now three-pane grid per CM-12/CM-14."
+    },
+    "CB-01": {
+      "files": [
+        "src/components/CommandBar/CommandBar.tsx:22"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: sort by count desc then alphabetical"
+    },
+    "CB-02": {
+      "files": [
+        "src/lib/claude.ts:113",
+        "src/lib/claude.ts:122"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: computeHeatLevel 0-3 tiers, getHeatStyle applies color-mix gradient"
+    },
+    "CB-04": {
+      "files": [
+        "src/components/CommandBar/CommandBar.tsx:67"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: normal click writes command+CR to PTY and records usage"
+    },
+    "CB-08": {
+      "files": [
+        "src/components/CommandBar/CommandBar.tsx:51"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: dead state sets queuedCommand to null"
+    },
+    "CM-08": {
+      "files": [
+        "src-tauri/src/commands.rs:1397",
+        "src-tauri/src/commands.rs:1408"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: read_config_file/write_config_file, JSON validated before write, parent dirs auto-created"
+    },
+    "DP-08": {
+      "files": [
+        "src/components/DebugPanel/DebugPanel.tsx:54",
+        "src/components/DebugPanel/DebugPanel.tsx:58"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: handleCopy copies filtered.join(newline), handleClear empties buffer"
+    },
+    "HM-01": {
+      "files": [
+        "src/components/ConfigManager/HooksPane.tsx:60",
+        "src-tauri/src/commands.rs:924",
+        "src-tauri/src/commands.rs:964"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: three scopes in HooksPane via ThreePaneEditor; Rust discover_hooks/save_hooks handle user/project/project-local"
+    },
+    "SL-03": {
+      "files": [
+        "src/components/ResumePicker/ResumePicker.tsx:66",
+        "src/components/ResumePicker/ResumePicker.css:19",
+        "src/components/ResumePicker/ResumePicker.css:94",
+        "src/components/ResumePicker/ResumePicker.css:131"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: 660px width, 520px max-height, ctrl-held blue top-bar+tint via box-shadow+bg"
+    },
+    "SL-10": {
+      "files": [
+        "src/components/SessionLauncher/SessionLauncher.tsx:157",
+        "src/components/SessionLauncher/SessionLauncher.tsx:493"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: sortedCliCommands by usage, computeHeatLevel+getHeatStyle applied"
+    },
+    "SL-11": {
+      "files": [
+        "src/components/SessionLauncher/SessionLauncher.tsx:124",
+        "src/components/SessionLauncher/SessionLauncher.tsx:41"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: filteredCliOptions excludes DEDICATED_FLAGS and NON_SESSION_FLAGS"
+    },
+    "SL-14": {
+      "files": [
+        "src/components/SessionLauncher/SessionLauncher.tsx:48",
+        "src/components/SessionLauncher/SessionLauncher.css:299"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Fixed: non-session flags are in collapsed Utility Commands section, not at start of grid"
+    },
+    "TR-03": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:626"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: SVG backspace icon (pointed rectangle path + X lines), Lucide/Feather style"
+    }
+  }
+}

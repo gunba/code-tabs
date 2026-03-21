@@ -1,13 +1,12 @@
 # Claude Tabs
 
-A desktop app for managing multiple Claude Code CLI sessions in tabs, with an IRC-style activity feed, slash command bar, and session management.
+A desktop app for managing multiple Claude Code CLI sessions in tabs, with slash command bar and session management.
 
 ![Screenshot](ss.png)
 
 ## Features
 
 - **Terminal tabs** — Run multiple Claude Code sessions side by side with fixed-width tabs, inline rename, and drag-to-reorder
-- **Activity feed** — IRC-style right pane showing real-time agent output across all sessions
 - **Subagent display** — Live subagent status bar with elapsed time, token counts, and conversation inspector
 - **Slash command bar** — All commands auto-discovered from your Claude Code installation, with queued execution
 - **Session resume** — Resume past conversations with full CLI config persistence and first-message preview

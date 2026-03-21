@@ -1,5 +1,28 @@
 {
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(claude install:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(claude plugin:*)",
+      "Bash(npx tsc:*)",
+      "Bash(cd:*)",
+      "Bash(npm test:*)"
+    ]
+  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$LOCALAPPDATA/claude-agent-logs/bin/block-doc-edits.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
@@ -9,18 +32,6 @@
             "command": "npx tsc --noEmit 2>&1 | head -3 | tr '\\n' ' ' | sed 's/.*error.*/{ \"systemMessage\": \"TypeScript errors introduced — fix before continuing.\" }/' | grep -q systemMessage && npx tsc --noEmit 2>&1 | head -3 | tr '\\n' ' ' | sed 's/.*error.*/{ \"systemMessage\": \"TypeScript errors introduced — fix before continuing.\" }/' || echo '{}'",
             "timeout": 30,
             "statusMessage": "Type-checking..."
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/suggest-agents.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking for agent suggestions..."
           }
         ]
       }

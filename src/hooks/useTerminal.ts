@@ -5,6 +5,9 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { getXtermTheme } from "../lib/theme";
 
+const PROMPT_MARKER = "\u276F"; // ❯ — Ink prompt character used by Claude Code
+const BOTTOM_TOLERANCE = 2; // Lines of slack for "at bottom" detection
+
 interface UseTerminalOptions {
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
@@ -35,7 +38,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
       theme: getXtermTheme(),
       allowProposedApi: true,
-      scrollback: 5000,
+      scrollback: 100000,
     });
 
     const fit = new FitAddon();
@@ -58,7 +61,31 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
         }).catch(() => {});
         return false; // Prevent default handling
       }
+      // Ctrl+Home: scroll to top
+      if (ev.ctrlKey && ev.key === "Home" && ev.type === "keydown") {
+        term.scrollToTop();
+        return false;
+      }
+      // Ctrl+End: scroll to bottom
+      if (ev.ctrlKey && ev.key === "End" && ev.type === "keydown") {
+        term.scrollToBottom();
+        return false;
+      }
+      // Alt+digit: block from PTY — handled by App.tsx global tab-switch handler
+      if (ev.altKey && ev.key >= "0" && ev.key <= "9" && ev.type === "keydown") {
+        return false;
+      }
       return true; // Let it through
+    });
+
+    // Ctrl+wheel: page-at-a-time scroll
+    term.attachCustomWheelEventHandler((ev) => {
+      if (ev.ctrlKey) {
+        ev.preventDefault();
+        term.scrollPages(ev.deltaY > 0 ? 1 : -1);
+        return false;
+      }
+      return true;
     });
 
     termRef.current = term;
@@ -92,21 +119,6 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     if (onResize) {
       disposables.push(term.onResize(({ cols, rows }) => onResize(cols, rows)));
     }
-
-    // Dynamic scrollback: grow by 10K when user scrolls near the top,
-    // shrink back to default when they return to the bottom.
-    let scrollbackExpanded = false;
-    disposables.push(term.onScroll(() => {
-      const buf = term.buffer.active;
-      if (!scrollbackExpanded && buf.viewportY < 500 && buf.baseY > 0) {
-        const current = term.options.scrollback ?? 5000;
-        term.options.scrollback = current + 10000;
-        scrollbackExpanded = true;
-      } else if (scrollbackExpanded && buf.viewportY >= buf.baseY) {
-        term.options.scrollback = 5000;
-        scrollbackExpanded = false;
-      }
-    }));
 
     return () => disposables.forEach((d) => d.dispose());
   }, [onData, onResize]);
@@ -187,7 +199,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
 
     if (chunks.length === 0) return;
 
-    const wasAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY;
+    const wasAtBottom = term.buffer.active.viewportY >= term.buffer.active.baseY - BOTTOM_TOLERANCE;
 
     // Merge chunks into a single buffer
     let merged: Uint8Array;
@@ -246,10 +258,38 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     termRef.current?.scrollToBottom();
   }, []);
 
+  const scrollToTop = useCallback(() => {
+    termRef.current?.scrollToTop();
+  }, []);
+
+  const scrollToLastUserMessage = useCallback(() => {
+    const term = termRef.current;
+    if (!term) return;
+    const buf = term.buffer.active;
+    // Start from viewport position (skip current view), scan backwards
+    const startLine = buf.viewportY - 1;
+    for (let i = startLine; i >= 0; i--) {
+      const line = buf.getLine(i);
+      if (!line) continue;
+      if (line.translateToString(true).includes(PROMPT_MARKER)) {
+        term.scrollToLine(Math.max(0, i - 1));
+        return;
+      }
+    }
+    term.scrollToTop();
+  }, []);
+
   const isAtBottom = useCallback(() => {
     const term = termRef.current;
     if (!term) return true;
-    return term.buffer.active.viewportY >= term.buffer.active.baseY;
+    // 2-line tolerance for near-bottom snap
+    return term.buffer.active.viewportY >= term.buffer.active.baseY - BOTTOM_TOLERANCE;
+  }, []);
+
+  const isAtTop = useCallback(() => {
+    const term = termRef.current;
+    if (!term) return true;
+    return term.buffer.active.viewportY === 0;
   }, []);
 
   const fit = useCallback(() => {
@@ -280,6 +320,25 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     return lines.join("\n");
   }, []);
 
+  // Read current input from xterm.js buffer — authoritative, immediate,
+  // independent of PTY input tracking. Strips the Ink prompt prefix (❯).
+  const getCurrentInput = useCallback((): string => {
+    const term = termRef.current;
+    if (!term) return "";
+    const buf = term.buffer.active;
+    const y = buf.cursorY + buf.baseY;
+    const line = buf.getLine(y);
+    if (!line) return "";
+    const text = line.translateToString(true);
+    // Strip prompt prefix: ❯ (rendered by Ink when idle)
+    const promptIdx = text.lastIndexOf(PROMPT_MARKER);
+    if (promptIdx >= 0) {
+      // Strip focus event remnants ([I = focus in, [O = focus out) that leak into buffer text
+      return text.slice(promptIdx + 2).replace(/\[[OI]/g, "").trimEnd();
+    }
+    return "";
+  }, []);
+
   return {
     attach,
     write,
@@ -287,10 +346,14 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     clear,
     focus,
     scrollToBottom,
+    scrollToTop,
+    scrollToLastUserMessage,
     isAtBottom,
+    isAtTop,
     fit,
     getDimensions,
     getBufferText,
+    getCurrentInput,
     termRef,
   };
 }

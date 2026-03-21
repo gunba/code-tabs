@@ -3,10 +3,17 @@ mod jsonl_watcher;
 mod path_utils;
 mod session;
 
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
+
+use tauri::Manager;
 
 use jsonl_watcher::WatcherState;
 use session::SessionManager;
+
+/// OS PIDs of active PTY child processes, registered by the frontend.
+/// Killed on app exit to prevent orphaned Claude Code CLI processes.
+pub struct ActivePids(pub Mutex<HashSet<u32>>);
 
 pub fn run() {
     // Strip CLAUDECODE env var so spawned Claude CLI sessions don't think
@@ -51,6 +58,7 @@ pub fn run() {
             Ok(())
         })
         .manage(SessionManager::new())
+        .manage(ActivePids(Mutex::new(HashSet::new())))
         .manage(Arc::new(Mutex::new(WatcherState::new())))
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
@@ -68,6 +76,7 @@ pub fn run() {
             commands::detect_claude_cli,
             commands::build_claude_args,
             commands::discover_builtin_commands,
+            commands::discover_settings_schema,
             commands::discover_plugin_commands,
             commands::list_past_sessions,
             commands::check_cli_version,
@@ -81,6 +90,14 @@ pub fn run() {
             commands::read_test_commands,
             commands::write_test_commands,
             commands::write_test_state,
+            commands::read_config_file,
+            commands::write_config_file,
+            commands::list_agents,
+            commands::register_active_pid,
+            commands::unregister_active_pid,
+            commands::kill_process_tree,
+            commands::kill_session_holder,
+            commands::force_kill_session_holder,
             jsonl_watcher::find_active_jsonl_session,
             jsonl_watcher::find_continuation_session,
             jsonl_watcher::session_has_conversation,
@@ -89,6 +106,16 @@ pub fn run() {
             jsonl_watcher::start_subagent_watcher,
             jsonl_watcher::stop_subagent_watcher,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Claude Tabs");
+        .build(tauri::generate_context!())
+        .expect("error while building Claude Tabs")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Kill all active PTY process trees to prevent orphaned CLI processes
+                let active = app_handle.state::<ActivePids>();
+                let pids: Vec<u32> = active.0.lock().unwrap().drain().collect();
+                for pid in pids {
+                    let _ = commands::kill_process_tree_sync(pid);
+                }
+            }
+        });
 }

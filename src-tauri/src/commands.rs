@@ -4,6 +4,7 @@ use crate::path_utils;
 use crate::session::persistence;
 use crate::session::types::{Session, SessionConfig, SessionState};
 use crate::session::SessionManager;
+use crate::ActivePids;
 
 #[tauri::command]
 pub fn create_session(
@@ -170,7 +171,15 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
         return Ok(Vec::new());
     }
 
-    let mut results: Vec<(std::time::SystemTime, serde_json::Value)> = Vec::new();
+    // Collect raw entries with their first-event sessionId for chain detection
+    struct RawEntry {
+        modified: std::time::SystemTime,
+        session_id: String,
+        first_event_session_id: Option<String>,
+        json: serde_json::Value,
+    }
+
+    let mut raw_entries: Vec<RawEntry> = Vec::new();
 
     // Walk project dirs
     let entries = std::fs::read_dir(&projects_dir)
@@ -232,52 +241,128 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                 .format("%Y-%m-%dT%H:%M:%SZ")
                 .to_string();
 
-            // Read first meaningful user message from JSONL
-            let first_msg = std::fs::read_to_string(&fpath)
-                .ok()
-                .and_then(|content| {
-                    for line in content.lines().take(30) {
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
-                            if parsed["type"].as_str() == Some("user") {
-                                let content = &parsed["message"]["content"];
-                                if let Some(text) = content.as_str() {
-                                    if text.len() > 20 && !text.contains("command-name") && !text.contains("local-command") {
-                                        return Some(text.chars().take(150).collect::<String>());
-                                    }
-                                }
-                                if let Some(arr) = content.as_array() {
-                                    for block in arr {
-                                        if block["type"].as_str() == Some("text") {
-                                            if let Some(t) = block["text"].as_str() {
-                                                if t.len() > 20 && !t.contains("command-name") && !t.contains("local-command") {
-                                                    return Some(t.chars().take(150).collect::<String>());
-                                                }
-                                            }
-                                        }
-                                    }
+            // --- Head pass: BufReader, first 30 lines → firstMessage + first-event sessionId ---
+            let mut first_msg = String::new();
+            let mut first_event_sid: Option<String> = None;
+            if let Ok(file_handle) = std::fs::File::open(&fpath) {
+                use std::io::BufRead;
+                let reader = std::io::BufReader::new(file_handle);
+                for line in reader.lines().take(30).flatten() {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
+                        // Capture sessionId from first event that has one
+                        if first_event_sid.is_none() {
+                            if let Some(sid) = parsed.get("sessionId").and_then(|v| v.as_str()) {
+                                if !sid.is_empty() {
+                                    first_event_sid = Some(sid.to_string());
                                 }
                             }
                         }
+                        // Extract first user message
+                        if first_msg.is_empty() && parsed["type"].as_str() == Some("user") {
+                            if let Some(text) = extract_user_text(&parsed) {
+                                first_msg = text;
+                            }
+                        }
                     }
-                    None
-                })
-                .unwrap_or_default();
+                    // Stop early if we have both
+                    if !first_msg.is_empty() && first_event_sid.is_some() { break; }
+                }
+            }
 
-            results.push((modified, serde_json::json!({
-                "id": session_id,
-                "path": project_name,
-                "directory": decoded_dir,
-                "lastModified": last_modified,
-                "sizeBytes": size_bytes,
-                "firstMessage": first_msg,
-            })));
+            // --- Tail pass: seek to last 256KB, reverse scan → lastMessage + model ---
+            let mut last_msg = String::new();
+            let mut model = String::new();
+            if let Ok(file_handle) = std::fs::File::open(&fpath) {
+                use std::io::{Read, Seek, SeekFrom};
+                let mut reader = std::io::BufReader::new(file_handle);
+                let tail_offset = size_bytes.saturating_sub(256 * 1024);
+                let _ = reader.seek(SeekFrom::Start(tail_offset));
+                let mut tail_bytes = Vec::new();
+                let _ = reader.read_to_end(&mut tail_bytes);
+                let tail_buf = String::from_utf8_lossy(&tail_bytes);
+                // Reverse scan lines for last user message and model
+                for line in tail_buf.lines().rev() {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+                        // Capture model from last assistant message
+                        if model.is_empty() && parsed["type"].as_str() == Some("assistant") {
+                            if let Some(m) = parsed["message"]["model"].as_str() {
+                                if !m.is_empty() {
+                                    model = m.to_string();
+                                }
+                            }
+                        }
+                        // Capture last user message
+                        if last_msg.is_empty() && parsed["type"].as_str() == Some("user") {
+                            if let Some(text) = extract_user_text(&parsed) {
+                                last_msg = text;
+                            }
+                        }
+                    }
+                    if !last_msg.is_empty() && !model.is_empty() { break; }
+                }
+            }
+
+            raw_entries.push(RawEntry {
+                modified,
+                session_id: session_id.clone(),
+                first_event_session_id: first_event_sid,
+                json: serde_json::json!({
+                    "id": session_id,
+                    "path": project_name,
+                    "directory": decoded_dir,
+                    "lastModified": last_modified,
+                    "sizeBytes": size_bytes,
+                    "firstMessage": first_msg,
+                    "lastMessage": last_msg,
+                    "parentId": serde_json::Value::Null,
+                    "model": model,
+                }),
+            });
+        }
+    }
+
+    // --- Chain detection: if a file's first-event sessionId differs from its own ID
+    //     and exists in the result set, set parentId to that ID. ---
+    let id_set: std::collections::HashSet<String> = raw_entries.iter()
+        .map(|e| e.session_id.clone())
+        .collect();
+    for entry in &mut raw_entries {
+        if let Some(ref fesid) = entry.first_event_session_id {
+            if fesid != &entry.session_id && id_set.contains(fesid) {
+                entry.json["parentId"] = serde_json::Value::String(fesid.clone());
+            }
         }
     }
 
     // Sort by most recent first — return all (frontend filters by directory)
-    results.sort_by(|a, b| b.0.cmp(&a.0));
-    let entries: Vec<serde_json::Value> = results.into_iter().map(|(_, v)| v).collect();
+    raw_entries.sort_by(|a, b| b.modified.cmp(&a.modified));
+    let entries: Vec<serde_json::Value> = raw_entries.into_iter().map(|e| e.json).collect();
     Ok(entries)
+}
+
+/// Extract user message text from a JSONL event, filtering out commands.
+fn extract_user_text(parsed: &serde_json::Value) -> Option<String> {
+    let truncate = |s: &str| -> Option<String> {
+        if s.len() > 20 && !s.contains("command-name") && !s.contains("local-command") {
+            Some(s.chars().take(150).collect())
+        } else {
+            None
+        }
+    };
+    let content = &parsed["message"]["content"];
+    if let Some(text) = content.as_str() {
+        if let Some(t) = truncate(text) { return Some(t); }
+    }
+    if let Some(arr) = content.as_array() {
+        for block in arr {
+            if block["type"].as_str() == Some("text") {
+                if let Some(t) = block["text"].as_str().and_then(truncate) {
+                    return Some(t);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Run `claude --version` — async to avoid blocking the WebView.
@@ -360,20 +445,13 @@ pub fn write_ui_config(config_json: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to write ui-config.json: {}", e))
 }
 
-/// Scan the Claude Code binary for built-in slash commands.
-/// Extracts from the command registration pattern: name:"cmd",description:"..."
-#[tauri::command]
-pub async fn discover_builtin_commands() -> Result<Vec<serde_json::Value>, String> {
-    tokio::task::spawn_blocking(discover_builtin_commands_sync)
-        .await
-        .map_err(|e| e.to_string())?
-}
-
-fn discover_builtin_commands_sync() -> Result<Vec<serde_json::Value>, String> {
+/// Read the Claude Code binary content (latest version).
+/// Shared by discover_builtin_commands and discover_settings_schema.
+fn read_claude_binary() -> Result<String, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let versions_dir = home.join(".local").join("share").join("claude").join("versions");
     if !versions_dir.exists() {
-        return Ok(Vec::new());
+        return Err("No versions dir".into());
     }
 
     let mut versions: Vec<_> = std::fs::read_dir(&versions_dir)
@@ -385,11 +463,27 @@ fn discover_builtin_commands_sync() -> Result<Vec<serde_json::Value>, String> {
 
     let binary_path = match versions.last() {
         Some(v) => versions_dir.join(v),
-        None => return Ok(Vec::new()),
+        None => return Err("No versions found".into()),
     };
 
-    let content = match std::fs::read(&binary_path) {
-        Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
+    match std::fs::read(&binary_path) {
+        Ok(bytes) => Ok(String::from_utf8_lossy(&bytes).to_string()),
+        Err(e) => Err(format!("Failed to read binary: {}", e)),
+    }
+}
+
+/// Scan the Claude Code binary for built-in slash commands.
+/// Extracts from the command registration pattern: name:"cmd",description:"..."
+#[tauri::command]
+pub async fn discover_builtin_commands() -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(discover_builtin_commands_sync)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn discover_builtin_commands_sync() -> Result<Vec<serde_json::Value>, String> {
+    let content = match read_claude_binary() {
+        Ok(c) => c,
         Err(_) => return Ok(Vec::new()),
     };
 
@@ -402,7 +496,7 @@ fn discover_builtin_commands_sync() -> Result<Vec<serde_json::Value>, String> {
         let name = &cap[1];
         let desc_raw = &cap[2];
         // Clean up escaped newlines in descriptions
-        let desc = desc_raw.replace("\\n", " ").chars().take(120).collect::<String>();
+        let desc = desc_raw.replace("\\n", " ");
         let cmd = format!("/{}", name);
         if cmd.len() >= 4 && seen.insert(cmd.clone()) {
             commands.push(serde_json::json!({ "cmd": cmd, "desc": desc }));
@@ -419,6 +513,124 @@ fn discover_builtin_commands_sync() -> Result<Vec<serde_json::Value>, String> {
     });
 
     Ok(commands)
+}
+
+/// Scan the Claude Code binary for settings schema definitions.
+/// Extracts Zod schema patterns: keyName:u.type().optional().describe("...")
+/// Returns discovered settings with key, type, description, choices.
+#[tauri::command]
+pub async fn discover_settings_schema() -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(discover_settings_schema_sync)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn discover_settings_schema_sync() -> Result<Vec<serde_json::Value>, String> {
+    let content = match read_claude_binary() {
+        Ok(c) => c,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    let mut fields = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Pattern: keyName:u.type(args).optional().catch(...).describe("description")
+    // The Zod schema in the binary uses a minified `u` variable.
+    // We capture: key name, base type, optional args (for enum choices), and description.
+    //
+    // Match key:u.type( — then scan ahead for .describe("...") within ~300 chars
+    let key_re = regex::Regex::new(
+        r#"([a-zA-Z][a-zA-Z0-9]{2,40}):u\.(enum|string|boolean|number|array|record|object|lazy|union)\("#
+    ).unwrap();
+
+    for cap in key_re.captures_iter(&content) {
+        let key = cap[1].to_string();
+        let base_type = cap[2].to_string();
+
+        // Skip internal/noise keys (too short, all-caps constants, common JS identifiers)
+        if key.len() < 3 || key.chars().all(|c| c.is_uppercase()) {
+            continue;
+        }
+        // Skip common JS/minification noise
+        if matches!(key.as_str(),
+            "type" | "name" | "value" | "message" | "data" | "error" | "status" |
+            "content" | "role" | "input" | "output" | "result" | "text" | "key" |
+            "description" | "title" | "path" | "args" | "options" | "config" |
+            "params" | "command" | "event" | "action" | "state" | "context" |
+            "source" | "target" | "children" | "parent" | "index" | "length"
+        ) {
+            continue;
+        }
+
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+
+        // Look at the ~400 chars after the match to find .describe("...") and enum choices
+        let match_end = cap.get(0).unwrap().end();
+        let lookahead = &content[match_end..std::cmp::min(match_end + 400, content.len())];
+
+        // Extract description from .describe("...")
+        let description = regex::Regex::new(r#"\.describe\("([^"]{4,200})"\)"#)
+            .ok()
+            .and_then(|re| re.captures(lookahead))
+            .map(|c| c[1].replace("\\n", " "));
+
+        // Only keep entries that have a description (filters out non-settings Zod schemas)
+        let desc = match description {
+            Some(d) => d,
+            None => continue,
+        };
+
+        // Extract enum choices from u.enum(["a","b","c"])
+        let choices: Option<Vec<String>> = if base_type == "enum" {
+            regex::Regex::new(r#"\[([^\]]{1,200})\]"#)
+                .ok()
+                .and_then(|re| re.captures(lookahead))
+                .map(|c| {
+                    c[1].split(',')
+                        .filter_map(|s| {
+                            let trimmed = s.trim().trim_matches('"');
+                            if !trimmed.is_empty() { Some(trimmed.to_string()) } else { None }
+                        })
+                        .collect()
+                })
+        } else {
+            None
+        };
+
+        // Check for .optional()
+        let optional = lookahead.contains(".optional()");
+
+        // Map Zod type to our field type
+        let field_type = match base_type.as_str() {
+            "boolean" => "boolean",
+            "number" => "number",
+            "enum" => "enum",
+            "array" => "stringArray",
+            "record" => "stringMap",
+            "object" | "lazy" | "union" => "object",
+            _ => "string",
+        };
+
+        let mut entry = serde_json::json!({
+            "key": key,
+            "type": field_type,
+            "description": desc,
+            "optional": optional,
+        });
+        if let Some(c) = choices {
+            entry["choices"] = serde_json::json!(c);
+        }
+        fields.push(entry);
+    }
+
+    // Sort alphabetically for consistency
+    fields.sort_by(|a, b| {
+        a["key"].as_str().unwrap_or("").cmp(b["key"].as_str().unwrap_or(""))
+    });
+
+    Ok(fields)
 }
 
 /// Scan for plugin/custom command files in multiple locations.
@@ -446,7 +658,7 @@ pub fn discover_plugin_commands(extra_dirs: Vec<String>) -> Result<Vec<serde_jso
                                 let desc = meta.lines()
                                     .find(|l| l.trim().starts_with("description:"))
                                     .and_then(|l| l.trim().strip_prefix("description:"))
-                                    .map(|s| s.trim().to_string());
+                                    .map(|s| s.trim().chars().take(120).collect::<String>());
                                 if let Some(n) = name {
                                     commands.push(serde_json::json!({
                                         "cmd": format!("/{}", n),
@@ -542,13 +754,16 @@ pub fn get_first_user_message(session_id: String, working_dir: String) -> Result
                     return Ok(text.chars().take(500).collect());
                 }
             }
-            // Array content (text blocks)
+            // Array content (text blocks) — skip tool_result messages (auto-generated, not user prompts)
             if let Some(arr) = msg_content.as_array() {
-                for block in arr {
-                    if block["type"].as_str() == Some("text") {
-                        if let Some(t) = block["text"].as_str() {
-                            if t.len() > 10 && !t.contains("command-name") && !t.contains("local-command") {
-                                return Ok(t.chars().take(500).collect());
+                let has_tool_result = arr.iter().any(|b| b["type"].as_str() == Some("tool_result"));
+                if !has_tool_result {
+                    for block in arr {
+                        if block["type"].as_str() == Some("text") {
+                            if let Some(t) = block["text"].as_str() {
+                                if t.len() > 10 && !t.contains("command-name") && !t.contains("local-command") {
+                                    return Ok(t.chars().take(500).collect());
+                                }
                             }
                         }
                     }
@@ -876,4 +1091,376 @@ pub fn write_test_state(json: String) -> Result<(), String> {
     }
     std::fs::write(data_dir.join("test-state.json"), json)
         .map_err(|e| format!("Failed to write test state: {}", e))
+}
+
+// ── Active PID registry (for cleanup on app close) ────────────────
+
+#[tauri::command]
+pub fn register_active_pid(pid: u32, pids: State<'_, ActivePids>) -> Result<(), String> {
+    pids.0.lock().unwrap().insert(pid);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn unregister_active_pid(pid: u32, pids: State<'_, ActivePids>) -> Result<(), String> {
+    pids.0.lock().unwrap().remove(&pid);
+    Ok(())
+}
+
+// ── Process tree kill (Windows) ────────────────────────────────────
+
+/// Kill a process and all its descendants by PID.
+/// Uses CreateToolhelp32Snapshot to walk the process tree via BFS,
+/// then terminates children first, then the root.
+#[tauri::command]
+pub async fn kill_process_tree(pid: u32) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || kill_process_tree_sync(pid))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn kill_process_tree_sync(root_pid: u32) -> Result<(), String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
+        TH32CS_SNAPPROCESS,
+    };
+    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return Err("CreateToolhelp32Snapshot failed".into());
+        }
+
+        // Collect all processes
+        let mut entries: Vec<(u32, u32)> = Vec::new(); // (pid, parent_pid)
+        let mut entry: PROCESSENTRY32 = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32>() as u32;
+
+        if Process32First(snap, &mut entry) != 0 {
+            loop {
+                entries.push((entry.th32ProcessID, entry.th32ParentProcessID));
+                if Process32Next(snap, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snap);
+
+        // BFS to find all descendants
+        let mut to_kill = Vec::new();
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(root_pid);
+        while let Some(parent) = queue.pop_front() {
+            for &(pid, ppid) in &entries {
+                if ppid == parent && pid != root_pid {
+                    to_kill.push(pid);
+                    queue.push_back(pid);
+                }
+            }
+        }
+        // Kill children first, then root
+        to_kill.reverse();
+        to_kill.push(root_pid);
+
+        for pid in to_kill {
+            let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+            if !handle.is_null() {
+                TerminateProcess(handle, 1);
+                CloseHandle(handle);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn kill_process_tree_sync(root_pid: u32) -> Result<(), String> {
+    // On non-Windows, just send SIGKILL to the process group
+    unsafe {
+        libc::kill(-(root_pid as i32), libc::SIGKILL);
+    }
+    Ok(())
+}
+
+// ── Kill session holder ────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct SessionHolderResult {
+    /// Number of our own descendant processes killed (safe — stale orphans).
+    killed: u32,
+    /// PIDs of external processes holding the session (NOT killed).
+    external: Vec<u32>,
+}
+
+/// Find processes holding a specific session ID. Kills our own descendants
+/// automatically (stale orphans from crashed tabs). Returns external holder
+/// PIDs so the frontend can prompt the user before killing those.
+#[tauri::command]
+pub async fn kill_session_holder(session_id: String) -> Result<SessionHolderResult, String> {
+    tokio::task::spawn_blocking(move || kill_session_holder_sync(&session_id))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Force-kill a specific external process by PID (user confirmed).
+#[tauri::command]
+pub async fn force_kill_session_holder(pid: u32) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || kill_process_tree_sync(pid))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[cfg(target_os = "windows")]
+fn kill_session_holder_sync(session_id: &str) -> Result<SessionHolderResult, String> {
+    use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
+        TH32CS_SNAPPROCESS,
+    };
+
+    // 1. Find PIDs whose command line contains this session ID
+    let output = std::process::Command::new("wmic")
+        .args([
+            "process",
+            "where",
+            &format!("CommandLine like '%{}%'", session_id),
+            "get",
+            "ProcessId",
+            "/value",
+        ])
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .output()
+        .map_err(|e| format!("Failed to enumerate processes: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let my_pid = std::process::id();
+    let mut matching_pids = Vec::new();
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if let Some(pid_str) = line.strip_prefix("ProcessId=") {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                if pid != my_pid && pid != 0 {
+                    matching_pids.push(pid);
+                }
+            }
+        }
+    }
+
+    if matching_pids.is_empty() {
+        return Ok(SessionHolderResult { killed: 0, external: vec![] });
+    }
+
+    // 2. Build process tree to check ancestry
+    let process_tree = unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return Err("CreateToolhelp32Snapshot failed".into());
+        }
+        let mut entries: Vec<(u32, u32)> = Vec::new();
+        let mut entry: PROCESSENTRY32 = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32>() as u32;
+        if Process32First(snap, &mut entry) != 0 {
+            loop {
+                entries.push((entry.th32ProcessID, entry.th32ParentProcessID));
+                if Process32Next(snap, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snap);
+        entries
+    };
+
+    // 3. For each matching PID, walk parent chain to see if it's our descendant
+    let mut result = SessionHolderResult { killed: 0, external: vec![] };
+
+    for pid in matching_pids {
+        if is_descendant_of(pid, my_pid, &process_tree) {
+            if kill_process_tree_sync(pid).is_ok() {
+                result.killed += 1;
+            }
+        } else {
+            result.external.push(pid);
+        }
+    }
+
+    Ok(result)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn kill_session_holder_sync(session_id: &str) -> Result<SessionHolderResult, String> {
+    let output = std::process::Command::new("pgrep")
+        .args(["-f", session_id])
+        .output()
+        .map_err(|e| format!("Failed to enumerate processes: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let my_pid = std::process::id();
+
+    // On Unix, read /proc/<pid>/stat for parent PID
+    let process_tree: Vec<(u32, u32)> = std::fs::read_dir("/proc")
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let pid: u32 = e.file_name().to_str()?.parse().ok()?;
+                    let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+                    let ppid: u32 = stat.split_whitespace().nth(3)?.parse().ok()?;
+                    Some((pid, ppid))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut result = SessionHolderResult { killed: 0, external: vec![] };
+
+    for line in stdout.lines() {
+        if let Ok(pid) = line.trim().parse::<u32>() {
+            if pid != my_pid && pid != 0 {
+                if is_descendant_of(pid, my_pid, &process_tree) {
+                    if kill_process_tree_sync(pid).is_ok() {
+                        result.killed += 1;
+                    }
+                } else {
+                    result.external.push(pid);
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+/// Walk parent chain to check if `pid` is a descendant of `ancestor`.
+fn is_descendant_of(pid: u32, ancestor: u32, tree: &[(u32, u32)]) -> bool {
+    let mut current = pid;
+    let mut visited = std::collections::HashSet::new();
+    while visited.insert(current) {
+        if let Some(&(_, ppid)) = tree.iter().find(|&&(p, _)| p == current) {
+            if ppid == ancestor {
+                return true;
+            }
+            if ppid == 0 || ppid == current {
+                return false;
+            }
+            current = ppid;
+        } else {
+            return false;
+        }
+    }
+    false
+}
+
+// ── Config Manager commands ────────────────────────────────────────
+
+/// Validate an agent name — only alphanumeric, hyphens, underscores.
+fn validate_agent_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("Agent name cannot be empty".into());
+    }
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err(format!("Invalid agent name '{}': only alphanumeric, hyphens, underscores allowed", name));
+    }
+    Ok(())
+}
+
+/// Resolve the path for a config file based on scope and file type.
+fn resolve_config_path(scope: &str, working_dir: &str, file_type: &str) -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+
+    match file_type {
+        "settings" => match scope {
+            "user" => Ok(home.join(".claude").join("settings.json")),
+            "project" => Ok(std::path::Path::new(working_dir).join(".claude").join("settings.json")),
+            "project-local" => Ok(std::path::Path::new(working_dir).join(".claude").join("settings.local.json")),
+            _ => Err("Invalid scope".into()),
+        },
+        "claudemd-user" => Ok(home.join(".claude").join("CLAUDE.md")),
+        "claudemd-root" => Ok(std::path::Path::new(working_dir).join("CLAUDE.md")),
+        "claudemd-dotclaude" => Ok(std::path::Path::new(working_dir).join(".claude").join("CLAUDE.md")),
+        _ if file_type.starts_with("agent:") || file_type.starts_with("agent-delete:") => {
+            let name = file_type.split_once(':').map(|(_, n)| n).unwrap_or("");
+            validate_agent_name(name)?;
+            Ok(std::path::Path::new(working_dir).join(".claude").join("agents").join(format!("{}.md", name)))
+        },
+        _ => Err(format!("Unknown file_type: {}", file_type)),
+    }
+}
+
+/// Read a config file. Returns content or empty string if not found.
+#[tauri::command]
+pub fn read_config_file(scope: String, working_dir: String, file_type: String) -> Result<String, String> {
+    let path = resolve_config_path(&scope, &working_dir, &file_type)?;
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))
+}
+
+/// Write a config file. Creates parent directories if needed.
+/// For settings files, validates JSON. For agent-delete, deletes the file.
+#[tauri::command]
+pub fn write_config_file(scope: String, working_dir: String, file_type: String, content: String) -> Result<(), String> {
+    // Handle agent deletion
+    if file_type.starts_with("agent-delete:") {
+        let path = resolve_config_path(&scope, &working_dir, &file_type)?;
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|e| format!("Failed to delete: {}", e))?;
+        }
+        return Ok(());
+    }
+
+    let path = resolve_config_path(&scope, &working_dir, &file_type)?;
+
+    // Validate JSON for settings files
+    if file_type == "settings" {
+        serde_json::from_str::<serde_json::Value>(&content)
+            .map_err(|e| format!("Invalid JSON: {}", e))?;
+    }
+
+    // Create parent directories
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create dir: {}", e))?;
+        }
+    }
+
+    std::fs::write(&path, &content).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+}
+
+/// List agent definition files in a project's .claude/agents/ directory.
+#[tauri::command]
+pub fn list_agents(working_dir: String) -> Result<Vec<serde_json::Value>, String> {
+    let agents_dir = std::path::Path::new(&working_dir).join(".claude").join("agents");
+    if !agents_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut agents = Vec::new();
+    let entries = std::fs::read_dir(&agents_dir).map_err(|e| e.to_string())?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("md") {
+            let name = path.file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+            if !name.is_empty() {
+                agents.push(serde_json::json!({
+                    "name": name,
+                    "path": path.to_string_lossy().to_string(),
+                }));
+            }
+        }
+    }
+
+    agents.sort_by(|a, b| {
+        a["name"].as_str().unwrap_or("").cmp(b["name"].as_str().unwrap_or(""))
+    });
+    Ok(agents)
 }

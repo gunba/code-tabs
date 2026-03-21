@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
-import { modelLabel, formatTokenCount } from "../../lib/claude";
+import { effectiveModel, modelLabel, formatTokenCount } from "../../lib/claude";
 import type { Session, PermissionMode } from "../../types/session";
 import "./StatusBar.css";
 
@@ -32,11 +32,17 @@ function permissionIcon(mode: PermissionMode): { icon: string; tip: string } | n
 
 function SessionStatus({ session }: { session: Session }) {
   const perm = permissionIcon(session.config.permissionMode);
+  const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
 
   return (
     <div className="status-bar-content">
+      {inspectorOff && (
+        <span className="status-item status-inspector-off" title="Inspector disconnected — right-click tab to reconnect">
+          &#9676; Inspector off
+        </span>
+      )}
       <span className="status-item status-model" title="Model">
-        {modelLabel(session.config.model)}
+        {modelLabel(effectiveModel(session))}
       </span>
       {perm && (
         <span className="status-item status-perm" title={perm.tip}>
@@ -49,7 +55,7 @@ function SessionStatus({ session }: { session: Session }) {
           ? `${session.metadata.contextPercent.toFixed(0)}%`
           : "—"}
       </span>
-      <span className="status-item status-cost" title={`Input: ${formatTokenCount(session.metadata.inputTokens)}, Output: ${formatTokenCount(session.metadata.outputTokens)}`}>
+      <span className="status-item status-cost" title={`This session — Input: ${formatTokenCount(session.metadata.inputTokens)}, Output: ${formatTokenCount(session.metadata.outputTokens)}`}>
         <span className="status-icon">◆</span>
         {formatTokenCount(session.metadata.inputTokens + session.metadata.outputTokens)} tokens
       </span>
@@ -91,7 +97,9 @@ export function StatusBar() {
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const activeSession = sessions.find((s) => s.id === activeTabId);
   const [hookCount, setHookCount] = useState(0);
-  const setShowHooksManager = useSettingsStore((s) => s.setShowHooksManager);
+  const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
+  const showThinkingPanel = useSettingsStore((s) => s.showThinkingPanel);
+  const setShowThinkingPanel = useSettingsStore((s) => s.setShowThinkingPanel);
 
   useEffect(() => {
     const dirs = sessions
@@ -109,9 +117,11 @@ export function StatusBar() {
       .catch(() => setHookCount(0));
   }, [sessions]);
 
-  const activeSessions = sessions.filter(
-    (s) => s.state !== "dead" && s.state !== "idle"
-  ).length;
+  const aliveSessions = sessions.filter((s) => s.state !== "dead");
+  const activeSessions = aliveSessions.filter((s) => s.state !== "idle").length;
+  const totalTokens = aliveSessions.reduce(
+    (sum, s) => sum + s.metadata.inputTokens + s.metadata.outputTokens, 0
+  );
 
   return (
     <div className="status-bar">
@@ -122,12 +132,25 @@ export function StatusBar() {
       )}
       <div className="status-right">
         <button
+          className={`status-item status-thinking-btn${showThinkingPanel ? " active" : ""}`}
+          onClick={() => setShowThinkingPanel(!showThinkingPanel)}
+          title="Toggle thinking panel (Ctrl+I)"
+        >
+          Thinking
+        </button>
+        <button
           className="status-item status-hooks status-hooks-btn"
-          onClick={() => setShowHooksManager(true)}
+          onClick={() => setShowConfigManager("hooks")}
           title={hookCount > 0 ? `${hookCount} hooks active — click to manage` : "Hooks — click to manage"}
         >
           ⚓ {hookCount > 0 ? hookCount : "Hooks"}
         </button>
+        {totalTokens > 0 && aliveSessions.length > 1 && (
+          <span className="status-item status-total-tokens" title="Total tokens across all active sessions">
+            <span className="status-icon">Σ</span>
+            {formatTokenCount(totalTokens)}
+          </span>
+        )}
         {activeSessions > 0 && (
           <span className="status-item status-active" title={`${activeSessions} active`}>
             <span className="status-active-dot" />

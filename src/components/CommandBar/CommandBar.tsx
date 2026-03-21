@@ -9,10 +9,10 @@ import "./CommandBar.css";
 interface CommandBarProps {
   sessionId: string | null;
   sessionState: string;
-  shiftHeld: boolean;
+  ctrlHeld: boolean;
 }
 
-export function CommandBar({ sessionId, sessionState, shiftHeld }: CommandBarProps) {
+export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProps) {
   const [queuedCommand, setQueuedCommand] = useState<string | null>(null);
   const slashCommands = useSettingsStore((s) => s.slashCommands);
   const commandUsage = useSettingsStore((s) => s.commandUsage);
@@ -58,8 +58,8 @@ export function CommandBar({ sessionId, sessionState, shiftHeld }: CommandBarPro
     (command: string, e: React.MouseEvent) => {
       if (!sessionId) return;
 
-      if (e.shiftKey) {
-        // Shift+click: queue for auto-send when idle (for when Claude is busy)
+      if (e.ctrlKey) {
+        // Ctrl+Click: queue for auto-send when idle (for when Claude is busy)
         setQueuedCommand((prev) => {
           if (prev === command) return null; // Toggle off
           return command;
@@ -95,9 +95,9 @@ export function CommandBar({ sessionId, sessionState, shiftHeld }: CommandBarPro
                   "command-btn" +
                   (isQueued ? " command-btn-queued" : "")
                 }
-                style={isQueued || shiftHeld ? undefined : getHeatStyle(heat)}
+                style={isQueued || ctrlHeld ? undefined : getHeatStyle(heat)}
                 onClick={(e) => handleClick(cmd.cmd, e)}
-                title={shiftHeld ? `Shift+Click: Queue "${cmd.cmd}"` : cmd.desc}
+                title={ctrlHeld ? `Ctrl+Click: Queue "${cmd.cmd}"` : cmd.desc}
                 type="button"
               >
                 {cmd.cmd}

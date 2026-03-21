@@ -1,6 +1,6 @@
 /* ============================================================
    App — Terminal-first layout
-   Tab bar → Subagent row → Terminal + Activity Feed → StatusBar
+   Tab bar → Subagent row → Terminal → StatusBar
    All colors use CSS custom properties.
    ============================================================ */
 
@@ -44,12 +44,11 @@
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
-  flex-shrink: 0;
   transition: background 0.1s, color 0.1s, box-shadow 0.15s;
   position: relative;
   text-align: left;
-  width: 200px;
-  min-width: 200px;
+  flex: 0 1 200px;
+  min-width: 90px;
   max-width: 200px;
   height: 66px;
   overflow: hidden;
@@ -83,7 +82,7 @@
 
 /* Brief flash when a non-active tab transitions to idle (finished working) */
 .tab-flash:not(.tab-active) {
-  animation: tab-done-flash 1.5s ease;
+  animation: tab-done-flash 5s ease;
 }
 
 @keyframes tab-done-flash {
@@ -107,27 +106,27 @@
   opacity: 0.85;
 }
 
-/* ── Shift-held: unified blue top-bar + tint ──────────── */
-.shift-held .tab:not(.tab-dead):not(.tab-active) {
+/* ── Ctrl-held: unified blue top-bar + tint ──────────── */
+.ctrl-held .tab:not(.tab-dead):not(.tab-active) {
   background: color-mix(in srgb, var(--accent-secondary) 8%, var(--bg-surface));
   box-shadow: inset 0 2px 0 var(--accent-secondary);
 }
 
-.shift-held .tab-active:not(.tab-dead) {
+.ctrl-held .tab-active:not(.tab-dead) {
   background: color-mix(in srgb, var(--accent-secondary) 8%, var(--bg-primary));
   box-shadow: inset 0 -2px 0 var(--accent), inset 0 2px 0 var(--accent-secondary);
 }
 
-.shift-held .tab-active.tab-permission {
+.ctrl-held .tab-active.tab-permission {
   animation: none;
   box-shadow: inset 0 -2px 0 var(--permission), inset 0 2px 0 var(--accent-secondary);
 }
 
-.shift-held .tab-add {
+.ctrl-held .tab-add {
   background: var(--accent-secondary);
 }
 
-.shift-held .tab-add:hover {
+.ctrl-held .tab-add:hover {
   background: color-mix(in srgb, var(--accent-secondary) 80%, white);
 }
 
@@ -141,21 +140,25 @@
 
 /* State dot colors */
 .tab-dot.state-idle { background: var(--success); }
+.tab-dot.choice-pending {
+  background: var(--warning) !important;
+  animation: dot-pulse 2s ease infinite !important;
+}
 .tab-dot.state-thinking { background: var(--accent); animation: dot-pulse 2s ease infinite; }
-.tab-dot.state-toolUse { background: var(--info); animation: dot-scale 1s ease infinite; }
+.tab-dot.state-toolUse { background: var(--info); animation: dot-pulse 2s ease infinite; }
 .tab-dot.state-waitingPermission { background: var(--permission); animation: dot-pulse 2s ease infinite; }
 .tab-dot.state-error { background: var(--error); }
 .tab-dot.state-dead { background: var(--text-muted); }
 .tab-dot.state-starting { background: var(--text-muted); animation: dot-pulse 2s ease infinite; }
+.tab-dot.inspector-off {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1.5px var(--text-muted);
+  animation: none !important;
+}
 
 @keyframes dot-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
-@keyframes dot-scale {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.4); }
+  50% { opacity: 0.5; }
 }
 
 .tab-label {
@@ -164,6 +167,7 @@
   min-width: 0;
   flex: 1;
   gap: 2px;
+  align-self: stretch;
 }
 
 .tab-name {
@@ -179,24 +183,33 @@
   color: var(--text-muted);
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   line-height: 1.3;
   word-break: break-word;
 }
 
-/* Edit/close buttons: absolutely positioned, overlaid on hover with fade */
+.tab-meta {
+  font-size: 9px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: auto;
+}
+
+/* Edit/close buttons: absolutely positioned top-right, overlaid on hover with fade */
 .tab-actions {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  top: 2px;
+  right: 2px;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding-right: 6px;
-  padding-left: 16px;
-  background: linear-gradient(to right, transparent, var(--bg-surface) 40%);
+  gap: 1px;
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: var(--bg-surface);
   opacity: 0;
   transition: opacity 0.1s;
   pointer-events: none;
@@ -207,9 +220,16 @@
   pointer-events: auto;
 }
 
-/* Match active tab background in the gradient */
+/* Suppress focus ring on mouse click; preserve for keyboard (Tab) */
+.tab-edit:focus:not(:focus-visible),
+.tab-kill:focus:not(:focus-visible),
+.tab-close:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Match active tab background */
 .tab-active .tab-actions {
-  background: linear-gradient(to right, transparent, var(--bg-primary) 40%);
+  background: var(--bg-primary);
 }
 
 .tab-edit {
@@ -233,6 +253,11 @@
   background: var(--bg-selection);
 }
 
+/* Hide action buttons when rename input is active */
+.tab:has(.tab-name-input) .tab-actions {
+  display: none;
+}
+
 .tab-name-input {
   font-size: 12px;
   font-weight: 600;
@@ -245,6 +270,27 @@
   outline: none;
   width: 100%;
   min-width: 0;
+}
+
+.tab-kill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 9px;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.1s, background 0.1s;
+}
+
+.tab-kill:hover {
+  background: var(--warning, #c47a20);
+  color: var(--text-primary);
 }
 
 .tab-close {
@@ -297,8 +343,8 @@
   height: 66px;
   border: none;
   border-left: 1px solid var(--border-subtle);
-  background: var(--bg-surface-hover);
-  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent-secondary) 12%, var(--bg-surface));
+  color: var(--accent-secondary);
   font-size: 16px;
   cursor: pointer;
   flex-shrink: 0;
@@ -306,8 +352,29 @@
 }
 
 .tab-resume:hover {
-  background: var(--bg-selection);
+  background: color-mix(in srgb, var(--accent-secondary) 20%, var(--bg-surface));
   color: var(--accent-secondary);
+}
+
+.tab-config {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 66px;
+  height: 66px;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--accent-tertiary) 10%, var(--bg-surface));
+  color: var(--accent-tertiary);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-config:hover {
+  background: color-mix(in srgb, var(--accent-tertiary) 18%, var(--bg-surface));
+  color: var(--accent-tertiary);
 }
 
 /* ── Tab context menu ────────────────────────────────────────── */
@@ -364,7 +431,7 @@
   gap: 6px;
   padding: 5px 10px;
   border: none;
-  background: color-mix(in srgb, var(--accent-secondary) 4%, var(--bg-surface));
+  background: var(--bg-surface);
   color: var(--text-secondary);
   font-size: 10px;
   cursor: pointer;
@@ -382,19 +449,31 @@
 }
 
 .subagent-active {
-  border-left-color: var(--accent-secondary);
-  border-left-width: 3px;
-  animation: subagent-glow 1.5s ease infinite;
-  background: color-mix(in srgb, var(--accent-secondary) 8%, var(--bg-surface));
+  background: var(--bg-surface-hover);
+  border-left: 2px solid var(--accent);
 }
 
-@keyframes subagent-glow {
-  0%, 100% { border-left-color: var(--accent-secondary); opacity: 1; }
-  50% { border-left-color: var(--accent); opacity: 0.7; }
+.subagent-active .subagent-name,
+.subagent-active .subagent-last-msg {
+  animation: subagent-text-pulse 2s ease-in-out infinite;
+}
+
+@keyframes subagent-text-pulse {
+  0%, 100% { color: var(--text-muted); }
+  50% { color: var(--text-secondary); }
+}
+
+.subagent-idle {
+  opacity: 0.5;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.subagent-idle:hover {
+  opacity: 0.7;
 }
 
 .subagent-icon {
-  color: var(--accent-secondary);
+  color: var(--accent);
   font-size: 10px;
   flex-shrink: 0;
   margin-top: 1px;

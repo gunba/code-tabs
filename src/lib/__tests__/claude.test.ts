@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   dirToTabName,
   modelLabel,
+  modelColor,
   formatTokenCount,
   computeHeatLevel,
   getHeatStyle,
@@ -50,6 +51,40 @@ describe("modelLabel", () => {
 
   it("returns raw model string for unknown models", () => {
     expect(modelLabel("custom-model-v1")).toBe("custom-model-v1");
+  });
+});
+
+describe("modelColor", () => {
+  it("returns muted color for null", () => {
+    expect(modelColor(null)).toBe("var(--text-muted)");
+  });
+
+  it("returns tertiary accent for opus model", () => {
+    expect(modelColor("claude-opus-4-6")).toBe("var(--accent-tertiary)");
+  });
+
+  it("returns secondary accent for sonnet model", () => {
+    expect(modelColor("claude-sonnet-4-6")).toBe("var(--accent-secondary)");
+  });
+
+  it("returns success color for haiku model", () => {
+    expect(modelColor("claude-haiku-4-5-20251001")).toBe("var(--success)");
+  });
+
+  it("returns muted color for unknown model", () => {
+    expect(modelColor("custom-model-v1")).toBe("var(--text-muted)");
+  });
+
+  it("matches opus substring anywhere in model string", () => {
+    expect(modelColor("some-opus-variant")).toBe("var(--accent-tertiary)");
+  });
+
+  it("matches sonnet substring anywhere in model string", () => {
+    expect(modelColor("my-sonnet-4-20260101")).toBe("var(--accent-secondary)");
+  });
+
+  it("matches haiku substring anywhere in model string", () => {
+    expect(modelColor("claude-3-haiku-20240307")).toBe("var(--success)");
   });
 });
 

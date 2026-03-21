@@ -45,16 +45,13 @@ export interface SessionMetadata {
   contextPercent: number;
   durationSecs: number;
   currentAction: string | null;
-  subagentCount: number;
-  taskProgress: string | null;
   nodeSummary: string | null;
-  contextWarning: string | null;
-  recentOutput: string;
-  subagentActivity: string[];
   currentToolName: string | null;
   inputTokens: number;
   outputTokens: number;
   assistantMessageCount: number;
+  choiceHint: boolean;
+  runtimeModel: string | null;
 }
 
 export interface Session {
@@ -72,6 +69,12 @@ export interface LaunchPreset {
   id: string;
   name: string;
   config: Partial<SessionConfig>;
+}
+
+export interface ThinkingBlock {
+  text: string;
+  timestamp: number;
+  redacted?: boolean;
 }
 
 export interface SubagentMessage {
@@ -98,6 +101,9 @@ export interface PastSession {
   lastModified: string;
   sizeBytes: number;
   firstMessage: string;
+  lastMessage: string;
+  parentId: string | null;
+  model: string;
 }
 
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {

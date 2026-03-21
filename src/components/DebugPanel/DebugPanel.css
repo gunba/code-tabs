@@ -1,0 +1,115 @@
+.debug-panel {
+  width: 350px;
+  min-width: 250px;
+  max-width: 50%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.debug-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.debug-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.debug-panel-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.debug-panel-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.debug-panel-btn:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.debug-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.debug-panel-close:hover {
+  color: var(--text-primary);
+}
+
+.debug-panel-filter {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.debug-panel-filter input {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-mono, "SF Mono", "Cascadia Code", "Consolas", monospace);
+  font-size: 10px;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.debug-panel-filter input:focus {
+  border-color: var(--accent);
+}
+
+.debug-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+  font-family: var(--font-mono, "SF Mono", "Cascadia Code", "Consolas", monospace);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.debug-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
+
+.debug-line-warn {
+  color: var(--warning, #c47a20);
+}
+
+.debug-line-err {
+  color: var(--error, #e05050);
+}
+
+.debug-panel-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+  padding: 24px 12px;
+}

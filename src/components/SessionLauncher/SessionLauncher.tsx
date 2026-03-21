@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
@@ -65,14 +65,13 @@ export function SessionLauncher() {
 
   const [config, setConfig] = useState<SessionConfig>({
     ...DEFAULT_SESSION_CONFIG,
-    model: lastConfig.model,
-    permissionMode: lastConfig.permissionMode,
-    effort: lastConfig.effort,
-    dangerouslySkipPermissions: lastConfig.dangerouslySkipPermissions,
-    projectDir: lastConfig.projectDir,
-    workingDir: lastConfig.workingDir || "",
-    resumeSession: lastConfig.resumeSession,
+    ...lastConfig,
+    // Clear one-shot fields that shouldn't carry over (except resumeSession, preserved for configure flow)
+    continueSession: false,
+    sessionId: null,
+    runMode: false,
   });
+  const isUtilityRef = useRef(false);
   const [showCliOptions, setShowCliOptions] = useState(true);
   const [showUtility, setShowUtility] = useState(false);
   const [defaultsSaved, setDefaultsSaved] = useState(false);
@@ -93,8 +92,9 @@ export function SessionLauncher() {
 
   const [commandLine, setCommandLine] = useState(() => buildFullCommand(config, lastConfig.extraFlags || ""));
 
-  // Regenerate command line when config dropdowns change
+  // Regenerate command line when config dropdowns change (skip in utility mode)
   useEffect(() => {
+    if (isUtilityRef.current) return;
     setCommandLine(buildFullCommand(config));
   }, [config.model, config.permissionMode, config.effort, config.dangerouslySkipPermissions, config.projectDir, config.resumeSession, buildFullCommand]);
 
@@ -151,6 +151,8 @@ export function SessionLauncher() {
     return false;
   }, [commandTokens, activeFlags, cliCapabilities.commands]);
 
+  isUtilityRef.current = isNonSessionCommand;
+
   // CLI subcommands sorted by usage frequency (most-used first, then alphabetical)
   const sortedCliCommands = useMemo((): CliCommand[] => {
     return [...(cliCapabilities.commands || [])].sort((a, b) => {
@@ -186,7 +188,9 @@ export function SessionLauncher() {
 
   const handleLaunch = useCallback(async () => {
     if (!isNonSessionCommand && !launchConfig.workingDir.trim()) return;
-    const finalConfig: SessionConfig = { ...launchConfig, runMode: isNonSessionCommand };
+    const finalConfig: SessionConfig = isNonSessionCommand
+      ? { ...launchConfig, runMode: true, model: null, permissionMode: "default", effort: null, dangerouslySkipPermissions: false, projectDir: false }
+      : { ...launchConfig, runMode: false };
     const name = isNonSessionCommand
       ? commandTokens.find(t => t !== "claude" && !t.startsWith("-"))
         || commandTokens.find(t => t.startsWith("--"))
@@ -251,6 +255,18 @@ export function SessionLauncher() {
     });
   }, []);
 
+  const handleNonSessionFlagClick = useCallback(({ flag }: CliOption) => {
+    setCommandLine((prev) => {
+      const tokens = prev.split(/\s+/);
+      if (tokens.includes(flag)) {
+        // Toggling off → restore session command
+        return buildFullCommand(config);
+      }
+      // Toggling on → replace entire command
+      return `claude ${flag}`;
+    });
+  }, [config, buildFullCommand]);
+
   const handleResetCommand = useCallback(() => {
     setCommandLine(buildFullCommand(config));
   }, [config, buildFullCommand]);
@@ -290,6 +306,12 @@ export function SessionLauncher() {
     <div className="launcher-overlay" onClick={dismissLauncher}>
       <div className="launcher" onClick={(e) => e.stopPropagation()}>
 
+        {/* Header */}
+        <div className="launcher-header">
+          <span className="launcher-title">{isResuming ? "Resume Session" : "New Session"}</span>
+          <button className="launcher-close" onClick={dismissLauncher} type="button">&times;</button>
+        </div>
+
         {/* Resume banner or path input */}
         {isResuming ? (
           <div className="launcher-resume-banner">
@@ -319,7 +341,7 @@ export function SessionLauncher() {
         {!isResuming && uniqueRecentDirs.length > 0 && (
           <div className="launcher-recent">
             <div className="launcher-recent-chips">
-              {uniqueRecentDirs.slice(0, 6).map((dir) => (
+              {uniqueRecentDirs.map((dir) => (
                 <button
                   key={dir}
                   className="recent-chip"
@@ -336,13 +358,14 @@ export function SessionLauncher() {
         )}
 
         {/* Compact selects row: Model, Permissions, Effort, toggle pills */}
-        <div className="launcher-selects">
+        <div className={`launcher-selects${isNonSessionCommand ? " launcher-selects-disabled" : ""}`}>
           <label className="launcher-select-group">
             <span className="launcher-select-icon" title="Model">◈</span>
             <select
               className="launcher-select"
               value={config.model ?? ""}
               onChange={(e) => updateConfig("model", e.target.value || null)}
+              disabled={isNonSessionCommand}
             >
               {MODEL_OPTIONS.map((opt) => (
                 <option key={String(opt.value)} value={opt.value ?? ""}>
@@ -358,6 +381,7 @@ export function SessionLauncher() {
               className="launcher-select"
               value={config.permissionMode}
               onChange={(e) => updateConfig("permissionMode", e.target.value as PermissionMode)}
+              disabled={isNonSessionCommand}
             >
               {PERM_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -373,6 +397,7 @@ export function SessionLauncher() {
               className="launcher-select"
               value={config.effort ?? ""}
               onChange={(e) => updateConfig("effort", e.target.value || null)}
+              disabled={isNonSessionCommand}
             >
               {EFFORT_OPTIONS.map((opt) => (
                 <option key={String(opt.value)} value={opt.value ?? ""}>
@@ -407,7 +432,7 @@ export function SessionLauncher() {
         {/* CLI Options header (always shown) with save defaults on the right */}
         <div className="launcher-section">
           <div className="launcher-cli-header">
-            {(filteredCliOptions.length > 0 || (cliCapabilities.commands || []).length > 0) ? (
+            {!isNonSessionCommand && (filteredCliOptions.length > 0 || (cliCapabilities.commands || []).length > 0) ? (
               <button
                 className="launcher-cli-toggle"
                 onClick={() => setShowCliOptions((v) => !v)}
@@ -419,12 +444,13 @@ export function SessionLauncher() {
             <button
               className={`launcher-save-defaults${defaultsSaved ? " launcher-save-defaults-saved" : ""}`}
               onClick={() => { setSavedDefaults(launchConfig); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}
+              disabled={isNonSessionCommand}
               type="button"
             >
               {defaultsSaved ? "Saved" : "Save defaults"}
             </button>
           </div>
-          {showCliOptions && filteredCliOptions.length > 0 && (
+          {showCliOptions && !isNonSessionCommand && filteredCliOptions.length > 0 && (
             <div className="launcher-cli-grid">
               {filteredCliOptions.map((opt) => (
                 <button
@@ -456,7 +482,7 @@ export function SessionLauncher() {
                     <button
                       key={opt.flag}
                       className={`launcher-cli-pill launcher-cli-pill-nonsession${activeFlags.has(opt.flag) ? " launcher-cli-pill-active" : ""}`}
-                      onClick={() => handleCliPillClick(opt)}
+                      onClick={() => handleNonSessionFlagClick(opt)}
                       title={opt.description}
                       type="button"
                     >

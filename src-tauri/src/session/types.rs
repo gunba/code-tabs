@@ -106,6 +106,10 @@ pub struct SessionMetadata {
     pub output_tokens: u64,
     #[serde(default)]
     pub assistant_message_count: u64,
+    #[serde(default)]
+    pub choice_hint: bool,
+    #[serde(default)]
+    pub runtime_model: Option<String>,
 }
 
 impl Default for SessionMetadata {
@@ -125,6 +129,8 @@ impl Default for SessionMetadata {
             input_tokens: 0,
             output_tokens: 0,
             assistant_message_count: 0,
+            choice_hint: false,
+            runtime_model: None,
         }
     }
 }

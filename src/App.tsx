@@ -3,23 +3,27 @@ import { createPortal } from "react-dom";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, formatTokenCount, sessionColor, getResumeId } from "./lib/claude";
+import { dirToTabName, effectiveModel, formatTokenCount, getResumeId, modelLabel, modelColor } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
-import { ActivityFeed } from "./components/ActivityFeed/ActivityFeed";
+
 import { SessionLauncher } from "./components/SessionLauncher/SessionLauncher";
 import { ResumePicker } from "./components/ResumePicker/ResumePicker";
 import { StatusBar } from "./components/StatusBar/StatusBar";
 import { CommandBar } from "./components/CommandBar/CommandBar";
 import { CommandPalette } from "./components/CommandPalette/CommandPalette";
-import { HooksManager } from "./components/HooksManager/HooksManager";
+import { ConfigManager } from "./components/ConfigManager/ConfigManager";
+import { ThinkingPanel } from "./components/ThinkingPanel/ThinkingPanel";
+import { DebugPanel } from "./components/DebugPanel/DebugPanel";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
 import { useNotifications } from "./hooks/useNotifications";
 import { useCommandDiscovery } from "./hooks/useCommandDiscovery";
-import { useShiftKey } from "./hooks/useShiftKey";
-
+import { useCtrlKey } from "./hooks/useCtrlKey";
 import { useUiConfigStore } from "./lib/uiConfig";
+import { writeToPty } from "./lib/ptyRegistry";
+import { killAllActivePtys } from "./lib/ptyProcess";
+import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
 import { startTestHarness } from "./lib/testHarness";
 import type { Subagent } from "./types/session";
 import "./App.css";
@@ -36,21 +40,28 @@ export default function App() {
   const updateSubagent = useSessionStore((s) => s.updateSubagent);
   const reorderTabs = useSessionStore((s) => s.reorderTabs);
   const renameSession = useSessionStore((s) => s.renameSession);
+  const requestKill = useSessionStore((s) => s.requestKill);
+  const inspectorOffSessions = useSessionStore((s) => s.inspectorOffSessions);
+  const setInspectorOff = useSessionStore((s) => s.setInspectorOff);
   const showLauncher = useSettingsStore((s) => s.showLauncher);
   const setShowLauncher = useSettingsStore((s) => s.setShowLauncher);
   const setLastConfig = useSettingsStore((s) => s.setLastConfig);
-  const showHooksManager = useSettingsStore((s) => s.showHooksManager);
-  const setShowHooksManager = useSettingsStore((s) => s.setShowHooksManager);
+  const showConfigManager = useSettingsStore((s) => s.showConfigManager);
+  const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
+  const showThinkingPanel = useSettingsStore((s) => s.showThinkingPanel);
+  const setShowThinkingPanel = useSettingsStore((s) => s.setShowThinkingPanel);
   const [showPalette, setShowPalette] = useState(false);
   const [showResumePicker, setShowResumePicker] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [inspectedSubagent, setInspectedSubagent] = useState<{ sessionId: string; subagentId: string } | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; sessionId: string } | null>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingTabName, setEditingTabName] = useState("");
   const [flashingTabs, setFlashingTabs] = useState<Set<string>>(new Set());
-  const shiftHeld = useShiftKey();
+  const ctrlHeld = useCtrlKey();
   const prevStatesRef = useRef<Map<string, string>>(new Map());
+  const flashTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const dragTabRef = useRef<string | null>(null);
   const editDoneRef = useRef(false);
   const initRef = useRef(false);
@@ -59,20 +70,43 @@ export default function App() {
   useNotifications();
   useCommandDiscovery();
 
-  // Track state transitions — briefly flash tabs that become idle from an active state
+  // Track state transitions — flash tabs that become idle from an active state (5s, dismiss on hover)
   useEffect(() => {
     const prev = prevStatesRef.current;
+    const timers = flashTimersRef.current;
     for (const s of sessions) {
       const prevState = prev.get(s.id);
       if (prevState && prevState !== "idle" && prevState !== "dead" && prevState !== "starting" && s.state === "idle") {
+        // Clear existing timer before setting new one
+        const existing = timers.get(s.id);
+        if (existing) clearTimeout(existing);
         setFlashingTabs((f) => new Set(f).add(s.id));
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           setFlashingTabs((f) => { const n = new Set(f); n.delete(s.id); return n; });
-        }, 1500);
+          timers.delete(s.id);
+        }, 5000);
+        timers.set(s.id, timer);
       }
       prev.set(s.id, s.state);
     }
+    // Clean up timers for sessions that were removed (closed)
+    const sessionIds = new Set(sessions.map((s) => s.id));
+    for (const id of timers.keys()) {
+      if (!sessionIds.has(id)) {
+        clearTimeout(timers.get(id)!);
+        timers.delete(id);
+      }
+    }
   }, [sessions]);
+
+  const dismissFlash = useCallback((sessionId: string) => {
+    const timers = flashTimersRef.current;
+    const timer = timers.get(sessionId);
+    if (!timer) return;
+    clearTimeout(timer);
+    timers.delete(sessionId);
+    setFlashingTabs((f) => { const n = new Set(f); n.delete(sessionId); return n; });
+  }, []);
 
   // Initialize once
   useEffect(() => {
@@ -84,7 +118,7 @@ export default function App() {
     startTestHarness();
   }, [init]);
 
-  // Quick launch with saved defaults (Shift+click "+" or Ctrl+Shift+T)
+  // Quick launch with saved defaults (Ctrl+Click "+" or Ctrl+Shift+T)
   const quickLaunch = useCallback(async () => {
     const { savedDefaults, lastConfig } = useSettingsStore.getState();
     const defaults = (savedDefaults && savedDefaults.workingDir.trim()) ? savedDefaults : lastConfig;
@@ -112,24 +146,26 @@ export default function App() {
     }
   }, [sessions, persist]);
 
-  // Flush persist on window close so sessions survive app restart
+  // Kill active PTY processes and persist on window close
   useEffect(() => {
-    window.addEventListener("beforeunload", persist);
-    return () => window.removeEventListener("beforeunload", persist);
+    const handler = () => {
+      killAllActivePtys();
+      persist();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
   }, [persist]);
 
   // Activate tab — dead tabs just switch to them (overlay provides actions)
   const handleTabActivate = useCallback(
     (id: string) => {
-      // Always dismiss subagent inspector when switching tabs
-      if (inspectedSubagent) {
-        setInspectedSubagent(null);
-      }
+      setInspectedSubagent(null);
+      dismissFlash(id);
       if (id !== activeTabId) {
         setActiveTab(id);
       }
     },
-    [activeTabId, inspectedSubagent, setActiveTab]
+    [activeTabId, dismissFlash, setActiveTab]
   );
 
   // Global keyboard shortcuts
@@ -164,10 +200,27 @@ export default function App() {
         setShowResumePicker(true);
       }
 
+      if (e.ctrlKey && e.key === ",") {
+        e.preventDefault();
+        setShowConfigManager(showConfigManager ? false : "settings");
+      }
+
+      if (e.ctrlKey && e.key === "i") {
+        e.preventDefault();
+        setShowThinkingPanel(!showThinkingPanel);
+      }
+
+      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+        e.preventDefault();
+        setShowDebugPanel((v) => !v);
+      }
+
       if (e.key === "Escape") {
         if (tabContextMenu) { setTabContextMenu(null); return; }
         if (showPalette) return;
-        if (showHooksManager) { setShowHooksManager(false); return; }
+        if (showDebugPanel) { setShowDebugPanel(false); return; }
+        if (showThinkingPanel) { setShowThinkingPanel(false); return; }
+        if (showConfigManager) { setShowConfigManager(false); return; }
         if (showResumePicker) { setShowResumePicker(false); return; }
         if (showLauncher) { setShowLauncher(false); return; }
         if (inspectedSubagent) { e.preventDefault(); setInspectedSubagent(null); return; }
@@ -185,7 +238,23 @@ export default function App() {
         }
       }
 
-      if (e.ctrlKey && e.key >= "1" && e.key <= "9") {
+      if (e.ctrlKey && e.shiftKey && e.key === "U") {
+        e.preventDefault();
+        if (activeTabId) writeToPty(activeTabId, "\x15".repeat(20));
+      }
+
+      if (e.key === "F2") {
+        e.preventDefault();
+        if (activeTabId) {
+          const s = sessions.find(s => s.id === activeTabId);
+          if (s) {
+            setEditingTabId(s.id);
+            setEditingTabName(s.name || dirToTabName(s.config.workingDir));
+          }
+        }
+      }
+
+      if (e.altKey && e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         const nonMeta = sessions.filter((s) => !s.isMetaAgent);
         const idx = parseInt(e.key) - 1;
@@ -195,7 +264,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, sessions, setActiveTab, closeSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showHooksManager, setShowHooksManager, inspectedSubagent, tabContextMenu, quickLaunch]);
+  }, [activeTabId, sessions, setActiveTab, closeSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showThinkingPanel, setShowThinkingPanel, showDebugPanel, inspectedSubagent, tabContextMenu, quickLaunch]);
 
   const regularSessions = sessions.filter((s) => !s.isMetaAgent);
   const subagentMap = useSessionStore((s) => s.subagents);
@@ -211,15 +280,28 @@ export default function App() {
   const activeSubs = allSubs.filter((s) => s.state !== "dead");
 
   return (
-    <div className={`app${shiftHeld ? " shift-held" : ""}`}>
+    <div className={`app${ctrlHeld ? " ctrl-held" : ""}`}>
       {/* Tab bar */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
             {regularSessions.map((session) => {
               const isActive = session.id === activeTabId;
-              const name = session.name || dirToTabName(session.config.workingDir);
+              const fullName = session.name || dirToTabName(session.config.workingDir);
               const isDead = session.state === "dead";
               const summary = session.metadata.nodeSummary ?? session.metadata.currentAction;
+
+              // Meta row: model | effort | agents (each colored)
+              const m = effectiveModel(session);
+              const metaSpans: { text: string; color: string }[] = [];
+              if (m) {
+                const vMatch = m.match(/(\d+)[.-](\d+)/);
+                const ver = vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
+                metaSpans.push({ text: modelLabel(m) + ver, color: modelColor(m) });
+              }
+              if (session.config.effort) metaSpans.push({ text: session.config.effort.charAt(0).toUpperCase() + session.config.effort.slice(1), color: "var(--accent)" });
+              const subs = subagentMap.get(session.id) || [];
+              const liveAgents = subs.filter((s) => s.state !== "dead").length;
+              if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--accent-tertiary)" });
 
               return (
                 <div
@@ -232,7 +314,7 @@ export default function App() {
                     dragTabRef.current = session.id;
                     // Use a minimal drag image to reduce visual jank
                     const ghost = document.createElement("div");
-                    ghost.textContent = name;
+                    ghost.textContent = fullName;
                     ghost.style.cssText = "position:absolute;top:-999px;padding:4px 8px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;border-radius:4px;white-space:nowrap;";
                     document.body.appendChild(ghost);
                     e.dataTransfer.setDragImage(ghost, 0, 0);
@@ -264,7 +346,7 @@ export default function App() {
                   }}
                   onDragEnd={() => { dragTabRef.current = null; setDragOverTabId(null); }}
                   onClick={(e) => {
-                    if (e.shiftKey) {
+                    if (e.ctrlKey) {
                       setLastConfig({
                         ...session.config,
                         resumeSession: getResumeId(session),
@@ -289,9 +371,10 @@ export default function App() {
                     e.stopPropagation();
                     setTabContextMenu({ x: e.clientX, y: e.clientY, sessionId: session.id });
                   }}
-                  title={shiftHeld ? `Shift+Click: Relaunch ${name}` : `${name} — ${session.state}\n${session.config.workingDir}`}
+                  onMouseEnter={() => dismissFlash(session.id)}
+                  title={ctrlHeld ? `Ctrl+Click: Relaunch ${fullName}` : `${fullName} — ${session.state}\n${session.config.workingDir}`}
                 >
-                  <span className={`tab-dot state-${session.state}`} />
+                  <span className={`tab-dot state-${session.state}${session.state === "idle" && session.metadata.choiceHint ? " choice-pending" : ""}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
                   <span className="tab-label">
                     {editingTabId === session.id ? (
                       <input
@@ -301,6 +384,7 @@ export default function App() {
                         onBlur={() => {
                           if (!editDoneRef.current && editingTabName.trim()) {
                             renameSession(session.id, editingTabName.trim());
+                            useSettingsStore.getState().setSessionName(getResumeId(session), editingTabName.trim());
                           }
                           editDoneRef.current = false;
                           setEditingTabId(null);
@@ -310,6 +394,7 @@ export default function App() {
                             editDoneRef.current = true;
                             if (editingTabName.trim()) {
                               renameSession(session.id, editingTabName.trim());
+                              useSettingsStore.getState().setSessionName(getResumeId(session), editingTabName.trim());
                             }
                             setEditingTabId(null);
                           } else if (e.key === "Escape") {
@@ -322,9 +407,19 @@ export default function App() {
                         autoFocus
                       />
                     ) : (
-                      <span className="tab-name" style={{ textShadow: `0 0 12px ${sessionColor(session.id)}90, 0 0 4px ${sessionColor(session.id)}60` }}>{name}</span>
+                      <span className="tab-name">{fullName}</span>
                     )}
-                    {summary && editingTabId !== session.id && <span className="tab-summary">{summary}</span>}
+                    {summary && <span className="tab-summary">{summary}</span>}
+                    {metaSpans.length > 0 && (
+                      <span className="tab-meta">
+                        {metaSpans.map((s, i) => (
+                          <span key={i}>
+                            {i > 0 && <span style={{ color: "var(--text-muted)", opacity: 0.5 }}> &middot; </span>}
+                            <span style={{ color: s.color }}>{s.text}</span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </span>
                   <span className="tab-actions">
                     <button
@@ -332,12 +427,21 @@ export default function App() {
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditingTabId(session.id);
-                        setEditingTabName(name);
+                        setEditingTabName(fullName);
                       }}
                       title="Rename"
                     >
                       ✎
                     </button>
+                    {session.state !== "dead" && (
+                      <button
+                        className="tab-kill"
+                        onClick={(e) => { e.stopPropagation(); requestKill(session.id); }}
+                        title="Kill agent (keep tab)"
+                      >
+                        ⏹
+                      </button>
+                    )}
                     <button
                       className="tab-close"
                       onClick={(e) => { e.stopPropagation(); closeSession(session.id); }}
@@ -358,9 +462,16 @@ export default function App() {
             ↩
           </button>
           <button
+            className="tab-config"
+            onClick={() => setShowConfigManager("settings")}
+            title="Config Manager (Ctrl+,)"
+          >
+            ⚙
+          </button>
+          <button
             className="tab-add"
-            onClick={(e) => e.shiftKey ? quickLaunch() : setShowLauncher(true)}
-            title={shiftHeld ? "Quick launch with saved defaults (Ctrl+Shift+T)" : "New session (Ctrl+T)"}
+            onClick={(e) => e.ctrlKey ? quickLaunch() : setShowLauncher(true)}
+            title={ctrlHeld ? "Quick launch with saved defaults (Ctrl+Shift+T)" : "New session (Ctrl+T)"}
           >
             +
           </button>
@@ -371,13 +482,14 @@ export default function App() {
         <div className="subagent-bar">
           {activeSubs.map((sub) => {
             const isActive = sub.state === "thinking" || sub.state === "toolUse" || sub.state === "starting";
+            const isIdle = sub.state === "idle";
             const lastMsg = sub.messages.length > 0
               ? sub.messages[sub.messages.length - 1].text.slice(0, 200)
               : null;
             return (
               <button
                 key={sub.id}
-                className={`subagent-card${isActive ? " subagent-active" : ""}`}
+                className={`subagent-card${isActive ? " subagent-active" : ""}${isIdle ? " subagent-idle" : ""}`}
                 onClick={() => activeTabId && setInspectedSubagent({ sessionId: activeTabId, subagentId: sub.id })}
                 title={sub.description}
               >
@@ -404,7 +516,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main area: terminal + activity feed */}
+      {/* Main area: terminals */}
       <div className="app-main">
         <div className="terminal-area">
           {/* Terminal panels — always mounted, hidden via CSS (including dead ones so errors remain visible) */}
@@ -431,14 +543,18 @@ export default function App() {
             </div>
           )}
         </div>
-
-        <ActivityFeed />
+        {showThinkingPanel && activeTabId && (
+          <ThinkingPanel sessionId={activeTabId} onClose={() => setShowThinkingPanel(false)} />
+        )}
+        {showDebugPanel && (
+          <DebugPanel onClose={() => setShowDebugPanel(false)} />
+        )}
       </div>
 
       <CommandBar
         sessionId={activeTabId}
         sessionState={activeSession?.state ?? "dead"}
-        shiftHeld={shiftHeld}
+        ctrlHeld={ctrlHeld}
       />
 
       <StatusBar />
@@ -446,7 +562,7 @@ export default function App() {
       {showLauncher && <SessionLauncher />}
       {showResumePicker && <ResumePicker onClose={() => setShowResumePicker(false)} />}
       {showPalette && <CommandPalette onClose={() => setShowPalette(false)} />}
-      {showHooksManager && <HooksManager onClose={() => setShowHooksManager(false)} />}
+      {showConfigManager && <ConfigManager />}
 
       {/* Tab context menu portal */}
       {tabContextMenu && createPortal(
@@ -464,6 +580,8 @@ export default function App() {
               const ctxSession = sessions.find((s) => s.id === tabContextMenu.sessionId);
               if (!ctxSession) return null;
               const isDead = ctxSession.state === "dead";
+              const inspectorPort = !isDead ? getInspectorPort(ctxSession.id) : null;
+              const inspectorUrl = inspectorPort ? `https://debug.bun.sh/#127.0.0.1:${inspectorPort}/0` : null;
               return (
                 <>
                   <button
@@ -505,6 +623,42 @@ export default function App() {
                   >
                     Open in Explorer
                   </button>
+                  {inspectorUrl && (
+                    <>
+                      <button
+                        className="tab-context-menu-item"
+                        onClick={() => {
+                          shellOpen(inspectorUrl);
+                          disconnectInspectorForSession(ctxSession.id);
+                          setInspectorOff(ctxSession.id, true);
+                          setTabContextMenu(null);
+                        }}
+                      >
+                        Open Inspector
+                      </button>
+                      <button
+                        className="tab-context-menu-item"
+                        onClick={() => {
+                          navigator.clipboard.writeText(inspectorUrl);
+                          setTabContextMenu(null);
+                        }}
+                      >
+                        Copy Inspector URL
+                      </button>
+                      {inspectorOffSessions.has(ctxSession.id) && (
+                        <button
+                          className="tab-context-menu-item"
+                          onClick={() => {
+                            reconnectInspectorForSession(ctxSession.id);
+                            setInspectorOff(ctxSession.id, false);
+                            setTabContextMenu(null);
+                          }}
+                        >
+                          Reconnect Inspector
+                        </button>
+                      )}
+                    </>
+                  )}
                   {isDead && (
                     <button
                       className="tab-context-menu-item"

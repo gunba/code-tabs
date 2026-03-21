@@ -71,12 +71,12 @@
   height: 6px;
   border-radius: 50%;
   background: var(--success);
-  animation: pulse-dot 1.5s ease-in-out infinite;
+  animation: status-dot-pulse 2s ease infinite;
 }
 
-@keyframes pulse-dot {
+@keyframes status-dot-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  50% { opacity: 0.5; }
 }
 
 .status-right {
@@ -107,6 +107,33 @@
 
 .status-hooks-btn:hover {
   color: var(--accent);
+}
+
+.status-thinking-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text-muted);
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.status-thinking-btn:hover {
+  color: var(--text-primary);
+}
+
+.status-thinking-btn.active {
+  color: var(--accent-tertiary);
+}
+
+.status-total-tokens {
+  color: var(--text-muted);
+}
+
+.status-inspector-off {
+  color: var(--text-muted);
 }
 
 .status-id {

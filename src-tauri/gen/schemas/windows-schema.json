@@ -2667,16 +2667,28 @@
           "markdownDescription": "Denies the restart command without any pre-configured scope."
         },
         {
-          "description": "Allows the spawn command\n#### This default permission set includes:\n\n- `allow-spawn`\n- `allow-read`\n- `allow-write`\n- `allow-resize`\n- `allow-kill`\n- `allow-exitstatus`",
+          "description": "Allows all PTY commands\n#### This default permission set includes:\n\n- `allow-spawn`\n- `allow-read`\n- `allow-write`\n- `allow-resize`\n- `allow-kill`\n- `allow-exitstatus`\n- `allow-destroy`\n- `allow-get-child-pid`",
           "type": "string",
           "const": "pty:default",
-          "markdownDescription": "Allows the spawn command\n#### This default permission set includes:\n\n- `allow-spawn`\n- `allow-read`\n- `allow-write`\n- `allow-resize`\n- `allow-kill`\n- `allow-exitstatus`"
+          "markdownDescription": "Allows all PTY commands\n#### This default permission set includes:\n\n- `allow-spawn`\n- `allow-read`\n- `allow-write`\n- `allow-resize`\n- `allow-kill`\n- `allow-exitstatus`\n- `allow-destroy`\n- `allow-get-child-pid`"
+        },
+        {
+          "description": "Enables the destroy command without any pre-configured scope.",
+          "type": "string",
+          "const": "pty:allow-destroy",
+          "markdownDescription": "Enables the destroy command without any pre-configured scope."
         },
         {
           "description": "Enables the exitstatus command without any pre-configured scope.",
           "type": "string",
           "const": "pty:allow-exitstatus",
           "markdownDescription": "Enables the exitstatus command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_child_pid command without any pre-configured scope.",
+          "type": "string",
+          "const": "pty:allow-get-child-pid",
+          "markdownDescription": "Enables the get_child_pid command without any pre-configured scope."
         },
         {
           "description": "Enables the kill command without any pre-configured scope.",
@@ -2703,22 +2715,28 @@
           "markdownDescription": "Enables the spawn command without any pre-configured scope."
         },
         {
-          "description": "Enables the spawn, write, read, resize, kill, exitstatus command without any pre-configured scope.",
-          "type": "string",
-          "const": "pty:allow-spawn, write, read, resize, kill, exitstatus",
-          "markdownDescription": "Enables the spawn, write, read, resize, kill, exitstatus command without any pre-configured scope."
-        },
-        {
           "description": "Enables the write command without any pre-configured scope.",
           "type": "string",
           "const": "pty:allow-write",
           "markdownDescription": "Enables the write command without any pre-configured scope."
         },
         {
+          "description": "Denies the destroy command without any pre-configured scope.",
+          "type": "string",
+          "const": "pty:deny-destroy",
+          "markdownDescription": "Denies the destroy command without any pre-configured scope."
+        },
+        {
           "description": "Denies the exitstatus command without any pre-configured scope.",
           "type": "string",
           "const": "pty:deny-exitstatus",
           "markdownDescription": "Denies the exitstatus command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_child_pid command without any pre-configured scope.",
+          "type": "string",
+          "const": "pty:deny-get-child-pid",
+          "markdownDescription": "Denies the get_child_pid command without any pre-configured scope."
         },
         {
           "description": "Denies the kill command without any pre-configured scope.",
@@ -2743,12 +2761,6 @@
           "type": "string",
           "const": "pty:deny-spawn",
           "markdownDescription": "Denies the spawn command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the spawn, write, read, resize, kill, exitstatus command without any pre-configured scope.",
-          "type": "string",
-          "const": "pty:deny-spawn, write, read, resize, kill, exitstatus",
-          "markdownDescription": "Denies the spawn, write, read, resize, kill, exitstatus command without any pre-configured scope."
         },
         {
           "description": "Denies the write command without any pre-configured scope.",

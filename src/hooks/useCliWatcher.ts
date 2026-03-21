@@ -49,6 +49,9 @@ export function useCliWatcher(): void {
             });
           }
 
+          // Discover settings schema from binary (runs in background, non-blocking)
+          useSettingsStore.getState().loadBinarySettingsSchema();
+
           // Log version change
           if (cached) {
             console.info(`[cliWatcher] Claude CLI updated: ${cached} → ${version}`);

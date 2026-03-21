@@ -34,16 +34,13 @@ const DEFAULT_METADATA: SessionMetadata = {
   contextPercent: 0,
   durationSecs: 0,
   currentAction: null,
-  subagentCount: 0,
-  taskProgress: null,
   nodeSummary: null,
-  contextWarning: null,
-  recentOutput: "",
-  subagentActivity: [],
   currentToolName: null,
   inputTokens: 0,
   outputTokens: 0,
   assistantMessageCount: 0,
+  choiceHint: false,
+  runtimeModel: null,
 };
 
 function mockSession(overrides: Partial<Session> = {}): Session {

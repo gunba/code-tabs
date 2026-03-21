@@ -2,9 +2,9 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
-import { getResumeId } from "../../lib/claude";
+import { getResumeId, modelLabel } from "../../lib/claude";
 import { dirToTabName, abbreviatePath, normalizeForFilter } from "../../lib/paths";
-import { useShiftKey } from "../../hooks/useShiftKey";
+import { useCtrlKey } from "../../hooks/useCtrlKey";
 import {
   type PastSession,
   type SessionConfig,
@@ -30,6 +30,31 @@ function formatRelativeDate(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/** Short model badge text from full model string */
+function shortModelBadge(model: string): string | null {
+  if (!model) return null;
+  const label = modelLabel(model);
+  if (label === model) return null; // Unknown model, skip badge
+  // Extract version number if present (e.g. "claude-sonnet-4-5" → "4.5")
+  const verMatch = model.match(/(\d+)[.-](\d+)/);
+  const ver = verMatch ? ` ${verMatch[1]}.${verMatch[2]}` : "";
+  // Drop minor ".0" for cleaner display
+  return (label + ver).replace(/\.0$/, "");
+}
+
+// ── Chain grouping types ─────────────────────────────────────────
+
+/** Flatten chain groups into a display list with indent metadata */
+interface FlatEntry {
+  session: PastSession;
+  isChild: boolean;
+  isExpander?: boolean;
+  hiddenCount?: number;
+  chainRootId?: string;
+}
+
+const MAX_VISIBLE_CHILDREN = 3;
+
 // ── Props ───────────────────────────────────────────────────────────
 
 interface ResumePickerProps {
@@ -39,7 +64,7 @@ interface ResumePickerProps {
 // ── Component ───────────────────────────────────────────────────────
 
 export function ResumePicker({ onClose }: ResumePickerProps) {
-  const shiftHeld = useShiftKey();
+  const ctrlHeld = useCtrlKey();
   const createSession = useSessionStore((s) => s.createSession);
   const storeSessions = useSessionStore((s) => s.sessions);
   const activeSession = useSessionStore((s) => s.sessions.find((x) => x.id === s.activeTabId));
@@ -50,9 +75,13 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
   const pastSessions = useSettingsStore((s) => s.pastSessions);
   const pastSessionsLoading = useSettingsStore((s) => s.pastSessionsLoading);
   const loadPastSessions = useSettingsStore((s) => s.loadPastSessions);
+  const sessionNames = useSettingsStore((s) => s.sessionNames);
+  const sessionConfigs = useSettingsStore((s) => s.sessionConfigs);
   const [dirFilter, setDirFilter] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [expandedChains, setExpandedChains] = useState<Set<string>>(new Set());
   const filterRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   // Refresh past sessions on mount (background, non-blocking — data may already be preloaded)
   useEffect(() => {
@@ -85,7 +114,6 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
 
   // Filter past sessions by directory
   const filteredPastSessions = useMemo(() => {
-    // Only show sessions that have actual content (summary, first message, or known dead session)
     let list = pastSessions.filter((ps) => {
       if (deadSessionMap.has(ps.id)) return true;
       if (ps.firstMessage && !ps.firstMessage.startsWith('Summarize: [{"')) return true;
@@ -101,20 +129,72 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
     return list;
   }, [pastSessions, dirFilter, deadSessionMap]);
 
+  // Group sessions into chains by parentId
+  const flatList = useMemo((): FlatEntry[] => {
+    const childrenOf = new Map<string, PastSession[]>();
+    const childIds = new Set<string>();
+
+    // Build parent → children map (only if parent is in the filtered list)
+    const filteredIds = new Set(filteredPastSessions.map((ps) => ps.id));
+    for (const ps of filteredPastSessions) {
+      if (ps.parentId && filteredIds.has(ps.parentId)) {
+        childIds.add(ps.id);
+        const siblings = childrenOf.get(ps.parentId) || [];
+        siblings.push(ps);
+        childrenOf.set(ps.parentId, siblings);
+      }
+    }
+
+    const entries: FlatEntry[] = [];
+    for (const ps of filteredPastSessions) {
+      // Skip children — they'll be rendered under their parent
+      if (childIds.has(ps.id)) continue;
+
+      entries.push({ session: ps, isChild: false });
+
+      const children = childrenOf.get(ps.id);
+      if (children && children.length > 0) {
+        const isExpanded = expandedChains.has(ps.id);
+        const visible = isExpanded ? children : children.slice(0, MAX_VISIBLE_CHILDREN);
+        for (const child of visible) {
+          entries.push({ session: child, isChild: true });
+        }
+        if (!isExpanded && children.length > MAX_VISIBLE_CHILDREN) {
+          entries.push({
+            session: children[0], // placeholder
+            isChild: true,
+            isExpander: true,
+            hiddenCount: children.length - MAX_VISIBLE_CHILDREN,
+            chainRootId: ps.id,
+          });
+        }
+      }
+    }
+    return entries;
+  }, [filteredPastSessions, expandedChains]);
+
   // Reset selection when filter changes
   useEffect(() => {
     setSelectedIndex(0);
   }, [dirFilter]);
 
-  // Resume a past session directly — reuse active dead tab if available
+  // Scroll selected card into view
+  useEffect(() => {
+    const container = listRef.current;
+    if (!container) return;
+    const cards = container.querySelectorAll(".resume-picker-card, .resume-picker-expander");
+    const card = cards[selectedIndex] as HTMLElement | undefined;
+    card?.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex]);
+
+  // Resume a past session — reuse active dead tab if available, with config fallback
   const handleResume = useCallback(
     async (pastSession: PastSession) => {
       const workingDir = pastSession.directory || ".";
       const dead = deadSessionMap.get(pastSession.id);
-      // Use the full original config if we have a dead tab, otherwise use defaults.
-      // Don't spread lastConfig — it can contain stale flags like --effort that
-      // Claude CLI may not support with --resume.
-      const baseConfig = dead?.config ?? DEFAULT_SESSION_CONFIG;
+      const cached = sessionConfigs[pastSession.id];
+      // Use dead tab config, then cached config, then defaults
+      const baseConfig = dead?.config ?? { ...DEFAULT_SESSION_CONFIG, ...cached };
       const resumeConfig: SessionConfig = {
         ...baseConfig,
         workingDir,
@@ -124,7 +204,6 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
       addRecentDir(workingDir);
 
       if (activeIsDead && activeSession) {
-        // Reuse the dead tab — respawn in place
         requestRespawn(activeSession.id, resumeConfig, pastSession.path);
         onClose();
         return;
@@ -137,14 +216,15 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         console.error("Failed to resume session:", err);
       }
     },
-    [deadSessionMap, activeIsDead, activeSession, createSession, addRecentDir, requestRespawn, onClose]
+    [deadSessionMap, sessionConfigs, activeIsDead, activeSession, createSession, addRecentDir, requestRespawn, onClose]
   );
 
-  // Open the main launcher with this session pre-filled (Shift+Click / Configure)
+  // Open the main launcher with this session pre-filled (Ctrl+Click / Configure)
   const handleConfigure = useCallback(
     (pastSession: PastSession) => {
       const dead = deadSessionMap.get(pastSession.id);
-      const baseConfig = dead?.config ?? DEFAULT_SESSION_CONFIG;
+      const cached = sessionConfigs[pastSession.id];
+      const baseConfig = dead?.config ?? { ...DEFAULT_SESSION_CONFIG, ...cached };
       const prefillConfig: SessionConfig = {
         ...baseConfig,
         workingDir: pastSession.directory,
@@ -155,7 +235,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
       onClose();
       setShowLauncher(true);
     },
-    [deadSessionMap, setLastConfig, onClose, setShowLauncher]
+    [deadSessionMap, sessionConfigs, setLastConfig, onClose, setShowLauncher]
   );
 
   const handleBrowseFilter = useCallback(async () => {
@@ -168,35 +248,39 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
     if (selected) setDirFilter(selected);
   }, [dirFilter]);
 
-  // Keyboard: Enter resumes first visible, Escape closes
+  // Keyboard: Enter resumes, Escape closes, arrows navigate
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
         return;
       }
-      if (e.key === "Enter" && filteredPastSessions.length > 0) {
+      if (e.key === "Enter" && flatList.length > 0) {
         e.preventDefault();
-        const target = filteredPastSessions[selectedIndex] ?? filteredPastSessions[0];
-        if (e.shiftKey) {
-          handleConfigure(target);
+        const entry = flatList[selectedIndex] ?? flatList[0];
+        if (entry.isExpander && entry.chainRootId) {
+          setExpandedChains((s) => new Set(s).add(entry.chainRootId!));
+          return;
+        }
+        if (e.ctrlKey) {
+          handleConfigure(entry.session);
         } else {
-          handleResume(target);
+          handleResume(entry.session);
         }
         return;
       }
-      if (e.key === "ArrowDown" && filteredPastSessions.length > 0) {
+      if (e.key === "ArrowDown" && flatList.length > 0) {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.min(prev + 1, filteredPastSessions.length - 1));
+        setSelectedIndex((prev) => Math.min(prev + 1, flatList.length - 1));
       }
-      if (e.key === "ArrowUp" && filteredPastSessions.length > 0) {
+      if (e.key === "ArrowUp" && flatList.length > 0) {
         e.preventDefault();
         setSelectedIndex((prev) => Math.max(prev - 1, 0));
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, filteredPastSessions, selectedIndex, handleResume, handleConfigure]);
+  }, [onClose, flatList, selectedIndex, handleResume, handleConfigure]);
 
   return (
     <div className="resume-picker-overlay" onClick={onClose}>
@@ -225,34 +309,67 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         </div>
 
         {/* Session list */}
-        <div className="resume-picker-list">
-          {filteredPastSessions.length === 0 && (
+        <div className="resume-picker-list" ref={listRef}>
+          {flatList.length === 0 && (
             <div className="resume-picker-empty">
-              {pastSessionsLoading ? "Loading sessions..." : pastSessions.length === 0 ? "No past sessions found" : "No sessions match filter"}
+              {pastSessionsLoading
+                ? "Loading sessions..."
+                : pastSessions.length === 0
+                  ? "No past sessions found"
+                  : "No sessions match filter"}
             </div>
           )}
-          {filteredPastSessions.map((ps, idx) => {
+          {flatList.map((entry, idx) => {
+            if (entry.isExpander) {
+              return (
+                <div
+                  key={`expander-${entry.chainRootId}`}
+                  className={`resume-picker-expander${idx === selectedIndex ? " resume-picker-expander-selected" : ""}`}
+                  onClick={() => entry.chainRootId && setExpandedChains((s) => new Set(s).add(entry.chainRootId!))}
+                  onMouseEnter={() => setSelectedIndex(idx)}
+                >
+                  +{entry.hiddenCount} more in chain...
+                </div>
+              );
+            }
+
+            const ps = entry.session;
             const dead = deadSessionMap.get(ps.id);
             const isSelected = idx === selectedIndex;
+            const customName = sessionNames[ps.id];
+            const badge = shortModelBadge(ps.model);
+            const cardClass = [
+              "resume-picker-card",
+              isSelected && "resume-picker-card-selected",
+              entry.isChild && "resume-picker-card-child",
+            ].filter(Boolean).join(" ");
+
             return (
               <div
                 key={ps.id}
-                className={`resume-picker-card${isSelected ? " resume-picker-card-selected" : ""}`}
+                className={cardClass}
                 onClick={(e) => {
-                  if (e.shiftKey) {
+                  if (e.ctrlKey) {
                     handleConfigure(ps);
                   } else {
                     handleResume(ps);
                   }
                 }}
                 onMouseEnter={() => setSelectedIndex(idx)}
-                title={shiftHeld
-                  ? `Shift+Click: Configure & relaunch\n${ps.directory}`
-                  : `${ps.directory}\nSession: ${ps.id}\nShift+Click to configure`}
+                title={ctrlHeld
+                  ? `Ctrl+Click: Configure & relaunch\n${ps.directory}`
+                  : `${ps.directory}\nSession: ${ps.id}\nCtrl+Click to configure`}
               >
                 <div className="resume-picker-card-top">
                   <span className="resume-picker-card-name">
-                    {dirToTabName(ps.directory)}
+                    {customName ? (
+                      <>
+                        <span className="resume-picker-card-custom-name">{customName}</span>
+                        <span className="resume-picker-card-dir-label">{dirToTabName(ps.directory)}</span>
+                      </>
+                    ) : (
+                      dirToTabName(ps.directory)
+                    )}
                   </span>
                   <span className="resume-picker-card-date">
                     {formatRelativeDate(ps.lastModified)}
@@ -262,20 +379,34 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                   <span className="resume-picker-card-dir">
                     {abbreviatePath(ps.directory)}
                   </span>
+                  {badge && (
+                    <span className="resume-picker-card-model">{badge}</span>
+                  )}
                   <span className="resume-picker-card-size">
                     {formatSize(ps.sizeBytes)}
                   </span>
                 </div>
-                <div className="resume-picker-card-bottom">
+                <div className="resume-picker-card-messages">
                   {dead?.nodeSummary ? (
                     <span className="resume-picker-card-summary-haiku">
                       {dead.nodeSummary}
                     </span>
-                  ) : ps.firstMessage ? (
-                    <span className="resume-picker-card-first-msg">
-                      {ps.firstMessage}
-                    </span>
-                  ) : null}
+                  ) : (
+                    <>
+                      {ps.firstMessage && (
+                        <div className="resume-picker-card-msg">
+                          <span className="resume-picker-card-msg-arrow">{"\u25B8"}</span>
+                          <span className="resume-picker-card-msg-text">{ps.firstMessage}</span>
+                        </div>
+                      )}
+                      {ps.lastMessage && ps.lastMessage !== ps.firstMessage && (
+                        <div className="resume-picker-card-msg resume-picker-card-msg-last">
+                          <span className="resume-picker-card-msg-arrow">{"\u25B8"}</span>
+                          <span className="resume-picker-card-msg-text">{ps.lastMessage}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -284,7 +415,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
 
         {/* Hint */}
         <div className="resume-picker-hint">
-          <kbd>↵</kbd> to resume &middot; <kbd>Shift+↵</kbd> to configure
+          <kbd>{"\u21B5"}</kbd> to resume &middot; <kbd>Ctrl+{"\u21B5"}</kbd> to configure
         </div>
       </div>
     </div>
