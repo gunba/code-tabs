@@ -122,6 +122,21 @@
   box-shadow: inset 0 -2px 0 var(--permission), inset 0 2px 0 var(--accent-secondary);
 }
 
+/* Action needed: pulsing purple bar */
+.tab-active.tab-actionNeeded {
+  animation: actionNeeded-pulse 2s ease-in-out infinite;
+}
+
+@keyframes actionNeeded-pulse {
+  0%, 100% { box-shadow: inset 0 -2px 0 var(--accent); }
+  50% { box-shadow: inset 0 -2px 0 var(--accent-tertiary), 0 2px 6px color-mix(in srgb, var(--accent-tertiary) 20%, transparent); }
+}
+
+.ctrl-held .tab-active.tab-actionNeeded {
+  animation: none;
+  box-shadow: inset 0 -2px 0 var(--accent-tertiary), inset 0 2px 0 var(--accent-secondary);
+}
+
 .ctrl-held .tab-add {
   background: var(--accent-secondary);
 }
@@ -140,12 +155,9 @@
 
 /* State dot colors */
 .tab-dot.state-idle { background: var(--success); }
-.tab-dot.choice-pending {
-  background: var(--warning) !important;
-  animation: dot-pulse 2s ease infinite !important;
-}
 .tab-dot.state-thinking { background: var(--accent); animation: dot-pulse 2s ease infinite; }
 .tab-dot.state-toolUse { background: var(--info); animation: dot-pulse 2s ease infinite; }
+.tab-dot.state-actionNeeded { background: var(--accent-tertiary); animation: dot-pulse 2s ease infinite; }
 .tab-dot.state-waitingPermission { background: var(--permission); animation: dot-pulse 2s ease infinite; }
 .tab-dot.state-error { background: var(--error); }
 .tab-dot.state-dead { background: var(--text-muted); }
@@ -379,6 +391,66 @@
 .tab-config:hover {
   background: color-mix(in srgb, var(--accent-tertiary) 18%, var(--bg-surface));
   color: var(--accent-tertiary);
+}
+
+/* ── Tab group separators ────────────────────────────────────── */
+
+.tab-group-separator {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.tab-group-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+/* ── Tab reorder arrows ─────────────────────────────────────── */
+
+.tab-reorder-arrows {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0 2px;
+  z-index: 1;
+}
+
+.tab:hover .tab-reorder-arrows { opacity: 1; }
+
+.tab-arrow {
+  pointer-events: auto;
+  width: 16px;
+  height: 24px;
+  border: none;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg-surface) 85%, transparent);
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-arrow:hover {
+  background: var(--bg-selection);
+  color: var(--text-primary);
 }
 
 /* ── Tab context menu ────────────────────────────────────────── */

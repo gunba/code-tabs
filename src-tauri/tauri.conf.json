@@ -21,7 +21,8 @@
         "decorations": true,
         "theme": "Dark",
         "resizable": true,
-        "center": true
+        "center": true,
+        "zoomHotkeysEnabled": false
       }
     ],
     "security": {

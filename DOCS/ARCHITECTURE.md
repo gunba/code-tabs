@@ -16,6 +16,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [DF-07] Visibility change handler: clears texture atlas and redraws on OS wake / tab restore (fixes GPU corruption after sleep)
 - [DF-08] Icons module: src/components/Icons/Icons.tsx exports 24 inline SVG icon components (stroke-based, 16x16 viewBox, currentColor inheritance, pointerEvents none). No dependencies. All UI icons are monochrome SVGs — no emoji or unicode icon chars.
   - Files: src/components/Icons/Icons.tsx:1
+- [DF-09] groupSessionsByDir() and swapWithinGroup() in paths.ts: pure functions for tab grouping by normalized workingDir (Map-based, O(n) single pass, insertion-order groups) and position swapping within group boundaries. TabGroup type exported.
+  - Files: src/lib/paths.ts:53, src/lib/paths.ts:68
 
 ## State Inspection
 
@@ -23,12 +25,18 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [SI-02] Inspector connects after 1s delay (Bun init time), retries 3x with backoff on failure
 - [SI-03] `deriveStateFromPoll()` — pure function for direct state derivation from inspector data
 - [SI-04] Permission detection via `permPending` notification flag (not PTY regex)
-- [SI-05] Idle detection via `idleDetected` notification flag (not PTY regex)
+- [SI-05] Idle detection via `idleDetected` notification flag (not PTY regex); sticky across polls, cleared only by user event
 - [SI-06] `choiceHint` detection: POLL_STATE checks for numbered list items (`\n\s*[1-9]\.\s`) in last 200 chars of assistant text when `stop === 'end_turn'`; auto-clears on user input
 - [SI-07] Tool actions, user prompts, assistant text, subagent descriptions captured inline
 - [SI-08] State is NEVER inferred from timers or arbitrary delays — only from real signals
 - [SI-09] Subagent descriptions, state, tokens, actions, and messages all captured via inspector (no JSONL subagent watcher)
 - [SI-10] No JSONL file watching for state — Rust JSONL utilities kept only for `session_has_conversation` and `list_past_sessions`
+- [SI-11] Sealed flag (`_sealed`) on result event prevents post-completion JSON.stringify re-serializations (JSONL persistence, hook dispatch) from overwriting `state.stop` back to `tool_use`; tokens/model still accumulate while sealed; cleared on user event
+  - Files: src/lib/inspectorHooks.ts:57, src/lib/inspectorHooks.ts:215, src/lib/inspectorHooks.ts:239
+- [SI-12] `idleDetected` is sticky (not reset by POLL_STATE) — cleared only by user events in the hook; prevents state oscillation between idle and stale tool_use
+  - Files: src/lib/inspectorHooks.ts:239, src/lib/inspectorHooks.ts:363
+- [SI-13] `deriveStateFromPoll` override chain: ExitPlanMode refines toolUse→actionNeeded; idleDetected overrides to idle; choiceHint refines idle→actionNeeded; permPending always wins (waitingPermission)
+  - Files: src/hooks/useInspectorState.ts:82
 
 ## PTY Internals
 
@@ -112,4 +120,6 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 
 
 - [CM-01] Config modal header uses CSS grid (auto 1fr auto) instead of flexbox space-between, so tab row stays centered regardless of left (title) or right (project selector + close) content width.
-  - Files: src/components/ConfigManager/ConfigManager.css:16, src/components/ConfigManager/ConfigManager.tsx:67
+  - Files: src/components/ConfigManager/ConfigManager.css:20, src/components/ConfigManager/ConfigManager.tsx:67
+- [CM-02] formatScopePath() normalizes backslashes to forward slashes and abbreviates project-scope paths via abbreviatePath(). User-scope paths (~/...) pass through unchanged.
+  - Files: src/lib/paths.ts:43

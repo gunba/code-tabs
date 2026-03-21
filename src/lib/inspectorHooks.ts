@@ -52,7 +52,9 @@ export const INSTALL_HOOK = `(function() {
     inputTs: 0,
     pendingDescs: [],
     subs: [],
-    thinking: []
+    thinking: [],
+    thinkingAccum: {},
+    _sealed: false
   };
   globalThis.__inspectorState = state;
 
@@ -176,44 +178,36 @@ export const INSTALL_HOOK = `(function() {
               // Assistant message
               if (obj.type === 'assistant' && obj.message) {
                 var msg = obj.message;
-                if (msg.stop_reason) state.stop = msg.stop_reason;
                 if (msg.model) state.model = msg.model;
                 if (msg.usage) {
                   state.inTok += (msg.usage.input_tokens || 0) + (msg.usage.cache_creation_input_tokens || 0);
                   state.outTok += (msg.usage.output_tokens || 0);
                 }
-                var content = msg.content;
-                if (Array.isArray(content)) {
-                  var toolNames = [];
-                  for (var i = 0; i < content.length; i++) {
-                    if (content[i].type === 'tool_use') {
-                      var tn = content[i].name;
-                      toolNames.push(tn);
-                      var inp = content[i].input || {};
-                      toolAct = fmtToolAction(tn, inp);
-                      if (tn === 'Agent' && inp.description) {
-                        state.subagentDescs.push(inp.description.slice(0, 100));
-                        if (state.subagentDescs.length > 20) state.subagentDescs.shift();
-                        state.pendingDescs.push(inp.description.slice(0, 100));
+                if (!state._sealed) {
+                  if (msg.stop_reason) state.stop = msg.stop_reason;
+                  var content = msg.content;
+                  if (Array.isArray(content)) {
+                    var toolNames = [];
+                    for (var i = 0; i < content.length; i++) {
+                      if (content[i].type === 'tool_use') {
+                        var tn = content[i].name;
+                        toolNames.push(tn);
+                        var inp = content[i].input || {};
+                        toolAct = fmtToolAction(tn, inp);
+                        if (tn === 'Agent' && inp.description) {
+                          state.subagentDescs.push(inp.description.slice(0, 100));
+                          if (state.subagentDescs.length > 20) state.subagentDescs.shift();
+                          state.pendingDescs.push(inp.description.slice(0, 100));
+                        }
+                      }
+                      if (content[i].type === 'text' && content[i].text) {
+                        txtSnippet = content[i].text;
                       }
                     }
-                    if (content[i].type === 'text' && content[i].text) {
-                      txtSnippet = content[i].text;
-                    }
-                    if (content[i].type === 'thinking' && content[i].thinking) {
-                      var thinkText = content[i].thinking;
-                      if (thinkText.length > 10000) thinkText = thinkText.slice(0, 10000) + '\\n[truncated]';
-                      state.thinking.push({ x: thinkText, ts: Date.now(), r: false });
-                      if (state.thinking.length > 30) state.thinking.shift();
-                    }
-                    if (content[i].type === 'redacted_thinking') {
-                      state.thinking.push({ x: '', ts: Date.now(), r: true });
-                      if (state.thinking.length > 30) state.thinking.shift();
-                    }
+                    if (toolNames.length > 0) state.tools = toolNames;
+                    if (txtSnippet) state.lastText = txtSnippet.slice(-300);
+                    if (toolAct) state.toolAction = toolAct;
                   }
-                  if (toolNames.length > 0) state.tools = toolNames;
-                  if (txtSnippet) state.lastText = txtSnippet.slice(-300);
-                  if (toolAct) state.toolAction = toolAct;
                 }
               }
 
@@ -221,6 +215,7 @@ export const INSTALL_HOOK = `(function() {
               if (obj.type === 'result') {
                 if (typeof obj.total_cost_usd === 'number') state.cost = obj.total_cost_usd;
                 state.stop = 'end_turn';
+                state._sealed = true;
               }
 
               // User event (tool_result or new prompt)
@@ -244,12 +239,14 @@ export const INSTALL_HOOK = `(function() {
                 state.inputBuf = '';
                 state.stop = null;
                 state.tools = [];
+                state._sealed = false;
+                state.idleDetected = false;
               }
 
               // Ring buffer of last 50 state-carrying main events.
               // Only user/assistant/result — system/progress/notification events
               // would mask real state signals in deriveStateFromPoll.
-              if (obj.type === 'user' || obj.type === 'assistant' || obj.type === 'result') {
+              if (obj.type === 'user' || obj.type === 'result' || (obj.type === 'assistant' && !state._sealed)) {
                 state.lastEvent = obj.type;
                 var evt = { t: obj.type };
                 if (obj.type === 'assistant' && obj.message && obj.message.stop_reason) {
@@ -264,6 +261,41 @@ export const INSTALL_HOOK = `(function() {
                 if (state.events.length > 50) state.events.shift();
               }
             }
+          }
+        }
+      }
+    } catch(e) {}
+    return result;
+  };
+
+  var origParse = JSON.parse;
+  JSON.parse = function(text) {
+    var result = origParse.apply(this, arguments);
+    try {
+      if (result && typeof result === 'object' && result.type) {
+        if (result.type === 'content_block_start' && result.content_block) {
+          if (result.content_block.type === 'thinking') {
+            state.thinkingAccum[result.index] = '';
+          }
+          if (result.content_block.type === 'redacted_thinking') {
+            state.thinking.push({ x: '', ts: Date.now(), r: true });
+            if (state.thinking.length > 30) state.thinking.shift();
+          }
+        }
+        if (result.type === 'content_block_delta' && result.delta
+            && result.delta.type === 'thinking_delta'
+            && typeof state.thinkingAccum[result.index] === 'string') {
+          state.thinkingAccum[result.index] += result.delta.thinking;
+        }
+        if (result.type === 'content_block_stop'
+            && typeof state.thinkingAccum[result.index] === 'string') {
+          var accumulated = state.thinkingAccum[result.index];
+          delete state.thinkingAccum[result.index];
+          if (accumulated) {
+            var thinkText = accumulated;
+            if (thinkText.length > 10000) thinkText = thinkText.slice(0, 10000) + '\\n[truncated]';
+            state.thinking.push({ x: thinkText, ts: Date.now(), r: false });
+            if (state.thinking.length > 30) state.thinking.shift();
           }
         }
       }
@@ -333,7 +365,6 @@ export const POLL_STATE = `(function() {
     })
   };
   s.permPending = false;
-  s.idleDetected = false;
   s.events = [];
   return result;
 })()`;

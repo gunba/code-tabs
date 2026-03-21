@@ -77,10 +77,10 @@ src/
 │   ├── StatusBar/StatusBar.tsx           # Model, cost, tokens, duration
 │   ├── CommandPalette/CommandPalette.tsx # Ctrl+K search
 │   ├── SubagentInspector/SubagentInspector.tsx  # Markdown-rendered subagent conversation viewer
-│   ├── ConfigManager/ConfigManager.tsx  # 5-tab config workspace (Ctrl+,): Settings, CLAUDE.md, Hooks, Plugins, Agents
+│   ├── ConfigManager/ConfigManager.tsx  # 5-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents
 │   ├── ConfigManager/ThreePaneEditor.tsx # 3-column User/Project/Local scope layout (color-coded)
 │   ├── ConfigManager/SettingsPane.tsx   # Per-scope JSON editor with syntax highlighting overlay
-│   ├── ConfigManager/MarkdownPane.tsx   # Per-scope CLAUDE.md editor
+│   ├── ConfigManager/MarkdownPane.tsx   # Per-scope CLAUDE.md editor with preview toggle
 │   ├── ConfigManager/HooksPane.tsx      # Per-scope hooks CRUD (absorbed from HooksManager)
 │   ├── ConfigManager/PluginsPane.tsx    # Per-scope enabledPlugins (Record<string,boolean>) + mcpServers
 │   ├── ConfigManager/AgentEditor.tsx    # Per-scope agent file list + markdown editor
@@ -96,7 +96,7 @@ src/
 │   ├── ptyProcess.ts                    # Direct PTY wrapper + active PID cleanup registry
 │   ├── ptyRegistry.ts                   # Global PTY writer registry
 │   ├── terminalRegistry.ts             # Terminal buffer reader registry
-│   ├── paths.ts                         # Path helpers (dirToTabName, abbreviatePath, normalizeForFilter)
+│   ├── paths.ts                         # Path helpers, tab grouping (groupSessionsByDir, swapWithinGroup, TabGroup)
 │   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
 │   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
 │   ├── uiConfig.ts                     # Persisted UI configuration

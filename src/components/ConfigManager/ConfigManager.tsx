@@ -16,7 +16,7 @@ type Tab = "settings" | "claudemd" | "hooks" | "plugins" | "agents";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <IconGear size={11} /> },
-  { id: "claudemd", label: "CLAUDE.md", icon: <IconDocument size={11} /> },
+  { id: "claudemd", label: "Claude", icon: <IconDocument size={11} /> },
   { id: "hooks", label: "Hooks", icon: <IconHook size={11} /> },
   { id: "plugins", label: "Plugins", icon: <IconPuzzle size={11} /> },
   { id: "agents", label: "Agents", icon: <IconBot size={11} /> },
@@ -59,9 +59,10 @@ export function ConfigManager() {
   }, [projectDir, activeTabId, sessions, projectDirs]);
 
   const onClose = () => setShowConfigManager(false);
+  const isCompact = tab === "hooks" || tab === "plugins";
 
   return (
-    <ModalOverlay onClose={onClose} className="config-modal">
+    <ModalOverlay onClose={onClose} className={`config-modal${isCompact ? " config-modal-compact" : ""}`}>
       {/* Header with tabs */}
       <div className="config-header">
         <span className="config-title">Config</span>
@@ -99,19 +100,19 @@ export function ConfigManager() {
       {/* Content */}
       <div className="config-content">
         {tab === "settings" && (
-          <ThreePaneEditor component={SettingsPane} projectDir={projectDir} onStatus={setStatusMsg} />
+          <ThreePaneEditor component={SettingsPane} projectDir={projectDir} onStatus={setStatusMsg} tabId="settings" />
         )}
         {tab === "claudemd" && (
-          <ThreePaneEditor component={MarkdownPane} projectDir={projectDir} onStatus={setStatusMsg} />
+          <ThreePaneEditor component={MarkdownPane} projectDir={projectDir} onStatus={setStatusMsg} tabId="claudemd" />
         )}
         {tab === "hooks" && (
-          <ThreePaneEditor component={HooksPane} projectDir={projectDir} onStatus={setStatusMsg} compact />
+          <ThreePaneEditor component={HooksPane} projectDir={projectDir} onStatus={setStatusMsg} compact tabId="hooks" />
         )}
         {tab === "plugins" && (
-          <ThreePaneEditor component={PluginsPane} projectDir={projectDir} onStatus={setStatusMsg} compact />
+          <ThreePaneEditor component={PluginsPane} projectDir={projectDir} onStatus={setStatusMsg} compact tabId="plugins" />
         )}
         {tab === "agents" && (
-          <ThreePaneEditor component={AgentEditor} projectDir={projectDir} onStatus={setStatusMsg} />
+          <ThreePaneEditor component={AgentEditor} projectDir={projectDir} onStatus={setStatusMsg} tabId="agents" />
         )}
       </div>
 

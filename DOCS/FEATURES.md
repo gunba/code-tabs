@@ -11,7 +11,7 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [TB-03] Three distinct top-right buttons: Resume (blue tint + blue icon), Config (purple tint + purple icon), New (orange/accent bg)
 - [TB-04] Native Windows dark-themed titlebar — `decorations: true` + `"theme": "Dark"` in tauri.conf.json, no custom window controls HTML
 - [TB-05] No `-webkit-app-region` drag regions — native titlebar handles window dragging
-- [TB-06] State dot colors: idle=green, thinking=clay pulse, toolUse=blue pulse, waitingPermission=orange pulse, error=red, dead=muted, starting=muted pulse, choice-pending=amber/gold pulse (idle + numbered choice detected)
+- [TB-06] State dot colors: idle=green, thinking=clay pulse, toolUse=blue pulse, actionNeeded=purple pulse, waitingPermission=orange pulse, error=red, dead=muted, starting=muted pulse
 - [TB-07] All dot pulse animations unified: `dot-pulse 2s ease infinite` with min opacity 0.5 (no separate scale animation)
 - [TB-08] Tab meta text color-coded: model color matches type (Opus=orange, Sonnet=purple, Haiku=blue via hardcoded hex), effort=clay, agents=muted text-secondary; dot separators
   - Files: src/App.tsx:296, src/lib/claude.ts:25
@@ -21,7 +21,7 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [TB-11] Dead tabs dimmed (opacity 0.45), clickable to switch (overlay provides actions)
 - [TB-12] Ctrl+Click tab opens relaunch modal; blue top-bar + tint when Ctrl is held
 - [TB-13] Tabs preferred at 200px, shrink to 90px min-width before scrolling; CSS ellipsis handles name truncation
-- [TB-14] Tabs draggable for reorder via native drag-and-drop
+- [TB-14] Tabs draggable for reorder via native drag-and-drop; constrained to same workspace group
 - [TB-15] Tab rename: action buttons hidden during edit (`:has(.tab-name-input)`); summary/meta lines remain visible during rename
 - [TB-16] Right-click context menu: Rename, Copy Session ID, Copy Working Dir, Open in Explorer, Open Inspector / Copy Inspector URL / Reconnect Inspector (live sessions only), Revive/Close
 - [TB-17] Open Inspector: opens `https://debug.bun.sh/#HOST:PORT/PATH` in the default browser, disconnects the internal WebSocket, and marks session as inspector-off (hollow tab dot, status bar indicator)
@@ -31,6 +31,12 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [TB-21] Inspector-off state cleared on session respawn
 - [TB-22] All tab bar icons (rename, kill, close, resume, config, subagent arrow) are inline SVG components — no platform-dependent emoji
   - Files: src/App.tsx:28, src/components/Icons/Icons.tsx:1
+- [TB-23] Tab grouping by workspace directory: tabs with the same workingDir are visually grouped with uppercase folder-label separators between groups. Multi-tab groups show hover-visible left/right arrow buttons (‹/›) for reorder within group. Drag-and-drop constrained to same group.
+  - Files: src/App.tsx:272, src/App.tsx:291, src/App.css:388
+- [TB-24] actionNeeded state: purple pulsing dot (--accent-tertiary) for ExitPlanMode approval and numbered choice questions; active tab gets pulsing purple underline; supersedes old choice-pending amber styling
+  - Files: src/App.css:127, src/App.css:157, src/App.tsx:316, src/App.tsx:384
+- [TB-25] actionNeeded notification: background sessions entering actionNeeded state trigger 'Action Needed' / 'A session needs your input.' desktop notification (same cooldown as other states)
+  - Files: src/hooks/useNotifications.ts:90
 
 ## Session Resume
 
@@ -46,7 +52,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [DS-02] All actions respawn the PTY in the same tab — no new tab created, no old tab destroyed
 - [DS-03] Resume button only shown if session has conversation (derived from `nodeSummary` or `resumeSession` — no JSONL check)
 - [DS-04] Enter key on dead tab resumes same session; all other input swallowed
-- [DS-05] Ctrl+R on dead tab opens resume picker targeting that tab (reuses tab via `requestRespawn`)
+- [DS-05] Ctrl+Shift+R on dead tab opens resume picker targeting that tab (reuses tab via `requestRespawn`); dead overlay hint shows Ctrl+R for the "Resume other..." button
+  - Files: src/components/Terminal/TerminalPanel.tsx:65, src/components/ResumePicker/ResumePicker.tsx:250, src/App.tsx:200
 - [DS-06] ResumePicker detects active dead tab and respawns in place instead of creating new session
 - [DS-07] Session-in-use auto-recovery: own orphans killed automatically and resume retries; external processes show "Session in use externally" overlay with "Kill and resume" / "Cancel" — never killed without user confirmation
 - [DS-08] Proactive orphan cleanup on startup: init() collects all persisted session IDs, calls kill_orphan_sessions to kill leftover CLI processes before any PTY spawning. Prevents 'session ID already in use' and port conflicts on app restart after crash/force-close
@@ -62,10 +69,10 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [TR-06] Fixed 100K scrollback buffer — no dynamic resizing
 - [TR-07] Vertical button bar (28px): permanent right-side column with scroll-to-top, scroll-to-last-message, queue input, clear input, clear all input, thinking toggle, and scroll-to-bottom. Visibility-toggled (not removed) to prevent layout shift.
   - Files: src/components/Terminal/TerminalPanel.tsx:609
-- [TR-08] Scroll to last user message: scans buffer backwards for prompt marker (❯), accessible via button bar and Ctrl+middle-click on terminal
-  - Files: src/hooks/useTerminal.ts:274, src/components/Terminal/TerminalPanel.tsx:567
-- [TR-09] Ctrl+wheel scrolls by page (not line); uses xterm.js 6 attachCustomWheelEventHandler
-  - Files: src/hooks/useTerminal.ts:82
+- [TR-08] Scroll to last user message: uses xterm.js buffer markers registered on user Enter presses (not prompt scanning), accessible via button bar and Ctrl+middle-click on terminal (capture phase listener)
+  - Files: src/hooks/useTerminal.ts:283, src/components/Terminal/TerminalPanel.tsx:566
+- [TR-09] Ctrl+wheel snaps to top/bottom; requires zoomHotkeysEnabled: false in tauri.conf.json to prevent WebView2 zoom interception
+  - Files: src/hooks/useTerminal.ts:82, src-tauri/tauri.conf.json
 - [TR-10] fit() deferred on tab switch via double requestAnimationFrame — waits for browser layout reflow before sizing, prevents tiny-terminal bug. Cancels on rapid tab switching.
   - Files: src/components/Terminal/TerminalPanel.tsx:435
 
@@ -73,11 +80,15 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 
 - [SL-01] Modal for new session or resume — Ctrl+T opens fresh (clears resume/continue flags)
 - [SL-02] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T instantly launches without showing modal; uses saved defaults if set, otherwise falls back to last-used config (including folder)
-- [SL-03] Ctrl+R opens resume picker (browse past Claude sessions); 660px modal, 520px list max-height; cards show blue top-bar + tint when Ctrl is held
-- [SL-04] Resume picker enriched data: each session card shows firstMessage, lastMessage (from tail scan), model badge (short label like "Sonnet 4"), and file size
-- [SL-05] Chain grouping: sessions linked by `parentId` (plan-mode forks) grouped under parent with left accent border + 16px indent; max 3 visible children per chain with "+N more" expander
+- [SL-03] Ctrl+R opens resume picker (browse past Claude sessions); 660px modal, 520px list max-height; cards show blue top-bar + tint when Ctrl is held; resume banner uses orange accent (not blue)
+  - Files: src/components/SessionLauncher/SessionLauncher.css:402
+- [SL-04] Resume picker enriched data: each session card shows firstMessage, lastMessage (from tail scan), settings badges (model, skip-perms, permission mode, effort, agent), and file size
+  - Files: src/components/ResumePicker/ResumePicker.tsx:364
+- [SL-05] Chain merging: sessions linked by parentId merged into a single card — latest session used for resume, names resolved from any member, suppressed plan-mode artifact messages skipped, sizes summed; stacked box-shadow when chainLength > 1
+  - Files: src/components/ResumePicker/ResumePicker.tsx:155
 - [SL-06] Custom names: tab renames persist in `sessionNames` map (localStorage); shown as bold primary name with directory as secondary text in resume picker
-- [SL-07] Config caching: session configs cached in `sessionConfigs` map (localStorage) when inspector connects; used as fallback when resuming sessions not in the dead tab map
+- [SL-07] Config caching: session configs cached in sessionConfigs map (localStorage) when inspector connects (model, permissionMode, dangerouslySkipPermissions, effort, agent, maxBudget, runMode); used as fallback when resuming sessions not in the dead tab map
+  - Files: src/store/settings.ts:201
 - [SL-08] Config pruning: both `sessionNames` and `sessionConfigs` maps pruned to only IDs present in loaded past sessions
 - [SL-09] Config restore: SessionLauncher spreads all `lastConfig` fields (not just 8), clearing only one-shot fields (`continueSession`, `sessionId`, `runMode`)
 - [SL-10] CLI command pills sorted by usage frequency (same heat gradient as Command Bar)
@@ -119,11 +130,11 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 ## Config Manager
 
 - [CM-01] Config modal header uses CSS grid (auto 1fr auto) instead of flexbox space-between, so tab row stays centered regardless of left (title) or right (project selector + close) content width.
-  - Files: src/components/ConfigManager/ConfigManager.css:16, src/components/ConfigManager/ConfigManager.tsx:66
-- [CM-02] Five header tabs: Settings / CLAUDE.md / Hooks / Plugins / Agents — each with icon
+  - Files: src/components/ConfigManager/ConfigManager.css:20, src/components/ConfigManager/ConfigManager.tsx:67
+- [CM-02] Five header tabs: Settings / Claude / Hooks / Plugins / Agents — each with icon
 - [CM-03] Project dir selector shown when multiple project dirs exist; defaults to active session's working dir
 - [CM-04] Keystrokes blocked via shared ModalOverlay component (`onKeyDown` stopPropagation); Escape and `Ctrl+,` pass through to global handler
-- [CM-05] All five content tabs (Settings/CLAUDE.md/Hooks/Plugins/Agents) use ThreePaneEditor: 3-column grid showing User/Project/Local scopes side by side with color-coded borders and tinted headers.
+- [CM-05] All five content tabs (Settings/Claude/Hooks/Plugins/Agents) use ThreePaneEditor: 3-column grid showing User/Project/Local scopes side by side with color-coded borders and tinted headers.
   - Files: src/components/ConfigManager/ConfigManager.tsx:103
 - [CM-06] Per-scope raw JSON settings editor (SettingsPane) and CLAUDE.md editor (MarkdownPane) with own dirty tracking and Save per pane. Tab key inserts 2 spaces in markdown.
 - [CM-07] Agent editor: scoped via ThreePaneEditor (user/project/local) with agent pills at top, editor below. User scope scans ~/.claude/agents/, project scans {wd}/.claude/agents/, local scans {wd}/.claude/local/agents/. Create, edit, delete per scope.
@@ -131,7 +142,7 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [CM-08] Save via Rust `read_config_file`/`write_config_file` commands (JSON validated before write, parent dirs auto-created)
 - [CM-09] Escape closes modal; clicking overlay closes modal
 - [CM-10] Settings schema cached in localStorage (`binarySettingsSchema`) to avoid re-scanning on every startup
-- [CM-11] Wide modal (96vw, max 1900px, 88vh) with 5 tabs: Settings, CLAUDE.md, Hooks, Plugins, Agents. Store value controls which tab opens.
+- [CM-11] Wide modal (96vw, max 1900px, 88vh) with 5 tabs: Settings, Claude, Hooks, Plugins, Agents. Store value controls which tab opens.
 - [CM-12] ThreePaneEditor: Settings/CLAUDE.md/Hooks/Plugins tabs use 3-column grid showing User/Project/Local scopes side by side. Color coded: User=clay, Project=blue, Local=purple (left border + tinted header).
   - Files: src/components/ConfigManager/ThreePaneEditor.tsx:1, src/components/ConfigManager/ConfigManager.css:133
 - [CM-13] SettingsPane: JSON textarea with syntax highlighting overlay (pre behind transparent textarea). Keys=clay, strings=blue, numbers/bools=purple. Scroll synced between layers. Ctrl+S to save.
@@ -147,7 +158,15 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [CM-18] Config tabs use inline SVG icons (gear, document, hook, puzzle, bot) instead of emoji — monochrome, consistent cross-platform
   - Files: src/components/ConfigManager/ConfigManager.tsx:17
 - [CM-19] ThreePaneEditor compact mode: Hooks and Plugins tabs pass compact prop, constraining grid to max-width 1300px centered. Settings, CLAUDE.md, and Agents fill full modal width (up to 1900px) for wider text editing.
-  - Files: src/components/ConfigManager/ThreePaneEditor.tsx:9, src/components/ConfigManager/ConfigManager.tsx:110, src/components/ConfigManager/ConfigManager.css:142
+  - Files: src/components/ConfigManager/ThreePaneEditor.tsx:16, src/components/ConfigManager/ConfigManager.tsx:109, src/components/ConfigManager/ConfigManager.css:140
+- [CM-20] Tab label reads "Claude" instead of "CLAUDE.md" for the markdown editor tab.
+  - Files: src/components/ConfigManager/ConfigManager.tsx:19
+- [CM-21] Compact modal: Hooks/Plugins tabs apply config-modal-compact class (max-width 1400px) to the ModalOverlay, narrowing the entire modal — not just the grid. Settings/Claude/Agents remain at full 1900px width.
+  - Files: src/components/ConfigManager/ConfigManager.tsx:63, src/components/ConfigManager/ConfigManager.css:13
+- [CM-22] ThreePaneEditor scope headers show actual file paths per tab (e.g. ~/.claude/settings.json, {dir}/CLAUDE.md, {dir}/.claude/agents/) instead of generic directory stubs. Paths normalized to forward slashes via formatScopePath().
+  - Files: src/components/ConfigManager/ThreePaneEditor.tsx:21, src/lib/paths.ts:40
+- [CM-23] MarkdownPane preview toggle: footer has Preview/Edit button (left-aligned via margin-right:auto). Preview mode renders markdown via ReactMarkdown with dark-themed styles for headings, code, tables, blockquotes, lists, and links.
+  - Files: src/components/ConfigManager/MarkdownPane.tsx:61, src/components/ConfigManager/ConfigManager.css:908
 
 ## Thinking Panel
 
@@ -155,7 +174,7 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [TP-02] Toggle via Ctrl+I keyboard shortcut or thought-bubble button in terminal button bar (purple active state, dot badge when blocks exist)
   - Files: src/components/Terminal/TerminalPanel.tsx:674
 - [TP-03] Renders as flex sibling of `terminal-area` — shrinks terminal horizontally (not an overlay); ResizeObserver auto-fires `fit()` on width change
-- [TP-04] Captures `type === 'thinking'` and `type === 'redacted_thinking'` content blocks via inspector JSON.stringify interception
+- [TP-04] Captures thinking via JSON.parse SSE interception: hooks `content_block_start` (thinking/redacted_thinking), accumulates `thinking_delta` events, finalizes on `content_block_stop`
 - [TP-05] Thinking text truncated at 10K chars per block in inspector; ring buffer capped at 30 in inspector, 50 per session in store
 - [TP-06] Long blocks (>500 chars) collapsed by default with "[show more]" toggle
 - [TP-07] Redacted thinking blocks shown as muted italic `[redacted thinking]` placeholder

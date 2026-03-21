@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -20,6 +20,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const webglRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const attachedRef = useRef(false);
+  const markersRef = useRef<IMarker[]>([]);
 
   // Write batching — accumulate PTY chunks and flush via debounce.
   // ConPTY fragments ink's redraws into many small chunks; batching
@@ -101,6 +102,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       observerRef.current?.disconnect();
       webglRef.current?.dispose();
       webglRef.current = null;
+      markersRef.current = [];
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -118,7 +120,14 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     const disposables: { dispose(): void }[] = [];
 
     if (onData) {
-      disposables.push(term.onData(onData));
+      const wrappedOnData = (data: string) => {
+        if (data.includes('\r')) {
+          const marker = term.registerMarker(0);
+          if (marker) markersRef.current.push(marker);
+        }
+        onData(data);
+      };
+      disposables.push(term.onData(wrappedOnData));
     }
     if (onResize) {
       disposables.push(term.onResize(({ cols, rows }) => onResize(cols, rows)));
@@ -274,22 +283,23 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const scrollToLastUserMessage = useCallback(() => {
     const term = termRef.current;
     if (!term) return;
+    // Prune disposed markers
+    markersRef.current = markersRef.current.filter(m => !m.isDisposed);
+    const markers = markersRef.current;
+    if (markers.length === 0) { term.scrollToTop(); return; }
     const buf = term.buffer.active;
-    // At bottom: scan from end of visible area to find most recent prompt
-    // Already scrolled up: scan from above viewport to cycle to next prompt
     const atBottom = buf.viewportY >= buf.baseY - BOTTOM_TOLERANCE;
-    const startLine = atBottom
-      ? buf.baseY + term.rows - 1
-      : buf.viewportY - 1;
-    for (let i = startLine; i >= 0; i--) {
-      const line = buf.getLine(i);
-      if (!line) continue;
-      if (line.translateToString(true).includes(PROMPT_MARKER)) {
-        term.scrollToLine(Math.max(0, i - 1));
-        return;
+    if (atBottom) {
+      term.scrollToLine(Math.max(0, markers[markers.length - 1].line - 1));
+    } else {
+      for (let i = markers.length - 1; i >= 0; i--) {
+        if (markers[i].line < buf.viewportY) {
+          term.scrollToLine(Math.max(0, markers[i].line - 1));
+          return;
+        }
       }
+      term.scrollToTop();
     }
-    term.scrollToTop();
   }, []);
 
   const isAtBottom = useCallback(() => {

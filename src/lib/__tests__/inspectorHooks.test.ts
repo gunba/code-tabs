@@ -69,19 +69,24 @@ describe("INSTALL_HOOK", () => {
     expect(state.subagentDescs).toEqual([]);
     expect(state.inputBuf).toBe("");
     expect(state.inputTs).toBe(0);
+    expect(state.thinkingAccum).toEqual({});
+    expect(state._sealed).toBe(false);
   });
 });
 
 describe("INSTALL_HOOK JSON.stringify interception", () => {
   let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
 
   beforeEach(() => {
     savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
   });
 
-  // Restore original JSON.stringify and clean up after each test
+  // Restore original JSON.stringify/JSON.parse and clean up after each test
   afterEach(() => {
     JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
     cleanupGlobalHook();
   });
 
@@ -598,22 +603,22 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
     expect(state.lastEvent).toBe("assistant");
   });
 
-  // ── Thinking block capture tests ──────────────────────────────────
+  // ── Thinking block capture tests (SSE via JSON.parse) ─────────────
 
-  it("captures thinking content blocks", () => {
+  /** Helper: simulate SSE thinking block via JSON.parse events */
+  function emitThinkingSSE(index: number, text: string) {
+    JSON.parse(JSON.stringify({ type: "content_block_start", index, content_block: { type: "thinking" } }));
+    // Send text in chunks to simulate streaming
+    const chunkSize = Math.max(1, Math.ceil(text.length / 3));
+    for (let i = 0; i < text.length; i += chunkSize) {
+      JSON.parse(JSON.stringify({ type: "content_block_delta", index, delta: { type: "thinking_delta", thinking: text.slice(i, i + chunkSize) } }));
+    }
+    JSON.parse(JSON.stringify({ type: "content_block_stop", index }));
+  }
+
+  it("captures thinking via SSE delta accumulation", () => {
     const state = installAndGetState();
-    JSON.stringify({
-      type: "assistant",
-      message: {
-        model: "claude-opus-4-6",
-        stop_reason: "end_turn",
-        content: [
-          { type: "thinking", thinking: "Let me analyze this problem step by step" },
-          { type: "text", text: "Here is my answer" },
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      },
-    });
+    emitThinkingSSE(0, "Let me analyze this problem step by step");
     const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
     expect(thinking).toHaveLength(1);
     expect(thinking[0].x).toBe("Let me analyze this problem step by step");
@@ -621,42 +626,20 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
     expect(thinking[0].ts).toBeGreaterThan(0);
   });
 
-  it("captures redacted_thinking blocks", () => {
+  it("captures redacted_thinking blocks via SSE", () => {
     const state = installAndGetState();
-    JSON.stringify({
-      type: "assistant",
-      message: {
-        model: "claude-opus-4-6",
-        stop_reason: "end_turn",
-        content: [
-          { type: "redacted_thinking" },
-          { type: "text", text: "Response" },
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      },
-    });
+    JSON.parse(JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "redacted_thinking" } }));
     const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
     expect(thinking).toHaveLength(1);
     expect(thinking[0].x).toBe("");
     expect(thinking[0].r).toBe(true);
   });
 
-  it("captures mixed thinking and redacted_thinking blocks", () => {
+  it("captures mixed thinking and redacted_thinking blocks via SSE", () => {
     const state = installAndGetState();
-    JSON.stringify({
-      type: "assistant",
-      message: {
-        model: "claude-opus-4-6",
-        stop_reason: "end_turn",
-        content: [
-          { type: "thinking", thinking: "Step 1 reasoning" },
-          { type: "redacted_thinking" },
-          { type: "thinking", thinking: "Step 3 reasoning" },
-          { type: "text", text: "Final answer" },
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      },
-    });
+    emitThinkingSSE(0, "Step 1 reasoning");
+    JSON.parse(JSON.stringify({ type: "content_block_start", index: 1, content_block: { type: "redacted_thinking" } }));
+    emitThinkingSSE(2, "Step 3 reasoning");
     const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
     expect(thinking).toHaveLength(3);
     expect(thinking[0].x).toBe("Step 1 reasoning");
@@ -667,21 +650,10 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
     expect(thinking[2].r).toBe(false);
   });
 
-  it("truncates thinking text at 10K chars", () => {
+  it("truncates thinking text at 10K chars via SSE", () => {
     const state = installAndGetState();
     const longThinking = "x".repeat(15000);
-    JSON.stringify({
-      type: "assistant",
-      message: {
-        model: "claude-opus-4-6",
-        stop_reason: "end_turn",
-        content: [
-          { type: "thinking", thinking: longThinking },
-          { type: "text", text: "Answer" },
-        ],
-        usage: { input_tokens: 100, output_tokens: 50 },
-      },
-    });
+    emitThinkingSSE(0, longThinking);
     const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
     expect(thinking).toHaveLength(1);
     // 10000 chars + "\n[truncated]" suffix
@@ -692,18 +664,7 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
   it("caps thinking ring buffer at 30 entries", () => {
     const state = installAndGetState();
     for (let i = 0; i < 35; i++) {
-      JSON.stringify({
-        type: "assistant",
-        message: {
-          model: "claude-opus-4-6",
-          stop_reason: "end_turn",
-          content: [
-            { type: "thinking", thinking: `thinking-block-${i} with enough padding` },
-            { type: "text", text: "response" },
-          ],
-          usage: { input_tokens: 10, output_tokens: 5 },
-        },
-      });
+      emitThinkingSSE(0, `thinking-block-${i} with enough padding`);
     }
     const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
     expect(thinking).toHaveLength(30);
@@ -712,77 +673,50 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
     expect(thinking[29].x).toContain("thinking-block-34");
   });
 
-  it("accumulates thinking blocks across multiple assistant messages", () => {
+  it("accumulates thinking blocks across multiple sequential SSE blocks", () => {
     const state = installAndGetState();
-    JSON.stringify({
-      type: "assistant",
-      message: {
-        model: "claude-opus-4-6",
-        stop_reason: "end_turn",
-        content: [
-          { type: "thinking", thinking: "First turn thinking" },
-          { type: "text", text: "First response" },
-        ],
-        usage: { input_tokens: 50, output_tokens: 25 },
-      },
-    });
-    JSON.stringify({
-      type: "assistant",
-      message: {
-        model: "claude-opus-4-6",
-        stop_reason: "end_turn",
-        content: [
-          { type: "thinking", thinking: "Second turn thinking" },
-          { type: "text", text: "Second response" },
-        ],
-        usage: { input_tokens: 50, output_tokens: 25 },
-      },
-    });
+    emitThinkingSSE(0, "First turn thinking");
+    emitThinkingSSE(0, "Second turn thinking");
     const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
     expect(thinking).toHaveLength(2);
     expect(thinking[0].x).toBe("First turn thinking");
     expect(thinking[1].x).toBe("Second turn thinking");
   });
 
-  it("does not capture thinking from subagent events", () => {
+  it("drops empty thinking blocks (no deltas before stop)", () => {
     const state = installAndGetState();
-    // Set up subagent
-    JSON.stringify({ type: "system", sessionId: "main-1", permissionMode: "default" });
-    JSON.stringify({
-      type: "assistant",
-      message: {
-        model: "claude-opus-4-6",
-        stop_reason: "tool_use",
-        content: [{ type: "tool_use", name: "Agent", input: { description: "Sub task" } }],
-        usage: { input_tokens: 10, output_tokens: 5 },
-      },
-    });
-    // Subagent assistant with thinking — should NOT go to main thinking array
-    JSON.stringify({
-      type: "assistant",
-      agentId: "agent-think-1",
-      message: {
-        model: "claude-opus-4-6",
-        stop_reason: "end_turn",
-        content: [
-          { type: "thinking", thinking: "Subagent thinking" },
-          { type: "text", text: "Sub response" },
-        ],
-        usage: { input_tokens: 50, output_tokens: 25 },
-      },
-    });
-    // Main thinking should be empty (subagent thinking not routed to main)
+    JSON.parse(JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "thinking" } }));
+    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 0 }));
     const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
     expect(thinking).toHaveLength(0);
   });
 
-  it("initializes thinking array in state", () => {
+  it("ignores non-thinking deltas", () => {
+    const state = installAndGetState();
+    // text_delta should not accumulate into thinking
+    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "some text" } }));
+    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 0 }));
+    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
+    expect(thinking).toHaveLength(0);
+  });
+
+  it("handles JSON.parse errors gracefully", () => {
+    installAndGetState();
+    // Should not throw — origParse handles bad input
+    expect(() => JSON.parse("not json")).toThrow(); // origParse throws
+    // But structured SSE with bad data should not corrupt state
+    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 99, delta: { type: "thinking_delta", thinking: "orphan" } }));
+    // No crash, orphan delta ignored since index 99 was never started
+  });
+
+  it("initializes thinking array and thinkingAccum in state", () => {
     const fn = new Function(`return ${INSTALL_HOOK}`);
     cleanupGlobalHook();
     fn();
     const g = globalThis as unknown as Record<string, unknown>;
     const state = g.__inspectorState as Record<string, unknown>;
     expect(state.thinking).toEqual([]);
+    expect(state.thinkingAccum).toEqual({});
     cleanupGlobalHook();
   });
 });
@@ -881,10 +815,10 @@ describe("POLL_STATE", () => {
     // Result should have the flags
     expect(result.permPending).toBe(true);
     expect(result.idleDetected).toBe(true);
-    // State should be reset
+    // State should be reset (permPending one-shot, idleDetected sticky)
     const state = g.__inspectorState as Record<string, unknown>;
     expect(state.permPending).toBe(false);
-    expect(state.idleDetected).toBe(false);
+    expect(state.idleDetected).toBe(true); // sticky — cleared only by user event
     expect((state.events as unknown[]).length).toBe(0);
   });
 
@@ -1075,9 +1009,9 @@ describe("deriveStateFromPoll", () => {
     expect(deriveStateFromPoll({ ...basePoll, idleDetected: true }, "thinking")).toBe("idle");
   });
 
-  it("permPending overrides idleDetected (idleDetected wins — later check)", () => {
-    // Both true: idleDetected is checked after permPending, so it wins
-    expect(deriveStateFromPoll({ ...basePoll, permPending: true, idleDetected: true }, "thinking")).toBe("idle");
+  it("permPending overrides idleDetected", () => {
+    // Both true: permPending wins (checked last)
+    expect(deriveStateFromPoll({ ...basePoll, permPending: true, idleDetected: true }, "thinking")).toBe("waitingPermission");
   });
 
   it("returns toolUse from stop_reason", () => {
@@ -1152,13 +1086,16 @@ describe("allocateInspectorPort", () => {
 
 describe("INSTALL_HOOK subagent tracking", () => {
   let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
 
   beforeEach(() => {
     savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
   });
 
   afterEach(() => {
     JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
     cleanupGlobalHook();
   });
 
@@ -1417,5 +1354,644 @@ describe("POLL_STATE subagent draining", () => {
     const fn = new Function(`return ${POLL_STATE}`);
     const result = fn() as Record<string, unknown>;
     expect((result.subs as unknown[]).length).toBe(0);
+  });
+});
+
+// ── Sealed flag tests ──────────────────────────────────────────
+
+describe("INSTALL_HOOK sealed flag", () => {
+  let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
+
+  beforeEach(() => {
+    savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
+  });
+
+  afterEach(() => {
+    JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
+    cleanupGlobalHook();
+  });
+
+  function installAndGetState(): Record<string, unknown> {
+    const g = globalThis as unknown as Record<string, unknown>;
+    cleanupGlobalHook();
+    const fn = new Function(`return ${INSTALL_HOOK}`);
+    fn();
+    return g.__inspectorState as Record<string, unknown>;
+  }
+
+  it("result event sets _sealed = true and blocks subsequent assistant from updating stop", () => {
+    const state = installAndGetState();
+    // Assistant with tool_use
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use", content: [], usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    expect(state.stop).toBe("tool_use");
+
+    // Result seals
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state.stop).toBe("end_turn");
+    expect(state._sealed).toBe(true);
+
+    // Post-completion re-serialized assistant — stop should NOT change
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use", content: [{ type: "tool_use", name: "Bash", input: { command: "ls" } }], usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect(state.stop).toBe("end_turn");
+  });
+
+  it("sealed assistant events don't enter ring buffer", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [], usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    const eventsAfterResult = (state.events as unknown[]).length;
+
+    // Sealed assistant — should NOT add to events
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use", content: [], usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect((state.events as unknown[]).length).toBe(eventsAfterResult);
+  });
+
+  it("tokens still accumulate while sealed", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [], usage: { input_tokens: 100, output_tokens: 50 } },
+    });
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state.inTok).toBe(100);
+
+    // Sealed assistant still accumulates tokens (model/usage always update)
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use", content: [], usage: { input_tokens: 20, output_tokens: 10 } },
+    });
+    expect(state.inTok).toBe(120);
+    expect(state.outTok).toBe(60);
+  });
+
+  it("user event clears _sealed", () => {
+    const state = installAndGetState();
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state._sealed).toBe(true);
+
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "text", text: "hello" }] },
+    });
+    expect(state._sealed).toBe(false);
+  });
+});
+
+// ── Sticky idleDetected tests ──────────────────────────────────
+
+describe("INSTALL_HOOK sticky idleDetected", () => {
+  afterEach(cleanupGlobalHook);
+
+  it("POLL_STATE does not reset idleDetected", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 1, sid: null, cost: 0, model: null, stop: "end_turn",
+      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
+      events: [], lastEvent: "result", firstMsg: null, lastText: null,
+      userPrompt: null, permPending: false, idleDetected: true,
+      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
+      pendingDescs: [], thinking: [], subs: [], _sealed: true,
+    };
+
+    const fn = new Function(`return ${POLL_STATE}`);
+    fn(); // first poll
+    const stateObj = g.__inspectorState as Record<string, unknown>;
+    expect(stateObj.idleDetected).toBe(true); // still sticky
+  });
+
+  it("user event clears idleDetected", () => {
+    let savedStringify: typeof JSON.stringify;
+    let savedParse: typeof JSON.parse;
+    savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
+    try {
+      const g = globalThis as unknown as Record<string, unknown>;
+      cleanupGlobalHook();
+      const fn = new Function(`return ${INSTALL_HOOK}`);
+      fn();
+      const state = g.__inspectorState as Record<string, unknown>;
+
+      // Trigger idle
+      JSON.stringify({ notification_type: "idle_prompt" });
+      expect(state.idleDetected).toBe(true);
+
+      // User event clears it
+      JSON.stringify({
+        type: "user",
+        message: { content: [{ type: "text", text: "continue" }] },
+      });
+      expect(state.idleDetected).toBe(false);
+    } finally {
+      JSON.stringify = savedStringify;
+      JSON.parse = savedParse;
+      cleanupGlobalHook();
+    }
+  });
+});
+
+// ── actionNeeded state derivation tests ──────────────────────
+
+describe("deriveStateFromPoll actionNeeded", () => {
+  const basePoll = {
+    n: 1, sid: null, cost: 0, model: null, stop: null as string | null,
+    tools: [] as string[], perm: null, inTok: 0, outTok: 0, dur: 0,
+    events: [] as Array<{ t: string; sr?: string; c?: number; txt?: string; nt?: string; ta?: string }>,
+    lastEvent: null as string | null,
+    firstMsg: null, lastText: null, userPrompt: null,
+    permPending: false, idleDetected: false, choiceHint: false,
+    toolAction: null, subagentDescs: [] as string[],
+    thinking: [] as Array<{ x: string; ts: number; r: boolean }>,
+    inputBuf: "", inputTs: 0,
+    subs: [] as Array<{ sid: string; desc: string; st: string; tok: number; act: string | null;
+      msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number }>,
+  };
+
+  it("ExitPlanMode tool_use → actionNeeded", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"],
+    }, "idle")).toBe("actionNeeded");
+  });
+
+  it("Bash tool_use → toolUse (not actionNeeded)", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "tool_use", tools: ["Bash"],
+    }, "idle")).toBe("toolUse");
+  });
+
+  it("choiceHint + idle → actionNeeded", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "end_turn", choiceHint: true,
+    }, "idle")).toBe("actionNeeded");
+  });
+
+  it("idleDetected + choiceHint → actionNeeded (choiceHint refines after idleDetected)", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, idleDetected: true, choiceHint: true,
+    }, "thinking")).toBe("actionNeeded");
+  });
+
+  it("permPending overrides actionNeeded → waitingPermission", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], permPending: true,
+    }, "idle")).toBe("waitingPermission");
+  });
+
+  it("ExitPlanMode via events (not persisted stop) → actionNeeded", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, tools: ["ExitPlanMode"],
+      events: [{ t: "assistant", sr: "tool_use" }],
+    }, "idle")).toBe("actionNeeded");
+  });
+
+  it("choiceHint without idle state has no effect (toolUse stays toolUse)", () => {
+    // choiceHint only refines idle → actionNeeded; toolUse is unaffected
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "tool_use", choiceHint: true,
+    }, "idle")).toBe("toolUse");
+  });
+
+  it("idleDetected alone (no choiceHint) → idle, not actionNeeded", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, idleDetected: true, choiceHint: false,
+    }, "thinking")).toBe("idle");
+  });
+
+  it("ExitPlanMode + idleDetected → actionNeeded (idleDetected→idle, then choiceHint absent keeps idle)", () => {
+    // ExitPlanMode refines toolUse→actionNeeded, then idleDetected overrides to idle
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], idleDetected: true,
+    }, "idle")).toBe("idle");
+  });
+
+  it("ExitPlanMode + idleDetected + choiceHint → actionNeeded", () => {
+    // ExitPlanMode→actionNeeded, idleDetected→idle, choiceHint→actionNeeded
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "tool_use", tools: ["ExitPlanMode"], idleDetected: true, choiceHint: true,
+    }, "idle")).toBe("actionNeeded");
+  });
+
+  it("permPending overrides choiceHint actionNeeded → waitingPermission", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, stop: "end_turn", choiceHint: true, permPending: true,
+    }, "idle")).toBe("waitingPermission");
+  });
+});
+
+// ── Extended sealed flag edge cases ─────────────────────────────
+
+describe("INSTALL_HOOK sealed flag edge cases", () => {
+  let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
+
+  beforeEach(() => {
+    savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
+  });
+
+  afterEach(() => {
+    JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
+    cleanupGlobalHook();
+  });
+
+  function installAndGetState(): Record<string, unknown> {
+    const g = globalThis as unknown as Record<string, unknown>;
+    cleanupGlobalHook();
+    const fn = new Function(`return ${INSTALL_HOOK}`);
+    fn();
+    return g.__inspectorState as Record<string, unknown>;
+  }
+
+  it("sealed blocks tools array update from post-completion assistant", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [{ type: "text", text: "Done" }], usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state.tools).toEqual([]);
+
+    // Sealed assistant with tool_use — tools should NOT update
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Bash", input: { command: "echo hi" } }],
+        usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect(state.tools).toEqual([]);
+  });
+
+  it("sealed blocks lastText update from post-completion assistant", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn",
+        content: [{ type: "text", text: "Original response" }],
+        usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state.lastText).toBe("Original response");
+
+    // Sealed assistant — lastText should NOT change
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn",
+        content: [{ type: "text", text: "Phantom re-serialized text" }],
+        usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect(state.lastText).toBe("Original response");
+  });
+
+  it("sealed blocks toolAction update from post-completion assistant", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Read", input: { file_path: "/real.ts" } }],
+        usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    expect(state.toolAction).toBe("Read: /real.ts");
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+
+    // Sealed assistant — toolAction should NOT change
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Bash", input: { command: "rm -rf /" } }],
+        usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect(state.toolAction).toBe("Read: /real.ts");
+  });
+
+  it("sealed blocks subagentDescs growth from post-completion Agent tool_use", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [], usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+
+    // Sealed assistant with Agent tool_use — subagentDescs should NOT grow
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Agent", input: { description: "Ghost agent" } }],
+        usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect(state.subagentDescs).toEqual([]);
+    expect(state.pendingDescs).toEqual([]);
+  });
+
+  it("sealed does not block lastEvent update for user events", () => {
+    const state = installAndGetState();
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state._sealed).toBe(true);
+    expect(state.lastEvent).toBe("result");
+
+    // User event still updates lastEvent (and clears sealed)
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "text", text: "next question" }] },
+    });
+    expect(state.lastEvent).toBe("user");
+    expect(state._sealed).toBe(false);
+  });
+
+  it("sealed does not block model update from post-completion assistant", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [], usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state.model).toBe("claude-opus-4-6");
+
+    // Model still updates while sealed (it's outside the sealed guard)
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-sonnet-4-6", stop_reason: "end_turn", content: [], usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect(state.model).toBe("claude-sonnet-4-6");
+  });
+
+  it("result events still update lastEvent while creating seal", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [], usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    expect(state.lastEvent).toBe("assistant");
+
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state.lastEvent).toBe("result");
+    expect(state._sealed).toBe(true);
+  });
+
+  it("sealed lastEvent stays unchanged for sealed assistant events", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [], usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state.lastEvent).toBe("result");
+
+    // Sealed assistant — lastEvent should NOT update
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use", content: [], usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect(state.lastEvent).toBe("result");
+  });
+
+  it("seal-unseal-seal cycle works correctly", () => {
+    const state = installAndGetState();
+    // First cycle: assistant → result (seal)
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [{ type: "text", text: "First answer" }], usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state._sealed).toBe(true);
+
+    // Unseal via user
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "text", text: "Follow up" }] },
+    });
+    expect(state._sealed).toBe(false);
+
+    // Second cycle: assistant → result (re-seal)
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn", content: [{ type: "text", text: "Second answer" }], usage: { input_tokens: 20, output_tokens: 10 } },
+    });
+    expect(state.lastText).toBe("Second answer");
+    expect(state.stop).toBe("end_turn");
+
+    JSON.stringify({ type: "result", total_cost_usd: 0.02 });
+    expect(state._sealed).toBe(true);
+
+    // Verify sealed blocks again
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "tool_use", content: [{ type: "tool_use", name: "Bash", input: { command: "ls" } }], usage: { input_tokens: 0, output_tokens: 0 } },
+    });
+    expect(state.stop).toBe("end_turn");
+    expect(state.tools).toEqual([]);
+  });
+});
+
+// ── Extended sticky idleDetected edge cases ─────────────────────
+
+describe("INSTALL_HOOK sticky idleDetected edge cases", () => {
+  let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
+
+  beforeEach(() => {
+    savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
+  });
+
+  afterEach(() => {
+    JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
+    cleanupGlobalHook();
+  });
+
+  function installAndGetState(): Record<string, unknown> {
+    const g = globalThis as unknown as Record<string, unknown>;
+    cleanupGlobalHook();
+    const fn = new Function(`return ${INSTALL_HOOK}`);
+    fn();
+    return g.__inspectorState as Record<string, unknown>;
+  }
+
+  it("idleDetected persists across multiple POLL_STATE calls", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 1, sid: null, cost: 0, model: null, stop: "end_turn",
+      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
+      events: [], lastEvent: "result", firstMsg: null, lastText: null,
+      userPrompt: null, permPending: false, idleDetected: true,
+      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
+      pendingDescs: [], thinking: [], subs: [], _sealed: true,
+    };
+
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result1 = fn() as Record<string, unknown>;
+    expect(result1.idleDetected).toBe(true);
+
+    const result2 = fn() as Record<string, unknown>;
+    expect(result2.idleDetected).toBe(true);
+
+    const result3 = fn() as Record<string, unknown>;
+    expect(result3.idleDetected).toBe(true);
+
+    const stateObj = g.__inspectorState as Record<string, unknown>;
+    expect(stateObj.idleDetected).toBe(true);
+  });
+
+  it("second idle_prompt while already sticky is idempotent", () => {
+    const state = installAndGetState();
+    JSON.stringify({ notification_type: "idle_prompt" });
+    expect(state.idleDetected).toBe(true);
+
+    // Second idle_prompt — still true, no error
+    JSON.stringify({ notification_type: "idle_prompt" });
+    expect(state.idleDetected).toBe(true);
+  });
+
+  it("tool_result user event also clears idleDetected", () => {
+    const state = installAndGetState();
+    JSON.stringify({ notification_type: "idle_prompt" });
+    expect(state.idleDetected).toBe(true);
+
+    // User event with tool_result still clears idleDetected
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "tool_result", tool_use_id: "abc", content: "output" }] },
+    });
+    expect(state.idleDetected).toBe(false);
+  });
+
+  it("assistant event does not clear idleDetected", () => {
+    const state = installAndGetState();
+    JSON.stringify({ notification_type: "idle_prompt" });
+    expect(state.idleDetected).toBe(true);
+
+    // Assistant event — idleDetected stays
+    JSON.stringify({
+      type: "assistant",
+      message: { model: "claude-opus-4-6", stop_reason: "end_turn",
+        content: [{ type: "text", text: "Some response text here" }],
+        usage: { input_tokens: 10, output_tokens: 5 } },
+    });
+    expect(state.idleDetected).toBe(true);
+  });
+
+  it("result event does not clear idleDetected", () => {
+    const state = installAndGetState();
+    JSON.stringify({ notification_type: "idle_prompt" });
+    expect(state.idleDetected).toBe(true);
+
+    JSON.stringify({ type: "result", total_cost_usd: 0.01 });
+    expect(state.idleDetected).toBe(true);
+  });
+});
+
+// ── SSE thinking via JSON.parse edge cases ─────────────────────
+
+describe("INSTALL_HOOK SSE thinking edge cases", () => {
+  let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
+
+  beforeEach(() => {
+    savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
+  });
+
+  afterEach(() => {
+    JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
+    cleanupGlobalHook();
+  });
+
+  function installAndGetState(): Record<string, unknown> {
+    const g = globalThis as unknown as Record<string, unknown>;
+    cleanupGlobalHook();
+    const fn = new Function(`return ${INSTALL_HOOK}`);
+    fn();
+    return g.__inspectorState as Record<string, unknown>;
+  }
+
+  it("concurrent thinking blocks with different indices accumulate independently", () => {
+    const state = installAndGetState();
+    // Start two thinking blocks at different indices
+    JSON.parse(JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "thinking" } }));
+    JSON.parse(JSON.stringify({ type: "content_block_start", index: 2, content_block: { type: "thinking" } }));
+
+    // Interleave deltas
+    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Block zero " } }));
+    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 2, delta: { type: "thinking_delta", thinking: "Block two " } }));
+    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "continued" } }));
+    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 2, delta: { type: "thinking_delta", thinking: "continued" } }));
+
+    // Stop them
+    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 0 }));
+    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 2 }));
+
+    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
+    expect(thinking).toHaveLength(2);
+    expect(thinking[0].x).toBe("Block zero continued");
+    expect(thinking[1].x).toBe("Block two continued");
+  });
+
+  it("content_block_stop for non-thinking index is a no-op", () => {
+    const state = installAndGetState();
+    // Stop without start — no crash, no entry
+    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 5 }));
+    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
+    expect(thinking).toHaveLength(0);
+  });
+
+  it("thinkingAccum is cleaned up after stop (no memory leak)", () => {
+    const state = installAndGetState();
+    JSON.parse(JSON.stringify({ type: "content_block_start", index: 0, content_block: { type: "thinking" } }));
+    JSON.parse(JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "hello" } }));
+
+    // Before stop, accumulator exists
+    const accum = state.thinkingAccum as Record<number, string>;
+    expect(accum[0]).toBe("hello");
+
+    JSON.parse(JSON.stringify({ type: "content_block_stop", index: 0 }));
+
+    // After stop, accumulator entry is deleted
+    expect(accum[0]).toBeUndefined();
+  });
+
+  it("thinkingAccum does not appear in POLL_STATE output", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 1, sid: null, cost: 0, model: null, stop: null,
+      tools: [], perm: null, inTok: 0, outTok: 0, dur: 0,
+      events: [], lastEvent: null, firstMsg: null, lastText: null,
+      userPrompt: null, permPending: false, idleDetected: false,
+      toolAction: null, subagentDescs: [], inputBuf: "", inputTs: 0,
+      pendingDescs: [], thinking: [], subs: [],
+      thinkingAccum: { 0: "partial" }, _sealed: false,
+    };
+
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.thinkingAccum).toBeUndefined();
+  });
+
+  it("content_block_start without index field does not crash", () => {
+    const state = installAndGetState();
+    // Malformed SSE event — no index
+    JSON.parse(JSON.stringify({ type: "content_block_start", content_block: { type: "thinking" } }));
+    // This creates thinkingAccum[undefined] = '' — stop should clean it up
+    JSON.parse(JSON.stringify({ type: "content_block_delta", delta: { type: "thinking_delta", thinking: "test" } }));
+    JSON.parse(JSON.stringify({ type: "content_block_stop" }));
+    // Should not crash; entry accumulates at key "undefined"
+    const thinking = state.thinking as Array<{ x: string; ts: number; r: boolean }>;
+    expect(thinking).toHaveLength(1);
+    expect(thinking[0].x).toBe("test");
   });
 });

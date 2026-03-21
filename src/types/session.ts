@@ -3,6 +3,7 @@ export type SessionState =
   | "idle"
   | "thinking"
   | "toolUse"
+  | "actionNeeded"
   | "waitingPermission"
   | "error"
   | "dead";

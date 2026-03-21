@@ -29,6 +29,10 @@
     "CM-17",
     "CM-18",
     "CM-19",
+    "CM-20",
+    "CM-21",
+    "CM-22",
+    "CM-23",
     "DP-01",
     "DP-02",
     "DP-03",
@@ -113,6 +117,9 @@
     "TB-20",
     "TB-21",
     "TB-22",
+    "TB-23",
+    "TB-24",
+    "TB-25",
     "TP-01",
     "TP-02",
     "TP-03",
@@ -140,7 +147,126 @@
     "WN-03"
   ],
   "unchecked": [
-    "CM-19"
+    "CB-01",
+    "CB-02",
+    "CB-03",
+    "CB-04",
+    "CB-05",
+    "CB-07",
+    "CB-08",
+    "CB-09",
+    "CM-01",
+    "CM-02",
+    "CM-03",
+    "CM-04",
+    "CM-05",
+    "CM-06",
+    "CM-07",
+    "CM-09",
+    "CM-10",
+    "CM-11",
+    "CM-12",
+    "CM-13",
+    "CM-14",
+    "CM-15",
+    "CM-16",
+    "CM-17",
+    "CM-18",
+    "CM-19",
+    "CM-22",
+    "CM-23",
+    "DP-01",
+    "DP-02",
+    "DP-04",
+    "DP-05",
+    "DP-07",
+    "DP-08",
+    "DP-09",
+    "DP-10",
+    "DP-11",
+    "DP-12",
+    "DS-01",
+    "DS-02",
+    "DS-03",
+    "DS-04",
+    "DS-06",
+    "DS-07",
+    "DS-08",
+    "HM-01",
+    "HM-02",
+    "HM-03",
+    "HM-04",
+    "HM-05",
+    "HM-06",
+    "HM-07",
+    "HM-08",
+    "KB-01",
+    "KB-02",
+    "KB-03",
+    "KB-04",
+    "KB-05",
+    "KB-06",
+    "KB-07",
+    "KB-08",
+    "KB-09",
+    "KB-10",
+    "MO-01",
+    "SL-01",
+    "SL-03",
+    "SL-04",
+    "SL-05",
+    "SL-07",
+    "SL-09",
+    "SL-10",
+    "SL-12",
+    "SL-13",
+    "SL-15",
+    "SL-16",
+    "SR-01",
+    "SR-02",
+    "SR-03",
+    "TB-01",
+    "TB-02",
+    "TB-04",
+    "TB-05",
+    "TB-06",
+    "TB-07",
+    "TB-08",
+    "TB-09",
+    "TB-10",
+    "TB-12",
+    "TB-13",
+    "TB-14",
+    "TB-16",
+    "TB-17",
+    "TB-19",
+    "TB-20",
+    "TB-21",
+    "TB-22",
+    "TB-23",
+    "TB-24",
+    "TB-25",
+    "TP-01",
+    "TP-02",
+    "TP-03",
+    "TP-05",
+    "TP-07",
+    "TP-08",
+    "TP-09",
+    "TP-10",
+    "TP-12",
+    "TR-01",
+    "TR-02",
+    "TR-03",
+    "TR-04",
+    "TR-06",
+    "TR-07",
+    "TR-08",
+    "TR-09",
+    "TR-10",
+    "WN-01",
+    "WN-02",
+    "WN-03"
   ],
   "citations": {
     "CB-01": {
@@ -164,7 +290,7 @@
       "down": 0
     },
     "CB-06": {
-      "up": 0,
+      "up": 3,
       "down": 0
     },
     "CB-07": {
@@ -176,15 +302,15 @@
       "down": 0
     },
     "CM-01": {
-      "up": 0,
+      "up": 3,
       "down": 0
     },
     "CM-02": {
-      "up": 2,
+      "up": 6,
       "down": 0
     },
     "CM-03": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CM-04": {
@@ -192,7 +318,7 @@
       "down": 0
     },
     "CM-05": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CM-06": {
@@ -204,7 +330,7 @@
       "down": 0
     },
     "CM-08": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CM-09": {
@@ -224,7 +350,7 @@
       "down": 0
     },
     "DP-03": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "DP-04": {
@@ -236,11 +362,11 @@
       "down": 0
     },
     "DP-06": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "DP-07": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "DP-08": {
@@ -268,7 +394,7 @@
       "down": 0
     },
     "DS-02": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "DS-03": {
@@ -280,11 +406,11 @@
       "down": 0
     },
     "DS-05": {
-      "up": 0,
-      "down": 1
+      "up": 1,
+      "down": 0
     },
     "DS-06": {
-      "up": 0,
+      "up": 2,
       "down": 0
     },
     "DS-07": {
@@ -292,7 +418,7 @@
       "down": 0
     },
     "HM-01": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "HM-02": {
@@ -304,7 +430,7 @@
       "down": 0
     },
     "HM-04": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "HM-05": {
@@ -324,7 +450,7 @@
       "down": 0
     },
     "HM-09": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "KB-01": {
@@ -368,7 +494,7 @@
       "down": 0
     },
     "SL-02": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SL-03": {
@@ -376,7 +502,7 @@
       "down": 0
     },
     "SL-04": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "SL-05": {
@@ -384,7 +510,7 @@
       "down": 0
     },
     "SL-06": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SL-07": {
@@ -392,7 +518,7 @@
       "down": 0
     },
     "SL-08": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "SL-09": {
@@ -404,7 +530,7 @@
       "down": 0
     },
     "SL-11": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SL-12": {
@@ -416,7 +542,7 @@
       "down": 0
     },
     "SL-14": {
-      "up": 0,
+      "up": 2,
       "down": 1
     },
     "SL-15": {
@@ -432,19 +558,19 @@
       "down": 0
     },
     "SR-02": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "SR-03": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SR-04": {
-      "up": 1,
+      "up": 3,
       "down": 0
     },
     "SR-05": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TB-01": {
@@ -456,11 +582,11 @@
       "down": 0
     },
     "TB-03": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TB-04": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TB-05": {
@@ -468,7 +594,7 @@
       "down": 0
     },
     "TB-06": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TB-07": {
@@ -484,11 +610,11 @@
       "down": 0
     },
     "TB-10": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TB-11": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TB-12": {
@@ -504,7 +630,7 @@
       "down": 0
     },
     "TB-15": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TB-16": {
@@ -516,7 +642,7 @@
       "down": 0
     },
     "TB-18": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TB-19": {
@@ -552,7 +678,7 @@
       "down": 0
     },
     "TP-06": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TP-07": {
@@ -564,7 +690,7 @@
       "down": 0
     },
     "TP-09": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TP-10": {
@@ -572,7 +698,7 @@
       "down": 0
     },
     "TP-11": {
-      "up": 0,
+      "up": 1,
       "down": 0
     },
     "TP-12": {
@@ -588,7 +714,7 @@
       "down": 0
     },
     "TR-03": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TR-04": {
@@ -596,7 +722,7 @@
       "down": 0
     },
     "TR-05": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "TR-06": {
@@ -616,7 +742,7 @@
       "down": 0
     },
     "TR-08": {
-      "up": 1,
+      "up": 0,
       "down": 0
     },
     "TR-09": {
@@ -624,7 +750,7 @@
       "down": 0
     },
     "KB-10": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "MO-01": {
@@ -632,7 +758,7 @@
       "down": 0
     },
     "CM-11": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CM-12": {
@@ -644,7 +770,7 @@
       "down": 0
     },
     "CM-14": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "CM-15": {
@@ -668,7 +794,7 @@
       "down": 0
     },
     "HM-10": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "DS-08": {
@@ -688,12 +814,40 @@
       "down": 0
     },
     "CM-19": {
+      "up": 2,
+      "down": 0
+    },
+    "CM-20": {
+      "up": 5,
+      "down": 0
+    },
+    "CM-21": {
+      "up": 4,
+      "down": 0
+    },
+    "CM-22": {
+      "up": 3,
+      "down": 0
+    },
+    "CM-23": {
+      "up": 3,
+      "down": 0
+    },
+    "TB-23": {
+      "up": 1,
+      "down": 0
+    },
+    "TB-24": {
+      "up": 1,
+      "down": 0
+    },
+    "TB-25": {
       "up": 1,
       "down": 0
     }
   },
-  "cycle": 2,
-  "last_run": "2026-03-21T11:13:28.786401+00:00",
+  "cycle": 3,
+  "last_run": "2026-03-21T13:32:26.678068+00:00",
   "metadata": {
     "TB-22": {
       "files": [
@@ -712,15 +866,16 @@
     },
     "TR-08": {
       "files": [
-        "src/hooks/useTerminal.ts:274",
-        "src/components/Terminal/TerminalPanel.tsx:567"
+        "src/hooks/useTerminal.ts:283",
+        "src/components/Terminal/TerminalPanel.tsx:566"
       ],
       "verified": "2026-03-21",
       "notes": "Edited via tag-edit.sh"
     },
     "TR-09": {
       "files": [
-        "src/hooks/useTerminal.ts:82"
+        "src/hooks/useTerminal.ts:82",
+        "src-tauri/tauri.conf.json"
       ],
       "verified": "2026-03-21",
       "notes": "Edited via tag-edit.sh"
@@ -734,10 +889,10 @@
     },
     "KB-10": {
       "files": [
-        "src/hooks/useTerminal.ts:74"
+        "src/hooks/useTerminal.ts:75"
       ],
       "verified": "2026-03-21",
-      "notes": "Edited via tag-edit.sh"
+      "notes": "attachCustomKeyEventHandler: Alt+digit (0-9) returns false (line 75-78), blocking the keypress from reaching the PTY. Handled by App.tsx global keydown for tab switching."
     },
     "MO-01": {
       "files": [
@@ -773,10 +928,11 @@
     },
     "CM-14": {
       "files": [
-        "src/components/ConfigManager/MarkdownPane.tsx:1"
+        "src/components/ConfigManager/MarkdownPane.tsx:6-9",
+        "src/components/ConfigManager/MarkdownPane.tsx:73-79"
       ],
       "verified": "2026-03-21",
-      "notes": "Added during change documentation"
+      "notes": "SCOPE_TO_FILETYPE mapping matches docs, Tab inserts 2 spaces"
     },
     "CM-15": {
       "files": [
@@ -828,30 +984,26 @@
     },
     "SL-02": {
       "files": [
-        "src/App.tsx:121",
-        "src/App.tsx:472",
-        "src/store/settings.ts:146"
+        "src/App.tsx:123",
+        "src/App.tsx:179",
+        "src/App.tsx:499"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: quickLaunch uses savedDefaults if set, else lastConfig; Ctrl+Click on + calls quickLaunch; savedDefaults strips one-shot fields"
+      "notes": "verified: quickLaunch() uses savedDefaults then lastConfig fallback including folder"
     },
     "SR-03": {
       "files": [
-        "src/hooks/useInspectorState.ts:148",
-        "src/hooks/useInspectorState.ts:21"
+        "src/hooks/useInspectorState.ts:148"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: processPollResult reads data.firstMsg into metadata.nodeSummary which is used for tab naming"
+      "notes": "firstMsg mapped to nodeSummary for tab naming"
     },
     "SR-04": {
       "files": [
-        "src/App.css:428",
-        "src/App.css:451",
-        "src/App.css:466",
-        "src/App.css:476"
+        "src/App.css:434-486"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: .subagent-card base=--bg-surface, .subagent-active=--bg-surface-hover + clay border-left, .subagent-idle=0.5 opacity, .subagent-icon=--accent"
+      "notes": "bg-surface base, bg-surface-hover+accent border for active, 0.5 opacity idle, accent icon"
     },
     "TB-17": {
       "files": [
@@ -895,8 +1047,8 @@
     },
     "CM-01": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.css:16",
-        "src/components/ConfigManager/ConfigManager.tsx:66"
+        "src/components/ConfigManager/ConfigManager.css:20",
+        "src/components/ConfigManager/ConfigManager.tsx:67"
       ],
       "verified": "2026-03-21",
       "notes": "Edited via tag-edit.sh"
@@ -977,22 +1129,17 @@
     },
     "HM-01": {
       "files": [
-        "src/components/ConfigManager/HooksPane.tsx:60",
-        "src-tauri/src/commands.rs:924",
-        "src-tauri/src/commands.rs:964"
+        "src/components/ConfigManager/ThreePaneEditor.tsx:20-38"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: three scopes in HooksPane via ThreePaneEditor; Rust discover_hooks/save_hooks handle user/project/project-local"
+      "notes": "scopePath returns ~/.claude/settings.json, .claude/settings.json, .claude/settings.local.json"
     },
     "SL-03": {
       "files": [
-        "src/components/ResumePicker/ResumePicker.tsx:66",
-        "src/components/ResumePicker/ResumePicker.css:19",
-        "src/components/ResumePicker/ResumePicker.css:94",
-        "src/components/ResumePicker/ResumePicker.css:131"
+        "src/components/SessionLauncher/SessionLauncher.css:402"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: 660px width, 520px max-height, ctrl-held blue top-bar+tint via box-shadow+bg"
+      "notes": "Edited via tag-edit.sh"
     },
     "SL-10": {
       "files": [
@@ -1012,18 +1159,21 @@
     },
     "SL-14": {
       "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:48",
-        "src/components/SessionLauncher/SessionLauncher.css:299"
+        "src/components/SessionLauncher/SessionLauncher.tsx:49-55",
+        "src/components/SessionLauncher/SessionLauncher.tsx:470-514",
+        "src/components/SessionLauncher/SessionLauncher.tsx:300-302",
+        "src/components/SessionLauncher/SessionLauncher.css:299-309",
+        "src/components/SessionLauncher/SessionLauncher.css:452-458"
       ],
       "verified": "2026-03-21",
-      "notes": "Fixed: non-session flags are in collapsed Utility Commands section, not at start of grid"
+      "notes": "NON_SESSION_FLAGS set, Utility Commands collapsed section, Run label and blue styling, no workingDir required"
     },
     "TR-03": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:626"
+        "src/components/Terminal/TerminalPanel.tsx:655"
       ],
       "verified": "2026-03-21",
-      "notes": "verified: SVG backspace icon (pointed rectangle path + X lines), Lucide/Feather style"
+      "notes": "Clear input button SVG (line 655-659): pointed rectangle path (M21 4H8l-7 8 7 8h13...) with X cross lines -- standard backspace/delete key icon, Lucide/Feather style."
     },
     "CM-07": {
       "files": [
@@ -1049,10 +1199,11 @@
     },
     "HM-10": {
       "files": [
-        "src/components/StatusBar/StatusBar.tsx:8"
+        "src/components/StatusBar/StatusBar.tsx:7",
+        "src/components/StatusBar/StatusBar.tsx:147"
       ],
       "verified": "2026-03-21",
-      "notes": "Added during change documentation"
+      "notes": "verified: all icons imported as SVG components from Icons.tsx; Sigma is text character"
     },
     "TB-09": {
       "files": [
@@ -1063,11 +1214,12 @@
     },
     "CM-03": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:43-58",
-        "src/components/ConfigManager/ConfigManager.tsx:84"
+        "src/components/ConfigManager/ConfigManager.tsx:43",
+        "src/components/ConfigManager/ConfigManager.tsx:52",
+        "src/components/ConfigManager/ConfigManager.tsx:83"
       ],
       "verified": "2026-03-21",
-      "notes": "PASS: projectDirs deduped at :43, selector renders only when length>1 at :84, defaults to active session dir at :52-58"
+      "notes": "Project dirs from sessions (useMemo line 43), defaults to active session dir (useEffect line 52), selector shown only when >1 dir (line 83)."
     },
     "TB-08": {
       "files": [
@@ -1163,11 +1315,10 @@
     },
     "SL-07": {
       "files": [
-        "src/store/settings.ts:200",
-        "src/components/Terminal/TerminalPanel.tsx:191"
+        "src/store/settings.ts:201"
       ],
       "verified": "2026-03-21",
-      "notes": "cacheSessionConfig stores partial config in sessionConfigs map (localStorage persisted). Called when inspector connects at TerminalPanel:191-193. Used as fallback in ResumePicker."
+      "notes": "Edited via tag-edit.sh"
     },
     "SL-16": {
       "files": [
@@ -1186,11 +1337,11 @@
     },
     "TR-05": {
       "files": [
-        "src/App.tsx:524",
-        "src/components/Terminal/TerminalPanel.tsx:591"
+        "src/components/Terminal/TerminalPanel.tsx:591",
+        "src/App.tsx:551"
       ],
       "verified": "2026-03-21",
-      "notes": "App.tsx always renders all TerminalPanels (line 524-530). TerminalPanel uses style={{ display: visible ? 'flex' : 'none' }} (line 591). Never unmounts/remounts."
+      "notes": "verified: display:none when not visible, stable key=session.id prevents unmount"
     },
     "DS-08": {
       "files": [
@@ -1218,10 +1369,11 @@
     "DS-05": {
       "files": [
         "src/components/Terminal/TerminalPanel.tsx:65",
-        "src/App.tsx:199"
+        "src/components/ResumePicker/ResumePicker.tsx:250",
+        "src/App.tsx:200"
       ],
       "verified": "2026-03-21",
-      "notes": "DRIFT: Dead overlay dispatches Ctrl+r (no shift, lowercase) but App.tsx handler requires Ctrl+Shift+R. Synthetic event wont match. Overlay hint also says Ctrl+R (line 89). Code bug or doc needs to say Ctrl+Shift+R."
+      "notes": "Edited via tag-edit.sh"
     },
     "CB-09": {
       "files": [
@@ -1233,12 +1385,233 @@
     },
     "CM-19": {
       "files": [
-        "src/components/ConfigManager/ThreePaneEditor.tsx:9",
-        "src/components/ConfigManager/ConfigManager.tsx:108",
-        "src/components/ConfigManager/ConfigManager.css:136"
+        "src/components/ConfigManager/ThreePaneEditor.tsx:16",
+        "src/components/ConfigManager/ThreePaneEditor.tsx:48",
+        "src/components/ConfigManager/ConfigManager.tsx:109",
+        "src/components/ConfigManager/ConfigManager.tsx:112",
+        "src/components/ConfigManager/ConfigManager.css:140"
       ],
       "verified": "2026-03-21",
-      "notes": "compact prop at ThreePaneEditor:13, hooks compact at ConfigManager:108, plugins compact at :111, CSS class at ConfigManager.css:136"
+      "notes": "compact prop on ThreePaneEditor (line 16 interface, line 48 usage), hooks/plugins pass compact (lines 109,112). CSS .three-pane-grid-compact max-width 1300px (line 140-142). Settings/claudemd/agents do not pass compact."
+    },
+    "CM-20": {
+      "files": [
+        "src/components/ConfigManager/ConfigManager.tsx:19"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Tab label is 'Claude' not 'CLAUDE.md'"
+    },
+    "CM-21": {
+      "files": [
+        "src/components/ConfigManager/ConfigManager.tsx:62",
+        "src/components/ConfigManager/ConfigManager.css:13"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: isCompact for hooks/plugins applies config-modal-compact, max-width 1400px"
+    },
+    "CM-22": {
+      "files": [
+        "src/components/ConfigManager/ThreePaneEditor.tsx:20",
+        "src/components/ConfigManager/ThreePaneEditor.tsx:53",
+        "src/lib/paths.ts:43"
+      ],
+      "verified": "2026-03-21",
+      "notes": "scopePath() returns actual file paths per tab (line 20-38). formatScopePath() normalizes backslashes to forward slashes (paths.ts line 43-52). Used in header (line 53)."
+    },
+    "CM-23": {
+      "files": [
+        "src/components/ConfigManager/MarkdownPane.tsx:60",
+        "src/components/ConfigManager/MarkdownPane.tsx:85",
+        "src/components/ConfigManager/ConfigManager.css:910",
+        "src/components/ConfigManager/ConfigManager.css:919"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Preview toggle: preview state (line 16), ReactMarkdown render (line 60-63). Footer button left-aligned via margin-right:auto (CSS line 919). Preview/Edit text (line 89). Dark-themed styles for headings/code/tables/blockquotes/lists/links in CSS lines 932-1041."
+    },
+    "SL-04": {
+      "files": [
+        "src/components/ResumePicker/ResumePicker.tsx:373"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Badge building: model, skip-perms, perm-mode, effort, agent"
+    },
+    "SL-05": {
+      "files": [
+        "src/components/ResumePicker/ResumePicker.tsx:159"
+      ],
+      "verified": "2026-03-21",
+      "notes": "mergedList useMemo: chain building, member sorting, name resolution, message filtering"
+    },
+    "CB-06": {
+      "files": [
+        "src/components/CommandBar/CommandBar.tsx:76-77",
+        "src/components/CommandBar/CommandBar.tsx:136-141",
+        "src/components/CommandBar/CommandBar.css:78-89",
+        "src/components/CommandBar/CommandBar.css:116-123"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Toggle off on same click, pulsing queue-pulse animation on indicator and dot"
+    },
+    "DS-02": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:280",
+        "src/components/Terminal/TerminalPanel.tsx:283",
+        "src/components/Terminal/TerminalPanel.tsx:318"
+      ],
+      "verified": "2026-03-21",
+      "notes": "triggerRespawnRef respawns PTY in same tab (line 280-320). updateState/updateConfig modify existing session, no new tab created or old destroyed. DeadOverlay Resume/New both call triggerRespawnRef. Enter on dead tab also calls it (line 326-328)."
+    },
+    "DS-06": {
+      "files": [
+        "src/components/ResumePicker/ResumePicker.tsx:250",
+        "src/components/ResumePicker/ResumePicker.tsx:92"
+      ],
+      "verified": "2026-03-21",
+      "notes": "handleResume checks activeIsDead (line 250). If active tab is dead, calls requestRespawn to respawn in place instead of creating new session. activeIsDead derived from activeSession?.state === 'dead' (line 91)."
+    },
+    "TP-09": {
+      "files": [
+        "src/components/ThinkingPanel/ThinkingPanel.tsx:30",
+        "src/components/ThinkingPanel/ThinkingPanel.tsx:32"
+      ],
+      "verified": "2026-03-21",
+      "notes": "setInterval every 10000ms (10s) triggers setTick to force re-render (line 30-33). formatRelativeTime (line 14-21) recalculates on each render."
+    },
+    "TB-04": {
+      "files": [
+        "src-tauri/tauri.conf.json:21-22"
+      ],
+      "verified": "2026-03-21",
+      "notes": "decorations:true and theme:Dark confirmed in tauri.conf.json"
+    },
+    "TB-10": {
+      "files": [
+        "src/App.tsx:74-110",
+        "src/App.css:83-94"
+      ],
+      "verified": "2026-03-21",
+      "notes": "5s flash timer, green success color, dismissFlash on hover/click"
+    },
+    "SR-02": {
+      "files": [
+        "src/hooks/useInspectorState.ts:141-143"
+      ],
+      "verified": "2026-03-21",
+      "notes": "costUsd, inTok, outTok from inspector poll data accumulated since connection"
+    },
+    "HM-04": {
+      "files": [
+        "src/components/ConfigManager/HooksPane.tsx:120"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Spread ...(editing?.hook ?? {}) preserves unknown fields before applying form values"
+    },
+    "DP-07": {
+      "files": [
+        "src/components/DebugPanel/DebugPanel.tsx:37-49"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Auto-scroll on new entries when at bottom, pauses when user scrolls up (30px threshold)"
+    },
+    "TB-23": {
+      "files": [
+        "src/App.tsx:272",
+        "src/App.tsx:291",
+        "src/App.css:388"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "TB-24": {
+      "files": [
+        "src/App.css:127",
+        "src/App.css:157",
+        "src/App.tsx:316",
+        "src/App.tsx:384"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "TB-06": {
+      "files": [
+        "src/App.css:155"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Updated: actionNeeded replaces choice-pending; added purple state"
+    },
+    "TB-25": {
+      "files": [
+        "src/hooks/useNotifications.ts:90"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "TB-03": {
+      "files": [
+        "src/App.css:333",
+        "src/App.css:354",
+        "src/App.css:375"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: tab-add=accent(orange), tab-resume=accent-secondary(blue), tab-config=accent-tertiary(purple)"
+    },
+    "TB-15": {
+      "files": [
+        "src/App.css:269"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: :has(.tab-name-input) hides .tab-actions; summary/meta lines remain visible"
+    },
+    "SL-06": {
+      "files": [
+        "src/components/ResumePicker/ResumePicker.tsx:98",
+        "src/components/ResumePicker/ResumePicker.tsx:187",
+        "src/store/settings.ts:53"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: sessionNames in localStorage, bold custom name + secondary dir text"
+    },
+    "DP-03": {
+      "files": [
+        "src/lib/testHarness.ts:253",
+        "src/lib/testHarness.ts:260"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: pushLog formats [HH:MM:SS.mmm] [LOG|WARN|ERR]; wraps console.log/warn/error"
+    },
+    "DP-06": {
+      "files": [
+        "src/components/DebugPanel/DebugPanel.tsx:51",
+        "src/components/DebugPanel/DebugPanel.tsx:80"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: filter state + input element, case-insensitive includes matching"
+    },
+    "TP-04": {
+      "files": [
+        "src/lib/inspectorHooks.ts:271",
+        "src/lib/inspectorHooks.ts:276",
+        "src/lib/inspectorHooks.ts:286",
+        "src/lib/inspectorHooks.ts:290"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: JSON.parse hook captures content_block_start(thinking/redacted), thinking_delta accumulation, content_block_stop finalization"
+    },
+    "TP-06": {
+      "files": [
+        "src/components/ThinkingPanel/ThinkingPanel.tsx:76",
+        "src/components/ThinkingPanel/ThinkingPanel.tsx:86"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: >500 char threshold, [show more]/[show less] toggle"
+    },
+    "TP-11": {
+      "files": [
+        "src/store/settings.ts:96",
+        "src/store/settings.ts:246"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: showThinkingPanel defaults false, not in partialize list"
     }
   }
 }

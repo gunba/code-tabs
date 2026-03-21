@@ -404,14 +404,14 @@
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-primary));
-  border: 1px solid var(--accent-secondary);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-primary));
+  border: 1px solid var(--accent);
   border-radius: 8px;
 }
 
 .launcher-resume-banner-icon {
   font-size: 16px;
-  color: var(--accent-secondary);
+  color: var(--accent);
 }
 
 .launcher-resume-banner-text {

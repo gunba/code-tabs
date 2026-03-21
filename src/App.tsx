@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { useSessionStore } from "./store/sessions";
@@ -26,6 +26,7 @@ import { killAllActivePtys } from "./lib/ptyProcess";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
 import { startTestHarness } from "./lib/testHarness";
 import { IconPencil, IconStop, IconClose, IconReturn, IconGear, IconArrowRight } from "./components/Icons/Icons";
+import { groupSessionsByDir, swapWithinGroup } from "./lib/paths";
 import type { Subagent } from "./types/session";
 import "./App.css";
 
@@ -267,7 +268,8 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [activeTabId, sessions, setActiveTab, closeSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showThinkingPanel, setShowThinkingPanel, showDebugPanel, inspectedSubagent, tabContextMenu, quickLaunch]);
 
-  const regularSessions = sessions.filter((s) => !s.isMetaAgent);
+  const regularSessions = useMemo(() => sessions.filter((s) => !s.isMetaAgent), [sessions]);
+  const groups = useMemo(() => groupSessionsByDir(regularSessions), [regularSessions]);
   const subagentMap = useSessionStore((s) => s.subagents);
   const activeSubagent: Subagent | null = inspectedSubagent
     ? (subagentMap.get(inspectedSubagent.sessionId) || []).find(
@@ -285,7 +287,11 @@ export default function App() {
       {/* Tab bar */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
-            {regularSessions.map((session) => {
+            {groups.flatMap((group) => [
+              <div key={`sep-${group.key}`} className="tab-group-separator" title={group.fullPath}>
+                <span className="tab-group-label">{group.label}</span>
+              </div>,
+              ...group.sessions.map((session, si) => {
               const isActive = session.id === activeTabId;
               const fullName = session.name || dirToTabName(session.config.workingDir);
               const isDead = session.state === "dead";
@@ -307,13 +313,12 @@ export default function App() {
               return (
                 <div
                   key={session.id}
-                  className={`tab${isActive ? " tab-active" : ""}${isDead ? " tab-dead" : ""}${session.config.runMode ? " tab-run" : ""}${dragOverTabId === session.id ? " tab-drag-over" : ""}${session.state === "waitingPermission" && isActive ? " tab-permission" : ""}${flashingTabs.has(session.id) ? " tab-flash" : ""}`}
+                  className={`tab${isActive ? " tab-active" : ""}${isDead ? " tab-dead" : ""}${session.config.runMode ? " tab-run" : ""}${dragOverTabId === session.id ? " tab-drag-over" : ""}${session.state === "waitingPermission" && isActive ? " tab-permission" : ""}${session.state === "actionNeeded" && isActive ? " tab-actionNeeded" : ""}${flashingTabs.has(session.id) ? " tab-flash" : ""}`}
                   role="button"
                   tabIndex={0}
                   draggable
                   onDragStart={(e) => {
                     dragTabRef.current = session.id;
-                    // Use a minimal drag image to reduce visual jank
                     const ghost = document.createElement("div");
                     ghost.textContent = fullName;
                     ghost.style.cssText = "position:absolute;top:-999px;padding:4px 8px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;border-radius:4px;white-space:nowrap;";
@@ -324,7 +329,9 @@ export default function App() {
                   onDragOver={(e) => {
                     e.preventDefault();
                     if (dragTabRef.current && dragTabRef.current !== session.id) {
-                      setDragOverTabId(session.id);
+                      if (group.sessions.some((s) => s.id === dragTabRef.current)) {
+                        setDragOverTabId(session.id);
+                      }
                     }
                   }}
                   onDragLeave={() => {
@@ -333,7 +340,7 @@ export default function App() {
                   onDrop={() => {
                     setDragOverTabId(null);
                     const from = dragTabRef.current;
-                    if (from && from !== session.id) {
+                    if (from && from !== session.id && group.sessions.some((s) => s.id === from)) {
                       const order = regularSessions.map((s) => s.id);
                       const fromIdx = order.indexOf(from);
                       const toIdx = order.indexOf(session.id);
@@ -360,7 +367,6 @@ export default function App() {
                     }
                   }}
                   onKeyDown={(e) => {
-                    // Only activate on Enter/Space when not editing the rename input
                     if (editingTabId === session.id) return;
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
@@ -375,7 +381,7 @@ export default function App() {
                   onMouseEnter={() => dismissFlash(session.id)}
                   title={ctrlHeld ? `Ctrl+Click: Relaunch ${fullName}` : `${fullName} — ${session.state}\n${session.config.workingDir}`}
                 >
-                  <span className={`tab-dot state-${session.state}${session.state === "idle" && session.metadata.choiceHint ? " choice-pending" : ""}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
+                  <span className={`tab-dot state-${session.state}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
                   <span className="tab-label">
                     {editingTabId === session.id ? (
                       <input
@@ -422,6 +428,24 @@ export default function App() {
                       </span>
                     )}
                   </span>
+                  {group.sessions.length > 1 && (
+                    <span className="tab-reorder-arrows">
+                      {si > 0 ? (
+                        <button className="tab-arrow" onClick={(e) => {
+                          e.stopPropagation();
+                          const order = swapWithinGroup(regularSessions.map(s => s.id), session.id, "left", groups);
+                          if (order) reorderTabs(order);
+                        }} title="Move left" aria-label="Move tab left">&#x2039;</button>
+                      ) : <span />}
+                      {si < group.sessions.length - 1 ? (
+                        <button className="tab-arrow" onClick={(e) => {
+                          e.stopPropagation();
+                          const order = swapWithinGroup(regularSessions.map(s => s.id), session.id, "right", groups);
+                          if (order) reorderTabs(order);
+                        }} title="Move right" aria-label="Move tab right">&#x203a;</button>
+                      ) : <span />}
+                    </span>
+                  )}
                   <span className="tab-actions">
                     <button
                       className="tab-edit"
@@ -453,7 +477,8 @@ export default function App() {
                   </span>
                 </div>
               );
-            })}
+              }),
+            ])}
           </div>
           <button
             className="tab-resume"

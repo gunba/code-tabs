@@ -201,6 +201,7 @@ export const useSettingsStore = create<SettingsState>()(
           const partial: Partial<SessionConfig> = {};
           if (config.model) partial.model = config.model;
           if (config.permissionMode !== "default") partial.permissionMode = config.permissionMode;
+          if (config.dangerouslySkipPermissions) partial.dangerouslySkipPermissions = config.dangerouslySkipPermissions;
           if (config.effort) partial.effort = config.effort;
           if (config.agent) partial.agent = config.agent;
           if (config.maxBudget !== null) partial.maxBudget = config.maxBudget;

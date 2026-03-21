@@ -140,34 +140,25 @@
   background: color-mix(in srgb, var(--accent-secondary) 15%, var(--bg-primary));
 }
 
-/* ── Chain child indent ───────────────────────────────────────── */
+/* ── Chain stacked effect ────────────────────────────────────── */
 
-.resume-picker-card-child {
-  margin-left: 16px;
-  border-left: 2px solid var(--accent-tertiary);
+.resume-picker-card-chain {
+  box-shadow: 2px 2px 0 0 var(--border-subtle), 4px 4px 0 0 var(--border-subtle);
 }
 
-.resume-picker-card-child:hover,
-.resume-picker-card-child.resume-picker-card-selected {
-  border-left-color: var(--accent-tertiary);
+.ctrl-held .resume-picker-card-chain {
+  box-shadow: inset 0 2px 0 var(--accent-secondary),
+              2px 2px 0 0 var(--border-subtle),
+              4px 4px 0 0 var(--border-subtle);
 }
 
-/* ── Chain expander ───────────────────────────────────────────── */
-
-.resume-picker-expander {
-  margin-left: 16px;
-  padding: 4px 10px;
-  font-size: 10px;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.12s;
-}
-
-.resume-picker-expander:hover,
-.resume-picker-expander-selected {
+.resume-picker-card-chain-count {
+  font-size: 9px;
   color: var(--accent-tertiary);
-  background: var(--bg-surface-hover);
+  background: color-mix(in srgb, var(--accent-tertiary) 15%, transparent);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 /* ── Card rows ────────────────────────────────────────────────── */
@@ -226,15 +217,23 @@
   flex: 1;
 }
 
-.resume-picker-card-model {
+/* ── Badges (base + color variants) ──────────────────────────── */
+
+.resume-picker-badge {
   font-size: 9px;
-  color: var(--accent-secondary);
-  background: color-mix(in srgb, var(--accent-secondary) 15%, transparent);
   padding: 1px 5px;
   border-radius: 4px;
   flex-shrink: 0;
   white-space: nowrap;
+  color: var(--badge-color);
+  background: color-mix(in srgb, var(--badge-color) 15%, transparent);
 }
+
+.resume-picker-badge-model  { --badge-color: var(--accent-secondary); }
+.resume-picker-badge-danger { --badge-color: var(--error); }
+.resume-picker-badge-perm   { --badge-color: var(--warning); }
+.resume-picker-badge-effort { --badge-color: var(--accent-tertiary); }
+.resume-picker-badge-agent  { --badge-color: var(--accent); }
 
 .resume-picker-card-size {
   font-size: 9px;

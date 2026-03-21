@@ -185,8 +185,10 @@ export const useSessionStore = create<SessionsState>((set) => ({
     invoke("reorder_tabs", { order });
     set((s) => {
       const map = new Map(s.sessions.map((x) => [x.id, x]));
-      const sessions = order.map((id) => map.get(id)!).filter(Boolean);
-      return { sessions };
+      const orderSet = new Set(order);
+      const reordered = order.map((id) => map.get(id)!).filter(Boolean);
+      const rest = s.sessions.filter((x) => !orderSet.has(x.id));
+      return { sessions: [...reordered, ...rest] };
     });
   },
 

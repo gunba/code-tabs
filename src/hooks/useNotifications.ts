@@ -89,6 +89,9 @@ export function useNotifications() {
         if ((prev === "thinking" || prev === "toolUse") && session.state === "idle") {
           title = `${session.name} — Response Complete`;
           body = session.metadata.currentAction || "Session is ready for input.";
+        } else if (session.state === "actionNeeded") {
+          title = `${session.name} — Action Needed`;
+          body = "A session needs your input.";
         } else if (session.state === "waitingPermission") {
           title = `${session.name} — Permission Required`;
           body = "A session needs your permission to continue.";

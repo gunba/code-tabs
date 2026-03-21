@@ -78,9 +78,19 @@ export function deriveStateFromPoll(
     else if (data.stop !== null) state = "idle";
   }
 
-  // Notification flags override everything
-  if (data.permPending) state = "waitingPermission";
+  // Refine toolUse → actionNeeded for ExitPlanMode
+  if (state === "toolUse" && data.tools.includes("ExitPlanMode")) {
+    state = "actionNeeded";
+  }
+
+  // Notification flags override
   if (data.idleDetected) state = "idle";
+
+  // Refine idle → actionNeeded for choice questions
+  if (state === "idle" && data.choiceHint) state = "actionNeeded";
+
+  // Permission always wins
+  if (data.permPending) state = "waitingPermission";
 
   return state;
 }

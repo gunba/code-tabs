@@ -4,6 +4,7 @@
     "BF-01",
     "BF-02",
     "CM-01",
+    "CM-02",
     "DF-01",
     "DF-02",
     "DF-03",
@@ -12,6 +13,7 @@
     "DF-06",
     "DF-07",
     "DF-08",
+    "DF-09",
     "IN-01",
     "IN-02",
     "IN-03",
@@ -63,16 +65,52 @@
     "SI-08",
     "SI-09",
     "SI-10",
+    "SI-11",
+    "SI-12",
+    "SI-13",
     "SS-01",
     "SS-02",
     "SS-03"
   ],
   "unchecked": [
-    "CM-01"
+    "BF-01",
+    "DF-03",
+    "DF-07",
+    "DF-09",
+    "IN-02",
+    "IN-03",
+    "IN-04",
+    "IN-05",
+    "IN-06",
+    "PS-04",
+    "PT-04",
+    "PT-05",
+    "PT-08",
+    "PT-09",
+    "RC-02",
+    "RC-03",
+    "RC-04",
+    "RC-08",
+    "RC-09",
+    "RC-10",
+    "RC-11",
+    "RC-13",
+    "RS-01",
+    "RS-03",
+    "RS-05",
+    "RS-06",
+    "SI-04",
+    "SI-06",
+    "SI-07",
+    "SI-09",
+    "SI-10",
+    "SI-11",
+    "SI-13",
+    "SS-02"
   ],
   "citations": {
     "BF-01": {
-      "up": 4,
+      "up": 5,
       "down": 0
     },
     "BF-02": {
@@ -80,11 +118,11 @@
       "down": 0
     },
     "DF-01": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "DF-02": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "DF-03": {
@@ -96,23 +134,23 @@
       "down": 0
     },
     "DF-05": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "DF-06": {
-      "up": 2,
+      "up": 4,
       "down": 0
     },
     "DF-07": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "IN-01": {
-      "up": 2,
+      "up": 4,
       "down": 0
     },
     "IN-02": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "IN-03": {
@@ -136,11 +174,11 @@
       "down": 0
     },
     "PS-02": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "PS-03": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "PS-04": {
@@ -148,15 +186,15 @@
       "down": 0
     },
     "PT-01": {
-      "up": 0,
+      "up": 3,
       "down": 0
     },
     "PT-02": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "PT-03": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "PT-04": {
@@ -168,15 +206,15 @@
       "down": 0
     },
     "PT-06": {
-      "up": 1,
-      "down": 0
-    },
-    "PT-07": {
       "up": 3,
       "down": 0
     },
+    "PT-07": {
+      "up": 4,
+      "down": 0
+    },
     "RC-01": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "RC-02": {
@@ -192,11 +230,11 @@
       "down": 0
     },
     "RC-05": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "RC-06": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "RC-07": {
@@ -216,11 +254,11 @@
       "down": 0
     },
     "RC-11": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "RS-01": {
-      "up": 1,
+      "up": 3,
       "down": 0
     },
     "RS-02": {
@@ -228,19 +266,19 @@
       "down": 0
     },
     "RS-03": {
-      "up": 1,
-      "down": 0
-    },
-    "RS-04": {
       "up": 2,
       "down": 0
     },
+    "RS-04": {
+      "up": 3,
+      "down": 0
+    },
     "RS-05": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "RS-06": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SI-01": {
@@ -248,15 +286,15 @@
       "down": 0
     },
     "SI-02": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SI-03": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SI-04": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "SI-05": {
@@ -264,7 +302,7 @@
       "down": 0
     },
     "SI-06": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "SI-07": {
@@ -272,7 +310,7 @@
       "down": 0
     },
     "SI-08": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "SI-09": {
@@ -284,7 +322,7 @@
       "down": 0
     },
     "SS-01": {
-      "up": 3,
+      "up": 4,
       "down": 0
     },
     "SS-02": {
@@ -292,11 +330,11 @@
       "down": 0
     },
     "SS-03": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "PT-08": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "RC-12": {
@@ -304,7 +342,7 @@
       "down": 1
     },
     "DF-08": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "RC-13": {
@@ -312,11 +350,11 @@
       "down": 0
     },
     "IN-07": {
-      "up": 2,
+      "up": 3,
       "down": 0
     },
     "PS-05": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "PT-09": {
@@ -324,16 +362,36 @@
       "down": 0
     },
     "RC-14": {
-      "up": 1,
+      "up": 2,
       "down": 0
     },
     "CM-01": {
+      "up": 3,
+      "down": 0
+    },
+    "CM-02": {
+      "up": 4,
+      "down": 0
+    },
+    "DF-09": {
+      "up": 1,
+      "down": 0
+    },
+    "SI-11": {
+      "up": 1,
+      "down": 0
+    },
+    "SI-12": {
+      "up": 2,
+      "down": 0
+    },
+    "SI-13": {
       "up": 1,
       "down": 0
     }
   },
-  "cycle": 3,
-  "last_run": "2026-03-21T11:05:49.343734+00:00",
+  "cycle": 4,
+  "last_run": "2026-03-21T13:31:36.079690+00:00",
   "metadata": {
     "PS-04": {
       "files": [
@@ -346,19 +404,21 @@
     "PT-08": {
       "files": [
         "src/components/Terminal/TerminalPanel.css:55",
-        "src/hooks/useTerminal.ts:211",
-        "src/hooks/useTerminal.ts:295"
+        "src/hooks/useTerminal.ts:220",
+        "src/hooks/useTerminal.ts:305"
       ],
       "verified": "2026-03-21",
-      "notes": "Edited via tag-edit.sh"
+      "notes": "CSS overflow-y:scroll with scrollbar-width:none at 55-62; wasAtBottom 2-line tolerance at 220; isAtBottom same tolerance at 305-310"
     },
     "RC-12": {
       "files": [
         "src-tauri/src/commands.rs:1487",
-        "src-tauri/src/commands.rs:1498"
+        "src-tauri/src/commands.rs:1498",
+        "src-tauri/src/commands.rs:1528",
+        "src-tauri/src/commands.rs:1458"
       ],
       "verified": "2026-03-21",
-      "notes": "read_config_file at :1487, write_config_file at :1498"
+      "notes": "read_config_file, write_config_file, list_agents, resolve_config_path with 3 agent scopes"
     },
     "DF-03": {
       "files": [
@@ -370,11 +430,10 @@
     },
     "DF-04": {
       "files": [
-        "src/store/sessions.ts:52",
-        "src/App.tsx:310"
+        "src/store/sessions.ts:1"
       ],
       "verified": "2026-03-21",
-      "notes": "Zustand store at sessions.ts:52, React renders tab dots/statusbar/subagents in App.tsx"
+      "notes": "Zustand store drives tab state dots, status bar, subagent cards"
     },
     "IN-06": {
       "files": [
@@ -394,10 +453,10 @@
     },
     "PT-06": {
       "files": [
-        "src/hooks/useTerminal.ts:41"
+        "src/hooks/useTerminal.ts:42"
       ],
       "verified": "2026-03-21",
-      "notes": "scrollback: 100000 fixed, no dynamic resizing"
+      "notes": "Line 42: scrollback: 100000 in Terminal constructor. Fixed 100K scrollback, no dynamic resizing. Verified accurate."
     },
     "PT-07": {
       "files": [
@@ -412,39 +471,39 @@
         "src-tauri/src/commands.rs:737"
       ],
       "verified": "2026-03-21",
-      "notes": "get_first_user_message reads first user message from JSONL"
+      "notes": "get_first_user_message reads JSONL"
     },
     "SI-02": {
       "files": [
         "src/hooks/useInspectorState.ts:44",
         "src/hooks/useInspectorState.ts:48",
-        "src/hooks/useInspectorState.ts:50"
+        "src/hooks/useInspectorState.ts:50",
+        "src/hooks/useInspectorState.ts:354"
       ],
       "verified": "2026-03-21",
-      "notes": "CONNECT_DELAY_MS=1000 at :44, MAX_RETRIES=3 at :48, RETRY_DELAYS=[2000,4000,8000] at :50"
+      "notes": "verified: 1s delay, 3 retries, backoff [2s,4s,8s]"
     },
     "SI-05": {
       "files": [
-        "src/lib/inspectorHooks.ts:79",
         "src/hooks/useInspectorState.ts:83"
       ],
       "verified": "2026-03-21",
-      "notes": "idleDetected set on notification_type=idle_prompt at :79, mapped to idle at :83"
+      "notes": "idleDetected notification flag override in deriveStateFromPoll"
     },
     "SS-03": {
       "files": [
         "src/hooks/useInspectorState.ts:1"
       ],
       "verified": "2026-03-21",
-      "notes": "No JSONL scanning in inspector state hook, sole source is WebSocket POLL_STATE"
+      "notes": "verified: no JSONL polling in inspector state hook, all via WebSocket"
     },
     "RS-06": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:242",
-        "src-tauri/src/commands.rs:1202"
+        "src-tauri/src/commands.rs:1202",
+        "src/components/Terminal/TerminalPanel.tsx:241"
       ],
       "verified": "2026-03-21",
-      "notes": "session-in-use detection at :242, kill_session_holder ancestry check at :1202"
+      "notes": "kill_session_holder checks ancestry via is_descendant_of at 1283; kills own descendants, returns external PIDs; frontend retries at 255-259"
     },
     "RC-11": {
       "files": [
@@ -452,31 +511,30 @@
         "src-tauri/src/lib.rs:114"
       ],
       "verified": "2026-03-21",
-      "notes": "Edited via tag-edit.sh"
+      "notes": "register_active_pid at commands.rs:1098, unregister_active_pid at :1104. RunEvent::Exit handler at lib.rs:114 drains ActivePids and calls kill_process_tree_sync for each. Verified accurate."
     },
     "BF-02": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:205",
-        "src/components/Terminal/TerminalPanel.tsx:225"
+        "src/components/Terminal/TerminalPanel.tsx:205"
       ],
       "verified": "2026-03-21",
-      "notes": "visibleRef tracks tab visibility at :205, used in handlePtyData at :225"
+      "notes": "visibleRef tracks tab visibility at line 205"
     },
     "DF-05": {
       "files": [
-        "src/hooks/useTerminal.ts:27"
+        "src/hooks/useTerminal.ts:29",
+        "src/hooks/useTerminal.ts:248"
       ],
       "verified": "2026-03-21",
-      "notes": "DEC 2026 sync output referenced in write-batching comment at :27"
+      "notes": "xterm.js 6.0 with DEC 2026 sync output; batching defense-in-depth"
     },
     "RC-01": {
       "files": [
         "src-tauri/src/commands.rs:10",
-        "src-tauri/src/commands.rs:25",
-        "src-tauri/src/lib.rs:64"
+        "src-tauri/src/commands.rs:25"
       ],
       "verified": "2026-03-21",
-      "notes": "create_session at :10, close_session at :25, registered in lib.rs:64-65"
+      "notes": "verified: create_session and close_session Tauri commands"
     },
     "RC-04": {
       "files": [
@@ -498,43 +556,44 @@
         "src/components/Terminal/TerminalPanel.tsx:283"
       ],
       "verified": "2026-03-21",
-      "notes": "triggerRespawn cleans PTY/inspector :286-289, allocates port :315, increments counter :319"
+      "notes": "triggerRespawn at line 283 cleans up old PTY (286), inspector (287), unregisters ports (288-289), allocates new inspector port (315), increments respawn counter via setRespawnCounter (319). Verified accurate."
     },
     "RS-03": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:294"
+        "src/components/Terminal/TerminalPanel.tsx:294",
+        "src/lib/claude.ts:15"
       ],
       "verified": "2026-03-21",
-      "notes": "canResume = !!session.metadata.nodeSummary || !!session.config.resumeSession, in-memory"
+      "notes": "canResume checks nodeSummary||resumeSession at 294; getResumeId chains resumeSession||sessionId||id at claude.ts:16; in-memory only"
     },
     "RS-05": {
       "files": [
-        "src-tauri/src/commands.rs:898"
+        "src-tauri/src/commands.rs:895"
       ],
       "verified": "2026-03-21",
-      "notes": "session-id skipped when continue_session || resume_session at :898"
+      "notes": "Guard at 898: --session-id only when !continue_session && resume_session.is_none(); --continue at 882, --resume at 889"
     },
     "SI-06": {
       "files": [
-        "src/lib/inspectorHooks.ts:328",
-        "src/lib/inspectorHooks.ts:245"
+        "src/lib/inspectorHooks.ts:354"
       ],
       "verified": "2026-03-21",
-      "notes": "choiceHint regex on lastText.slice(-200) when stop=end_turn at :328, auto-clears via stop=null at :245"
+      "notes": "POLL_STATE line 354: choiceHint computed as s.stop === 'end_turn' && \\!\\!s.lastText && regex /\\n\\s*[1-9]\\.\\s/.test(s.lastText.slice(-200)). Auto-clears on user input at line 236 (stop reset to null). Verified accurate."
     },
     "SI-08": {
       "files": [
         "src/hooks/useInspectorState.ts:56"
       ],
       "verified": "2026-03-21",
-      "notes": "deriveStateFromPoll uses events/stop_reason/permPending/idleDetected only, no timers"
+      "notes": "verified: deriveStateFromPoll uses only real signals (events, stop, flags)"
     },
     "SS-01": {
       "files": [
-        "src/hooks/useInspectorState.ts:220"
+        "src/hooks/useInspectorState.ts:229",
+        "src/lib/inspectorHooks.ts:174"
       ],
       "verified": "2026-03-21",
-      "notes": "data.sid change detected at :220, updates claudeSessionId"
+      "notes": "verified: sid field tracked in processPollResult, set from system event sessionId"
     },
     "SS-02": {
       "files": [
@@ -548,7 +607,7 @@
         "src/components/Icons/Icons.tsx:1"
       ],
       "verified": "2026-03-21",
-      "notes": "24 icon components (counted), shared Icon base with 16x16 viewBox, stroke-based, currentColor, pointerEvents none"
+      "notes": "verified: 24 exports, stroke-based, 16x16 viewBox, currentColor, pointerEvents none"
     },
     "DF-02": {
       "files": [
@@ -559,10 +618,10 @@
     },
     "DF-07": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:469"
+        "src/components/Terminal/TerminalPanel.tsx:466"
       ],
       "verified": "2026-03-21",
-      "notes": "visibilitychange handler: clearTextureAtlas + refresh + fit at lines 469-483"
+      "notes": "visibilitychange listener at 478, clearTextureAtlas at 474 and refresh at 475 on visible state"
     },
     "IN-04": {
       "files": [
@@ -581,10 +640,11 @@
     },
     "PS-01": {
       "files": [
-        "src/store/sessions.ts:193"
+        "src/store/sessions.ts:193",
+        "src-tauri/src/commands.rs:94"
       ],
       "verified": "2026-03-21",
-      "notes": "persist() serializes from frontend store, calls invoke('persist_sessions_json')"
+      "notes": "Frontend persist() calls persist_sessions_json; Rust comment confirms"
     },
     "PS-03": {
       "files": [
@@ -611,11 +671,10 @@
     },
     "SI-04": {
       "files": [
-        "src/lib/inspectorHooks.ts:78",
         "src/hooks/useInspectorState.ts:82"
       ],
       "verified": "2026-03-21",
-      "notes": "permPending set on notification_type=permission_prompt at :78, mapped to waitingPermission at :82"
+      "notes": "permPending flag override at line 82: if (data.permPending) state = waitingPermission; no PTY regex used"
     },
     "SI-09": {
       "files": [
@@ -628,11 +687,11 @@
     "BF-01": {
       "files": [
         "src/components/Terminal/TerminalPanel.tsx:206",
-        "src/components/Terminal/TerminalPanel.tsx:225",
-        "src/components/Terminal/TerminalPanel.tsx:443"
+        "src/components/Terminal/TerminalPanel.tsx:228",
+        "src/components/Terminal/TerminalPanel.tsx:444"
       ],
       "verified": "2026-03-21",
-      "notes": "bgBufferRef at :206, push when hidden at :225-228, flush on focus at :443-451"
+      "notes": "bgBufferRef at line 206, writes to buffer at 228 when not visible, flushes as single merged write at 444-452. Verified accurate."
     },
     "RC-05": {
       "files": [
@@ -641,22 +700,21 @@
         "src-tauri/src/commands.rs:391"
       ],
       "verified": "2026-03-21",
-      "notes": "detect_claude_cli at :107, check_cli_version at :370, get_cli_help at :391"
+      "notes": "detect_claude_cli, check_cli_version, get_cli_help"
     },
     "SI-01": {
       "files": [
-        "src/hooks/useInspectorState.ts:92",
-        "src/lib/inspectorHooks.ts:1"
+        "src/hooks/useInspectorState.ts:89"
       ],
       "verified": "2026-03-21",
-      "notes": "useInspectorState sole source via BUN_INSPECT WebSocket, JSON.stringify interception in inspectorHooks"
+      "notes": "BUN_INSPECT WebSocket via JSON.stringify interception"
     },
     "SI-03": {
       "files": [
         "src/hooks/useInspectorState.ts:56"
       ],
       "verified": "2026-03-21",
-      "notes": "deriveStateFromPoll pure function at lines 56-86"
+      "notes": "verified: pure function, data+currentState in, SessionState out"
     },
     "SI-07": {
       "files": [
@@ -679,7 +737,7 @@
         "src/lib/ptyProcess.ts:1"
       ],
       "verified": "2026-03-21",
-      "notes": "Direct PTY wrapper, calls invoke('plugin:pty|...') not tauri-pty npm"
+      "notes": "verified: direct invoke plugin:pty calls, not tauri-pty npm"
     },
     "RC-13": {
       "files": [
@@ -694,7 +752,7 @@
         "src/lib/inspectorPort.ts:9"
       ],
       "verified": "2026-03-21",
-      "notes": "Date.now() mod range at :9 for random start offset"
+      "notes": "Date.now() mod range for random start offset"
     },
     "PS-05": {
       "files": [
@@ -730,25 +788,25 @@
     },
     "DF-06": {
       "files": [
-        "src/hooks/useTerminal.ts:153"
+        "src/hooks/useTerminal.ts:162"
       ],
       "verified": "2026-03-21",
-      "notes": "WebGL loadWebgl() with canRetry, onContextLoss retry after 1s, fallback to canvas"
+      "notes": "WebGL addon loaded at 162, onContextLoss disposes and retries once after 1s at 170, no-retry falls back to canvas at 178"
     },
     "CM-01": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.css:16",
-        "src/components/ConfigManager/ConfigManager.tsx:66"
+        "src/components/ConfigManager/ConfigManager.css:20",
+        "src/components/ConfigManager/ConfigManager.tsx:67"
       ],
       "verified": "2026-03-21",
-      "notes": "CSS grid auto 1fr auto at :16, header div at :66 with title left, tabs center, right section"
+      "notes": "verified: grid auto 1fr auto + title/tabs/header-right structure"
     },
     "PT-03": {
       "files": [
         "src-tauri/src/lib.rs:22"
       ],
       "verified": "2026-03-21",
-      "notes": "std::env::remove_var(CLAUDECODE) at lib.rs:22 before builder"
+      "notes": "verified: std::env::remove_var(CLAUDECODE) at startup"
     },
     "PT-05": {
       "files": [
@@ -766,25 +824,25 @@
     },
     "RS-02": {
       "files": [
-        "src/lib/claude.ts:15"
+        "src/lib/claude.ts:16"
       ],
       "verified": "2026-03-21",
-      "notes": "getResumeId: resumeSession || sessionId || id at claude.ts:16"
+      "notes": "getResumeId: resumeSession || sessionId || id"
     },
     "IN-01": {
       "files": [
         "src/lib/inspectorPort.ts:1"
       ],
       "verified": "2026-03-21",
-      "notes": "Port allocation and registry, allocateInspectorPort, register/unregister/get"
+      "notes": "inspectorPort.ts contains port allocation (allocateInspectorPort), registry (portRegistry Map), and callback registry for disconnect/reconnect. Verified accurate."
     },
     "IN-02": {
       "files": [
         "src/lib/inspectorHooks.ts:27",
-        "src/lib/inspectorHooks.ts:303"
+        "src/lib/inspectorHooks.ts:329"
       ],
       "verified": "2026-03-21",
-      "notes": "INSTALL_HOOK at :27, POLL_STATE at :303"
+      "notes": "INSTALL_HOOK at line 27, POLL_STATE at line 329. Both are JS expressions for Runtime.evaluate. Verified accurate."
     },
     "IN-03": {
       "files": [
@@ -813,7 +871,7 @@
         "src-tauri/src/commands.rs:160"
       ],
       "verified": "2026-03-21",
-      "notes": "list_past_sessions with spawn_blocking at :160-161"
+      "notes": "list_past_sessions with spawn_blocking"
     },
     "RC-08": {
       "files": [
@@ -830,6 +888,45 @@
       ],
       "verified": "2026-03-21",
       "notes": "discover_hooks at :924, save_hooks at :964"
+    },
+    "CM-02": {
+      "files": [
+        "src/lib/paths.ts:89"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: normalizes backslashes, user-scope passthrough, abbreviatePath for project"
+    },
+    "DF-09": {
+      "files": [
+        "src/lib/paths.ts:53",
+        "src/lib/paths.ts:68"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "SI-11": {
+      "files": [
+        "src/lib/inspectorHooks.ts:57",
+        "src/lib/inspectorHooks.ts:215",
+        "src/lib/inspectorHooks.ts:239"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
+    },
+    "SI-12": {
+      "files": [
+        "src/lib/inspectorHooks.ts:243",
+        "src/lib/inspectorHooks.ts:367"
+      ],
+      "verified": "2026-03-21",
+      "notes": "verified: idleDetected not reset by POLL_STATE, only cleared in user event block at line 243"
+    },
+    "SI-13": {
+      "files": [
+        "src/hooks/useInspectorState.ts:82"
+      ],
+      "verified": "2026-03-21",
+      "notes": "Added during change documentation"
     }
   }
 }

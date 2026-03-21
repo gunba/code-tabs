@@ -98,7 +98,7 @@ function DeadOverlay({ session, triggerRespawnRef, closeSession }: DeadOverlayPr
 
 // ── Duration Timer (active time only) ────────────────────────────────────
 
-const ACTIVE_STATES = new Set<SessionState>(["thinking", "toolUse", "waitingPermission", "error"]);
+const ACTIVE_STATES = new Set<SessionState>(["thinking", "toolUse", "actionNeeded", "waitingPermission", "error"]);
 
 function useDurationTimer(sessionId: string, state: SessionState): void {
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
@@ -570,11 +570,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     const handler = (ev: MouseEvent) => {
       if (ev.button === 1 && ev.ctrlKey) {
         ev.preventDefault();
+        ev.stopPropagation();
         terminal.scrollToLastUserMessage();
       }
     };
-    el.addEventListener("mousedown", handler);
-    return () => el.removeEventListener("mousedown", handler);
+    el.addEventListener("mousedown", handler, { capture: true });
+    return () => el.removeEventListener("mousedown", handler, { capture: true });
     // terminal.scrollToLastUserMessage is a stable useCallback — safe in deps
   }, [visible, terminal.scrollToLastUserMessage]);
 
