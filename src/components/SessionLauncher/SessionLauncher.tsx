@@ -192,11 +192,14 @@ export function SessionLauncher() {
     const finalConfig: SessionConfig = isNonSessionCommand
       ? { ...launchConfig, runMode: true, model: null, permissionMode: "default", effort: null, dangerouslySkipPermissions: false, projectDir: false }
       : { ...launchConfig, runMode: false };
+    const storedName = finalConfig.resumeSession
+      ? useSettingsStore.getState().sessionNames[finalConfig.resumeSession]
+      : undefined;
     const name = isNonSessionCommand
       ? commandTokens.find(t => t !== "claude" && !t.startsWith("-"))
         || commandTokens.find(t => t.startsWith("--"))
         || "run"
-      : launchConfig.workingDir ? dirToTabName(launchConfig.workingDir) : "run";
+      : storedName || (launchConfig.workingDir ? dirToTabName(launchConfig.workingDir) : "run");
     if (finalConfig.workingDir) addRecentDir(finalConfig.workingDir);
     // Save config as defaults but strip one-shot resume fields and runMode —
     // these are per-launch, not persistent defaults.

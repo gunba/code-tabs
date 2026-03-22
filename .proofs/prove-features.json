@@ -829,75 +829,77 @@
     "TB-23": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "DS-09": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "TR-07": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "TR-08": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "TR-10": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "TR-11": {
       "up": 1,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "TR-12": {
       "up": 3,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "SL-07": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "CM-23": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "CM-25": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "KB-03": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "TR-09": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "TB-24": {
       "up": 0,
       "down": 0,
-      "seen": 2
+      "seen": 3
     },
     "CM-05": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 1
     },
     "CM-24": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 1
     }
   },
   "metadata": {

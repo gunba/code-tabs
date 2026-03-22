@@ -15,7 +15,61 @@ use session::SessionManager;
 /// Killed on app exit to prevent orphaned Claude Code CLI processes.
 pub struct ActivePids(pub Mutex<HashSet<u32>>);
 
+/// Create a Windows Job Object and assign our process to it.
+/// All child processes (ConPTY conhost, Claude CLI, etc.) inherit the job.
+/// `KILL_ON_JOB_CLOSE` ensures they all die when our process exits.
+#[cfg(target_os = "windows")]
+fn setup_job_object() {
+    use windows_sys::Win32::System::JobObjects::*;
+    use windows_sys::Win32::System::Threading::*;
+    use windows_sys::Win32::Foundation::*;
+    use std::mem;
+
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            eprintln!("Failed to create job object");
+            return;
+        }
+
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        let ok = SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const _,
+            mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ok == 0 {
+            eprintln!("Failed to set job object limits");
+            CloseHandle(job);
+            return;
+        }
+
+        let current = GetCurrentProcess();
+        let ok = AssignProcessToJobObject(job, current);
+        if ok == 0 {
+            eprintln!("Failed to assign process to job object");
+            CloseHandle(job);
+            return;
+        }
+
+        // Don't close the handle — it must stay open for the lifetime of the
+        // process. When the process exits, Windows closes it automatically,
+        // which triggers KILL_ON_JOB_CLOSE for all child processes.
+        let _ = job;
+    }
+}
+
 pub fn run() {
+    // Assign our process to a Job Object with KILL_ON_JOB_CLOSE.
+    // When our process exits (clean, crash, or force-close), Windows
+    // automatically kills all child processes — including conhost.exe
+    // instances spawned by ConPTY and Claude CLI processes.
+    #[cfg(target_os = "windows")]
+    setup_job_object();
+
     // Strip CLAUDECODE env var so spawned Claude CLI sessions don't think
     // they're nested inside another Claude Code session. Claude Tabs manages
     // independent sessions — it's not a nested invocation.
