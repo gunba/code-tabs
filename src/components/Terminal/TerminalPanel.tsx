@@ -332,6 +332,14 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         }
         return;
       }
+      // Detect slash commands typed directly in terminal on Enter.
+      // Exact match: real Enter keypress is "\r"; pasted text is always longer.
+      if (data === "\r") {
+        const input = terminalRef.current?.getCurrentInput();
+        if (input && input.startsWith("/")) {
+          useSessionStore.getState().addCommandHistory(session.id, input);
+        }
+      }
       pty.handle.current?.write(data);
     },
     // pty.handle is a stable ref — omitted from deps intentionally
@@ -371,6 +379,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       spawnedRef.current = true;
       try {
         const args = await buildClaudeArgs(session.config);
+        terminal.fit(); // Force fit before reading dimensions
         const { cols, rows } = terminal.getDimensions();
         // Normalize path slashes for Windows PTY spawn
         const cwd = session.config.workingDir.replace(/\//g, "\\");
@@ -381,6 +390,16 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         registerPtyWriter(session.id, handle.write);
         if (inspPort) registerInspectorPort(session.id, inspPort);
         updateState(session.id, "idle");
+
+        // Post-spawn dimension verification — catches cases where font metrics
+        // or WebGL renderer weren't ready during the initial fit.
+        requestAnimationFrame(() => {
+          terminal.fit();
+          const { cols: c, rows: r } = terminal.getDimensions();
+          if (c !== cols || r !== rows) {
+            handle.resize(c, r);
+          }
+        });
       } catch (err) {
         console.error("Failed to spawn PTY:", err);
         updateState(session.id, "error");

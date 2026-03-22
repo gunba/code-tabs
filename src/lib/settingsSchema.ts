@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { CliOption } from "../store/settings";
 
 export type Scope = "user" | "project" | "project-local";
@@ -58,6 +59,114 @@ const STATIC_FIELDS: SettingField[] = [
   { key: "hooks", label: "Hooks", type: "object", description: "Event hooks configuration", category: "hooks", scopes: ["user", "project", "project-local"] },
 ];
 
+/** JSON Schema types from schemastore */
+export interface JsonSchemaProperty {
+  type?: string | string[];
+  description?: string;
+  enum?: string[];
+  anyOf?: JsonSchemaProperty[];
+  items?: JsonSchemaProperty;
+  properties?: Record<string, JsonSchemaProperty>;
+  additionalProperties?: JsonSchemaProperty | boolean;
+  default?: any;
+  const?: any;
+}
+
+export interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchemaProperty>;
+  $schema?: string;
+  description?: string;
+}
+
+/** Unwrap anyOf wrappers (Zod optionals produce anyOf:[{type:X},{type:'null'}]) */
+function unwrapAnyOf(prop: JsonSchemaProperty): JsonSchemaProperty {
+  if (prop.anyOf) {
+    // Filter out null type entries
+    const nonNull = prop.anyOf.filter(
+      (v) => v.type !== "null" && v.const !== null
+    );
+    if (nonNull.length === 1) {
+      // Merge description from parent
+      return { ...nonNull[0], description: nonNull[0].description ?? prop.description };
+    }
+    // Multiple non-null: check if it's an enum pattern (all have const)
+    if (nonNull.every((v) => v.const !== undefined)) {
+      return {
+        type: "string",
+        enum: nonNull.map((v) => String(v.const)),
+        description: prop.description,
+      };
+    }
+  }
+  return prop;
+}
+
+/** Map a JSON Schema property to our SettingField type */
+function jsonSchemaToFieldType(prop: JsonSchemaProperty): { type: SettingField["type"]; choices?: string[] } {
+  const unwrapped = unwrapAnyOf(prop);
+
+  if (unwrapped.enum) {
+    return { type: "enum", choices: unwrapped.enum };
+  }
+
+  const t = Array.isArray(unwrapped.type) ? unwrapped.type[0] : unwrapped.type;
+  switch (t) {
+    case "boolean": return { type: "boolean" };
+    case "number":
+    case "integer": return { type: "number" };
+    case "array": return { type: "stringArray" };
+    case "object": {
+      // object with additionalProperties of string → stringMap
+      if (unwrapped.additionalProperties && typeof unwrapped.additionalProperties === "object"
+        && unwrapped.additionalProperties.type === "string") {
+        return { type: "stringMap" };
+      }
+      return { type: "object" };
+    }
+    default: return { type: "string" };
+  }
+}
+
+/** Parse a JSON Schema (from schemastore) into SettingField[] */
+export function parseJsonSchema(schema: JsonSchema): SettingField[] {
+  if (!schema.properties) return [];
+  const fields: SettingField[] = [];
+
+  for (const [key, rawProp] of Object.entries(schema.properties)) {
+    const prop = unwrapAnyOf(rawProp);
+    const description = prop.description ?? rawProp.description ?? "";
+    const { type, choices } = jsonSchemaToFieldType(rawProp);
+
+    fields.push({
+      key,
+      label: keyToLabel(key),
+      type,
+      description,
+      choices,
+      category: categorize(key, description),
+      scopes: ["user", "project", "project-local"],
+    });
+  }
+
+  return fields;
+}
+
+/** Get default value for a setting type */
+export function defaultForType(field: SettingField): any {
+  if (field.choices && field.choices.length > 0) return field.choices[0];
+  switch (field.type) {
+    case "boolean": return false;
+    case "string": return "";
+    case "number": return 0;
+    case "stringArray": return [];
+    case "stringMap": return {};
+    case "object": return {};
+    case "enum": return "";
+    default: return "";
+  }
+}
+
 /** Convert --kebab-flag to camelCase key */
 function flagToKey(flag: string): string {
   if (FLAG_TO_KEY[flag]) return FLAG_TO_KEY[flag];
@@ -105,19 +214,31 @@ function keyToLabel(key: string): string {
 }
 
 /**
- * Build settings schema from three sources (in priority order):
- * 1. CLI --help options (most reliable for flag-settable keys)
- * 2. Binary Zod schema scan (discovers settings-only keys)
- * 3. Static registry (fallback for keys missed by both)
+ * Build settings schema from four sources (in priority order):
+ * 1. JSON Schema from schemastore (most complete — all keys, types, descriptions)
+ * 2. CLI --help options (reliable for flag-settable keys)
+ * 3. Binary Zod schema scan (discovers settings-only keys)
+ * 4. Static registry (fallback for keys missed by all)
  */
 export function buildSettingsSchema(
   cliOptions: CliOption[],
   binaryFields?: BinarySettingField[],
+  jsonSchema?: JsonSchema | null,
 ): SettingField[] {
   const fields: SettingField[] = [];
   const seenKeys = new Set<string>();
 
-  // 1. CLI flag-derived fields (highest priority — most accurate type info)
+  // 1. JSON Schema fields (highest priority — authoritative from schemastore)
+  if (jsonSchema) {
+    for (const field of parseJsonSchema(jsonSchema)) {
+      if (!seenKeys.has(field.key)) {
+        seenKeys.add(field.key);
+        fields.push(field);
+      }
+    }
+  }
+
+  // 2. CLI flag-derived fields (fills in anything schema missed)
   for (const opt of cliOptions) {
     if (SESSION_ONLY.has(opt.flag)) continue;
 
@@ -137,7 +258,7 @@ export function buildSettingsSchema(
     });
   }
 
-  // 2. Binary-discovered fields (settings-only keys not exposed via CLI flags)
+  // 3. Binary-discovered fields (settings-only keys not exposed via CLI flags)
   if (binaryFields) {
     for (const bf of binaryFields) {
       if (seenKeys.has(bf.key)) continue;
@@ -159,7 +280,7 @@ export function buildSettingsSchema(
     }
   }
 
-  // 3. Static fields (fallback for structural keys)
+  // 4. Static fields (fallback for structural keys)
   for (const field of STATIC_FIELDS) {
     if (!seenKeys.has(field.key)) {
       seenKeys.add(field.key);
@@ -168,6 +289,36 @@ export function buildSettingsSchema(
   }
 
   return fields;
+}
+
+/** Check for type mismatches between JSON values and schema */
+export function getTypeMismatches(
+  json: Record<string, unknown>,
+  schema: SettingField[],
+): { key: string; expected: string; actual: string }[] {
+  const fieldMap = new Map(schema.map((f) => [f.key, f]));
+  const mismatches: { key: string; expected: string; actual: string }[] = [];
+
+  for (const [key, value] of Object.entries(json)) {
+    const field = fieldMap.get(key);
+    if (!field || value === null || value === undefined) continue;
+
+    const actual = Array.isArray(value) ? "array" : typeof value;
+    let ok = false;
+    switch (field.type) {
+      case "boolean": ok = actual === "boolean"; break;
+      case "number": ok = actual === "number"; break;
+      case "string":
+      case "enum": ok = actual === "string"; break;
+      case "stringArray": ok = actual === "array"; break;
+      case "stringMap":
+      case "object": ok = actual === "object"; break;
+    }
+    if (!ok) {
+      mismatches.push({ key, expected: field.type, actual });
+    }
+  }
+  return mismatches;
 }
 
 /** Get unknown keys from JSON that aren't in the schema */

@@ -545,8 +545,13 @@
 }
 
 .subagent-active {
-  background: var(--bg-surface-hover);
   border-left: 2px solid var(--accent);
+  animation: subagent-bg-pulse 2s ease-in-out infinite;
+}
+
+@keyframes subagent-bg-pulse {
+  0%, 100% { background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface)); }
+  50% { background: color-mix(in srgb, var(--accent) 25%, var(--bg-surface)); }
 }
 
 .subagent-active .subagent-name,
@@ -560,12 +565,13 @@
 }
 
 .subagent-idle {
-  opacity: 0.5;
+  background: var(--bg-primary);
+  opacity: 0.4;
   transition: background 0.15s, opacity 0.15s;
 }
 
 .subagent-idle:hover {
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .subagent-icon {

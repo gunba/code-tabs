@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { LaunchPreset, SessionConfig, PastSession } from "../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../types/session";
 import { normalizePath } from "../lib/paths";
-import type { BinarySettingField } from "../lib/settingsSchema";
+import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 
 export interface CliOption {
   flag: string;        // e.g. "--model"
@@ -42,6 +42,7 @@ interface SettingsState {
   previousCliVersion: string | null;
   cliCapabilities: CliCapabilities;
   binarySettingsSchema: BinarySettingField[];
+  settingsJsonSchema: JsonSchema | null;
   slashCommands: SlashCommand[];
 
   commandUsage: Record<string, number>;
@@ -72,6 +73,7 @@ interface SettingsState {
   cacheSessionConfig: (id: string, config: SessionConfig) => void;
   loadPastSessions: () => Promise<void>;
   loadBinarySettingsSchema: () => Promise<void>;
+  loadSettingsJsonSchema: () => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -88,6 +90,7 @@ export const useSettingsStore = create<SettingsState>()(
       previousCliVersion: null,
       cliCapabilities: { models: [], permissionModes: [], flags: [], options: [], commands: [] },
       binarySettingsSchema: [],
+      settingsJsonSchema: null,
       slashCommands: [],
       commandUsage: {},
       showConfigManager: false,
@@ -234,6 +237,15 @@ export const useSettingsStore = create<SettingsState>()(
           // Binary scan failed — no problem, CLI help + static fields still work
         }
       },
+      loadSettingsJsonSchema: async () => {
+        try {
+          const raw = await invoke<string>("fetch_settings_schema");
+          const schema = JSON.parse(raw) as JsonSchema;
+          set({ settingsJsonSchema: schema });
+        } catch {
+          // Network fetch failed — Zustand persistence provides offline fallback
+        }
+      },
     }),
     {
       name: "claude-tabs-settings",
@@ -250,6 +262,7 @@ export const useSettingsStore = create<SettingsState>()(
         previousCliVersion: state.previousCliVersion,
         cliCapabilities: state.cliCapabilities,
         binarySettingsSchema: state.binarySettingsSchema,
+        settingsJsonSchema: state.settingsJsonSchema,
         commandUsage: state.commandUsage,
         sessionNames: state.sessionNames,
         sessionConfigs: state.sessionConfigs,

@@ -30,6 +30,10 @@
   animation: spin 0.8s linear infinite;
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .terminal-container {
   flex: 1;
   padding: 4px;

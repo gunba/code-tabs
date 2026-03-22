@@ -29,4 +29,5 @@ export interface IpcCommands {
   build_claude_args: (args: {
     config: SessionConfig;
   }) => Promise<string[]>;
+  shell_open: (args: { path: string }) => Promise<void>;
 }

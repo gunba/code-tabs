@@ -52,6 +52,9 @@ export function useCliWatcher(): void {
           // Discover settings schema from binary (runs in background, non-blocking)
           useSettingsStore.getState().loadBinarySettingsSchema();
 
+          // Fetch JSON Schema from schemastore (runs in background, non-blocking)
+          useSettingsStore.getState().loadSettingsJsonSchema();
+
           // Log version change
           if (cached) {
             console.info(`[cliWatcher] Claude CLI updated: ${cached} → ${version}`);

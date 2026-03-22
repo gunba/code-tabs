@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { highlightJson } from "../../components/ConfigManager/SettingsPane";
+import { highlightJson, insertIntoJson } from "../../components/ConfigManager/SettingsPane";
 
 describe("highlightJson", () => {
   it("wraps object keys in sh-key spans", () => {
@@ -97,5 +97,79 @@ describe("highlightJson", () => {
     expect(result).toContain('<span class="sh-key">"outer"</span>:');
     expect(result).toContain('<span class="sh-key">"inner"</span>:');
     expect(result).toContain('<span class="sh-number">1</span>');
+  });
+});
+
+describe("insertIntoJson", () => {
+  it("creates new object from empty string", () => {
+    const result = insertIntoJson("", "model", "claude-3");
+    expect(JSON.parse(result)).toEqual({ model: "claude-3" });
+  });
+
+  it("creates new object from empty braces", () => {
+    const result = insertIntoJson("{}", "verbose", true);
+    expect(JSON.parse(result)).toEqual({ verbose: true });
+  });
+
+  it("creates new object from whitespace-only string", () => {
+    const result = insertIntoJson("   ", "key", "val");
+    expect(JSON.parse(result)).toEqual({ key: "val" });
+  });
+
+  it("inserts into valid existing JSON", () => {
+    const existing = JSON.stringify({ model: "claude-3" }, null, 2);
+    const result = insertIntoJson(existing, "verbose", true);
+    const parsed = JSON.parse(result);
+    expect(parsed.model).toBe("claude-3");
+    expect(parsed.verbose).toBe(true);
+  });
+
+  it("overwrites existing key in valid JSON", () => {
+    const existing = JSON.stringify({ model: "old" }, null, 2);
+    const result = insertIntoJson(existing, "model", "new");
+    expect(JSON.parse(result)).toEqual({ model: "new" });
+  });
+
+  it("inserts array values", () => {
+    const result = insertIntoJson("{}", "tools", ["read", "write"]);
+    expect(JSON.parse(result)).toEqual({ tools: ["read", "write"] });
+  });
+
+  it("inserts object values", () => {
+    const result = insertIntoJson("{}", "env", { PATH: "/usr/bin" });
+    expect(JSON.parse(result)).toEqual({ env: { PATH: "/usr/bin" } });
+  });
+
+  it("inserts numeric values", () => {
+    const result = insertIntoJson("{}", "maxBudget", 50);
+    expect(JSON.parse(result)).toEqual({ maxBudget: 50 });
+  });
+
+  it("handles invalid JSON by appending before last brace", () => {
+    const invalid = '{\n  "model": "claude-3",\n  BROKEN\n}';
+    const result = insertIntoJson(invalid, "verbose", true);
+    expect(result).toContain('"verbose"');
+    expect(result).toContain("true");
+    expect(result.endsWith("\n}")).toBe(true);
+  });
+
+  it("adds comma for invalid JSON with existing content", () => {
+    const invalid = '{\n  "model": "claude-3"\n  BAD\n}';
+    const result = insertIntoJson(invalid, "key", "val");
+    // Should add a comma before the new entry
+    expect(result).toContain(",");
+    expect(result).toContain('"key"');
+  });
+
+  it("returns input unchanged for invalid JSON without closing brace", () => {
+    const noBrace = '"just a string';
+    const result = insertIntoJson(noBrace, "key", "val");
+    expect(result).toBe(noBrace);
+  });
+
+  it("handles whitespace around valid JSON", () => {
+    const padded = "  \n  {} \n  ";
+    const result = insertIntoJson(padded, "key", "val");
+    expect(JSON.parse(result)).toEqual({ key: "val" });
   });
 });

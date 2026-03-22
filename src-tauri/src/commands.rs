@@ -647,6 +647,26 @@ fn discover_settings_schema_sync() -> Result<Vec<serde_json::Value>, String> {
     Ok(fields)
 }
 
+/// Fetch the Claude Code JSON Schema from schemastore.org.
+/// Done server-side to avoid CORS restrictions in the WebView.
+#[tauri::command]
+pub async fn fetch_settings_schema() -> Result<String, String> {
+    tokio::task::spawn_blocking(|| {
+        let url = "https://json.schemastore.org/claude-code-settings.json";
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| format!("HTTP client error: {}", e))?;
+        client.get(url)
+            .send()
+            .and_then(|r| r.error_for_status())
+            .and_then(|r| r.text())
+            .map_err(|e| format!("Failed to fetch settings schema: {}", e))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Scan for plugin/custom command files in multiple locations.
 #[tauri::command]
 pub fn discover_plugin_commands(extra_dirs: Vec<String>) -> Result<Vec<serde_json::Value>, String> {
@@ -1608,4 +1628,9 @@ pub async fn send_notification(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn shell_open(path: String) -> Result<(), String> {
+    open::that_detached(&path).map_err(|e| format!("shell_open failed for {path}: {e}"))
 }

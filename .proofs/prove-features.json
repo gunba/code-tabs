@@ -31,6 +31,8 @@
     "CM-20",
     "CM-22",
     "CM-23",
+    "CM-24",
+    "CM-25",
     "DP-01",
     "DP-02",
     "DP-03",
@@ -94,6 +96,7 @@
     "SR-03",
     "SR-04",
     "SR-05",
+    "SR-06",
     "TB-01",
     "TB-02",
     "TB-03",
@@ -119,14 +122,8 @@
     "TB-23",
     "TB-24",
     "TB-25",
-    "TP-02",
-    "TP-04",
-    "TP-05",
-    "TP-06",
-    "TP-07",
-    "TP-08",
-    "TP-09",
-    "TP-11",
+    "TB-26",
+    "TB-27",
     "TR-01",
     "TR-02",
     "TR-03",
@@ -152,6 +149,8 @@
     "CM-16",
     "CM-17",
     "CM-18",
+    "CM-24",
+    "CM-25",
     "DP-02",
     "DP-09",
     "DP-10",
@@ -176,6 +175,7 @@
     "SR-01",
     "SR-02",
     "SR-03",
+    "SR-06",
     "TB-05",
     "TB-06",
     "TB-14",
@@ -185,9 +185,8 @@
     "TB-22",
     "TB-23",
     "TB-25",
-    "TP-02",
-    "TP-05",
-    "TP-08",
+    "TB-26",
+    "TB-27",
     "TR-01",
     "TR-03",
     "TR-07",
@@ -196,559 +195,683 @@
   "citations": {
     "CB-01": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CB-02": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CB-03": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CB-04": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CB-05": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CB-06": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CB-07": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CB-08": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CM-01": {
-      "up": 1,
-      "down": 0
+      "up": 2,
+      "down": 0,
+      "seen": 4
     },
     "CM-02": {
-      "up": 7,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "CM-03": {
-      "up": 3,
-      "down": 0
+      "up": 6,
+      "down": 0,
+      "seen": 8
     },
     "CM-04": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CM-05": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "CM-06": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CM-07": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "CM-08": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CM-09": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CM-10": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-01": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "DP-02": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-03": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-04": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-05": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-06": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-07": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-08": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-09": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-10": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DP-11": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "DP-12": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DS-01": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DS-02": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DS-03": {
-      "up": 1,
-      "down": 0
+      "up": 2,
+      "down": 0,
+      "seen": 8
     },
     "DS-04": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DS-05": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "DS-06": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "DS-07": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-01": {
       "up": 4,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-02": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-03": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-04": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-05": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-06": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-07": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-08": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-09": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "KB-01": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "KB-02": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "KB-03": {
-      "up": 3,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "KB-04": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "KB-05": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "KB-06": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "KB-07": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "KB-08": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "KB-09": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-01": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-02": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-03": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "SL-04": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "SL-05": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "SL-06": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-07": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "SL-08": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-09": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-10": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-11": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-12": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-13": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-14": {
       "up": 2,
-      "down": 1
+      "down": 1,
+      "seen": 8
     },
     "SL-15": {
       "up": 4,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SL-16": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SR-01": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SR-02": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SR-03": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "SR-04": {
-      "up": 3,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "SR-05": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-01": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-02": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-03": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-04": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-05": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-06": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "TB-07": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-08": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "TB-09": {
-      "up": 4,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "TB-10": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-11": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-12": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-13": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-14": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-15": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-16": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-17": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-18": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-19": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-20": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TB-21": {
       "up": 1,
-      "down": 0
-    },
-    "TP-02": {
-      "up": 4,
-      "down": 0
-    },
-    "TP-04": {
-      "up": 1,
-      "down": 0
-    },
-    "TP-05": {
-      "up": 1,
-      "down": 0
-    },
-    "TP-06": {
-      "up": 1,
-      "down": 0
-    },
-    "TP-07": {
-      "up": 1,
-      "down": 0
-    },
-    "TP-08": {
-      "up": 0,
-      "down": 0
-    },
-    "TP-09": {
-      "up": 2,
-      "down": 0
-    },
-    "TP-11": {
-      "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TR-01": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TR-02": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TR-03": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TR-04": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TR-05": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TR-06": {
       "up": 4,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "WN-01": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "WN-02": {
       "up": 2,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "TR-07": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "TR-08": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 4
     },
     "TR-09": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "KB-10": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "MO-01": {
-      "up": 2,
-      "down": 0
+      "up": 3,
+      "down": 0,
+      "seen": 8
     },
     "CM-11": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "CM-12": {
-      "up": 5,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "CM-13": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 1
     },
     "CM-14": {
       "up": 4,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CM-15": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CM-16": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "CM-17": {
-      "up": 4,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 1
     },
     "TB-22": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "CM-18": {
       "up": 1,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "HM-10": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "DS-08": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "TR-10": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "WN-03": {
       "up": 3,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CB-09": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "CM-20": {
       "up": 5,
-      "down": 0
+      "down": 0,
+      "seen": 8
     },
     "CM-22": {
-      "up": 2,
-      "down": 0
+      "up": 3,
+      "down": 0,
+      "seen": 8
     },
     "CM-23": {
-      "up": 4,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 1
     },
     "TB-23": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "TB-24": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "TB-25": {
-      "up": 1,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
     },
     "DS-09": {
-      "up": 2,
-      "down": 0
+      "up": 0,
+      "down": 0,
+      "seen": 4
+    },
+    "TB-26": {
+      "up": 1,
+      "down": 0,
+      "seen": 4
+    },
+    "TB-27": {
+      "up": 1,
+      "down": 0,
+      "seen": 4
+    },
+    "SR-06": {
+      "up": 4,
+      "down": 0,
+      "seen": 7
+    },
+    "CM-24": {
+      "up": 1,
+      "down": 0,
+      "seen": 1
+    },
+    "CM-25": {
+      "up": 1,
+      "down": 0,
+      "seen": 1
     }
   },
   "cycle": 3,
@@ -756,30 +879,30 @@
   "metadata": {
     "TB-22": {
       "files": [
-        "src/App.tsx:28",
+        "src/App.tsx:27",
         "src/components/Icons/Icons.tsx:1"
       ],
-      "verified": "2026-03-21",
-      "notes": "Added during change documentation"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "TR-07": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:609"
+        "src/components/Terminal/TerminalPanel.tsx:653"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "TR-08": {
       "files": [
-        "src/hooks/useTerminal.ts:283",
-        "src/components/Terminal/TerminalPanel.tsx:566"
+        "src/hooks/useTerminal.ts:277",
+        "src/components/Terminal/TerminalPanel.tsx:618"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "TR-09": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:584",
+        "src/components/Terminal/TerminalPanel.tsx:606",
         "src-tauri/tauri.conf.json:25"
       ],
       "verified": "2026-03-22",
@@ -787,16 +910,16 @@
     },
     "TR-10": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:449"
+        "src/components/Terminal/TerminalPanel.tsx:475"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "KB-10": {
       "files": [
-        "src/hooks/useTerminal.ts:79"
+        "src/hooks/useTerminal.ts:80"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "MO-01": {
@@ -809,31 +932,27 @@
     },
     "CM-11": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.css:7",
-        "src/components/ConfigManager/ConfigManager.tsx:64"
+        "src/components/ConfigManager/ConfigManager.tsx:64",
+        "src/components/ConfigManager/ConfigManager.css:1"
       ],
-      "verified": "2026-03-21",
-      "notes": "96vw/1900px/88vh confirmed in CSS; 5 tabs in TABS array; ModalOverlay at line 64"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-12": {
       "files": [
-        "src/components/ConfigManager/ThreePaneEditor.tsx:45",
-        "src/components/ConfigManager/ConfigManager.tsx:101",
+        "src/components/ConfigManager/ThreePaneEditor.tsx:1",
         "src/components/ConfigManager/ConfigManager.css:129"
       ],
       "verified": "2026-03-22",
-      "notes": "ThreePaneEditor renders 3 columns (line 47: three-pane-grid). CSS at ConfigManager.css:131 uses grid-template-columns: 1fr 1fr 1fr. Colors: User=var(--accent) (clay), Project=var(--accent-secondary) (blue), Local=var(--accent-tertiary) (purple) at ThreePaneEditor.tsx:39-43. Left border via --scope-color at CSS:142, tinted header at CSS:153. 5 tabs (Settings, CLAUDE.md, Hooks, Plugins, Agents) at ConfigManager.tsx:101-114. Confirmed."
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-13": {
       "files": [
-        "src/components/ConfigManager/SettingsPane.tsx:8",
-        "src/components/ConfigManager/SettingsPane.tsx:94",
-        "src/components/ConfigManager/ConfigManager.css:852",
-        "src/components/ConfigManager/ConfigManager.css:876",
-        "src/components/ConfigManager/ConfigManager.css:885"
+        "src/components/ConfigManager/SettingsPane.tsx:15",
+        "src/components/ConfigManager/ConfigManager.css:858"
       ],
-      "verified": "2026-03-21",
-      "notes": "sh-container with position:relative at CSS:852; sh-pre absolute inset:0 at CSS:860; sh-textarea absolute inset:0 at CSS:880. Keys=sh-key clay, strings=sh-string blue, numbers/bools=sh-number/sh-bool purple at CSS:885-888. Scroll synced via syncScroll() at TSX:81. Ctrl+S save at TSX:109."
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-14": {
       "files": [
@@ -853,18 +972,18 @@
     "CM-16": {
       "files": [
         "src/components/ConfigManager/PluginsPane.tsx:14",
-        "src/components/ConfigManager/ConfigManager.css:555"
+        "src/components/ConfigManager/ConfigManager.css:548"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "CM-17": {
       "files": [
         "src/components/StatusBar/StatusBar.tsx:140",
-        "src/store/settings.ts:48"
+        "src/store/settings.ts:49"
       ],
-      "verified": "2026-03-21",
-      "notes": "hooks button onClick at StatusBar:140, showConfigManager type at settings:48"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "CB-03": {
       "files": [
@@ -948,17 +1067,17 @@
     "CM-01": {
       "files": [
         "src/components/ConfigManager/ConfigManager.css:16",
-        "src/components/ConfigManager/ConfigManager.tsx:67"
+        "src/components/ConfigManager/ConfigManager.tsx:66"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "CM-02": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:17"
+        "src/lib/paths.ts:89"
       ],
-      "verified": "2026-03-21",
-      "notes": "Five tabs confirmed: settings/claudemd/hooks/plugins/agents with IconGear/IconDocument/IconHook/IconPuzzle/IconBot icons"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-04": {
       "files": [
@@ -971,9 +1090,9 @@
     },
     "CM-05": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:103"
+        "src/components/ConfigManager/ConfigManager.tsx:102"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "CM-06": {
@@ -1040,9 +1159,9 @@
     },
     "SL-03": {
       "files": [
-        "src/components/SessionLauncher/SessionLauncher.css:402"
+        "src/components/SessionLauncher/SessionLauncher.css:404"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "SL-10": {
@@ -1082,16 +1201,9 @@
     "CM-07": {
       "files": [
         "src/components/ConfigManager/AgentEditor.tsx:6",
-        "src/components/ConfigManager/ConfigManager.css:705"
+        "src/components/ConfigManager/ConfigManager.css:701"
       ],
-      "verified": "2026-03-21",
-      "notes": "ThreePaneEditor scoped, pills+editor, auto-select, dashed new-agent pill, duplicate check, Ctrl+S"
-    },
-    "TP-02": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:674"
-      ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "CM-18": {
@@ -1103,19 +1215,17 @@
     },
     "HM-10": {
       "files": [
-        "src/components/StatusBar/StatusBar.tsx:7",
-        "src/components/StatusBar/StatusBar.tsx:147"
+        "src/components/StatusBar/StatusBar.tsx:7"
       ],
-      "verified": "2026-03-21",
-      "notes": "verified: all icons imported as SVG components from Icons.tsx; Sigma is text character"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "TB-09": {
       "files": [
-        "src/App.tsx:239",
-        "src/App.tsx:377"
+        "src/App.tsx:239"
       ],
-      "verified": "2026-03-21",
-      "notes": "Ctrl+E handler at 239; inline input with Enter/Esc at 377-401"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-03": {
       "files": [
@@ -1128,10 +1238,10 @@
     "TB-08": {
       "files": [
         "src/App.tsx:293",
-        "src/lib/claude.ts:30"
+        "src/lib/claude.ts:25"
       ],
-      "verified": "2026-03-21",
-      "notes": "Meta spans use modelColor for hardcoded hex; MODEL_FAMILIES at line 30"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "HM-05": {
       "files": [
@@ -1175,10 +1285,10 @@
     },
     "KB-03": {
       "files": [
-        "src/App.tsx:197"
+        "src/App.tsx:199"
       ],
       "verified": "2026-03-22",
-      "notes": "Ctrl+Shift+R opens resume picker at line 197-200. Confirmed."
+      "notes": "Edited via tag-edit.sh"
     },
     "TB-20": {
       "files": [
@@ -1221,9 +1331,9 @@
     },
     "SL-07": {
       "files": [
-        "src/store/settings.ts:201"
+        "src/store/settings.ts:194"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "SL-16": {
@@ -1232,14 +1342,6 @@
       ],
       "verified": "2026-03-21",
       "notes": "Subcommand onClick replaces command line with 'claude <cmd>' if not already set, clicking again restores via buildFullCommand(config) (line 500-502). Toggle behavior confirmed."
-    },
-    "TP-05": {
-      "files": [
-        "src/lib/inspectorHooks.ts:205",
-        "src/store/sessions.ts:288"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Inspector truncates thinking text at 10000 chars (line 205). Inspector ring buffer capped at 30 (line 207). Store appendThinkingBlocks caps at 50 per session (line 288)."
     },
     "TR-05": {
       "files": [
@@ -1251,9 +1353,9 @@
     },
     "DS-08": {
       "files": [
-        "src/store/sessions.ts:83"
+        "src/store/sessions.ts:90"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "SR-05": {
@@ -1276,18 +1378,18 @@
     "DS-05": {
       "files": [
         "src/components/Terminal/TerminalPanel.tsx:65",
-        "src/components/ResumePicker/ResumePicker.tsx:250",
-        "src/App.tsx:200"
+        "src/components/ResumePicker/ResumePicker.tsx:277",
+        "src/App.tsx:199"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "CB-09": {
       "files": [
-        "src/components/CommandBar/CommandBar.tsx:95",
-        "src/store/sessions.ts:283"
+        "src/components/CommandBar/CommandBar.tsx:81",
+        "src/store/sessions.ts:287"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "CM-20": {
@@ -1307,25 +1409,25 @@
     },
     "CM-23": {
       "files": [
-        "src/components/ConfigManager/MarkdownPane.tsx:60",
-        "src/components/ConfigManager/ConfigManager.css:895"
+        "src/components/ConfigManager/MarkdownPane.tsx:86",
+        "src/components/ConfigManager/ConfigManager.css:1084"
       ],
-      "verified": "2026-03-21",
-      "notes": "Preview toggle at line 60-63; margin-right:auto at CSS line 895; ReactMarkdown with dark styles"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "SL-04": {
       "files": [
-        "src/components/ResumePicker/ResumePicker.tsx:373"
+        "src/components/ResumePicker/ResumePicker.tsx:418"
       ],
-      "verified": "2026-03-21",
-      "notes": "Badge building: model, skip-perms, perm-mode, effort, agent"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "SL-05": {
       "files": [
-        "src/components/ResumePicker/ResumePicker.tsx:159",
-        "src-tauri/src/commands.rs:330"
+        "src/components/ResumePicker/ResumePicker.tsx:163",
+        "src-tauri/src/commands.rs:337"
       ],
-      "verified": "2026-03-21",
+      "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "CB-06": {
@@ -1354,13 +1456,6 @@
       ],
       "verified": "2026-03-21",
       "notes": "handleResume checks activeIsDead (line 250). If active tab is dead, calls requestRespawn to respawn in place instead of creating new session. activeIsDead derived from activeSession?.state === 'dead' (line 91)."
-    },
-    "TP-09": {
-      "files": [
-        "src/components/ThinkingPanel/ThinkingPanel.tsx:31-33"
-      ],
-      "verified": "2026-03-21",
-      "notes": "setInterval with 10000ms (10s) triggers state tick to force re-render of formatRelativeTime"
     },
     "TB-04": {
       "files": [
@@ -1404,12 +1499,12 @@
     },
     "TB-23": {
       "files": [
-        "src/App.tsx:272",
-        "src/App.tsx:291",
-        "src/App.css:388"
+        "src/App.tsx:263",
+        "src/App.tsx:281",
+        "src/App.css:406"
       ],
-      "verified": "2026-03-21",
-      "notes": "Added during change documentation"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "TB-24": {
       "files": [
@@ -1429,10 +1524,10 @@
     },
     "TB-25": {
       "files": [
-        "src/hooks/useNotifications.ts:90"
+        "src/hooks/useNotifications.ts:92"
       ],
-      "verified": "2026-03-21",
-      "notes": "Added during change documentation"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "TB-03": {
       "files": [
@@ -1474,32 +1569,6 @@
       ],
       "verified": "2026-03-21",
       "notes": "verified: filter state + input element, case-insensitive includes matching"
-    },
-    "TP-04": {
-      "files": [
-        "src/lib/inspectorHooks.ts:271",
-        "src/lib/inspectorHooks.ts:276",
-        "src/lib/inspectorHooks.ts:286",
-        "src/lib/inspectorHooks.ts:290"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: JSON.parse hook captures content_block_start(thinking/redacted), thinking_delta accumulation, content_block_stop finalization"
-    },
-    "TP-06": {
-      "files": [
-        "src/components/ThinkingPanel/ThinkingPanel.tsx:76",
-        "src/components/ThinkingPanel/ThinkingPanel.tsx:86"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: >500 char threshold, [show more]/[show less] toggle"
-    },
-    "TP-11": {
-      "files": [
-        "src/store/settings.ts:96",
-        "src/store/settings.ts:246"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: showThinkingPanel defaults false, not in partialize list"
     },
     "DS-01": {
       "files": [
@@ -1550,14 +1619,6 @@
       "verified": "2026-03-21",
       "notes": "triggerRespawn calls setInspectorOff(session.id, false) to clear inspector-off state on respawn"
     },
-    "TP-07": {
-      "files": [
-        "src/components/ThinkingPanel/ThinkingPanel.tsx:67-73",
-        "src/components/ThinkingPanel/ThinkingPanel.css:103-111"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Redacted blocks render muted italic [redacted thinking] text; CSS opacity 0.6 + font-style italic + text-muted color"
-    },
     "WN-01": {
       "files": [
         "src-tauri/tauri.conf.json:21-22"
@@ -1599,10 +1660,10 @@
     },
     "DS-09": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:396"
+        "src/components/Terminal/TerminalPanel.tsx:421"
       ],
-      "verified": "2026-03-21",
-      "notes": "prevVisibleRef tracks hidden->visible; only fires on becameVisible && state=dead && canResume"
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     },
     "CB-07": {
       "files": [
@@ -1682,6 +1743,45 @@
       ],
       "verified": "2026-03-22",
       "notes": "DebugPanel CSS: width 350px (line 2), min-width 250px (line 3), max-width 50% (line 4). Renders as flex sibling of terminal-area in app-main (App.tsx:537-566). app-main uses display:flex (App.css:626). Confirmed."
+    },
+    "TB-26": {
+      "files": [
+        "src/App.tsx:391",
+        "src/App.tsx:401",
+        "src/App.tsx:405"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "TB-27": {
+      "files": [
+        "src/App.tsx:282"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "SR-06": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.css:33"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Added during change documentation"
+    },
+    "CM-24": {
+      "files": [
+        "src/components/ConfigManager/SettingsPane.tsx:83",
+        "src/components/ConfigManager/ConfigManager.css:898"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "CM-25": {
+      "files": [
+        "src/components/ConfigManager/SettingsPane.tsx:203",
+        "src/lib/settingsSchema.ts:295"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
     }
   }
 }

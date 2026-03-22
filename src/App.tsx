@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { open as shellOpen } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
 import { dirToTabName, effectiveModel, formatTokenCount, getResumeId, modelLabel, modelColor } from "./lib/claude";
@@ -278,10 +278,10 @@ export default function App() {
       {/* Tab bar */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
-            {groups.flatMap((group) => [
-              <div key={`sep-${group.key}`} className="tab-group-separator" title={group.fullPath}>
+            {groups.flatMap((group, gi) => [
+              ...(gi > 0 ? [<div key={`sep-${group.key}`} className="tab-group-separator" title={group.fullPath}>
                 <span className="tab-group-pip" />
-              </div>,
+              </div>] : []),
               ...group.sessions.map((session, si) => {
               const isActive = session.id === activeTabId;
               const fullName = session.name || dirToTabName(session.config.workingDir);
@@ -388,6 +388,9 @@ export default function App() {
                           setEditingTabId(null);
                         }}
                         onKeyDown={(e) => {
+                          const focusTerminal = () => requestAnimationFrame(() => {
+                            document.querySelector<HTMLElement>('.terminal-panel[style*="display: flex"] textarea')?.focus();
+                          });
                           if (e.key === "Enter") {
                             editDoneRef.current = true;
                             if (editingTabName.trim()) {
@@ -395,9 +398,11 @@ export default function App() {
                               useSettingsStore.getState().setSessionName(getResumeId(session), editingTabName.trim());
                             }
                             setEditingTabId(null);
+                            focusTerminal();
                           } else if (e.key === "Escape") {
                             editDoneRef.current = true;
                             setEditingTabId(null);
+                            focusTerminal();
                           }
                           e.stopPropagation();
                         }}
@@ -631,7 +636,7 @@ export default function App() {
                   <button
                     className="tab-context-menu-item"
                     onClick={() => {
-                      shellOpen(ctxSession.config.workingDir);
+                      invoke("shell_open", { path: ctxSession.config.workingDir });
                       setTabContextMenu(null);
                     }}
                   >
@@ -642,7 +647,7 @@ export default function App() {
                       <button
                         className="tab-context-menu-item"
                         onClick={() => {
-                          shellOpen(inspectorUrl);
+                          invoke("shell_open", { path: inspectorUrl });
                           disconnectInspectorForSession(ctxSession.id);
                           setInspectorOff(ctxSession.id, true);
                           setTabContextMenu(null);
