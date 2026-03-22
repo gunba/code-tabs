@@ -48,3 +48,5 @@ opt-level = 1
 [profile.release]
 incremental = true
 lto = "thin"
+strip = true
+panic = "abort"

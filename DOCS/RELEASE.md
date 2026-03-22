@@ -52,3 +52,12 @@ Version must be bumped in all three files:
 ## Build Notes
 
 Build optimization log. `/b` appends findings and improvements here.
+
+### v0.10.0 — Linker + profile optimizations (2026-03-22)
+
+Added `src-tauri/.cargo/config.toml` with `rust-lld` linker, plus `strip = true` and `panic = "abort"` in release profile.
+
+- **Before**: incremental release Rust compile ~88s
+- **After**: incremental release Rust compile ~34s (62% faster)
+- Binary: 8.3MB portable, 2.5MB installer (smaller due to strip + panic=abort)
+- Full NSIS build wall time: ~46s incremental (was ~90s)
