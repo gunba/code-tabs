@@ -148,8 +148,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/lib/paths.ts:89
 - [CM-03] Project dir selector shown when multiple project dirs exist; defaults to active session's working dir
 - [CM-04] Keystrokes blocked via shared ModalOverlay component (`onKeyDown` stopPropagation); Escape and `Ctrl+,` pass through to global handler
-- [CM-05] All five content tabs (Settings/Claude/Hooks/Plugins/Agents) use ThreePaneEditor: 3-column grid showing User/Project/Local scopes side by side with color-coded borders and tinted headers.
-  - Files: src/components/ConfigManager/ConfigManager.tsx:102
+- [CM-05] Four content tabs (Claude/Hooks/Plugins/Agents) use ThreePaneEditor: 3-column grid showing User/Project/Local scopes side by side with color-coded borders and tinted headers. Settings tab uses dedicated SettingsTab component with unified reference panel.
+  - Files: src/components/ConfigManager/ConfigManager.tsx:102, src/components/ConfigManager/SettingsTab.tsx:1
 - [CM-06] Per-scope raw JSON settings editor (SettingsPane) and CLAUDE.md editor (MarkdownPane) with own dirty tracking and Save per pane. Tab key inserts 2 spaces in markdown.
 - [CM-07] Agent editor: scoped via ThreePaneEditor (user/project/local) with agent pills at top, editor below. Auto-selects first agent on load (or enters new-agent mode if none). Textarea always visible -- no empty state. Dashed '+ new agent' pill replaces old + New button/inline form. Duplicate name validation on create. Ctrl+S dispatches to create or save based on mode. User scope scans ~/.claude/agents/, project scans {wd}/.claude/agents/, local scans {wd}/.claude/local/agents/.
   - Files: src/components/ConfigManager/AgentEditor.tsx:6, src/components/ConfigManager/ConfigManager.css:701
@@ -178,8 +178,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/components/ConfigManager/ThreePaneEditor.tsx:19, src/lib/paths.ts:89
 - [CM-23] MarkdownPane preview toggle: footer has Preview/Edit button (left-aligned via margin-right:auto). Preview mode renders markdown via ReactMarkdown with dark-themed styles for headings, code, tables, blockquotes, lists, and links.
   - Files: src/components/ConfigManager/MarkdownPane.tsx:86, src/components/ConfigManager/ConfigManager.css:1086
-- [CM-24] Settings Reference Browser: collapsible panel below JSON editor showing all known settings grouped by category (general, permissions, environment, plugins, hooks, advanced) with type badges (boolean=blue, string=green, number=purple, enum=purple, array=yellow, object=clay), search/filter, click-to-insert with type-appropriate defaults, and 'already set' checkmark indicator. Collapse state persisted to localStorage.
-  - Files: src/components/ConfigManager/SettingsPane.tsx:83, src/components/ConfigManager/ConfigManager.css:898
+- [CM-24] Unified Settings Reference: full-width panel below the 3 editor columns, alphabetically sorted in a 3-column CSS grid (left-to-right flow). Type badges (boolean=blue, string=green, number=purple, enum=purple, array=yellow, object=clay), search/filter, click-to-insert into the active scope's editor, 2-line CSS-clamped descriptions with full text on hover. Scope dots (U/P/L colored, filled when set) show which scopes have each setting. Collapse state persisted to localStorage.
+  - Files: src/components/ConfigManager/SettingsTab.tsx:112, src/components/ConfigManager/ConfigManager.css:1101
 - [CM-25] Settings validation footer: shows 'Valid' when JSON is well-formed with all recognized keys, warns about unknown key count and type mismatches (e.g. '2 unknown keys . 1 type error'). Computed from getUnknownKeys() and getTypeMismatches() against the merged schema.
   - Files: src/components/ConfigManager/SettingsPane.tsx:282, src/lib/settingsSchema.ts:295
 
