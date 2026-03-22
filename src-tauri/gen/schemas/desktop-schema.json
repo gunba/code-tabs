@@ -2667,16 +2667,22 @@
           "markdownDescription": "Denies the restart command without any pre-configured scope."
         },
         {
-          "description": "Allows all PTY commands\n#### This default permission set includes:\n\n- `allow-spawn`\n- `allow-read`\n- `allow-write`\n- `allow-resize`\n- `allow-kill`\n- `allow-exitstatus`\n- `allow-destroy`\n- `allow-get-child-pid`",
+          "description": "Allows all PTY commands\n#### This default permission set includes:\n\n- `allow-spawn`\n- `allow-read`\n- `allow-write`\n- `allow-resize`\n- `allow-kill`\n- `allow-exitstatus`\n- `allow-destroy`\n- `allow-get-child-pid`\n- `allow-drain-output`",
           "type": "string",
           "const": "pty:default",
-          "markdownDescription": "Allows all PTY commands\n#### This default permission set includes:\n\n- `allow-spawn`\n- `allow-read`\n- `allow-write`\n- `allow-resize`\n- `allow-kill`\n- `allow-exitstatus`\n- `allow-destroy`\n- `allow-get-child-pid`"
+          "markdownDescription": "Allows all PTY commands\n#### This default permission set includes:\n\n- `allow-spawn`\n- `allow-read`\n- `allow-write`\n- `allow-resize`\n- `allow-kill`\n- `allow-exitstatus`\n- `allow-destroy`\n- `allow-get-child-pid`\n- `allow-drain-output`"
         },
         {
           "description": "Enables the destroy command without any pre-configured scope.",
           "type": "string",
           "const": "pty:allow-destroy",
           "markdownDescription": "Enables the destroy command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the drain_output command without any pre-configured scope.",
+          "type": "string",
+          "const": "pty:allow-drain-output",
+          "markdownDescription": "Enables the drain_output command without any pre-configured scope."
         },
         {
           "description": "Enables the exitstatus command without any pre-configured scope.",
@@ -2725,6 +2731,12 @@
           "type": "string",
           "const": "pty:deny-destroy",
           "markdownDescription": "Denies the destroy command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the drain_output command without any pre-configured scope.",
+          "type": "string",
+          "const": "pty:deny-drain-output",
+          "markdownDescription": "Denies the drain_output command without any pre-configured scope."
         },
         {
           "description": "Denies the exitstatus command without any pre-configured scope.",

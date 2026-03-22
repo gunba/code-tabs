@@ -1,5 +1,6 @@
 const COMMANDS: &[&str] = &[
     "spawn", "write", "read", "resize", "kill", "exitstatus", "destroy", "get_child_pid",
+    "drain_output",
 ];
 
 fn main() {

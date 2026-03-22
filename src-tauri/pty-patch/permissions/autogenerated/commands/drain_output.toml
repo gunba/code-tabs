@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-drain-output"
+description = "Enables the drain_output command without any pre-configured scope."
+commands.allow = ["drain_output"]
+
+[[permission]]
+identifier = "deny-drain-output"
+description = "Denies the drain_output command without any pre-configured scope."
+commands.deny = ["drain_output"]

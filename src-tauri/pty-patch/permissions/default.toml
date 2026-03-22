@@ -9,4 +9,5 @@ permissions = [
     "allow-exitstatus",
     "allow-destroy",
     "allow-get-child-pid",
+    "allow-drain-output",
 ]

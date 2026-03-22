@@ -590,7 +590,7 @@ describe("deriveStateFromPoll", () => {
     firstMsg: null, lastText: null, userPrompt: null,
     permPending: false, idleDetected: false, choiceHint: false,
     toolAction: null,
-    inputBuf: "", inputTs: 0,
+    inputBuf: "", inputTs: 0, fetchBypassed: 0,
     subs: [] as Array<{ sid: string; desc: string; st: string; tok: number; act: string | null;
       msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number }>,
   };
@@ -1553,29 +1553,12 @@ describe("INSTALL_HOOK turnHasTools", () => {
   });
 });
 
-// ── choiceHint suppression via turnHasTools ──────────────────────
+// ── POLL_STATE choiceHint is always false (detection moved to terminal buffer) ──
 
-describe("POLL_STATE choiceHint with turnHasTools", () => {
+describe("POLL_STATE choiceHint always false", () => {
   afterEach(cleanupGlobalHook);
 
-  it("choiceHint=false when turnHasTools=true with numbered list", () => {
-    const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 5, sid: null, cost: 0, model: null,
-      stop: "end_turn", tools: [], inTok: 0, outTok: 0,
-      events: [], lastEvent: "assistant", firstMsg: null,
-      lastText: "Three fixes applied:\n1. Fixed A\n2. Fixed B\n3. Fixed C",
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, turnHasTools: true,
-      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
-      _sealed: false,
-    };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.choiceHint).toBe(false);
-  });
-
-  it("choiceHint=true when turnHasTools=false with numbered list", () => {
+  it("choiceHint=false regardless of lastText content", () => {
     const g = globalThis as unknown as Record<string, unknown>;
     g.__inspectorState = {
       n: 5, sid: null, cost: 0, model: null,
@@ -1589,23 +1572,375 @@ describe("POLL_STATE choiceHint with turnHasTools", () => {
     };
     const fn = new Function(`return ${POLL_STATE}`);
     const result = fn() as Record<string, unknown>;
-    expect(result.choiceHint).toBe(true);
+    expect(result.choiceHint).toBe(false);
+  });
+});
+
+// ── Stdin handler: interrupt (Ctrl+C, Escape) and Ctrl+U ─────────────
+
+describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
+  let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
+
+  beforeEach(() => {
+    savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
   });
 
-  it("choiceHint=false when turnHasTools=false but no numbered list", () => {
+  afterEach(() => {
+    JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
+    cleanupGlobalHook();
+  });
+
+  function installAndGetState(): Record<string, unknown> {
     const g = globalThis as unknown as Record<string, unknown>;
-    g.__inspectorState = {
-      n: 5, sid: null, cost: 0, model: null,
-      stop: "end_turn", tools: [], inTok: 0, outTok: 0,
-      events: [], lastEvent: "assistant", firstMsg: null,
-      lastText: "All done! The changes look good.",
-      userPrompt: null, permPending: false, idleDetected: false,
-      toolAction: null, turnHasTools: false,
-      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
-      _sealed: false,
+    cleanupGlobalHook();
+    const fn = new Function(`return ${INSTALL_HOOK}`);
+    fn();
+    return g.__inspectorState as Record<string, unknown>;
+  }
+
+  /** Simulate a stdin keystroke via the installed handler.
+   *  The hook does chunk.toString(), so passing a string-like object suffices. */
+  function sendStdin(ch: string) {
+    const handler = (globalThis as unknown as Record<string, unknown>).__inspectorStdinHandler as (chunk: { toString(): string }) => void;
+    expect(handler).toBeDefined();
+    handler({ toString: () => ch });
+  }
+
+  /** Put the hook into mid-turn state: assistant thinking with active subagents. */
+  function setupMidTurn(state: Record<string, unknown>) {
+    // Main assistant event (thinking, tool in progress)
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6",
+        stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Bash", input: { command: "npm test" } }],
+        usage: { input_tokens: 100, output_tokens: 50 },
+      },
+    });
+    // Type some input
+    sendStdin("p");
+    sendStdin("a");
+    sendStdin("r");
+    expect(state.inputBuf).toBe("par");
+    expect(state.stop).toBe("tool_use");
+    expect(state.toolAction).toBe("Bash: npm test");
+    expect(state.permPending).toBe(false);
+  }
+
+  // ── Ctrl+C (\x03) ──
+
+  it("Ctrl+C clears inputBuf", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x03");
+    expect(state.inputBuf).toBe("");
+  });
+
+  it("Ctrl+C pushes synthetic result event to ring buffer", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    const eventsBefore = (state.events as unknown[]).length;
+    sendStdin("\x03");
+    const events = state.events as Array<Record<string, unknown>>;
+    expect(events.length).toBe(eventsBefore + 1);
+    expect(events[events.length - 1].t).toBe("result");
+  });
+
+  it("Ctrl+C sets lastEvent to result and stop to end_turn", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x03");
+    expect(state.lastEvent).toBe("result");
+    expect(state.stop).toBe("end_turn");
+  });
+
+  it("Ctrl+C clears _sealed so next real event can update state", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x03");
+    expect(state._sealed).toBe(false);
+  });
+
+  it("Ctrl+C clears permPending and toolAction", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    // Set permPending manually to verify it's cleared
+    (state as Record<string, unknown>).permPending = true;
+    sendStdin("\x03");
+    expect(state.permPending).toBe(false);
+    expect(state.toolAction).toBeNull();
+  });
+
+  // ── Escape (\x1b) ──
+
+  it("Escape clears inputBuf", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x1b");
+    expect(state.inputBuf).toBe("");
+  });
+
+  it("Escape pushes synthetic result event to ring buffer", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    const eventsBefore = (state.events as unknown[]).length;
+    sendStdin("\x1b");
+    const events = state.events as Array<Record<string, unknown>>;
+    expect(events.length).toBe(eventsBefore + 1);
+    expect(events[events.length - 1].t).toBe("result");
+  });
+
+  it("Escape sets lastEvent to result and stop to end_turn", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x1b");
+    expect(state.lastEvent).toBe("result");
+    expect(state.stop).toBe("end_turn");
+  });
+
+  it("Escape clears permPending and toolAction", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    (state as Record<string, unknown>).permPending = true;
+    sendStdin("\x1b");
+    expect(state.permPending).toBe(false);
+    expect(state.toolAction).toBeNull();
+  });
+
+  // ── Ctrl+U (\x15) ──
+
+  it("Ctrl+U clears inputBuf only (no synthetic event, no state reset)", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    const eventsBefore = (state.events as unknown[]).length;
+    const stopBefore = state.stop;
+    const lastEventBefore = state.lastEvent;
+    const toolActionBefore = state.toolAction;
+
+    sendStdin("\x15");
+
+    expect(state.inputBuf).toBe("");
+    // No synthetic event pushed
+    expect((state.events as unknown[]).length).toBe(eventsBefore);
+    // State fields unchanged
+    expect(state.stop).toBe(stopBefore);
+    expect(state.lastEvent).toBe(lastEventBefore);
+    expect(state.toolAction).toBe(toolActionBefore);
+  });
+
+  // ── Subagent cleanup on interrupt ──
+
+  it("Ctrl+C marks all active subagents idle", () => {
+    const state = installAndGetState();
+    // Spawn two subagents in different states
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6",
+        stop_reason: "tool_use",
+        content: [
+          { type: "tool_use", name: "Agent", input: { description: "Task A" } },
+          { type: "tool_use", name: "Agent", input: { description: "Task B" } },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    });
+    // Create subagents via agentId events
+    JSON.stringify({ type: "system", sessionId: "s1", agentId: "agent-a" });
+    JSON.stringify({ type: "system", sessionId: "s1", agentId: "agent-b" });
+    // Put agent-a into thinking state
+    JSON.stringify({
+      type: "assistant", agentId: "agent-a",
+      message: {
+        model: "claude-opus-4-6", stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Bash", input: { command: "ls" } }],
+        usage: { input_tokens: 20, output_tokens: 10 },
+      },
+    });
+
+    const subs = state.subs as Array<Record<string, unknown>>;
+    expect(subs).toHaveLength(2);
+    expect(subs[0].st).toBe("u"); // tool_use
+    expect(subs[1].st).toBe("s"); // starting
+
+    sendStdin("\x03");
+
+    expect(subs[0].st).toBe("i");
+    expect(subs[1].st).toBe("i");
+  });
+
+  it("Escape marks all active subagents idle", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6",
+        stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Agent", input: { description: "Research" } }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    });
+    JSON.stringify({ type: "system", sessionId: "s1", agentId: "agent-r1" });
+    // Sub is in thinking state
+    JSON.stringify({
+      type: "user", agentId: "agent-r1",
+      message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] },
+    });
+
+    const subs = state.subs as Array<Record<string, unknown>>;
+    expect(subs[0].st).toBe("t"); // thinking (user event → tool_result)
+
+    sendStdin("\x1b");
+    expect(subs[0].st).toBe("i");
+  });
+
+  it("interrupt does not change already-idle subagents", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6",
+        stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Agent", input: { description: "Done task" } }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+    });
+    JSON.stringify({ type: "system", sessionId: "s1", agentId: "agent-done" });
+    // Complete the subagent
+    JSON.stringify({ type: "result", agentId: "agent-done", total_cost_usd: 0.01 });
+
+    const subs = state.subs as Array<Record<string, unknown>>;
+    expect(subs[0].st).toBe("i");
+
+    sendStdin("\x03");
+    expect(subs[0].st).toBe("i"); // stays idle, no error
+  });
+
+  // ── Self-correction: real events after interrupt override synthetic state ──
+
+  it("real assistant event after Ctrl+C overrides synthetic idle state", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x03");
+
+    // Synthetic state: idle
+    expect(state.lastEvent).toBe("result");
+    expect(state.stop).toBe("end_turn");
+
+    // Claude continues processing — real assistant event arrives
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-6",
+        stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "Read", input: { file_path: "/src/app.ts" } }],
+        usage: { input_tokens: 50, output_tokens: 20 },
+      },
+    });
+
+    // Real event overrides the synthetic state
+    expect(state.lastEvent).toBe("assistant");
+    expect(state.stop).toBe("tool_use");
+    expect(state.toolAction).toBe("Read: /src/app.ts");
+    const events = state.events as Array<Record<string, unknown>>;
+    expect(events[events.length - 1].t).toBe("assistant");
+  });
+
+  it("real user event after interrupt resets sealed and starts new turn", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x03");
+
+    // _sealed is false after interrupt, so user event works normally
+    expect(state._sealed).toBe(false);
+
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "text", text: "new prompt after interrupt" }] },
+    });
+
+    expect(state.lastEvent).toBe("user");
+    expect(state.stop).toBeNull();
+    expect(state.tools).toEqual([]);
+    expect(state.userPrompt).toBe("new prompt after interrupt");
+  });
+
+  it("deriveStateFromPoll sees idle after interrupt (synthetic result in events)", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x03");
+
+    // Build a poll-like snapshot from current state
+    const events = (state.events as Array<{ t: string; sr?: string; c?: number; txt?: string; ta?: string }>).slice();
+    const pollData = {
+      n: state.n as number,
+      sid: state.sid as string | null,
+      cost: state.cost as number,
+      model: state.model as string | null,
+      stop: state.stop as string | null,
+      tools: (state.tools as string[]).slice(),
+      inTok: state.inTok as number,
+      outTok: state.outTok as number,
+      events,
+      lastEvent: state.lastEvent as string | null,
+      firstMsg: state.firstMsg as string | null,
+      lastText: state.lastText as string | null,
+      userPrompt: state.userPrompt as string | null,
+      permPending: state.permPending as boolean,
+      idleDetected: state.idleDetected as boolean,
+      toolAction: state.toolAction as string | null,
+      choiceHint: false,
+      inputBuf: state.inputBuf as string,
+      inputTs: state.inputTs as number,
+      fetchBypassed: 0,
+      subs: [],
     };
-    const fn = new Function(`return ${POLL_STATE}`);
-    const result = fn() as Record<string, unknown>;
-    expect(result.choiceHint).toBe(false);
+
+    const derived = deriveStateFromPoll(pollData, "toolUse");
+    expect(derived).toBe("idle");
+  });
+
+  it("deriveStateFromPoll overrides to thinking when real user event follows interrupt", () => {
+    const state = installAndGetState();
+    setupMidTurn(state);
+    sendStdin("\x03");
+
+    // Real user event after interrupt
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "text", text: "continue" }] },
+    });
+
+    const events = (state.events as Array<{ t: string; sr?: string; c?: number; txt?: string; ta?: string }>).slice();
+    const pollData = {
+      n: state.n as number,
+      sid: state.sid as string | null,
+      cost: state.cost as number,
+      model: state.model as string | null,
+      stop: state.stop as string | null,
+      tools: (state.tools as string[]).slice(),
+      inTok: state.inTok as number,
+      outTok: state.outTok as number,
+      events,
+      lastEvent: state.lastEvent as string | null,
+      firstMsg: state.firstMsg as string | null,
+      lastText: state.lastText as string | null,
+      userPrompt: state.userPrompt as string | null,
+      permPending: state.permPending as boolean,
+      idleDetected: state.idleDetected as boolean,
+      toolAction: state.toolAction as string | null,
+      choiceHint: false,
+      inputBuf: state.inputBuf as string,
+      inputTs: state.inputTs as number,
+      fetchBypassed: 0,
+      subs: [],
+    };
+
+    const derived = deriveStateFromPoll(pollData, "idle");
+    expect(derived).toBe("thinking");
   });
 });

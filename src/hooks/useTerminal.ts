@@ -341,6 +341,22 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     return lines.join("\n");
   }, []);
 
+  const getBufferTail = useCallback((lineCount: number) => {
+    const term = termRef.current;
+    if (!term) return "";
+    const buf = term.buffer.active;
+    const start = Math.max(0, buf.length - lineCount);
+    const lines: string[] = [];
+    for (let i = start; i < buf.length; i++) {
+      const line = buf.getLine(i);
+      if (line) lines.push(line.translateToString(true));
+    }
+    while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+      lines.pop();
+    }
+    return lines.join("\n");
+  }, []);
+
   // Read current input from xterm.js buffer — authoritative, immediate,
   // independent of PTY input tracking. Strips the Ink prompt prefix (❯).
   const getCurrentInput = useCallback((): string => {
@@ -387,6 +403,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     fit,
     getDimensions,
     getBufferText,
+    getBufferTail,
     getCurrentInput,
     termRef,
   };

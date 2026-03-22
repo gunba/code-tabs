@@ -91,7 +91,13 @@
   font-family: var(--font-mono, "SF Mono", "Cascadia Code", "Consolas", monospace);
   font-size: 10px;
   line-height: 1.6;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
+
+.debug-panel-body::-webkit-scrollbar { width: 5px; }
+.debug-panel-body::-webkit-scrollbar-track { background: transparent; }
+.debug-panel-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
 
 .debug-line {
   white-space: pre-wrap;

@@ -167,7 +167,14 @@ export async function spawnPty(
         }
       }
 
-      // 5. Destroy session — remove from BTreeMap, trigger Drop chain
+      // 5. Drain remaining output from the channel
+      try {
+        await invoke("plugin:pty|drain_output", { pid });
+      } catch {
+        // Best effort
+      }
+
+      // 6. Destroy session — remove from BTreeMap, trigger Drop chain
       try {
         await invoke("plugin:pty|destroy", { pid });
       } catch {

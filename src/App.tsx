@@ -298,7 +298,7 @@ export default function App() {
               }
               if (session.config.effort) metaSpans.push({ text: session.config.effort.charAt(0).toUpperCase() + session.config.effort.slice(1), color: "var(--accent)" });
               const subs = subagentMap.get(session.id) || [];
-              const liveAgents = subs.filter((s) => s.state !== "dead").length;
+              const liveAgents = subs.filter((s) => s.state !== "dead" && s.state !== "idle").length;
               if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
 
               return (
@@ -505,13 +505,14 @@ export default function App() {
           {activeSubs.map((sub) => {
             const isActive = sub.state === "thinking" || sub.state === "toolUse" || sub.state === "starting";
             const isIdle = sub.state === "idle";
+            const isSelected = inspectedSubagent?.subagentId === sub.id && inspectedSubagent?.sessionId === activeTabId;
             const lastMsg = sub.messages.length > 0
               ? sub.messages[sub.messages.length - 1].text.slice(0, 200)
               : null;
             return (
               <button
                 key={sub.id}
-                className={`subagent-card${isActive ? " subagent-active" : ""}${isIdle ? " subagent-idle" : ""}`}
+                className={`subagent-card${isActive ? " subagent-active" : ""}${isIdle ? " subagent-idle" : ""}${isSelected ? " subagent-selected" : ""}`}
                 onClick={() => activeTabId && setInspectedSubagent({ sessionId: activeTabId, subagentId: sub.id })}
                 title={sub.description}
               >

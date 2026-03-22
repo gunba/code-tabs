@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 portable-pty = { version = "0.9.0", features = ["serde_support"] }
+memchr = "2"
 serde = "1.0"
 serde_json = "1.0"
 tauri = "^2"

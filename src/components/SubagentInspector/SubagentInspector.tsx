@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Subagent, SubagentMessage } from "../../types/session";
 import { formatTokenCount } from "../../lib/claude";
@@ -9,7 +9,15 @@ interface SubagentInspectorProps {
   onClose: () => void;
 }
 
-function MessageBlock({ msg }: { msg: SubagentMessage }) {
+function getToolPreview(text: string): string {
+  const firstLine = text.split("\n").find(line => line.trim().length > 0) ?? "";
+  const trimmed = firstLine.trim();
+  return trimmed.length > 120 ? trimmed.slice(0, 120) + "\u2026" : trimmed;
+}
+
+function MessageBlock({ msg, defaultExpanded }: { msg: SubagentMessage; defaultExpanded: boolean }) {
+  const [collapsed, setCollapsed] = useState(!defaultExpanded);
+
   if (msg.role === "assistant") {
     return (
       <div className="inspector-msg inspector-msg-assistant">
@@ -18,15 +26,23 @@ function MessageBlock({ msg }: { msg: SubagentMessage }) {
     );
   }
 
+  const label = msg.toolName === "result"
+    ? <span className="inspector-tool-result-label">result</span>
+    : msg.toolName
+      ? <span className="inspector-tool-name">{msg.toolName}</span>
+      : null;
+
   return (
-    <div className="inspector-msg inspector-msg-tool">
-      {msg.toolName && msg.toolName !== "result" && (
-        <span className="inspector-tool-name">{msg.toolName}</span>
-      )}
-      {msg.toolName === "result" && (
-        <span className="inspector-tool-result-label">result</span>
-      )}
-      <pre className="inspector-msg-text">{msg.text}</pre>
+    <div
+      className={`inspector-msg inspector-msg-tool${collapsed ? " inspector-msg-tool-collapsed" : ""}`}
+      onClick={() => setCollapsed(c => !c)}
+    >
+      <div className="inspector-tool-header">
+        <span className="inspector-tool-toggle">{collapsed ? "\u25b8" : "\u25be"}</span>
+        {label}
+        {collapsed && <span className="inspector-tool-preview">{getToolPreview(msg.text)}</span>}
+      </div>
+      {!collapsed && <pre className="inspector-msg-text">{msg.text}</pre>}
     </div>
   );
 }
@@ -58,6 +74,11 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  const isActive = subagent.state !== "dead" && subagent.state !== "idle";
+  const lastToolIndex = isActive
+    ? subagent.messages.reduce((acc, m, idx) => m.role === "tool" ? idx : acc, -1)
+    : -1;
+
   return (
     <div className="inspector-overlay">
       <div className="inspector-header">
@@ -76,7 +97,7 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
           </div>
         ) : (
           subagent.messages.map((msg, i) => (
-            <MessageBlock key={i} msg={msg} />
+            <MessageBlock key={i} msg={msg} defaultExpanded={msg.role === "assistant" || i === lastToolIndex} />
           ))
         )}
       </div>

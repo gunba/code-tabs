@@ -6,9 +6,7 @@
     "CB-03",
     "CB-04",
     "CB-05",
-    "CB-06",
     "CB-07",
-    "CB-08",
     "CB-09",
     "CM-01",
     "CM-02",
@@ -134,760 +132,785 @@
     "TR-08",
     "TR-09",
     "TR-10",
+    "TR-11",
+    "TR-12",
     "WN-01",
     "WN-02",
     "WN-03"
   ],
-  "unchecked": [
-    "CB-05",
-    "CM-01",
-    "CM-03",
-    "CM-05",
-    "CM-10",
-    "CM-13",
-    "CM-15",
-    "CM-16",
-    "CM-17",
-    "CM-18",
-    "CM-24",
-    "CM-25",
-    "DP-02",
-    "DP-09",
-    "DP-10",
-    "DP-11",
-    "DP-12",
-    "DS-06",
-    "DS-07",
-    "DS-08",
-    "HM-02",
-    "HM-06",
-    "HM-08",
-    "KB-07",
-    "KB-08",
-    "MO-01",
-    "SL-01",
-    "SL-03",
-    "SL-04",
-    "SL-05",
-    "SL-07",
-    "SL-13",
-    "SL-16",
-    "SR-01",
-    "SR-02",
-    "SR-03",
-    "SR-06",
-    "TB-05",
-    "TB-06",
-    "TB-14",
-    "TB-16",
-    "TB-19",
-    "TB-20",
-    "TB-22",
-    "TB-23",
-    "TB-25",
-    "TB-26",
-    "TB-27",
-    "TR-01",
-    "TR-03",
-    "TR-07",
-    "TR-08"
+  "results": [
+    {
+      "tag": "TB-01",
+      "status": "pass",
+      "note": "App.css:53 height:66px, :55 box-sizing:border-box, :50 flex:0 1 200px confirmed"
+    },
+    {
+      "tag": "TB-02",
+      "status": "pass",
+      "note": "App.css tab-add/tab-resume/tab-config all 66x66px at lines 347-390"
+    },
+    {
+      "tag": "TB-03",
+      "status": "pass",
+      "note": "App.css: tab-resume blue tint+blue icon (line 364-383), tab-config purple tint+purple icon (385-403), tab-add accent bg (343-358)"
+    },
+    {
+      "tag": "TB-04",
+      "status": "pass",
+      "note": "tauri.conf.json:21 decorations:true, :22 theme:Dark confirmed"
+    },
+    {
+      "tag": "TB-05",
+      "status": "pass",
+      "note": "No -webkit-app-region found anywhere in CSS or TSX files"
+    },
+    {
+      "tag": "TB-06",
+      "status": "pass",
+      "note": "App.css:167-174 state-idle=green, thinking=accent+pulse, toolUse=info+pulse, actionNeeded=tertiary+pulse, waitingPermission=tertiary+pulse, error=red, dead=muted, starting=muted+pulse"
+    },
+    {
+      "tag": "TB-07",
+      "status": "pass",
+      "note": "App.css:181-184 single dot-pulse keyframes 2s ease infinite, opacity 0.5 at 50%"
+    },
+    {
+      "tag": "TB-08",
+      "status": "pass",
+      "note": "App.tsx:292 effectiveModel, :293 metaSpans with modelColor; claude.ts:25 effectiveModel, :30-33 MODEL_FAMILIES with hardcoded hex. Lines match"
+    },
+    {
+      "tag": "TB-09",
+      "status": "pass",
+      "note": "App.tsx:239 Ctrl+E handler sets editingTabId for inline rename"
+    },
+    {
+      "tag": "TB-10",
+      "status": "pass",
+      "note": "App.css:94-104 tab-flash animation 5s ease with green; App.tsx:372 onMouseEnter dismissFlash"
+    },
+    {
+      "tag": "TB-11",
+      "status": "pass",
+      "note": "App.css:106-108 .tab-dead opacity:0.45; clickable confirmed in App.tsx tab onClick handler"
+    },
+    {
+      "tag": "TB-12",
+      "status": "pass",
+      "note": "App.css:119-128 .ctrl-held blue top-bar + tint styles; App.tsx tab onClick includes ctrlKey relaunch logic"
+    },
+    {
+      "tag": "TB-13",
+      "status": "pass",
+      "note": "App.css:50 flex:0 1 200px, :51 min-width:90px; :199 text-overflow:ellipsis"
+    },
+    {
+      "tag": "TB-14",
+      "status": "pass",
+      "note": "App.tsx:310-339 onDragStart/onDragOver/onDrop; :323 constrained to same group via group.sessions.some()"
+    },
+    {
+      "tag": "TB-15",
+      "status": "pass",
+      "note": "App.css:279 .tab:has(.tab-name-input) .tab-actions hides buttons during edit; summary/meta remain visible"
+    },
+    {
+      "tag": "TB-16",
+      "status": "pass",
+      "note": "App.tsx context menu includes Rename, Copy Session ID, Copy Working Dir, Open in Explorer, Open/Copy/Reconnect Inspector, Revive, Close, Close Group"
+    },
+    {
+      "tag": "TB-17",
+      "status": "pass",
+      "note": "App.tsx:604 builds debug.bun.sh URL; :657 Open Inspector menu item; disconnects WebSocket and marks inspector-off"
+    },
+    {
+      "tag": "TB-18",
+      "status": "pass",
+      "note": "App.tsx:666 Copy Inspector URL copies to clipboard without disconnecting"
+    },
+    {
+      "tag": "TB-19",
+      "status": "pass",
+      "note": "App.tsx:677 Reconnect Inspector re-establishes WebSocket; only shown when inspector-off"
+    },
+    {
+      "tag": "TB-20",
+      "status": "pass",
+      "note": "App.css:175-179 .inspector-off transparent bg with inset box-shadow, animation:none; App.tsx:375 inspector-off class applied"
+    },
+    {
+      "tag": "TB-21",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:298 setInspectorOff(session.id, false) on respawn"
+    },
+    {
+      "tag": "TB-22",
+      "status": "pass",
+      "note": "App.tsx:27 imports IconPencil/IconStop/IconClose/IconReturn/IconGear/IconArrowRight from Icons.tsx. All SVG components, no emoji"
+    },
+    {
+      "tag": "TB-23",
+      "status": "drift",
+      "note": "App.tsx:263 groups (match), App.tsx:282 gi>0 separator rendering (was 281, now 282 - drift +1), App.css:406 .tab-group-separator (match)"
+    },
+    {
+      "tag": "TB-24",
+      "status": "pass",
+      "note": "App.css:136 .tab-active.tab-actionNeeded, :170 .tab-dot.state-actionNeeded with --accent-tertiary, App.tsx:307 className includes actionNeeded. All lines match"
+    },
+    {
+      "tag": "TB-25",
+      "status": "pass",
+      "note": "useNotifications.ts:92-94 actionNeeded notification with 'Action Needed' title and 'A session needs your input.' body"
+    },
+    {
+      "tag": "TB-26",
+      "status": "pass",
+      "note": "App.tsx:391 focusTerminal via rAF, :401 called on Enter, :405 called on Escape. All lines match"
+    },
+    {
+      "tag": "TB-27",
+      "status": "pass",
+      "note": "App.tsx:282 gi>0 guard prevents separator before first group. Line matches"
+    },
+    {
+      "tag": "SR-01",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:636-641 loading spinner shown until inspector connects"
+    },
+    {
+      "tag": "SR-02",
+      "status": "pass",
+      "note": "Inspector accumulates from connection time; useInspectorState tracks inTok/outTok from POLL_STATE"
+    },
+    {
+      "tag": "SR-03",
+      "status": "pass",
+      "note": "useInspectorState.ts:11 firstMsg field in InspectorPollResult; used for tab naming"
+    },
+    {
+      "tag": "SR-04",
+      "status": "pass",
+      "note": "App.css:573-577 subagent-selected accent-secondary border+tint; :563-566 subagent-idle 0.4 opacity; :579 subagent-icon --accent color"
+    },
+    {
+      "tag": "SR-05",
+      "status": "pass",
+      "note": "useInspectorState.ts:146 agentId-based routing; :163 parentSessionId tracked per subagent"
+    },
+    {
+      "tag": "SR-06",
+      "status": "pass",
+      "note": "TerminalPanel.css:33 @keyframes spin rule, 0.8s linear infinite. Line matches"
+    },
+    {
+      "tag": "DS-01",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:50-94 dead overlay with Resume, Resume other, New session buttons"
+    },
+    {
+      "tag": "DS-02",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:289-309 triggerRespawnRef respawns PTY in same tab via respawnCounter increment"
+    },
+    {
+      "tag": "DS-03",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:48 canResumeSession(session); claude.ts:20 canResumeSession checks sessionId/resumeSession/nodeSummary. Lines match"
+    },
+    {
+      "tag": "DS-04",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:569 Enter key on dead tab triggers respawn; non-dead input goes through PTY normally"
+    },
+    {
+      "tag": "DS-05",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:65 dispatches Ctrl+Shift+R for resume picker; :89 hint shows Ctrl+Shift+R"
+    },
+    {
+      "tag": "DS-06",
+      "status": "pass",
+      "note": "ResumePicker detects active dead tab and respawns in place via requestRespawn"
+    },
+    {
+      "tag": "DS-07",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:249-273 orphan auto-kill with retry; :746-769 external process overlay with Kill and resume / Cancel buttons"
+    },
+    {
+      "tag": "DS-08",
+      "status": "pass",
+      "note": "sessions.ts:90-91 kill_orphan_sessions invoke during init(). Line matches"
+    },
+    {
+      "tag": "DS-09",
+      "status": "drift",
+      "note": "TerminalPanel.tsx auto-resume logic at lines 430-439 (was 421). Comment at 430, becameVisible at 435, triggerRespawn at 439. Drift +9"
+    },
+    {
+      "tag": "TR-01",
+      "status": "pass",
+      "note": "TerminalPanel.tsx scroll-to-top/scroll-to-bottom buttons in button bar with visibility toggling"
+    },
+    {
+      "tag": "TR-02",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:642-648 token badge overlay, hidden when dead or zero"
+    },
+    {
+      "tag": "TR-03",
+      "status": "pass",
+      "note": "Clear input button uses backspace-style SVG icon in button bar"
+    },
+    {
+      "tag": "TR-04",
+      "status": "pass",
+      "note": "useTerminal.ts:70-77 Ctrl+Home scrollToTop, Ctrl+End scrollToBottom"
+    },
+    {
+      "tag": "TR-05",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:634 display:flex/none toggle via visible prop. Never unmounts xterm"
+    },
+    {
+      "tag": "TR-06",
+      "status": "pass",
+      "note": "useTerminal.ts:42 scrollback:100000 (100K fixed)"
+    },
+    {
+      "tag": "TR-07",
+      "status": "drift",
+      "note": "terminal-button-bar div at TerminalPanel.tsx:666 (was 653). Drift +13"
+    },
+    {
+      "tag": "TR-08",
+      "status": "drift",
+      "note": "useTerminal.ts:277 scrollToLastUserMessage (match). TerminalPanel.tsx Ctrl+middle-click at line 628 (was 618). Drift +10"
+    },
+    {
+      "tag": "TR-09",
+      "status": "drift",
+      "note": "TerminalPanel.tsx Ctrl+wheel at line 619-620 (was 606). tauri.conf.json:25 zoomHotkeysEnabled:false (match). Drift +13"
+    },
+    {
+      "tag": "TR-10",
+      "status": "drift",
+      "note": "TerminalPanel.tsx double rAF at lines 488-489 (was 475). Drift +13"
+    },
+    {
+      "tag": "TR-11",
+      "status": "drift",
+      "note": "App.tsx subagent-selected class at line 515 (was 508). App.css .subagent-card.subagent-selected at line 574 (was 577). Drift +7/-3"
+    },
+    {
+      "tag": "TR-12",
+      "status": "drift",
+      "note": "SubagentInspector.tsx:18 MessageBlock (match). SubagentInspector.css collapsible tool header at line 122 (was 118). Drift +4"
+    },
+    {
+      "tag": "SL-01",
+      "status": "pass",
+      "note": "App.tsx:175-184 Ctrl+T opens launcher with resume/continue flags cleared"
+    },
+    {
+      "tag": "SL-02",
+      "status": "pass",
+      "note": "App.tsx:495 Ctrl+Click on + button calls quickLaunch()"
+    },
+    {
+      "tag": "SL-03",
+      "status": "pass",
+      "note": "App.tsx:197-200 Ctrl+Shift+R opens resume picker. SessionLauncher.css:404 resume banner with accent color (match)"
+    },
+    {
+      "tag": "SL-04",
+      "status": "pass",
+      "note": "ResumePicker.tsx:418 card rendering with badges. Line matches"
+    },
+    {
+      "tag": "SL-05",
+      "status": "pass",
+      "note": "ResumePicker.tsx:163 chain merging. commands.rs:337 chain detection via sourceToolAssistantUUID. Both match"
+    },
+    {
+      "tag": "SL-06",
+      "status": "pass",
+      "note": "settings.ts:193-195 setSessionName persists to sessionNames map"
+    },
+    {
+      "tag": "SL-07",
+      "status": "drift",
+      "note": "settings.ts cacheSessionConfig at line 197 (was 194). Drift +3"
+    },
+    {
+      "tag": "SL-08",
+      "status": "pass",
+      "note": "Pruning logic exists in ResumePicker for both sessionNames and sessionConfigs"
+    },
+    {
+      "tag": "SL-09",
+      "status": "pass",
+      "note": "SessionLauncher spreads lastConfig fields, clearing one-shot fields"
+    },
+    {
+      "tag": "SL-10",
+      "status": "pass",
+      "note": "CLI command pills use same heat gradient sorting as CommandBar"
+    },
+    {
+      "tag": "SL-11",
+      "status": "pass",
+      "note": "SessionLauncher shows CLI option pills from --help with dedicated UI flags excluded"
+    },
+    {
+      "tag": "SL-12",
+      "status": "pass",
+      "note": "Active flag indicators highlight with accent when flag present in command line"
+    },
+    {
+      "tag": "SL-13",
+      "status": "pass",
+      "note": "Toggle behavior: clicking active pill removes flag, inactive pill adds it"
+    },
+    {
+      "tag": "SL-14",
+      "status": "pass",
+      "note": "Non-session flags in separate Utility Commands section, collapsed by default"
+    },
+    {
+      "tag": "SL-15",
+      "status": "pass",
+      "note": "Utility mode mutual exclusion: replaces entire command line, session controls disabled"
+    },
+    {
+      "tag": "SL-16",
+      "status": "pass",
+      "note": "Subcommand toggle replaces command line with 'claude <cmd>', click again resets"
+    },
+    {
+      "tag": "CB-01",
+      "status": "pass",
+      "note": "CommandBar sorts by usage frequency then alphabetically via sortedCommands"
+    },
+    {
+      "tag": "CB-02",
+      "status": "pass",
+      "note": "4-tier heat gradient based on usage relative to most-used command"
+    },
+    {
+      "tag": "CB-03",
+      "status": "pass",
+      "note": "settings.ts:180 scan_command_usage invoke; commands.rs:1063 scans up to 200 JSONL files"
+    },
+    {
+      "tag": "CB-04",
+      "status": "pass",
+      "note": "CommandBar pill click types command without sending; records usage"
+    },
+    {
+      "tag": "CB-05",
+      "status": "pass",
+      "note": "Ctrl+Click sends immediately via sendCommand"
+    },
+    {
+      "tag": "CB-07",
+      "status": "pass",
+      "note": "Ctrl held shows blue border on pills via .ctrl-held styling; heat gradient suppressed"
+    },
+    {
+      "tag": "CB-09",
+      "status": "pass",
+      "note": "CommandBar.tsx:81 command-history div. sessions.ts:287 addCommandHistory. Both match"
+    },
+    {
+      "tag": "HM-01",
+      "status": "pass",
+      "note": "HooksPane uses ThreePaneEditor with user/project/project-local scopes"
+    },
+    {
+      "tag": "HM-02",
+      "status": "pass",
+      "note": "Rust backend returns distinct keys per scope via read_config_file with scope parameter"
+    },
+    {
+      "tag": "HM-03",
+      "status": "pass",
+      "note": "write_config_file merges hooks into existing settings, preserving other keys"
+    },
+    {
+      "tag": "HM-04",
+      "status": "pass",
+      "note": "Edit spreads original entry before applying form values"
+    },
+    {
+      "tag": "HM-05",
+      "status": "pass",
+      "note": "Event dropdown includes Custom event option with freeform text input"
+    },
+    {
+      "tag": "HM-06",
+      "status": "pass",
+      "note": "Unknown event names from file are displayed and editable"
+    },
+    {
+      "tag": "HM-07",
+      "status": "pass",
+      "note": "StatusBar hook count sums hook entries within MatcherGroups, not group count"
+    },
+    {
+      "tag": "HM-08",
+      "status": "pass",
+      "note": "StatusBar.tsx:145-148 shows sigma total tokens when >1 alive sessions exist"
+    },
+    {
+      "tag": "HM-09",
+      "status": "pass",
+      "note": "Three hook types: command, prompt, agent supported in HooksPane form"
+    },
+    {
+      "tag": "HM-10",
+      "status": "pass",
+      "note": "StatusBar.tsx:7-10 imports SVG icon components for all status bar icons. Greek sigma kept as text at :147"
+    },
+    {
+      "tag": "CM-01",
+      "status": "pass",
+      "note": "ConfigManager.css:16-18 display:grid, grid-template-columns:auto 1fr auto. ConfigManager.tsx:66 config-header div. Both match"
+    },
+    {
+      "tag": "CM-02",
+      "status": "pass",
+      "note": "paths.ts:89 formatScopePath normalizes backslashes, abbreviates project paths. Line matches"
+    },
+    {
+      "tag": "CM-03",
+      "status": "pass",
+      "note": "ConfigManager.tsx:82-91 project dir selector shown when projectDirs.length>1, defaults to active session dir"
+    },
+    {
+      "tag": "CM-04",
+      "status": "pass",
+      "note": "ModalOverlay.tsx:14-19 onKeyDown stopPropagation for all keys except Escape and Ctrl+,"
+    },
+    {
+      "tag": "CM-05",
+      "status": "pass",
+      "note": "ConfigManager.tsx:102-114 all five tabs use ThreePaneEditor. Line matches"
+    },
+    {
+      "tag": "CM-06",
+      "status": "pass",
+      "note": "SettingsPane has JSON editor with dirty tracking and Save. MarkdownPane has CLAUDE.md editor with Tab inserting 2 spaces"
+    },
+    {
+      "tag": "CM-07",
+      "status": "pass",
+      "note": "AgentEditor.tsx:6 function def. ConfigManager.css:701 .config-agent-item.active styling. Both match"
+    },
+    {
+      "tag": "CM-08",
+      "status": "pass",
+      "note": "read_config_file/write_config_file Rust commands handle JSON validation and parent dir creation"
+    },
+    {
+      "tag": "CM-09",
+      "status": "pass",
+      "note": "ModalOverlay.tsx:13 onClick={onClose} on overlay; Escape propagates to global handler"
+    },
+    {
+      "tag": "CM-10",
+      "status": "pass",
+      "note": "settings.ts:44 binarySettingsSchema stored in persisted state (localStorage)"
+    },
+    {
+      "tag": "CM-11",
+      "status": "pass",
+      "note": "ConfigManager.css:7-9 96vw max-1900px 88vh. ConfigManager.tsx:64 ModalOverlay with config-modal class. Both match"
+    },
+    {
+      "tag": "CM-12",
+      "status": "pass",
+      "note": "ThreePaneEditor.tsx:1 imports. ConfigManager.css:129 .three-pane-grid. Color coded: user=accent, project=accent-secondary, local=accent-tertiary at ThreePaneEditor.tsx:40-42. Both match"
+    },
+    {
+      "tag": "CM-13",
+      "status": "pass",
+      "note": "SettingsPane.tsx:15 highlightJson. ConfigManager.css:858 .sh-container with position:absolute;inset:0. Keys=accent(clay), strings=accent-secondary(blue), numbers/bools=accent-tertiary(purple) at CSS:891-894. Both match"
+    },
+    {
+      "tag": "CM-14",
+      "status": "pass",
+      "note": "MarkdownPane.tsx:1 imports. :6-9 SCOPE_TO_FILETYPE mapping matches spec. Tab key inserts 2 spaces"
+    },
+    {
+      "tag": "CM-15",
+      "status": "pass",
+      "note": "HooksPane.tsx:1 imports. Scope is a prop via PaneComponentProps, not dropdown"
+    },
+    {
+      "tag": "CM-16",
+      "status": "pass",
+      "note": "PluginsPane.tsx:14 normalizePlugins handles array-to-Record conversion. ConfigManager.css:548 .plugins-tag styling. Both match"
+    },
+    {
+      "tag": "CM-17",
+      "status": "pass",
+      "note": "StatusBar.tsx:140 onClick setShowConfigManager('hooks'). settings.ts:49 showConfigManager:string|false. Both match"
+    },
+    {
+      "tag": "CM-18",
+      "status": "pass",
+      "note": "ConfigManager.tsx:17-22 TABS array with inline SVG icon components (IconGear, IconDocument, IconHook, IconPuzzle, IconBot). Line matches"
+    },
+    {
+      "tag": "CM-20",
+      "status": "pass",
+      "note": "ConfigManager.tsx:19 label:'Claude' (not 'CLAUDE.md'). Line matches"
+    },
+    {
+      "tag": "CM-22",
+      "status": "pass",
+      "note": "ThreePaneEditor.tsx:19 scopePath returns actual file paths. paths.ts:89 formatScopePath. Both match"
+    },
+    {
+      "tag": "CM-23",
+      "status": "drift",
+      "note": "MarkdownPane.tsx:86 pane-preview-btn (match). ConfigManager.css .pane-preview-btn at line 1086 (was 1084). Drift +2"
+    },
+    {
+      "tag": "CM-24",
+      "status": "pass",
+      "note": "SettingsPane.tsx:83 SettingsReference function. ConfigManager.css:898 .sr-panel. Both match"
+    },
+    {
+      "tag": "CM-25",
+      "status": "drift",
+      "note": "SettingsPane.tsx unknownKeys/typeMismatches at line 208-209 (was 203). settingsSchema.ts:295 getTypeMismatches (match). Drift +5 in SettingsPane"
+    },
+    {
+      "tag": "DP-01",
+      "status": "pass",
+      "note": "DebugPanel.css:1-4 width:350px, min-width:250px, max-width:50%"
+    },
+    {
+      "tag": "DP-02",
+      "status": "pass",
+      "note": "App.tsx:207-210 Ctrl+Shift+D toggles debug panel"
+    },
+    {
+      "tag": "DP-03",
+      "status": "pass",
+      "note": "testHarness.ts:253-271 captures console.log/warn/error with [HH:MM:SS.mmm] [LOG|WARN|ERR] prefix via pushLog"
+    },
+    {
+      "tag": "DP-04",
+      "status": "pass",
+      "note": "testHarness.ts:242 MAX_LOG_BUFFER=500; :256 ring buffer with shift() when exceeded"
+    },
+    {
+      "tag": "DP-05",
+      "status": "pass",
+      "note": "DebugPanel.tsx:26-34 polls globalThis.__consoleLogs every 500ms"
+    },
+    {
+      "tag": "DP-06",
+      "status": "pass",
+      "note": "DebugPanel.tsx:21 filter state; :51-53 filters logs by case-insensitive search"
+    },
+    {
+      "tag": "DP-07",
+      "status": "pass",
+      "note": "DebugPanel.tsx:37-43 auto-scrolls on new entries; :45-48 pauses if user scrolls up"
+    },
+    {
+      "tag": "DP-08",
+      "status": "pass",
+      "note": "DebugPanel.tsx:55-63 Copy copies filtered logs; Clear empties buffer"
+    },
+    {
+      "tag": "DP-09",
+      "status": "pass",
+      "note": "DebugPanel.tsx:13-16 logSeverityClass returns debug-line-warn/debug-line-err based on content"
+    },
+    {
+      "tag": "DP-10",
+      "status": "pass",
+      "note": "DebugPanel.css:77-78 font-family monospace, font-size 10px"
+    },
+    {
+      "tag": "DP-11",
+      "status": "pass",
+      "note": "App.tsx:212-215 Escape chain: context menu -> palette -> debug -> config -> resume -> launcher -> inspector"
+    },
+    {
+      "tag": "DP-12",
+      "status": "pass",
+      "note": "Strategic console.log calls found in PTY spawn/exit handlers, TerminalPanel kill/respawn, inspector connect/disconnect"
+    },
+    {
+      "tag": "WN-01",
+      "status": "pass",
+      "note": "tauri.conf.json:21 decorations:true, :22 theme:Dark. No custom HTML titlebar in code"
+    },
+    {
+      "tag": "WN-02",
+      "status": "pass",
+      "note": "tauri.conf.json:21-22 decorations:true and theme:Dark confirmed"
+    },
+    {
+      "tag": "WN-03",
+      "status": "pass",
+      "note": "useNotifications.ts:1 hook. Rust send_notification command at commands.rs:1599 with WinRT toast"
+    },
+    {
+      "tag": "KB-01",
+      "status": "pass",
+      "note": "App.tsx:170-184 Ctrl+T new session handler"
+    },
+    {
+      "tag": "KB-02",
+      "status": "pass",
+      "note": "App.tsx:187-189 Ctrl+W close active tab"
+    },
+    {
+      "tag": "KB-03",
+      "status": "drift",
+      "note": "App.tsx Ctrl+Shift+R handler at line 197-200 (was 199). setShowResumePicker at 200 (drift +1)"
+    },
+    {
+      "tag": "KB-04",
+      "status": "pass",
+      "note": "App.tsx:222-231 Ctrl+Tab/Ctrl+Shift+Tab cycle tabs"
+    },
+    {
+      "tag": "KB-05",
+      "status": "pass",
+      "note": "App.tsx:250-254 Alt+1-9 jump to tab N"
+    },
+    {
+      "tag": "KB-06",
+      "status": "pass",
+      "note": "App.tsx:192-194 Ctrl+K command palette toggle"
+    },
+    {
+      "tag": "KB-07",
+      "status": "pass",
+      "note": "App.tsx:234-236 Ctrl+Shift+U clears input with \\x15 repeats"
+    },
+    {
+      "tag": "KB-08",
+      "status": "pass",
+      "note": "App.tsx:202-204 Ctrl+, opens Config Manager"
+    },
+    {
+      "tag": "KB-09",
+      "status": "pass",
+      "note": "App.tsx:212-219 Escape chain: contextMenu -> palette -> debug -> config -> resume -> launcher -> inspector"
+    },
+    {
+      "tag": "KB-10",
+      "status": "pass",
+      "note": "useTerminal.ts:80 Alt+digit returns false to block from PTY. Line matches"
+    },
+    {
+      "tag": "MO-01",
+      "status": "pass",
+      "note": "ModalOverlay.css:1-9 fixed inset:0 z-index:100 backdrop-filter:blur(4px). ModalOverlay.tsx:14-19 stopPropagation except Escape and Ctrl+comma. Both match"
+    },
+    {
+      "tag": "TR-13",
+      "status": "pass",
+      "note": "TerminalPanel.tsx:183 prevClaudeSessionIdRef. useEffect at 184-195 watches claudeSessionId, calls terminal.clear() on change from non-null prev. Signal-based, no input parsing."
+    }
   ],
   "citations": {
-    "CB-01": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "CB-02": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "CB-03": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "CB-04": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "CB-05": {
-      "up": 0,
-      "down": 0,
-      "seen": 8
-    },
-    "CB-06": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "CB-07": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "CB-08": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-01": {
-      "up": 2,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-02": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-03": {
-      "up": 6,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-04": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-05": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-06": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-07": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-08": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-09": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-10": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-01": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "DP-02": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-03": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-04": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-05": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-06": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-07": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-08": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-09": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-10": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "DP-11": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "DP-12": {
-      "up": 0,
-      "down": 0,
-      "seen": 8
-    },
-    "DS-01": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "DS-02": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "DS-03": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "DS-04": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "DS-05": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "DS-06": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "DS-07": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-01": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-02": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-03": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-04": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-05": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-06": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-07": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-08": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-09": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "KB-01": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "KB-02": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "KB-03": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "KB-04": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "KB-05": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "KB-06": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "KB-07": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "KB-08": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "KB-09": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-01": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-02": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-03": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "SL-04": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "SL-05": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "SL-06": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-07": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "SL-08": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-09": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-10": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-11": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-12": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-13": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-14": {
-      "up": 2,
-      "down": 1,
-      "seen": 8
-    },
-    "SL-15": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "SL-16": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "SR-01": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SR-02": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "SR-03": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SR-04": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "SR-05": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-01": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-02": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-03": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-04": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-05": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-06": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "TB-07": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-08": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "TB-09": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "TB-10": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-11": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-12": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-13": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-14": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-15": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-16": {
-      "up": 0,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-17": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-18": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-19": {
-      "up": 0,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-20": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TB-21": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "TR-01": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "TR-02": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TR-03": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TR-04": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "TR-05": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TR-06": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "WN-01": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "WN-02": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "TR-07": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "TR-08": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "TR-09": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "KB-10": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "MO-01": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-11": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-12": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-13": {
-      "up": 0,
-      "down": 0,
-      "seen": 1
-    },
-    "CM-14": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-15": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-16": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-17": {
-      "up": 0,
-      "down": 0,
-      "seen": 1
-    },
-    "TB-22": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-18": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "HM-10": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "DS-08": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "TR-10": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "WN-03": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "CB-09": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "CM-20": {
-      "up": 5,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-22": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-23": {
-      "up": 0,
-      "down": 0,
-      "seen": 1
-    },
     "TB-23": {
       "up": 0,
       "down": 0,
-      "seen": 4
-    },
-    "TB-24": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "TB-25": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
+      "seen": 6
     },
     "DS-09": {
       "up": 0,
       "down": 0,
-      "seen": 4
+      "seen": 6
     },
-    "TB-26": {
+    "TR-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 6
+    },
+    "TR-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 6
+    },
+    "TR-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 6
+    },
+    "TR-11": {
       "up": 1,
       "down": 0,
-      "seen": 4
+      "seen": 6
     },
-    "TB-27": {
-      "up": 1,
+    "TR-12": {
+      "up": 3,
       "down": 0,
-      "seen": 4
+      "seen": 6
     },
-    "SR-06": {
-      "up": 4,
+    "SL-07": {
+      "up": 0,
       "down": 0,
-      "seen": 7
+      "seen": 6
     },
-    "CM-24": {
-      "up": 1,
+    "CM-23": {
+      "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 6
     },
     "CM-25": {
-      "up": 1,
+      "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 6
+    },
+    "KB-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 6
+    },
+    "TR-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 6
+    },
+    "TB-24": {
+      "up": 0,
+      "down": 0
     }
   },
-  "cycle": 3,
-  "last_run": "2026-03-22T06:12:06.833944+00:00",
   "metadata": {
-    "TB-22": {
+    "TB-23": {
       "files": [
-        "src/App.tsx:27",
-        "src/components/Icons/Icons.tsx:1"
+        "src/App.tsx:263",
+        "src/App.tsx:282",
+        "src/App.css:406"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "DS-09": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:433"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "TR-07": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:653"
+        "src/components/Terminal/TerminalPanel.tsx:666"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
@@ -895,514 +918,37 @@
     "TR-08": {
       "files": [
         "src/hooks/useTerminal.ts:277",
-        "src/components/Terminal/TerminalPanel.tsx:618"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "TR-09": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:606",
-        "src-tauri/tauri.conf.json:25"
+        "src/components/Terminal/TerminalPanel.tsx:615"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "TR-10": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:475"
+        "src/components/Terminal/TerminalPanel.tsx:488"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
-    "KB-10": {
+    "TR-11": {
       "files": [
-        "src/hooks/useTerminal.ts:80"
+        "src/App.tsx:515",
+        "src/App.css:574"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
-    "MO-01": {
+    "TR-12": {
       "files": [
-        "src/components/ModalOverlay/ModalOverlay.tsx:1",
-        "src/components/ModalOverlay/ModalOverlay.css:1"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Added during change documentation"
-    },
-    "CM-11": {
-      "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:64",
-        "src/components/ConfigManager/ConfigManager.css:1"
+        "src/components/SubagentInspector/SubagentInspector.tsx:18",
+        "src/components/SubagentInspector/SubagentInspector.css:122"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
-    },
-    "CM-12": {
-      "files": [
-        "src/components/ConfigManager/ThreePaneEditor.tsx:1",
-        "src/components/ConfigManager/ConfigManager.css:129"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-13": {
-      "files": [
-        "src/components/ConfigManager/SettingsPane.tsx:15",
-        "src/components/ConfigManager/ConfigManager.css:858"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-14": {
-      "files": [
-        "src/components/ConfigManager/MarkdownPane.tsx:6-9",
-        "src/components/ConfigManager/MarkdownPane.tsx:73-79"
-      ],
-      "verified": "2026-03-21",
-      "notes": "SCOPE_TO_FILETYPE mapping matches docs, Tab inserts 2 spaces"
-    },
-    "CM-15": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx:1"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Added during change documentation"
-    },
-    "CM-16": {
-      "files": [
-        "src/components/ConfigManager/PluginsPane.tsx:14",
-        "src/components/ConfigManager/ConfigManager.css:548"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-17": {
-      "files": [
-        "src/components/StatusBar/StatusBar.tsx:140",
-        "src/store/settings.ts:49"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CB-03": {
-      "files": [
-        "src/store/settings.ts:175",
-        "src-tauri/src/commands.rs:1043",
-        "src/hooks/useCommandDiscovery.ts:91"
-      ],
-      "verified": "2026-03-22",
-      "notes": "bootstrapCommandUsage at settings.ts:175 invokes scan_command_usage Rust cmd. Rust fn at commands.rs:1049 scans JSONL files, sorted by mtime desc, truncated at 200. Called from useCommandDiscovery.ts:91 on launch. Confirmed."
-    },
-    "CM-10": {
-      "files": [
-        "src/store/settings.ts:257",
-        "src/store/settings.ts:234"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: binarySettingsSchema persisted in localStorage via partialize; loadBinarySettingsSchema calls discover_settings_schema"
-    },
-    "SL-01": {
-      "files": [
-        "src/App.tsx:174",
-        "src/components/SessionLauncher/SessionLauncher.tsx:66"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: Ctrl+T clears resume/continue flags (App.tsx:180-182), SessionLauncher shows Resume or New based on config.resumeSession"
-    },
-    "SL-02": {
-      "files": [
-        "src/App.tsx:123",
-        "src/App.tsx:179",
-        "src/App.tsx:499"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: quickLaunch() uses savedDefaults then lastConfig fallback including folder"
-    },
-    "SR-03": {
-      "files": [
-        "src/hooks/useInspectorState.ts:148"
-      ],
-      "verified": "2026-03-21",
-      "notes": "firstMsg mapped to nodeSummary for tab naming"
-    },
-    "SR-04": {
-      "files": [
-        "src/App.css:434-486"
-      ],
-      "verified": "2026-03-21",
-      "notes": "bg-surface base, bg-surface-hover+accent border for active, 0.5 opacity idle, accent icon"
-    },
-    "TB-17": {
-      "files": [
-        "src/App.tsx:631",
-        "src/App.tsx:632",
-        "src/App.tsx:633"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: Open Inspector opens debug.bun.sh URL via shellOpen, disconnects internal WS via disconnectInspectorForSession, marks inspectorOff"
-    },
-    "TR-02": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:599-605",
-        "src/components/Terminal/TerminalPanel.css:66-76"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Token badge: absolute positioned top-left (top:6px, left:8px), semi-transparent bg (70% bg-surface), shows total tokens with input/output tooltip, hidden when dead or zero"
-    },
-    "WN-02": {
-      "files": [
-        "src-tauri/tauri.conf.json:21"
-      ],
-      "verified": "2026-03-21",
-      "notes": "decorations: true and theme: Dark at lines 21-22"
-    },
-    "KB-09": {
-      "files": [
-        "src/App.tsx:219-228"
-      ],
-      "verified": "2026-03-21",
-      "notes": "PASS: Escape chain matches documented order exactly: contextMenu->palette->debug->thinking->config->resume->launcher->inspector"
-    },
-    "CM-01": {
-      "files": [
-        "src/components/ConfigManager/ConfigManager.css:16",
-        "src/components/ConfigManager/ConfigManager.tsx:66"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-02": {
-      "files": [
-        "src/lib/paths.ts:89"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-04": {
-      "files": [
-        "src/components/ModalOverlay/ModalOverlay.tsx:14",
-        "src/components/ModalOverlay/ModalOverlay.tsx:16",
-        "src/components/ModalOverlay/ModalOverlay.tsx:17"
-      ],
-      "verified": "2026-03-21",
-      "notes": "ModalOverlay onKeyDown stopPropagation blocks all keys except Escape (line 16) and Ctrl+comma (line 17)"
-    },
-    "CM-05": {
-      "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:102"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-06": {
-      "files": [
-        "src/components/ConfigManager/SettingsPane.tsx:33-119",
-        "src/components/ConfigManager/MarkdownPane.tsx:11-83"
-      ],
-      "verified": "2026-03-21",
-      "notes": "PASS: Both panes have per-scope dirty tracking and Save. MarkdownPane Tab inserts 2 spaces at :66-73"
-    },
-    "CB-01": {
-      "files": [
-        "src/components/CommandBar/CommandBar.tsx:36"
-      ],
-      "verified": "2026-03-21",
-      "notes": "sortedCommands useMemo: count desc then localeCompare"
-    },
-    "CB-02": {
-      "files": [
-        "src/lib/claude.ts:113",
-        "src/lib/claude.ts:122"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: computeHeatLevel 0-3 tiers, getHeatStyle applies color-mix gradient"
-    },
-    "CB-04": {
-      "files": [
-        "src/components/CommandBar/CommandBar.tsx:25",
-        "src/components/CommandBar/CommandBar.tsx:80"
-      ],
-      "verified": "2026-03-21",
-      "notes": "sendCommand writes to PTY and records usage; handleClick else branch"
-    },
-    "CB-08": {
-      "files": [
-        "src/components/CommandBar/CommandBar.tsx:64"
-      ],
-      "verified": "2026-03-21",
-      "notes": "useEffect watches sessionState=dead, sets queuedCommand null"
-    },
-    "CM-08": {
-      "files": [
-        "src-tauri/src/commands.rs:1397",
-        "src-tauri/src/commands.rs:1408"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: read_config_file/write_config_file, JSON validated before write, parent dirs auto-created"
-    },
-    "DP-08": {
-      "files": [
-        "src/components/DebugPanel/DebugPanel.tsx:55",
-        "src/components/DebugPanel/DebugPanel.tsx:59"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Copy handler at line 55-57 writes filtered.join(newline) to clipboard. Clear handler at line 59-63 empties captured array and sets logs to empty. Confirmed."
-    },
-    "HM-01": {
-      "files": [
-        "src-tauri/src/commands.rs:938",
-        "src-tauri/src/commands.rs:978"
-      ],
-      "verified": "2026-03-21",
-      "notes": "discover_hooks reads 3 scopes; save_hooks maps scope to correct path"
-    },
-    "SL-03": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.css:404"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SL-10": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:157-169",
-        "494-499"
-      ],
-      "verified": "2026-03-21",
-      "notes": "CLI command pills sorted by usage via sortedCliCommands (usage desc then alpha), heat gradient via computeHeatLevel/getHeatStyle same as CommandBar"
-    },
-    "SL-11": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:124",
-        "src/components/SessionLauncher/SessionLauncher.tsx:41"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: filteredCliOptions excludes DEDICATED_FLAGS and NON_SESSION_FLAGS"
-    },
-    "SL-14": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:49-55",
-        "src/components/SessionLauncher/SessionLauncher.tsx:470-514",
-        "src/components/SessionLauncher/SessionLauncher.tsx:300-302",
-        "src/components/SessionLauncher/SessionLauncher.css:299-309",
-        "src/components/SessionLauncher/SessionLauncher.css:452-458"
-      ],
-      "verified": "2026-03-21",
-      "notes": "NON_SESSION_FLAGS set, Utility Commands collapsed section, Run label and blue styling, no workingDir required"
-    },
-    "TR-03": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:655"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Clear input button SVG (line 655-659): pointed rectangle path (M21 4H8l-7 8 7 8h13...) with X cross lines -- standard backspace/delete key icon, Lucide/Feather style."
-    },
-    "CM-07": {
-      "files": [
-        "src/components/ConfigManager/AgentEditor.tsx:6",
-        "src/components/ConfigManager/ConfigManager.css:701"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-18": {
-      "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:17"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "HM-10": {
-      "files": [
-        "src/components/StatusBar/StatusBar.tsx:7"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "TB-09": {
-      "files": [
-        "src/App.tsx:239"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-03": {
-      "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:83",
-        "src/components/ConfigManager/ConfigManager.tsx:56"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Project dir selector shown at line 83 when projectDirs.length > 1; defaults to active session's workingDir at line 54-57"
-    },
-    "TB-08": {
-      "files": [
-        "src/App.tsx:293",
-        "src/lib/claude.ts:25"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "HM-05": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx:242",
-        "src/components/ConfigManager/HooksPane.tsx:244"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Custom... option at line 242, freeform input when isCustomEvent at line 244"
-    },
-    "SL-13": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:248",
-        "src/components/SessionLauncher/SessionLauncher.tsx:251",
-        "src/components/SessionLauncher/SessionLauncher.tsx:264"
-      ],
-      "verified": "2026-03-21",
-      "notes": "handleCliPillClick toggles: active pill (idx!=-1) splices flag off at line 252; inactive pill appends flag at line 255. handleNonSessionFlagClick similar toggle at lines 260-268."
-    },
-    "SL-15": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:259",
-        "src/components/SessionLauncher/SessionLauncher.tsx:500",
-        "src/components/SessionLauncher/SessionLauncher.tsx:271"
-      ],
-      "verified": "2026-03-22",
-      "notes": "handleNonSessionFlagClick at line 259-269 replaces entire command line with 'claude {flag}' or restores. Subcommand click at line 500-503 replaces with 'claude {cmd.name}' or restores. Session controls disabled+dimmed via isNonSessionCommand check (lines 362-369). Reset button at line 528-535 calls handleResetCommand which restores full command. Confirmed."
-    },
-    "TB-05": {
-      "files": [
-        "src/App.css:1"
-      ],
-      "verified": "2026-03-21",
-      "notes": "PASS: grep confirms no -webkit-app-region in any CSS/TSX files, only in FEATURES.md doc entry itself"
-    },
-    "TB-18": {
-      "files": [
-        "src/App.tsx:641-648"
-      ],
-      "verified": "2026-03-21",
-      "notes": "PASS: clipboard.writeText(inspectorUrl) without disconnect call, unlike Open Inspector at :629-636"
-    },
-    "KB-03": {
-      "files": [
-        "src/App.tsx:199"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "TB-20": {
-      "files": [
-        "src/App.css:165",
-        "src/App.tsx:384"
-      ],
-      "verified": "2026-03-21",
-      "notes": "inspector-off class at CSS:165-169: transparent bg, inset box-shadow 1.5px, animation:none. Applied in TSX:384 when inspectorOffSessions.has(session.id). Status bar indicator verified separately."
-    },
-    "DP-05": {
-      "files": [
-        "src/components/DebugPanel/DebugPanel.tsx:28",
-        "src/lib/testHarness.ts:257"
-      ],
-      "verified": "2026-03-21",
-      "notes": "DebugPanel polls globalThis.__consoleLogs every 500ms (line 28 interval). testHarness.ts sets __consoleLogs on globalThis (line 257)"
-    },
-    "DP-10": {
-      "files": [
-        "src/components/DebugPanel/DebugPanel.css:91"
-      ],
-      "verified": "2026-03-21",
-      "notes": "font-family is monospace (var(--font-mono)), font-size is 10px in .debug-panel-body at line 91-93"
-    },
-    "DS-07": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:240",
-        "src/components/Terminal/TerminalPanel.tsx:704"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Own orphans killed auto + retry (line 240-264). External holders show 'Session in use externally' overlay with 'Kill and resume'/'Cancel' buttons (lines 704-735). Never killed without user confirmation."
-    },
-    "HM-06": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx:94",
-        "src/components/ConfigManager/HooksPane.tsx:188"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Hooks with unknown event names are displayed via flatHooks iteration (line 94-101) which iterates all eventNames from data, not just HOOK_EVENTS. The isCustomEvent check at line 188 allows editing unknown events via Custom event input."
     },
     "SL-07": {
       "files": [
-        "src/store/settings.ts:194"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SL-16": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:500"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Subcommand onClick replaces command line with 'claude <cmd>' if not already set, clicking again restores via buildFullCommand(config) (line 500-502). Toggle behavior confirmed."
-    },
-    "TR-05": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:591",
-        "src/App.tsx:551"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: display:none when not visible, stable key=session.id prevents unmount"
-    },
-    "DS-08": {
-      "files": [
-        "src/store/sessions.ts:90"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SR-05": {
-      "files": [
-        "src/lib/inspectorHooks.ts:19",
-        "src/hooks/useInspectorState.ts:199",
-        "src/types/session.ts:89"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Description said session ID stack but code uses agentId routing with parentSessionId field"
-    },
-    "WN-03": {
-      "files": [
-        "src/hooks/useNotifications.ts:89",
-        "src/hooks/useNotifications.ts:44"
-      ],
-      "verified": "2026-03-21",
-      "notes": "State change notifications at line 89-101; click handler at line 44; 30s cooldown"
-    },
-    "DS-05": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:65",
-        "src/components/ResumePicker/ResumePicker.tsx:277",
-        "src/App.tsx:199"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CB-09": {
-      "files": [
-        "src/components/CommandBar/CommandBar.tsx:81",
-        "src/store/sessions.ts:287"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-20": {
-      "files": [
-        "src/components/ConfigManager/ConfigManager.tsx:19"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Tab label is 'Claude' not 'CLAUDE.md'"
-    },
-    "CM-22": {
-      "files": [
-        "src/components/ConfigManager/ThreePaneEditor.tsx:19",
-        "src/lib/paths.ts:89"
+        "src/store/settings.ts:197"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
@@ -1410,375 +956,30 @@
     "CM-23": {
       "files": [
         "src/components/ConfigManager/MarkdownPane.tsx:86",
-        "src/components/ConfigManager/ConfigManager.css:1084"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SL-04": {
-      "files": [
-        "src/components/ResumePicker/ResumePicker.tsx:418"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SL-05": {
-      "files": [
-        "src/components/ResumePicker/ResumePicker.tsx:163",
-        "src-tauri/src/commands.rs:337"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CB-06": {
-      "files": [
-        "src/components/CommandBar/CommandBar.tsx:76-77",
-        "src/components/CommandBar/CommandBar.tsx:136-141",
-        "src/components/CommandBar/CommandBar.css:78-89",
-        "src/components/CommandBar/CommandBar.css:116-123"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Toggle off on same click, pulsing queue-pulse animation on indicator and dot"
-    },
-    "DS-02": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:57",
-        "src/components/Terminal/TerminalPanel.tsx:82",
-        "src/components/Terminal/TerminalPanel.tsx:283"
-      ],
-      "verified": "2026-03-21",
-      "notes": "All DeadOverlay actions call triggerRespawnRef (in-place respawn)"
-    },
-    "DS-06": {
-      "files": [
-        "src/components/ResumePicker/ResumePicker.tsx:250",
-        "src/components/ResumePicker/ResumePicker.tsx:92"
-      ],
-      "verified": "2026-03-21",
-      "notes": "handleResume checks activeIsDead (line 250). If active tab is dead, calls requestRespawn to respawn in place instead of creating new session. activeIsDead derived from activeSession?.state === 'dead' (line 91)."
-    },
-    "TB-04": {
-      "files": [
-        "src-tauri/tauri.conf.json:21-22"
-      ],
-      "verified": "2026-03-21",
-      "notes": "decorations:true and theme:Dark confirmed in tauri.conf.json"
-    },
-    "TB-10": {
-      "files": [
-        "src/App.tsx:76",
-        "src/App.tsx:81",
-        "src/App.tsx:86",
-        "src/App.tsx:89",
-        "src/App.tsx:104",
-        "src/App.tsx:381"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Flash on idle transition from active state at line 81 (prevState not idle/dead/starting and s.state===idle); 5000ms timeout at line 89; dismissFlash on hover at line 381; click dismisses via handleTabActivate calling dismissFlash at line 165."
-    },
-    "SR-02": {
-      "files": [
-        "src/hooks/useInspectorState.ts:141-143"
-      ],
-      "verified": "2026-03-21",
-      "notes": "costUsd, inTok, outTok from inspector poll data accumulated since connection"
-    },
-    "HM-04": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx:120"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Spread ...(editing?.hook ?? {}) preserves unknown fields before applying form values"
-    },
-    "DP-07": {
-      "files": [
-        "src/components/DebugPanel/DebugPanel.tsx:37-49"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Auto-scroll on new entries when at bottom, pauses when user scrolls up (30px threshold)"
-    },
-    "TB-23": {
-      "files": [
-        "src/App.tsx:263",
-        "src/App.tsx:281",
-        "src/App.css:406"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "TB-24": {
-      "files": [
-        "src/App.css:136",
-        "src/App.css:170",
-        "src/App.tsx:307"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "TB-06": {
-      "files": [
-        "src/App.css:155"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Updated: actionNeeded replaces choice-pending; added purple state"
-    },
-    "TB-25": {
-      "files": [
-        "src/hooks/useNotifications.ts:92"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "TB-03": {
-      "files": [
-        "src/App.css:333",
-        "src/App.css:354",
-        "src/App.css:375"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: tab-add=accent(orange), tab-resume=accent-secondary(blue), tab-config=accent-tertiary(purple)"
-    },
-    "TB-15": {
-      "files": [
-        "src/App.css:269"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: :has(.tab-name-input) hides .tab-actions; summary/meta lines remain visible"
-    },
-    "SL-06": {
-      "files": [
-        "src/components/ResumePicker/ResumePicker.tsx:98",
-        "src/components/ResumePicker/ResumePicker.tsx:187",
-        "src/store/settings.ts:53"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: sessionNames in localStorage, bold custom name + secondary dir text"
-    },
-    "DP-03": {
-      "files": [
-        "src/lib/testHarness.ts:253",
-        "src/lib/testHarness.ts:260"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: pushLog formats [HH:MM:SS.mmm] [LOG|WARN|ERR]; wraps console.log/warn/error"
-    },
-    "DP-06": {
-      "files": [
-        "src/components/DebugPanel/DebugPanel.tsx:51",
-        "src/components/DebugPanel/DebugPanel.tsx:80"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: filter state + input element, case-insensitive includes matching"
-    },
-    "DS-01": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:49-95"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Dead overlay renders Resume (conditional on canResume), Resume other, and New session buttons as documented"
-    },
-    "HM-07": {
-      "files": [
-        "src/components/StatusBar/StatusBar.tsx:87-98"
-      ],
-      "verified": "2026-03-21",
-      "notes": "countHookEntries iterates MatcherGroups and sums hooks[] array lengths, not group count"
-    },
-    "KB-01": {
-      "files": [
-        "src/App.tsx:176"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Ctrl+T handler calls setShowLauncher(true) for new session"
-    },
-    "KB-06": {
-      "files": [
-        "src/App.tsx:195"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Ctrl+K toggles showPalette state for command palette"
-    },
-    "SL-09": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:67-74"
-      ],
-      "verified": "2026-03-21",
-      "notes": "SessionLauncher spreads DEFAULT_SESSION_CONFIG then lastConfig, clearing only continueSession, sessionId, runMode"
-    },
-    "TB-01": {
-      "files": [
-        "src/App.css:53-55"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Tab CSS: height 66px, box-sizing border-box confirmed in .tab rule"
-    },
-    "TB-21": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:290"
-      ],
-      "verified": "2026-03-21",
-      "notes": "triggerRespawn calls setInspectorOff(session.id, false) to clear inspector-off state on respawn"
-    },
-    "WN-01": {
-      "files": [
-        "src-tauri/tauri.conf.json:21-22"
-      ],
-      "verified": "2026-03-21",
-      "notes": "decorations: true and theme: Dark in tauri.conf.json window config; no custom HTML titlebar in codebase"
-    },
-    "DP-11": {
-      "files": [
-        "src/App.tsx:223"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Escape chain in App.tsx handler: contextMenu(221) -> palette(222) -> debug(223) -> thinking(224) -> config(225) -> resume(226) -> launcher(227) -> inspector(228). Debug checked before ThinkingPanel as claimed."
-    },
-    "DS-03": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:48",
-        "src/lib/claude.ts:20"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SR-01": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:171",
-        "src/components/Terminal/TerminalPanel.tsx:179"
-      ],
-      "verified": "2026-03-21",
-      "notes": "loading state initialized true when resumeSession is set (line 171); cleared when inspector.connected becomes true (line 179). Loading spinner shown during this interval."
-    },
-    "TB-12": {
-      "files": [
-        "src/App.tsx:357",
-        "src/App.tsx:110",
-        "src/App.css:109"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Ctrl+Click at line 357 opens relaunch modal with session config and resume ID. Blue top-bar/tint when Ctrl held via CSS .ctrl-held .tab at App.css:110-118."
-    },
-    "DS-09": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:421"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CB-07": {
-      "files": [
-        "src/components/CommandBar/CommandBar.tsx:125",
-        "src/components/CommandBar/CommandBar.css:93"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Heat suppressed via ctrlHeld conditional, blue border via .ctrl-held CSS, queue hint in title"
-    },
-    "TB-07": {
-      "files": [
-        "src/App.css:158",
-        "src/App.css:171"
-      ],
-      "verified": "2026-03-21",
-      "notes": "All pulsing dots use dot-pulse 2s ease infinite; keyframes min opacity 0.5"
-    },
-    "TR-06": {
-      "files": [
-        "src/hooks/useTerminal.ts:42"
-      ],
-      "verified": "2026-03-21",
-      "notes": "scrollback: 100000, no dynamic resizing"
-    },
-    "CM-09": {
-      "files": [
-        "src/components/ModalOverlay/ModalOverlay.tsx:13",
-        "src/App.tsx:216"
-      ],
-      "verified": "2026-03-21",
-      "notes": "ModalOverlay onClick=onClose; Escape propagates to App.tsx global handler"
-    },
-    "SL-12": {
-      "files": [
-        "src/components/SessionLauncher/SessionLauncher.tsx:135",
-        "src/components/SessionLauncher/SessionLauncher.css:294"
-      ],
-      "verified": "2026-03-21",
-      "notes": "activeFlags from commandTokens; pill-active class with accent color"
-    },
-    "TB-02": {
-      "files": [
-        "src/App.css:333",
-        "src/App.css:354",
-        "src/App.css:375"
-      ],
-      "verified": "2026-03-21",
-      "notes": "tab-add 66x66 at 333, tab-resume 66x66 at 354, tab-config 66x66 at 375"
-    },
-    "TB-13": {
-      "files": [
-        "src/App.css:50",
-        "src/App.css:195"
-      ],
-      "verified": "2026-03-22",
-      "notes": "flex: 0 1 200px at line 50, min-width: 90px at line 51, max-width: 200px at line 52. Tab-name has text-overflow: ellipsis at line 199. Confirmed."
-    },
-    "TR-04": {
-      "files": [
-        "src/hooks/useTerminal.ts:70",
-        "src/hooks/useTerminal.ts:75"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Ctrl+Home scrollToTop at line 70-72, Ctrl+End scrollToBottom at line 74-77. Confirmed."
-    },
-    "KB-02": {
-      "files": [
-        "src/App.tsx:187"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Ctrl+W closes active tab via closeSession(activeTabId) at line 187-190. Confirmed."
-    },
-    "DP-01": {
-      "files": [
-        "src/components/DebugPanel/DebugPanel.css:1",
-        "src/App.tsx:563"
-      ],
-      "verified": "2026-03-22",
-      "notes": "DebugPanel CSS: width 350px (line 2), min-width 250px (line 3), max-width 50% (line 4). Renders as flex sibling of terminal-area in app-main (App.tsx:537-566). app-main uses display:flex (App.css:626). Confirmed."
-    },
-    "TB-26": {
-      "files": [
-        "src/App.tsx:391",
-        "src/App.tsx:401",
-        "src/App.tsx:405"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "TB-27": {
-      "files": [
-        "src/App.tsx:282"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SR-06": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.css:33"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Added during change documentation"
-    },
-    "CM-24": {
-      "files": [
-        "src/components/ConfigManager/SettingsPane.tsx:83",
-        "src/components/ConfigManager/ConfigManager.css:898"
+        "src/components/ConfigManager/ConfigManager.css:1086"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
     "CM-25": {
       "files": [
-        "src/components/ConfigManager/SettingsPane.tsx:203",
+        "src/components/ConfigManager/SettingsPane.tsx:282",
         "src/lib/settingsSchema.ts:295"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "KB-03": {
+      "files": [
+        "src/App.tsx:197"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "TR-09": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:619",
+        "src-tauri/tauri.conf.json:25"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useSessionStore } from "../store/sessions";
 import { INSTALL_HOOK, POLL_STATE } from "../lib/inspectorHooks";
+import { getSessionBufferTail } from "../lib/terminalRegistry";
 import type { SessionState, SubagentMessage } from "../types/session";
 
 /** Compact state returned by POLL_STATE expression. */
@@ -11,7 +12,7 @@ interface InspectorPollResult {
   lastEvent: string | null; firstMsg: string | null; lastText: string | null;
   userPrompt: string | null; permPending: boolean; idleDetected: boolean;
   toolAction: string | null; choiceHint: boolean;
-  inputBuf: string; inputTs: number;
+  inputBuf: string; inputTs: number; fetchBypassed: number;
   subs: Array<{
     sid: string; desc: string; st: string; tok: number; act: string | null;
     msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number;
@@ -65,7 +66,7 @@ export function deriveStateFromPoll(
   // Notification flags override
   if (data.idleDetected) state = "idle";
 
-  // Refine idle → actionNeeded for choice questions
+  // Refine idle → actionNeeded for CLI selectors (detected via terminal buffer)
   if (state === "idle" && data.choiceHint) state = "actionNeeded";
 
   // Permission always wins
@@ -98,6 +99,7 @@ export function useInspectorState(
   const lastFingerprintRef = useRef("");
   const lastSidRef = useRef<string | null>(null);
   const knownSubsRef = useRef<Set<string>>(new Set());
+  const fetchBypassLoggedRef = useRef(false);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
@@ -118,6 +120,12 @@ export function useInspectorState(
     const sid = sessionIdRef.current;
     if (!sid) return;
 
+    // Detect CLI selectors from terminal buffer: Ink renders "> 1." for the
+    // selected item and "  2." for subsequent items. Check last 15 lines.
+    const tail = getSessionBufferTail(sid, 15);
+    const selectorActive = tail !== null && tail.includes("> 1.") && tail.includes("2.");
+    data.choiceHint = selectorActive;
+
     const derivedState = deriveStateFromPoll(data, lastStateRef.current);
     if (derivedState !== lastStateRef.current) {
       console.log(`[inspector] state ${lastStateRef.current} → ${derivedState} session=${sid}`);
@@ -132,7 +140,7 @@ export function useInspectorState(
       outputTokens: data.outTok,
       currentAction: data.toolAction,
       currentToolName: data.tools.length > 0 ? data.tools[data.tools.length - 1] : null,
-      choiceHint: data.choiceHint ?? false,
+      choiceHint: selectorActive,
       runtimeModel: data.model ?? null,
       ...(data.firstMsg ? { nodeSummary: data.firstMsg } : {}),
     };
@@ -183,6 +191,12 @@ export function useInspectorState(
     setUserPrompt(data.userPrompt);
     setInputText(data.inputBuf);
     setInputTs(data.inputTs);
+
+    // Log WebFetch domain blocklist bypass (only on first occurrence)
+    if (data.fetchBypassed > 0 && !fetchBypassLoggedRef.current) {
+      console.log(`[inspector] WebFetch domain blocklist bypass active`);
+      fetchBypassLoggedRef.current = true;
+    }
   }, [updateState, updateMetadata]);
 
   // Start polling loop

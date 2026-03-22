@@ -96,6 +96,7 @@
   color: var(--text-secondary);
   padding-left: 12px;
   border-left: 2px solid var(--border-subtle);
+  cursor: pointer;
 }
 
 .inspector-msg-text {
@@ -110,16 +111,41 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--accent-secondary);
-  display: block;
-  margin-bottom: 2px;
 }
 
 .inspector-tool-result-label {
   font-size: 10px;
   font-weight: 600;
   color: var(--text-muted);
-  display: block;
-  margin-bottom: 2px;
+}
+
+.inspector-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.inspector-tool-toggle {
+  font-size: 8px;
+  color: var(--text-muted);
+  width: 8px;
+  flex-shrink: 0;
+}
+
+.inspector-tool-preview {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.inspector-msg-tool-collapsed {
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 
 /* ── Markdown rendering for assistant messages ── */

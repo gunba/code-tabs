@@ -7,7 +7,7 @@ import { buildClaudeArgs, getResumeId, formatTokenCount, canResumeSession } from
 import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, registerInspectorCallbacks, unregisterInspectorCallbacks } from "../../lib/inspectorPort";
 import { useInspectorState } from "../../hooks/useInspectorState";
 import { registerPtyWriter, unregisterPtyWriter } from "../../lib/ptyRegistry";
-import { registerBufferReader, unregisterBufferReader } from "../../lib/terminalRegistry";
+import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader } from "../../lib/terminalRegistry";
 import { useSettingsStore } from "../../store/settings";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
 import "@xterm/xterm/css/xterm.css";
@@ -62,7 +62,7 @@ function DeadOverlay({ session, triggerRespawnRef, closeSession }: DeadOverlayPr
           <button
             className="dead-overlay-btn"
             onClick={() => {
-              window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true }));
+              window.dispatchEvent(new KeyboardEvent("keydown", { key: "R", ctrlKey: true, shiftKey: true }));
             }}
           >
             Resume other...
@@ -86,9 +86,9 @@ function DeadOverlay({ session, triggerRespawnRef, closeSession }: DeadOverlayPr
         </div>
         <div className="dead-overlay-hint">
           {canResume ? (
-            <><kbd>Enter</kbd> resume &middot; <kbd>Ctrl+R</kbd> browse</>
+            <><kbd>Enter</kbd> resume &middot; <kbd>Ctrl+Shift+R</kbd> browse</>
           ) : (
-            <><kbd>Ctrl+R</kbd> browse</>
+            <><kbd>Ctrl+Shift+R</kbd> browse</>
           )}
         </div>
       </div>
@@ -180,8 +180,16 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   }, [loading, inspector.connected]);
 
   // Sync Claude's internal session ID into config for persistence (plan-mode forks, compaction)
+  const prevClaudeSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (inspector.claudeSessionId && inspector.claudeSessionId !== session.config.sessionId) {
+    if (!inspector.claudeSessionId) return;
+    const prev = prevClaudeSessionIdRef.current;
+    prevClaudeSessionIdRef.current = inspector.claudeSessionId;
+    // Clear terminal when session ID changes (context clear, plan approval, compaction)
+    if (prev && prev !== inspector.claudeSessionId) {
+      terminal.termRef.current?.clear();
+    }
+    if (inspector.claudeSessionId !== session.config.sessionId) {
       updateConfig(session.id, { sessionId: inspector.claudeSessionId });
     }
   }, [inspector.claudeSessionId, session.id, session.config.sessionId, updateConfig]);
@@ -311,6 +319,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     setLoading(!!newConfig.resumeSession);
 
     // 5. Reset internal state and inspector port
+    lastPtyDimsRef.current = null;
     spawnedRef.current = false;
     earlyOutputRef.current = "";
     sessionInUseRef.current = false;
@@ -347,8 +356,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     [session.state]
   );
 
+  const lastPtyDimsRef = useRef<{ cols: number; rows: number } | null>(null);
   const handleResize = useCallback(
     (cols: number, rows: number) => {
+      const last = lastPtyDimsRef.current;
+      if (last && last.cols === cols && last.rows === rows) return;
+      lastPtyDimsRef.current = { cols, rows };
       pty.handle.current?.resize(cols, rows);
     },
     // pty.handle is a stable ref — omitted from deps intentionally
@@ -427,11 +440,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     return () => clearTimeout(timer);
   }, [visible, session.state, claudePath]);
 
-  // Register terminal buffer reader for transcript export
+  // Register terminal buffer readers for transcript export and selector detection
   useEffect(() => {
     registerBufferReader(session.id, terminal.getBufferText);
+    registerTailReader(session.id, terminal.getBufferTail);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id, terminal.getBufferText]);
+  }, [session.id, terminal.getBufferText, terminal.getBufferTail]);
 
   // Cleanup PTY and registries on unmount
   useEffect(() => {
@@ -439,6 +453,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     return () => {
       unregisterPtyWriter(id);
       unregisterBufferReader(id);
+      unregisterTailReader(id);
       unregisterInspectorPort(id);
       unregisterInspectorCallbacks(id);
       pty.cleanup();

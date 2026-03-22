@@ -7,8 +7,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 ## Data Flow
 
 - [DF-01] User types in xterm.js -> `onData` -> PTY `write` -> ConPTY -> Claude stdin
-- [DF-02] Claude stdout -> ConPTY -> direct PTY wrapper `invoke('plugin:pty|read')` -> `Uint8Array`
-  - Files: src/lib/ptyProcess.ts:88
+- [DF-02] Claude stdout -> ConPTY -> background reader thread (8 KiB) -> sync_channel(64) -> OutputFilter (security) -> SyncBlockDetector (DEC 2026 coalescing) -> IPC response -> Uint8Array
+  - Files: src-tauri/pty-patch/src/lib.rs:155, src/lib/ptyProcess.ts:88
 - [DF-03] PTY data handler: `writeBytes(data)` to xterm.js (debounce-batched, 4ms/50ms). Background tabs buffer PTY data in bgBufferRef, flushed as single merged write on tab focus.
 - [DF-04] React re-renders from Zustand store: tab state dots, status bar, subagent cards
 - [DF-05] xterm.js 6.0 with DEC 2026 synchronized output — prevents ink rendering flash on rapid writes
@@ -29,7 +29,7 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [SI-05] Idle detection via `idleDetected` notification flag (not PTY regex); sticky, cleared only by user event; pushed in real-time via `__ispPush`
   - Files: src/lib/inspectorHooks.ts:77
 - [SI-06] `choiceHint` detection: poll result computes choiceHint from numbered list items in last 200 chars of assistant text when stop=end_turn and no tools in turn; auto-clears on user input (resets stop to null)
-  - Files: src/lib/inspectorHooks.ts:315, src/hooks/useInspectorState.ts:69
+  - Files: src/lib/inspectorHooks.ts:374, src/hooks/useInspectorState.ts:69
 - [SI-07] Tool actions, user prompts, assistant text, subagent descriptions captured inline
 - [SI-08] State is NEVER inferred from timers or arbitrary delays — only from real signals
 - [SI-09] Subagent descriptions, state, tokens, actions, and messages all captured via inspector (no JSONL subagent watcher)
@@ -41,9 +41,13 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [SI-13] `deriveStateFromPoll` override chain: ExitPlanMode refines toolUse to actionNeeded; idleDetected overrides to idle; choiceHint refines idle to actionNeeded; permPending always wins (waitingPermission)
   - Files: src/hooks/useInspectorState.ts:37, src/hooks/useInspectorState.ts:63
 - [SI-14] Poll-based architecture: INSTALL_HOOK wraps JSON.stringify to capture state into globalThis.__inspectorState; useInspectorState polls via POLL_STATE expression every 250ms, draining events and transient flags each cycle. No push binding; state detection disabled if hook install fails.
-  - Files: src/hooks/useInspectorState.ts:203, src/lib/inspectorHooks.ts:27
+  - Files: src/hooks/useInspectorState.ts:199, src/lib/inspectorHooks.ts:27
 - [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (computed from lastText)
-  - Files: src/lib/inspectorHooks.ts:296, src/hooks/useInspectorState.ts:7
+  - Files: src/lib/inspectorHooks.ts:352, src/hooks/useInspectorState.ts:7
+- [SI-16] WebFetch domain blocklist bypass: intercepts require('https').request to return can_fetch:true for api.anthropic.com/api/web/domain_info, eliminating the 10s preflight that blocks all WebFetch calls. Axios in Bun uses the Node http adapter (not globalThis.fetch), so the hook targets the shared https module singleton. Bypass count exposed as fetchBypassed in poll state.
+  - Files: src/lib/inspectorHooks.ts:298
+- [SI-17] Interrupt signal detection: Ctrl+C (\x03) and Escape (\x1b) on stdin emit a synthetic result event, set state to end_turn, clear permission/tool flags, and mark all subagents idle — enabling immediate idle detection without waiting for Claude's actual response.
+  - Files: src/lib/inspectorHooks.ts:272
 
 ## PTY Internals
 
@@ -63,9 +67,21 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [PT-10] Parallel exit waiter: fire-and-forget invoke('plugin:pty|exitstatus') runs alongside read loop. On Windows ConPTY, read pipe may hang after Ctrl+C; exitstatus uses WaitForSingleObject which reliably returns. exitFired guard ensures exactly one callback fires
   - Files: src/lib/ptyProcess.ts:112
 - [PT-11] Respawn clears both bgBufferRef and useTerminal's writeBatchRef (via clearPending()) before writing \x1bc. Without this, stale PTY data from previous sessions survives the terminal reset and gets flushed when the tab becomes visible, causing duplicated conversation content.
-  - Files: src/components/Terminal/TerminalPanel.tsx:306, src/hooks/useTerminal.ts:366
+  - Files: src/components/Terminal/TerminalPanel.tsx:314, src/hooks/useTerminal.ts:366
 - [PT-12] Pre-spawn fit() + post-spawn rAF dimension verification prevents 80-col race when font metrics or WebGL renderer aren't ready during initial layout
-  - Files: src/components/Terminal/TerminalPanel.tsx:382, src/components/Terminal/TerminalPanel.tsx:396-402
+  - Files: src/components/Terminal/TerminalPanel.tsx:395, src/components/Terminal/TerminalPanel.tsx:409-415
+- [PT-13] Same-dimension gate: handleResize tracks last PTY dims in a ref; skips redundant pty.resize() calls when cols/rows unchanged. Prevents ConPTY reflow duplication from layout-triggered ResizeObserver events.
+  - Files: src/components/Terminal/TerminalPanel.tsx:359
+- [PT-14] Stable subagent bar height: .subagent-bar has fixed height: 40px to prevent content-driven height changes from triggering terminal resizes during inspector poll cycles.
+  - Files: src/App.css:516
+- [PT-15] Background reader thread per session: OS thread reads ConPTY pipe (8 KiB buffer) into bounded sync_channel(64). Decouples blocking pipe reads from IPC, enabling timeout-based sync block coalescing in the read command.
+  - Files: src-tauri/pty-patch/src/lib.rs:90
+- [PT-16] DEC 2026 sync coalescing: read command filters output through OutputFilter then SyncBlockDetector. When mid-sync-block (BSU seen, ESU pending), reads continue with 50ms timeout to coalesce the complete synchronized update into a single IPC response. Eliminates scroll jumping from ConPTY-fragmented redraws.
+  - Files: src-tauri/pty-patch/src/lib.rs:155, src-tauri/pty-patch/src/sync_detector.rs:1
+- [PT-17] Output security filter: byte-level state machine strips OSC 52 (clipboard hijack), OSC 50 (font query), device queries (DA1/DA2/DSR/CPR/DECRQM/Kitty keyboard), DCS sequences, C1 controls (including cross-chunk PendingC2 state), ESC[3J (scrollback erase). ESC[2J stripped outside sync blocks after startup grace period of 2. OSC 2 titles sanitized. All hyperlinks pass through.
+  - Files: src-tauri/pty-patch/src/output_filter.rs:1
+- [PT-18] Shutdown drain: drain_output command empties the channel (500ms deadline, 10ms intervals) before session destroy, preventing the background reader thread from blocking on a full channel.
+  - Files: src-tauri/pty-patch/src/lib.rs:312, src/lib/ptyProcess.ts:170
 
 ## Persistence
 
@@ -86,11 +102,11 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [RS-05] Skip `--session-id` CLI arg when using `--resume` or `--continue`
 - [RS-06] Session-in-use auto-recovery: checks process ancestry to distinguish own orphans from external processes; own descendants (stale orphans from crashed tabs) killed automatically and resume retries
 - [RS-07] Spawn effect guards against dead sessions (session.state === 'dead') -- prevents restored dead sessions from auto-spawning with --session-id on startup. Respawns still work because triggerRespawn sets state to 'starting' before incrementing respawnCounter
-  - Files: src/components/Terminal/TerminalPanel.tsx:376
+  - Files: src/components/Terminal/TerminalPanel.tsx:389
 - [RS-08] Auto-resume effect uses prevVisibleRef to detect hidden-to-visible transitions; only fires when tab becomes visible AND session is dead AND conversation is resumable; 150ms delay for render settling
-  - Files: src/components/Terminal/TerminalPanel.tsx:420
+  - Files: src/components/Terminal/TerminalPanel.tsx:433
 - [RS-09] Terminal reset on respawn: writes ANSI RIS (\x1bc) to clear content and scrollback, then fit() to sync xterm.js dimensions before spawning new PTY
-  - Files: src/components/Terminal/TerminalPanel.tsx:308
+  - Files: src/components/Terminal/TerminalPanel.tsx:316, src/hooks/useTerminal.ts:366
 
 ## Session Switch
 
@@ -105,13 +121,17 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/lib/inspectorHooks.ts:27
 - [IN-03] Subagent tracking: inspector detects Agent tool_use -> queues description -> matches with new session ID system event -> routes events to subagent entry
 - [IN-04] Subagent conversation messages captured via POLL_STATE splice (sub.msgs.splice(0)) each poll cycle; messages accumulated in INSTALL_HOOK's subagent tracking and drained by the frontend poller
-  - Files: src/lib/inspectorHooks.ts:317, src/hooks/useInspectorState.ts:120
+  - Files: src/lib/inspectorHooks.ts:381, src/hooks/useInspectorState.ts:155
 - [IN-05] Stale subagent detection removed -- push-based architecture handles subagent lifecycle via real-time state events only
   - Files: src/hooks/useInspectorState.ts:149
 - [IN-06] Dead subagent purge removed -- push-based architecture relies on real-time state transitions; idle subs remain visible until session ends
   - Files: src/hooks/useInspectorState.ts:149
 - [IN-07] Inspector port allocator uses random start offset (Date.now() mod range) to reduce collisions with orphan processes during the brief window between app startup and cleanup
   - Files: src/lib/inspectorPort.ts:9
+- [IN-08] SubagentInspector tool block collapse: MessageBlock uses local useState for collapsed state; getToolPreview extracts first non-empty line (120 char cap). Parent computes lastToolIndex via reduce; only the last tool message auto-expands when subagent is active (not dead/idle). React key={i} ensures stable mounting.
+  - Files: src/components/SubagentInspector/SubagentInspector.tsx:12, src/components/SubagentInspector/SubagentInspector.tsx:78
+- [IN-09] choiceHint detection uses terminal buffer tail (last 15 lines from xterm.js) to find active Ink selectors via "> 1." + "2." pattern, replacing the previous lastText regex approach. getBufferTail reads only the last N lines for efficiency.
+  - Files: src/hooks/useInspectorState.ts:142, src/lib/terminalRegistry.ts:20, src/hooks/useTerminal.ts:344
 
 ## Background Buffering
 
@@ -138,6 +158,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src-tauri/src/commands.rs:1400, src/store/sessions.ts:90
 - [RC-14] send_notification: Custom WinRT toast command bypassing Tauri notification plugin. Uses tauri-winrt-notification Toast with on_activated callback that emits notification-clicked event to frontend. Dev mode uses PowerShell app ID, production uses bundle identifier. spawn_blocking + CREATE_NO_WINDOW compliant.
   - Files: src-tauri/src/commands.rs:1599, src/hooks/useNotifications.ts:44
+- [RC-15] drain_output -- drain channel before session destroy (spawn_blocking, 500ms deadline)
+  - Files: src-tauri/pty-patch/src/lib.rs:312
 
 ## Config Manager
 

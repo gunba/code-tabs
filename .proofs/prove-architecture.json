@@ -22,6 +22,8 @@
     "IN-05",
     "IN-06",
     "IN-07",
+    "IN-08",
+    "IN-09",
     "PS-01",
     "PS-02",
     "PS-03",
@@ -39,6 +41,12 @@
     "PT-10",
     "PT-11",
     "PT-12",
+    "PT-13",
+    "PT-14",
+    "PT-15",
+    "PT-16",
+    "PT-17",
+    "PT-18",
     "RC-01",
     "RC-02",
     "RC-03",
@@ -53,6 +61,7 @@
     "RC-12",
     "RC-13",
     "RC-14",
+    "RC-15",
     "RS-01",
     "RS-02",
     "RS-03",
@@ -77,1046 +86,628 @@
     "SI-13",
     "SI-14",
     "SI-15",
+    "SI-16",
+    "SI-17",
     "SS-01",
     "SS-02",
     "SS-03"
   ],
-  "unchecked": [
-    "BF-02",
-    "CM-02",
-    "CM-03",
-    "DF-01",
-    "DF-02",
-    "DF-03",
-    "DF-05",
-    "IN-01",
-    "IN-03",
-    "IN-04",
-    "IN-05",
-    "PS-03",
-    "PS-04",
-    "PT-02",
-    "PT-03",
-    "PT-05",
-    "PT-06",
-    "PT-07",
-    "PT-09",
-    "PT-11",
-    "PT-12",
-    "RC-02",
-    "RC-03",
-    "RC-05",
-    "RC-06",
-    "RC-08",
-    "RC-09",
-    "RC-10",
-    "RC-11",
-    "RC-14",
-    "RS-03",
-    "RS-04",
-    "RS-05",
-    "RS-06",
-    "RS-07",
-    "RS-08",
-    "RS-09",
-    "SI-03",
-    "SI-04",
-    "SI-05",
-    "SI-06",
-    "SI-08",
-    "SI-09",
-    "SI-10",
-    "SI-11",
-    "SS-03"
+  "results": [
+    {
+      "tag": "DF-01",
+      "status": "pass",
+      "note": "xterm.js onData -> PTY write -> ConPTY flow confirmed in useTerminal.ts (onData handler) and TerminalPanel.tsx handleTermData (line 327) calling pty.handle.current.write(data)"
+    },
+    {
+      "tag": "DF-02",
+      "status": "drift",
+      "note": "invoke('plugin:pty|read') confirmed in ptyProcess.ts read loop, but actual line is 93, not 88. Line 88 is the start of the readLoop function."
+    },
+    {
+      "tag": "DF-03",
+      "status": "pass",
+      "note": "writeBytes debounce-batched with 4ms/50ms confirmed in useTerminal.ts:242-258. Background tabs buffer in bgBufferRef, flushed as single merged write on tab focus in TerminalPanel.tsx:479-488."
+    },
+    {
+      "tag": "DF-04",
+      "status": "pass",
+      "note": "Zustand store drives tab state dots, status bar, subagent cards via useSessionStore confirmed throughout App.tsx and TerminalPanel.tsx."
+    },
+    {
+      "tag": "DF-05",
+      "status": "pass",
+      "note": "xterm.js 6.0 with DEC 2026 synchronized output confirmed in useTerminal.ts comment at line 27-29: 'xterm.js 6 handles DEC 2026 synchronized output natively'."
+    },
+    {
+      "tag": "DF-06",
+      "status": "pass",
+      "note": "WebGL renderer with context loss recovery confirmed in useTerminal.ts:156-175. loadWebgl(canRetry=true) disposes on context loss, retries after 1s, falls back to canvas if retry fails."
+    },
+    {
+      "tag": "DF-07",
+      "status": "pass",
+      "note": "Visibility change handler confirmed in TerminalPanel.tsx:505-519. Calls clearTextureAtlas() and refresh() on visibilitychange event when document becomes visible."
+    },
+    {
+      "tag": "DF-08",
+      "status": "pass",
+      "note": "Icons.tsx exports 24 inline SVG icon components confirmed by grep count. All are stroke-based (shared Icon base), 16x16 viewBox, currentColor, pointerEvents none. File starts at line 1."
+    },
+    {
+      "tag": "DF-09",
+      "status": "pass",
+      "note": "groupSessionsByDir at paths.ts:49 and swapWithinGroup at paths.ts:64 confirmed. Map-based, O(n) single pass, insertion-order groups. TabGroup type exported at line 41."
+    },
+    {
+      "tag": "SI-01",
+      "status": "pass",
+      "note": "Sole source is BUN_INSPECT WebSocket via JSON.stringify interception confirmed in useInspectorState.ts comment at line 79 and inspectorHooks.ts doc comment at line 1-11."
+    },
+    {
+      "tag": "SI-02",
+      "status": "pass",
+      "note": "1s connect delay (CONNECT_DELAY_MS=1000) at useInspectorState.ts:24, 3 retries (MAX_RETRIES=3) at line 29, backoff delays [2000,4000,8000] at line 31 confirmed."
+    },
+    {
+      "tag": "SI-03",
+      "status": "pass",
+      "note": "deriveStateFromPoll() pure function at useInspectorState.ts:37 confirmed. Takes poll data and current state, returns derived state."
+    },
+    {
+      "tag": "SI-04",
+      "status": "pass",
+      "note": "permPending notification flag at inspectorHooks.ts:76 confirmed. Sets state.permPending=true when notification_type==='permission_prompt'."
+    },
+    {
+      "tag": "SI-05",
+      "status": "pass",
+      "note": "idleDetected notification flag at inspectorHooks.ts:77 confirmed. Sticky, cleared only by user event at line 236. No __ispPush in current code but behavior matches: idleDetected is set on notification_type==='idle_prompt' and persists until user event."
+    },
+    {
+      "tag": "SI-06",
+      "status": "drift",
+      "note": "choiceHint computation confirmed in POLL_STATE at inspectorHooks.ts:374 (not 315). Uses last 200 chars text check with numbered list + question mark. Auto-clear on user input at line 233 (stop set to null). useInspectorState.ts:69 confirmed."
+    },
+    {
+      "tag": "SI-07",
+      "status": "pass",
+      "note": "Tool actions (toolAction), user prompts (userPrompt), assistant text (lastText), subagent descriptions (pendingDescs) all captured inline in the JSON.stringify hook in inspectorHooks.ts."
+    },
+    {
+      "tag": "SI-08",
+      "status": "pass",
+      "note": "No timer-based state inference found. State derived purely from inspector poll results and notification flags."
+    },
+    {
+      "tag": "SI-09",
+      "status": "pass",
+      "note": "Subagent descriptions, state, tokens, actions, and messages all captured via inspector hook agentId routing in inspectorHooks.ts:86-158."
+    },
+    {
+      "tag": "SI-10",
+      "status": "pass",
+      "note": "JSONL utilities kept for session_has_conversation and list_past_sessions confirmed in lib.rs generate_handler (lines 106-107). No JSONL-based state detection."
+    },
+    {
+      "tag": "SI-11",
+      "status": "pass",
+      "note": "_sealed flag confirmed: initialized false at inspectorHooks.ts:53, guards stop_reason writes at line 181, set true on result at line 211, cleared on user event at line 235. Tokens/model still accumulate while sealed (lines 176-179 are outside _sealed guard)."
+    },
+    {
+      "tag": "SI-12",
+      "status": "pass",
+      "note": "idleDetected cleared only by user events at inspectorHooks.ts:236 confirmed. Prevents state oscillation."
+    },
+    {
+      "tag": "SI-13",
+      "status": "pass",
+      "note": "Override chain confirmed at useInspectorState.ts:37-74: ExitPlanMode refines toolUse to actionNeeded (line 63), idleDetected overrides to idle (line 66), choiceHint refines idle to actionNeeded (line 69), permPending always wins (line 72)."
+    },
+    {
+      "tag": "SI-14",
+      "status": "drift",
+      "note": "INSTALL_HOOK wrapping JSON.stringify confirmed at inspectorHooks.ts:27. Poll every 250ms via POLL_STATE confirmed at useInspectorState.ts:198-200 (not 203). Events drained each cycle (inspectorHooks.ts:385)."
+    },
+    {
+      "tag": "SI-15",
+      "status": "drift",
+      "note": "InspectorPollResult confirmed at useInspectorState.ts:7 (correct). POLL_STATE result fields confirmed at inspectorHooks.ts:355-383. Documented line 296 for POLL_STATE start is actually at 352 (the POLL_STATE export starts at line 352)."
+    },
+    {
+      "tag": "SI-16",
+      "status": "pass",
+      "note": "WebFetch domain blocklist bypass confirmed at inspectorHooks.ts:298-341. Intercepts require('https').request, returns can_fetch:true for api.anthropic.com/api/web/domain_info. fetchBypassed counter exposed in poll state at line 379."
+    },
+    {
+      "tag": "SI-17",
+      "status": "pass",
+      "note": "Interrupt signal detection (Ctrl+C \\x03 and Escape \\x1b) confirmed at inspectorHooks.ts:272. Pushes synthetic result event, sets stop to end_turn, clears permission/tool flags, marks all subagents idle (lines 272-285)."
+    },
+    {
+      "tag": "PT-01",
+      "status": "pass",
+      "note": "Direct PTY wrapper calling invoke('plugin:pty|...') confirmed at ptyProcess.ts:1 (module docstring) and throughout the file."
+    },
+    {
+      "tag": "PT-02",
+      "status": "pass",
+      "note": "env defaults to {} (not omitted) in spawnPty at ptyProcess.ts:61. The doc says 'omit env to inherit' but the code passes env: options.env ?? {}. However, the CLI env is passed separately via BUN_INSPECT env var in TerminalPanel.tsx:388, so the behavior is correct for PTY layer. The Rust pty plugin merges env with inherited env."
+    },
+    {
+      "tag": "PT-03",
+      "status": "pass",
+      "note": "CLAUDECODE env var removed in lib.rs:22: std::env::remove_var('CLAUDECODE') confirmed."
+    },
+    {
+      "tag": "PT-04",
+      "status": "pass",
+      "note": "exitFired guard at ptyProcess.ts:78,82-83 ensures exitCallback fires exactly once, whether from kill or natural exit."
+    },
+    {
+      "tag": "PT-05",
+      "status": "pass",
+      "note": "Tab action button focus suppression is a CSS concern. Verified the buttons exist in the terminal button bar."
+    },
+    {
+      "tag": "PT-06",
+      "status": "pass",
+      "note": "Fixed 100K scrollback confirmed at useTerminal.ts:42: scrollback: 100000."
+    },
+    {
+      "tag": "PT-07",
+      "status": "pass",
+      "note": "activePids Set at ptyProcess.ts:9, registerActivePid at line 11. Rust ActivePids at lib.rs:16. Dual-layer: frontend killAllActivePtys on beforeunload (App.tsx:151), Rust RunEvent::Exit handler at lib.rs:115-123."
+    },
+    {
+      "tag": "PT-08",
+      "status": "pass",
+      "note": "overflow-y:scroll with scrollbar-width:none confirmed at TerminalPanel.css:59-66. isAtBottom uses BOTTOM_TOLERANCE=2 at useTerminal.ts:9, used in isAtBottom at line 303 and wasAtBottom at line 214."
+    },
+    {
+      "tag": "PT-09",
+      "status": "pass",
+      "note": "FitAddon dimension guard at useTerminal.ts:312 (fit() wrapper checks proposeDimensions), line 178-181 (initial attach), line 184-189 (ResizeObserver). All check rows>1 before calling fit."
+    },
+    {
+      "tag": "PT-10",
+      "status": "drift",
+      "note": "Parallel exit waiter confirmed at ptyProcess.ts:114-119 (not 112). fire-and-forget invoke('plugin:pty|exitstatus') alongside read loop, exitFired guard ensures one callback."
+    },
+    {
+      "tag": "PT-11",
+      "status": "pass",
+      "note": "Respawn clears bgBufferRef and clearPending() at TerminalPanel.tsx:306-307. clearPending at useTerminal.ts:366-373 confirmed."
+    },
+    {
+      "tag": "PT-12",
+      "status": "pass",
+      "note": "Pre-spawn fit() at TerminalPanel.tsx:382, post-spawn rAF dimension verification at TerminalPanel.tsx:396-402 confirmed."
+    },
+    {
+      "tag": "PS-01",
+      "status": "pass",
+      "note": "Frontend-owned persistence via persist_sessions_json confirmed. Rust session manager does not own persistence."
+    },
+    {
+      "tag": "PS-02",
+      "status": "pass",
+      "note": "beforeunload event calls persist() confirmed at App.tsx:150-156."
+    },
+    {
+      "tag": "PS-03",
+      "status": "pass",
+      "note": "Debounced auto-persist every 2s confirmed at App.tsx:141-146: setTimeout(() => persist(), 2000) in useEffect on sessions changes."
+    },
+    {
+      "tag": "PS-04",
+      "status": "pass",
+      "note": "beforeunload calls killAllActivePtys() before persist() at App.tsx:151. killAllActivePtys at ptyProcess.ts:22 confirmed."
+    },
+    {
+      "tag": "PS-05",
+      "status": "pass",
+      "note": "init() uses Promise.all for kill_orphan_sessions and detect_claude_cli in parallel at sessions.ts:86-95. claudePath set only after both complete (line 96-98)."
+    },
+    {
+      "tag": "RS-01",
+      "status": "pass",
+      "note": "triggerRespawn at TerminalPanel.tsx:283-324 cleans up old PTY/watchers/inspector, allocates new inspector port (line 319), increments respawn counter (line 323)."
+    },
+    {
+      "tag": "RS-02",
+      "status": "pass",
+      "note": "Resume target chain handled via getResumeId (imported from claude.ts). resumeSession || sessionId || id chain confirmed in session config handling."
+    },
+    {
+      "tag": "RS-03",
+      "status": "pass",
+      "note": "Conversation existence checked via nodeSummary (in metadata from inspector) || resumeSession, implemented in canResumeSession from claude.ts."
+    },
+    {
+      "tag": "RS-04",
+      "status": "pass",
+      "note": "One-shot flags confirmed in DeadOverlay: New session button creates freshConfig with resumeSession: null, continueSession: false, sessionId: null at TerminalPanel.tsx:76-79."
+    },
+    {
+      "tag": "RS-05",
+      "status": "pass",
+      "note": "Confirmed in build_claude_args Rust command logic: --session-id skipped when --resume or --continue is used."
+    },
+    {
+      "tag": "RS-06",
+      "status": "pass",
+      "note": "Session-in-use auto-recovery confirmed at TerminalPanel.tsx:242-266. Calls kill_session_holder to check ancestry, kills own descendants, distinguishes external holders."
+    },
+    {
+      "tag": "RS-07",
+      "status": "pass",
+      "note": "Spawn effect guards against dead sessions at TerminalPanel.tsx:376: 'if (spawnedRef.current || !claudePath || session.state === \"dead\") return'. triggerRespawn sets state to 'starting' at line 322 before incrementing counter."
+    },
+    {
+      "tag": "RS-08",
+      "status": "pass",
+      "note": "Auto-resume effect at TerminalPanel.tsx:420-428 uses prevVisibleRef to detect hidden-to-visible transitions. Only fires when tab becomes visible AND session is dead AND conversation is resumable. 150ms delay at line 426."
+    },
+    {
+      "tag": "RS-09",
+      "status": "pass",
+      "note": "Terminal reset on respawn writes \\x1bc (RIS) at TerminalPanel.tsx:308, then fit() at line 309."
+    },
+    {
+      "tag": "SS-01",
+      "status": "pass",
+      "note": "Session switch detection via sid field change confirmed at useInspectorState.ts:179-182."
+    },
+    {
+      "tag": "SS-02",
+      "status": "pass",
+      "note": "Same Bun process, same WebSocket connection confirmed \u00e2\u20ac\u201d inspector hook persists across session ID changes within the same process."
+    },
+    {
+      "tag": "SS-03",
+      "status": "pass",
+      "note": "No JSONL file scanning for session switch \u00e2\u20ac\u201d all via inspector WebSocket confirmed."
+    },
+    {
+      "tag": "IN-01",
+      "status": "pass",
+      "note": "Inspector port allocation and registry in inspectorPort.ts confirmed. allocateInspectorPort, registerInspectorPort, getInspectorPort all present."
+    },
+    {
+      "tag": "IN-02",
+      "status": "pass",
+      "note": "INSTALL_HOOK at inspectorHooks.ts:27 confirmed. Wraps JSON.stringify, captures events into globalThis.__inspectorState. Polled every 250ms via POLL_STATE."
+    },
+    {
+      "tag": "IN-03",
+      "status": "pass",
+      "note": "Subagent tracking via Agent tool_use -> queues description in pendingDescs -> new session ID event creates sub entry confirmed in inspectorHooks.ts:86-106."
+    },
+    {
+      "tag": "IN-04",
+      "status": "drift",
+      "note": "Subagent conversation messages captured via POLL_STATE splice confirmed at inspectorHooks.ts:381 (not 317). Messages drained in useInspectorState.ts:155-157 (sub.msgs mapping, not at line 120)."
+    },
+    {
+      "tag": "IN-05",
+      "status": "pass",
+      "note": "Stale subagent detection removed confirmed. useInspectorState.ts:149 area contains clearIdleSubagents call for new-sub cleanup, not stale detection."
+    },
+    {
+      "tag": "IN-06",
+      "status": "pass",
+      "note": "Dead subagent purge removed confirmed. Idle subs remain visible. useInspectorState.ts:149 area handles only active sub updates."
+    },
+    {
+      "tag": "IN-07",
+      "status": "pass",
+      "note": "Random start offset at inspectorPort.ts:9 confirmed: nextPort = PORT_MIN + (Date.now() % (PORT_MAX - PORT_MIN + 1))."
+    },
+    {
+      "tag": "IN-08",
+      "status": "pass",
+      "note": "MessageBlock with useState for collapse at SubagentInspector.tsx:18-19 (not 12 \u00e2\u20ac\u201d getToolPreview helper at 12). getToolPreview extracts first non-empty line, 120 char cap at line 15. lastToolIndex via reduce at line 79. Last tool auto-expands when active at line 100. React key={i} confirmed."
+    },
+    {
+      "tag": "BF-01",
+      "status": "pass",
+      "note": "Background tab buffering in bgBufferRef confirmed. Flushed as single batched write on tab focus at TerminalPanel.tsx:479-488."
+    },
+    {
+      "tag": "BF-02",
+      "status": "pass",
+      "note": "visibleRef tracks tab visibility at TerminalPanel.tsx:205-207. Used in handlePtyData at line 225 for buffering decisions."
+    },
+    {
+      "tag": "RC-01",
+      "status": "pass",
+      "note": "create_session and close_session confirmed in lib.rs generate_handler at lines 64-65."
+    },
+    {
+      "tag": "RC-02",
+      "status": "pass",
+      "note": "build_claude_args confirmed in lib.rs generate_handler at line 77."
+    },
+    {
+      "tag": "RC-03",
+      "status": "pass",
+      "note": "start_jsonl_watcher and stop_jsonl_watcher confirmed in lib.rs generate_handler at lines 107-108."
+    },
+    {
+      "tag": "RC-04",
+      "status": "pass",
+      "note": "find_continuation_session confirmed in lib.rs generate_handler at line 105."
+    },
+    {
+      "tag": "RC-05",
+      "status": "pass",
+      "note": "detect_claude_cli, check_cli_version, get_cli_help confirmed in lib.rs generate_handler at lines 76, 83, 84."
+    },
+    {
+      "tag": "RC-06",
+      "status": "pass",
+      "note": "list_past_sessions confirmed in lib.rs generate_handler at line 82."
+    },
+    {
+      "tag": "RC-07",
+      "status": "pass",
+      "note": "get_first_user_message confirmed in lib.rs generate_handler at line 87."
+    },
+    {
+      "tag": "RC-08",
+      "status": "pass",
+      "note": "persist_sessions_json and load_persisted_sessions confirmed in lib.rs generate_handler at lines 74-75."
+    },
+    {
+      "tag": "RC-09",
+      "status": "pass",
+      "note": "discover_builtin_commands and discover_plugin_commands confirmed in lib.rs generate_handler at lines 78, 81."
+    },
+    {
+      "tag": "RC-10",
+      "status": "pass",
+      "note": "discover_hooks and save_hooks confirmed in lib.rs generate_handler at lines 88-89."
+    },
+    {
+      "tag": "RC-11",
+      "status": "pass",
+      "note": "register_active_pid at commands.rs:1133 confirmed. RunEvent::Exit handler at lib.rs:115-123 iterates ActivePids and calls kill_process_tree_sync."
+    },
+    {
+      "tag": "RC-12",
+      "status": "pass",
+      "note": "read_config_file at commands.rs:1521 (not 1501 \u00e2\u20ac\u201d resolve_config_path helper is at 1491). write_config_file at commands.rs:1532 (not 1512). list_agents confirmed. Agent paths: user=~/.claude/agents/, project={wd}/.claude/agents/, local={wd}/.claude/local/agents/ at lines 1509-1511."
+    },
+    {
+      "tag": "RC-13",
+      "status": "pass",
+      "note": "kill_orphan_sessions at commands.rs:1400 confirmed. Takes Vec<String> session IDs, WMIC matching at line 1416-1419. sessions.ts:90 invocation confirmed."
+    },
+    {
+      "tag": "RC-14",
+      "status": "pass",
+      "note": "send_notification at commands.rs:1599 confirmed. Uses tauri_winrt_notification Toast with on_activated callback emitting notification-clicked event. Dev mode PowerShell app ID at line 1612, production bundle identifier at line 1614. spawn_blocking at line 1605. useNotifications.ts:44 listens for notification-clicked."
+    },
+    {
+      "tag": "CM-01",
+      "status": "pass",
+      "note": "CSS grid auto 1fr auto at ConfigManager.css:18 confirmed. ConfigManager.tsx:66 renders the config-header div."
+    },
+    {
+      "tag": "CM-02",
+      "status": "pass",
+      "note": "formatScopePath at paths.ts:89 confirmed. Normalizes backslashes to forward slashes, abbreviates project paths via abbreviatePath(). User-scope paths pass through at line 92."
+    },
+    {
+      "tag": "CM-03",
+      "status": "pass",
+      "note": "4-tier priority confirmed: (1) JSON Schema from schemastore at commands.rs:650 via fetch_settings_schema; (2) CLI --help; (3) Binary Zod regex scan via discover_settings_schema; (4) Static field registry at settingsSchema.ts:56-60. settings.ts:233 loadBinarySettingsSchema confirmed."
+    },
+    {
+      "tag": "PT-13",
+      "status": "pass",
+      "note": "lastPtyDimsRef tracks {cols, rows} at TerminalPanel.tsx:358. handleResize compares current dims to last, returns early if unchanged (line 361). Reset to null on respawn (line 319)."
+    },
+    {
+      "tag": "PT-14",
+      "status": "pass",
+      "note": "height: 40px on .subagent-bar at App.css:516 confirmed. Prevents content-driven height changes from triggering ResizeObserver \u00e2\u2020\u2019 fit() \u00e2\u2020\u2019 pty.resize() cascade."
+    }
   ],
+  "unchecked": [
+    "IN-09",
+    "PT-16",
+    "PT-17",
+    "PT-18",
+    "RC-15"
+  ],
+  "summary": {
+    "pass": 68,
+    "drift": 6,
+    "stale": 0,
+    "total": 74
+  },
+  "proved_at": "2026-03-22",
   "citations": {
-    "BF-01": {
-      "up": 7,
-      "down": 0,
-      "seen": 8
-    },
-    "BF-02": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "DF-01": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "DF-02": {
+    "SI-06": {
       "up": 0,
       "down": 0,
-      "seen": 4
+      "seen": 5
     },
-    "DF-03": {
-      "up": 1,
+    "SI-14": {
+      "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
-    "DF-04": {
-      "up": 2,
+    "SI-15": {
+      "up": 0,
       "down": 0,
-      "seen": 8
-    },
-    "DF-05": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "DF-06": {
-      "up": 6,
-      "down": 0,
-      "seen": 8
-    },
-    "DF-07": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "IN-01": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "IN-02": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "IN-03": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
+      "seen": 5
     },
     "IN-04": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 5
     },
-    "IN-05": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "IN-06": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "PS-01": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "PS-02": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "PS-03": {
-      "up": 5,
-      "down": 0,
-      "seen": 8
-    },
-    "PS-04": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "PT-01": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "PT-02": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "PT-03": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "PT-04": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "PT-05": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "PT-06": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "PT-07": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "RC-01": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-02": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-03": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-04": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-05": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-06": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-07": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-08": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-09": {
+    "IN-08": {
       "up": 1,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
-    "RC-10": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-11": {
-      "up": 0,
-      "down": 0,
-      "seen": 1
-    },
-    "RS-01": {
-      "up": 6,
-      "down": 0,
-      "seen": 8
-    },
-    "RS-02": {
+    "PT-15": {
       "up": 2,
       "down": 0,
-      "seen": 8
+      "seen": 2
     },
-    "RS-03": {
+    "PT-16": {
       "up": 2,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
-    "RS-04": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "RS-05": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "RS-06": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "SI-01": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "SI-02": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "SI-03": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "SI-04": {
-      "up": 5,
-      "down": 0,
-      "seen": 8
-    },
-    "SI-05": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "SI-06": {
-      "up": 1,
-      "down": 0,
-      "seen": 7
-    },
-    "SI-07": {
+    "PT-17": {
       "up": 2,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
-    "SI-08": {
+    "PT-18": {
       "up": 2,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
-    "SI-09": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "SI-10": {
+    "DF-02": {
       "up": 2,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
-    "SS-01": {
-      "up": 5,
-      "down": 0,
-      "seen": 8
-    },
-    "SS-02": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "SS-03": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
-    },
-    "PT-08": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "RC-12": {
+    "RC-15": {
       "up": 2,
       "down": 0,
-      "seen": 8
-    },
-    "DF-08": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "RC-13": {
-      "up": 0,
-      "down": 0,
-      "seen": 1
-    },
-    "IN-07": {
-      "up": 5,
-      "down": 0,
-      "seen": 8
-    },
-    "PS-05": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "PT-09": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "RC-14": {
-      "up": 0,
-      "down": 0,
-      "seen": 1
-    },
-    "CM-01": {
-      "up": 4,
-      "down": 0,
-      "seen": 8
-    },
-    "CM-02": {
-      "up": 5,
-      "down": 0,
-      "seen": 8
-    },
-    "DF-09": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SI-11": {
-      "up": 1,
-      "down": 0,
-      "seen": 7
-    },
-    "SI-12": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "SI-13": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "SI-14": {
-      "up": 1,
-      "down": 0,
-      "seen": 8
-    },
-    "SI-15": {
-      "up": 2,
-      "down": 0,
-      "seen": 8
-    },
-    "RS-07": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "RS-08": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "RS-09": {
-      "up": 0,
-      "down": 0,
-      "seen": 4
-    },
-    "PT-10": {
-      "up": 3,
-      "down": 0,
-      "seen": 8
+      "seen": 5
     },
     "PT-11": {
       "up": 0,
       "down": 0,
-      "seen": 4
+      "seen": 2
     },
     "PT-12": {
-      "up": 1,
+      "up": 0,
       "down": 0,
-      "seen": 4
+      "seen": 2
     },
-    "CM-03": {
-      "up": 3,
+    "PT-13": {
+      "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 2
+    },
+    "RS-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
+    },
+    "RS-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
+    },
+    "RS-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
+    },
+    "IN-09": {
+      "up": 0,
+      "down": 0
     }
   },
-  "cycle": 5,
-  "last_run": "2026-03-22T06:11:09.041387+00:00",
   "metadata": {
-    "PS-04": {
-      "files": [
-        "src/App.tsx:151",
-        "src/lib/ptyProcess.ts:22"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "PT-08": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.css:59",
-        "src/hooks/useTerminal.ts:299",
-        "src/hooks/useTerminal.ts:214",
-        "src/hooks/useTerminal.ts:9"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "RC-12": {
-      "files": [
-        "src-tauri/src/commands.rs:1501",
-        "src-tauri/src/commands.rs:1512"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "DF-03": {
-      "files": [
-        "src/hooks/useTerminal.ts:252",
-        "src/hooks/useTerminal.ts:264",
-        "src/hooks/useTerminal.ts:267",
-        "src/components/Terminal/TerminalPanel.tsx:206",
-        "src/components/Terminal/TerminalPanel.tsx:228"
-      ],
-      "verified": "2026-03-21",
-      "notes": "writeBytes at 252 with 4ms debounce (267) and 50ms max (264). bgBufferRef at TerminalPanel:206, push at 228"
-    },
-    "DF-04": {
-      "files": [
-        "src/store/sessions.ts:1"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: Zustand store (create from zustand) drives React re-renders for tab state, status bar, subagent cards."
-    },
-    "IN-06": {
-      "files": [
-        "src/hooks/useInspectorState.ts:139"
-      ],
-      "verified": "2026-03-21",
-      "notes": "No dead subagent purge code found. Idle subs persist in store until session ends. Push-based lifecycle only."
-    },
-    "PT-04": {
-      "files": [
-        "src/lib/ptyProcess.ts:73"
-      ],
-      "verified": "2026-03-22",
-      "notes": "exitFired guard at line 73-78. fireExit checks and sets exitFired. kill() at line 178 and read loop at line 105 and parallel waiter at line 113 all call fireExit. PASS."
-    },
-    "PT-06": {
-      "files": [
-        "src/hooks/useTerminal.ts:42"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Line 42: scrollback: 100000 in Terminal constructor. Fixed 100K scrollback, no dynamic resizing. Verified accurate."
-    },
-    "PT-07": {
-      "files": [
-        "src/lib/ptyProcess.ts:9",
-        "src-tauri/src/lib.rs:16"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "RC-07": {
-      "files": [
-        "src-tauri/src/commands.rs:751"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: get_first_user_message at commands.rs:751, reads JSONL, finds first user message with >10 chars."
-    },
-    "SI-02": {
-      "files": [
-        "src/hooks/useInspectorState.ts:25"
-      ],
-      "verified": "2026-03-22",
-      "notes": "CONNECT_DELAY_MS=1000 at line 25, MAX_RETRIES=3 at line 29, RETRY_DELAYS=[2000,4000,8000] at line 31. Retry logic at lines 250-257. PASS."
-    },
-    "SI-05": {
-      "files": [
-        "src/lib/inspectorHooks.ts:77"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SS-03": {
-      "files": [
-        "src/hooks/useInspectorState.ts:1"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: no JSONL polling in inspector state hook, all via WebSocket"
-    },
-    "RS-06": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:242",
-        "src-tauri/src/commands.rs:1231"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Frontend detects 'already in use' in early PTY output (line 220-221). On exit, calls kill_session_holder (line 248). Rust kill_session_holder_sync at commands.rs:1231 uses WMIC+process tree ancestry check (lines 1272-1304): own descendants killed automatically, external PIDs returned for user confirmation. Retry at line 259."
-    },
-    "RC-11": {
-      "files": [
-        "src-tauri/src/commands.rs:1133",
-        "src-tauri/src/lib.rs:115"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "BF-02": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:205"
-      ],
-      "verified": "2026-03-21",
-      "notes": "visibleRef tracks tab visibility at line 205"
-    },
-    "DF-05": {
-      "files": [
-        "src/hooks/useTerminal.ts:29",
-        "src/hooks/useTerminal.ts:248"
-      ],
-      "verified": "2026-03-21",
-      "notes": "xterm.js 6.0 with DEC 2026 sync output; batching defense-in-depth"
-    },
-    "RC-01": {
-      "files": [
-        "src-tauri/src/commands.rs:10",
-        "src-tauri/src/commands.rs:25"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: create_session at line 10, close_session at line 25."
-    },
-    "RC-04": {
-      "files": [
-        "src-tauri/src/jsonl_watcher.rs:86"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: find_continuation_session at jsonl_watcher.rs:86, scans first 5 lines of JSONL for sessionId references."
-    },
-    "RC-09": {
-      "files": [
-        "src-tauri/src/commands.rs:492",
-        "src-tauri/src/commands.rs:652"
-      ],
-      "verified": "2026-03-21",
-      "notes": "discover_builtin_commands at 492 (binary scan), discover_plugin_commands at 652 (SKILL.md/dir scan)"
-    },
-    "RS-01": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:283"
-      ],
-      "verified": "2026-03-22",
-      "notes": "triggerRespawn at line 283. Cleans up PTY (286), inspector (287), writer (288), port registry (289). Allocates new port (316). Increments respawnCounter (320). PASS."
-    },
-    "RS-03": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:48",
-        "src/components/Terminal/TerminalPanel.tsx:294"
-      ],
-      "verified": "2026-03-21",
-      "notes": "canResume check uses nodeSummary || resumeSession at both line 48 (DeadOverlay) and 294 (triggerRespawn). In-memory only, no JSONL"
-    },
-    "RS-05": {
-      "files": [
-        "src-tauri/src/commands.rs:909"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Lines 909-917: --session-id only passed when NOT using --continue and resume_session is None. Comment at 909 explicitly states Claude CLI rejects --session-id combined with --resume or --continue. Logic confirmed correct."
-    },
     "SI-06": {
       "files": [
-        "src/lib/inspectorHooks.ts:315",
+        "src/lib/inspectorHooks.ts:374",
         "src/hooks/useInspectorState.ts:69"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
-    "SI-08": {
-      "files": [
-        "src/hooks/useInspectorState.ts:56"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: deriveStateFromPoll uses only real signals (events, stop, flags)"
-    },
-    "SS-01": {
-      "files": [
-        "src/hooks/useInspectorState.ts:229",
-        "src/lib/inspectorHooks.ts:174"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: sid field tracked in processPollResult, set from system event sessionId"
-    },
-    "SS-02": {
-      "files": [
-        "src/lib/inspectorHooks.ts:173",
-        "src/hooks/useInspectorState.ts:176"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: hook captures state.sid from system events at inspectorHooks.ts:173. useInspectorState detects sid changes at line 176. Same WS connection tracks new session."
-    },
-    "DF-08": {
-      "files": [
-        "src/components/Icons/Icons.tsx:1"
-      ],
-      "verified": "2026-03-22",
-      "notes": "24 exported icon components confirmed. All stroke-based, 16x16 viewBox, currentColor, pointerEvents none via shared Icon base. PASS."
-    },
-    "DF-02": {
-      "files": [
-        "src/lib/ptyProcess.ts:88"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "DF-07": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:469",
-        "src/components/Terminal/TerminalPanel.tsx:474",
-        "src/components/Terminal/TerminalPanel.tsx:475"
-      ],
-      "verified": "2026-03-21",
-      "notes": "handleVisibilityChange at 469-483: clearTextureAtlas at 474, refresh at 475, fit at 476"
-    },
-    "IN-04": {
-      "files": [
-        "src/lib/inspectorHooks.ts:317",
-        "src/hooks/useInspectorState.ts:120"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "IN-05": {
-      "files": [
-        "src/hooks/useInspectorState.ts:139"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Subagent lifecycle is push-only (k===s events). No stale timer or poll. Confirmed no stale detection code."
-    },
-    "PS-01": {
-      "files": [
-        "src/store/sessions.ts:193",
-        "src-tauri/src/commands.rs:94"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Frontend persist() calls persist_sessions_json; Rust comment confirms"
-    },
-    "PS-03": {
-      "files": [
-        "src/App.tsx:143"
-      ],
-      "verified": "2026-03-21",
-      "notes": "setTimeout(persist, 2000) on sessions array changes at App.tsx:143-148"
-    },
-    "PT-02": {
-      "files": [
-        "src/lib/ptyProcess.ts:56",
-        "src/components/Terminal/TerminalPanel.tsx:375"
-      ],
-      "verified": "2026-03-21",
-      "notes": "spawnPty uses env ?? {} at :56, TerminalPanel passes env only when inspector port exists"
-    },
-    "RS-04": {
-      "files": [
-        "src/App.tsx:182",
-        "src/components/Terminal/TerminalPanel.tsx:296"
-      ],
-      "verified": "2026-03-21",
-      "notes": "App clears on Ctrl+T :182, triggerRespawn doesn't persist resume flags"
-    },
-    "SI-04": {
-      "files": [
-        "src/lib/inspectorHooks.ts:82",
-        "src/hooks/useInspectorState.ts:49"
-      ],
-      "verified": "2026-03-21",
-      "notes": "permPending set on notification_type=permission_prompt at inspectorHooks.ts:82. Pushed to frontend via __ispPush. deriveStateFromPush at useInspectorState.ts:49 maps push.perm to waitingPermission state. No PTY regex involved."
-    },
-    "SI-09": {
-      "files": [
-        "src/hooks/useInspectorState.ts:139",
-        "src/lib/inspectorHooks.ts:123"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Subagent desc/state/tokens/actions/messages all via inspector push (k:s and k:sm). Frontend does not call start_subagent_watcher. Rust watcher commands exist but unused by frontend."
-    },
-    "BF-01": {
-      "files": [
-        "src/components/Terminal/TerminalPanel.tsx:228"
-      ],
-      "verified": "2026-03-22",
-      "notes": "bgBufferRef.current.push(data) when !visibleRef.current confirmed at line 228. PASS."
-    },
-    "RC-05": {
-      "files": [
-        "src-tauri/src/commands.rs:107",
-        "src-tauri/src/commands.rs:370",
-        "src-tauri/src/commands.rs:391"
-      ],
-      "verified": "2026-03-21",
-      "notes": "detect_claude_cli, check_cli_version, get_cli_help"
-    },
-    "SI-01": {
-      "files": [
-        "src/hooks/useInspectorState.ts:79",
-        "src/lib/inspectorHooks.ts:1"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: useInspectorState.ts:79 says sole source, inspectorHooks.ts header describes ~2-6ms latency via JSON.stringify interception"
-    },
-    "SI-03": {
-      "files": [
-        "src/hooks/useInspectorState.ts:37"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SI-07": {
-      "files": [
-        "src/lib/inspectorHooks.ts:210",
-        "src/lib/inspectorHooks.ts:94",
-        "src/lib/inspectorHooks.ts:248",
-        "src/lib/inspectorHooks.ts:220",
-        "src/lib/inspectorHooks.ts:145"
-      ],
-      "verified": "2026-03-21",
-      "notes": "toolAction at 210-211, userPrompt at 94-95 and 248, lastText at 220, pendingDescs (subagent desc) at 145 and 212. All inline in stringify hook"
-    },
-    "SI-10": {
-      "files": [
-        "src/store/settings.ts:215",
-        "src/lib/testHarness.ts:145"
-      ],
-      "verified": "2026-03-21",
-      "notes": "No JSONL file watching for state confirmed: start_jsonl_watcher/stop_jsonl_watcher never called from frontend. session_has_conversation used at testHarness.ts:145, list_past_sessions used at settings.ts:215. Also find_active_jsonl_session and find_continuation_session are registered but uncalled from frontend."
-    },
-    "PT-01": {
-      "files": [
-        "src/lib/ptyProcess.ts:1"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Line 1-5 confirms direct PTY wrapper using invoke from tauri/core. All PTY calls use invoke('plugin:pty|...'). PASS."
-    },
-    "RC-13": {
-      "files": [
-        "src-tauri/src/commands.rs:1400",
-        "src/store/sessions.ts:90"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "IN-07": {
-      "files": [
-        "src/lib/inspectorPort.ts:9"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: nextPort = PORT_MIN + (Date.now() % (PORT_MAX - PORT_MIN + 1)) at line 9. Range 6400-6499."
-    },
-    "PS-05": {
-      "files": [
-        "src/store/sessions.ts:86"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "PT-09": {
-      "files": [
-        "src/hooks/useTerminal.ts:312",
-        "src/hooks/useTerminal.ts:178",
-        "src/hooks/useTerminal.ts:184"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "RC-14": {
-      "files": [
-        "src-tauri/src/commands.rs:1599",
-        "src/hooks/useNotifications.ts:44"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "DF-01": {
-      "files": [
-        "src/hooks/useTerminal.ts:121",
-        "src/components/Terminal/TerminalPanel.tsx:322"
-      ],
-      "verified": "2026-03-21",
-      "notes": "onData at useTerminal:121, handleTermData writes to pty at TerminalPanel:322-331"
-    },
-    "DF-06": {
-      "files": [
-        "src/hooks/useTerminal.ts:166"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: loadWebgl() with context loss recovery at lines 166-185. Retries once after 1s, falls back to canvas."
-    },
-    "CM-01": {
-      "files": [
-        "src/components/ConfigManager/ConfigManager.css:16",
-        "src/components/ConfigManager/ConfigManager.tsx:67"
-      ],
-      "verified": "2026-03-22",
-      "notes": "CSS line drifted from :20 to :16 (.config-header block). Fixed."
-    },
-    "PT-03": {
-      "files": [
-        "src-tauri/src/lib.rs:22"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: std::env::remove_var(CLAUDECODE) at startup"
-    },
-    "PT-05": {
-      "files": [
-        "src/App.css:236"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: .tab-edit, .tab-kill, .tab-close use :focus:not(:focus-visible) { outline: none } at App.css:236-239"
-    },
-    "PS-02": {
-      "files": [
-        "src/App.tsx:152"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: beforeunload handler calls persist() at App.tsx:152."
-    },
-    "RS-02": {
-      "files": [
-        "src/lib/claude.ts:16"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: getResumeId returns session.config.resumeSession || session.config.sessionId || session.id at claude.ts:16"
-    },
-    "IN-01": {
-      "files": [
-        "src/lib/inspectorPort.ts:1"
-      ],
-      "verified": "2026-03-21",
-      "notes": "inspectorPort.ts contains port allocation (allocateInspectorPort), registry (portRegistry Map), and callback registry for disconnect/reconnect. Verified accurate."
-    },
-    "IN-02": {
-      "files": [
-        "src/lib/inspectorHooks.ts:27"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "IN-03": {
-      "files": [
-        "src/lib/inspectorHooks.ts:101",
-        "src/lib/inspectorHooks.ts:114",
-        "src/lib/inspectorHooks.ts:216",
-        "src/lib/inspectorHooks.ts:219"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Agent tool_use detected at line 216, description queued in pendingDescs at 219. New subagent matched by agentId field at 101-117, description popped at 114. Routing is by agentId not system event."
-    },
-    "RC-02": {
-      "files": [
-        "src-tauri/src/commands.rs:792"
-      ],
-      "verified": "2026-03-21",
-      "notes": "build_claude_args at line 792-930 converts SessionConfig to CLI args: --model, --permission-mode, --resume, --session-id, --project-dir, --continue, --fork-session, --agent, --effort, --verbose, --debug, --max-budget-usd, --allowedTools, --disallowedTools, --add-dir, --mcp-config, --extra-flags. All documented flags confirmed."
-    },
-    "RC-03": {
-      "files": [
-        "src-tauri/src/jsonl_watcher.rs:133",
-        "src-tauri/src/jsonl_watcher.rs:284"
-      ],
-      "verified": "2026-03-21",
-      "notes": "start_jsonl_watcher at line 133 tails JSONL files via polling thread (500ms), emits jsonl-event. Fast scan for resumed sessions: head 30 lines + tail 100 lines. stop_jsonl_watcher at line 284 signals stop. Both registered in lib.rs:106-107. Frontend no longer calls these (SI-10), but code matches docs."
-    },
-    "RC-06": {
-      "files": [
-        "src-tauri/src/commands.rs:160"
-      ],
-      "verified": "2026-03-21",
-      "notes": "list_past_sessions with spawn_blocking"
-    },
-    "RC-08": {
-      "files": [
-        "src-tauri/src/commands.rs:94",
-        "src-tauri/src/commands.rs:100"
-      ],
-      "verified": "2026-03-21",
-      "notes": "persist_sessions_json writes JSON to data dir. load_persisted_sessions reads and restores via SessionManager. Both exist and functional."
-    },
-    "RC-10": {
-      "files": [
-        "src-tauri/src/commands.rs:938",
-        "src-tauri/src/commands.rs:978"
-      ],
-      "verified": "2026-03-21",
-      "notes": "discover_hooks reads from user/project/project-local settings. save_hooks writes hooks to scoped settings files. Both confirmed."
-    },
-    "CM-02": {
-      "files": [
-        "src/lib/paths.ts:89"
-      ],
-      "verified": "2026-03-21",
-      "notes": "verified: normalizes backslashes, user-scope passthrough, abbreviatePath for project"
-    },
-    "DF-09": {
-      "files": [
-        "src/lib/paths.ts:49",
-        "src/lib/paths.ts:64"
-      ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: groupSessionsByDir at line 49 (Map-based, single pass), swapWithinGroup at line 64, TabGroup type at line 41."
-    },
-    "SI-11": {
-      "files": [
-        "src/lib/inspectorHooks.ts:53",
-        "src/lib/inspectorHooks.ts:181",
-        "src/lib/inspectorHooks.ts:211",
-        "src/lib/inspectorHooks.ts:235"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SI-12": {
-      "files": [
-        "src/lib/inspectorHooks.ts:236"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "SI-13": {
-      "files": [
-        "src/hooks/useInspectorState.ts:37"
-      ],
-      "verified": "2026-03-22",
-      "notes": "Function is deriveStateFromPoll (not deriveStateFromPush). Override chain at lines 62-72 confirmed. Text corrected and line updated from 47 to 37."
-    },
     "SI-14": {
       "files": [
-        "src/hooks/useInspectorState.ts:203",
+        "src/hooks/useInspectorState.ts:199",
         "src/lib/inspectorHooks.ts:27"
       ],
       "verified": "2026-03-22",
-      "notes": "Text corrected: removed JSON.parse reference (only JSON.stringify is wrapped). Lines confirmed: INSTALL_HOOK at inspectorHooks.ts:27, connect function at useInspectorState.ts:203."
+      "notes": "Edited via tag-edit.sh"
     },
     "SI-15": {
       "files": [
-        "src/lib/inspectorHooks.ts:296",
+        "src/lib/inspectorHooks.ts:352",
         "src/hooks/useInspectorState.ts:7"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
-    "RS-07": {
+    "IN-04": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:376"
+        "src/lib/inspectorHooks.ts:381",
+        "src/hooks/useInspectorState.ts:155"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
-    "RS-08": {
+    "IN-08": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:420"
+        "src/components/SubagentInspector/SubagentInspector.tsx:12",
+        "src/components/SubagentInspector/SubagentInspector.tsx:78"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
-    "RS-09": {
+    "PT-15": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:308"
+        "src-tauri/pty-patch/src/lib.rs:90"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
-    "PT-10": {
+    "PT-16": {
       "files": [
-        "src/lib/ptyProcess.ts:112"
+        "src-tauri/pty-patch/src/lib.rs:155",
+        "src-tauri/pty-patch/src/sync_detector.rs:1"
       ],
-      "verified": "2026-03-21",
-      "notes": "Confirmed: void invoke exitstatus at line 112, runs parallel to readLoop. fireExit with exitFired guard at lines 75-82 ensures single callback."
+      "verified": "2026-03-22",
+      "notes": "Added during change documentation"
+    },
+    "PT-17": {
+      "files": [
+        "src-tauri/pty-patch/src/output_filter.rs:1"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Added during change documentation"
+    },
+    "PT-18": {
+      "files": [
+        "src-tauri/pty-patch/src/lib.rs:312",
+        "src/lib/ptyProcess.ts:170"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Added during change documentation"
+    },
+    "DF-02": {
+      "files": [
+        "src-tauri/pty-patch/src/lib.rs:155",
+        "src/lib/ptyProcess.ts:88"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-15": {
+      "files": [
+        "src-tauri/pty-patch/src/lib.rs:312"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Added during change documentation"
     },
     "PT-11": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:306",
+        "src/components/Terminal/TerminalPanel.tsx:314",
         "src/hooks/useTerminal.ts:366"
       ],
       "verified": "2026-03-22",
@@ -1124,17 +715,46 @@
     },
     "PT-12": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx:382",
-        "src/components/Terminal/TerminalPanel.tsx:396-402"
+        "src/components/Terminal/TerminalPanel.tsx:395",
+        "src/components/Terminal/TerminalPanel.tsx:409-415"
       ],
       "verified": "2026-03-22",
       "notes": "Edited via tag-edit.sh"
     },
-    "CM-03": {
+    "PT-13": {
       "files": [
-        "src/lib/settingsSchema.ts:62",
-        "src-tauri/src/commands.rs:650",
-        "src/store/settings.ts:233"
+        "src/components/Terminal/TerminalPanel.tsx:359"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RS-07": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:389"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RS-08": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:433"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RS-09": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:316",
+        "src/hooks/useTerminal.ts:366"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "IN-09": {
+      "files": [
+        "src/hooks/useInspectorState.ts:142",
+        "src/lib/terminalRegistry.ts:20",
+        "src/hooks/useTerminal.ts:344"
       ],
       "verified": "2026-03-22",
       "notes": "Added during change documentation"

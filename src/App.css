@@ -513,6 +513,7 @@
   background: var(--border-subtle);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  height: 40px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -545,13 +546,9 @@
 }
 
 .subagent-active {
-  border-left: 2px solid var(--accent);
-  animation: subagent-bg-pulse 2s ease-in-out infinite;
-}
-
-@keyframes subagent-bg-pulse {
-  0%, 100% { background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface)); }
-  50% { background: color-mix(in srgb, var(--accent) 25%, var(--bg-surface)); }
+  border-left: 2px solid var(--text-muted);
+  background: var(--bg-surface);
+  opacity: 0.7;
 }
 
 .subagent-active .subagent-name,
@@ -572,6 +569,12 @@
 
 .subagent-idle:hover {
   opacity: 0.6;
+}
+
+.subagent-card.subagent-selected {
+  background: color-mix(in srgb, var(--accent-secondary) 15%, var(--bg-surface));
+  border-left: 2px solid var(--accent-secondary);
+  animation: none;
 }
 
 .subagent-icon {

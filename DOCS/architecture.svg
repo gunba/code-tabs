@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 810" width="1480" height="810">
+  <defs>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <style>
+    text { dominant-baseline: auto; }
+  </style>
+
+  <!-- Background -->
+  <rect width="1480" height="810" fill="#0d1117"/>
+
+  <!-- Grid dots -->
+  <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+    <circle cx="12" cy="12" r="0.5" fill="#484f58" opacity="0.3"/>
+  </pattern>
+  <rect width="1480" height="810" fill="url(#dots)"/>
+
+  <!-- Title -->
+  <text x="740" y="30" fill="#e6edf3" font-size="18" font-weight="700"
+        font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+        text-anchor="middle">Claude Tabs</text>
+  <text x="740" y="48" fill="#8b949e" font-size="11"
+        font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+        text-anchor="middle">React UI ↔ Tauri IPC ↔ Rust ↔ ConPTY ↔ Claude CLI</text>
+
+  <!-- Layer labels -->
+  <text x="16" y="89" fill="#484f58" font-size="9"
+            font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+            text-anchor="start" opacity="0.6">Root</text><text x="16" y="199" fill="#484f58" font-size="9"
+            font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+            text-anchor="start" opacity="0.6">UI Components</text><text x="16" y="309" fill="#484f58" font-size="9"
+            font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+            text-anchor="start" opacity="0.6">State &amp; Effects</text><text x="16" y="419" fill="#484f58" font-size="9"
+            font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+            text-anchor="start" opacity="0.6">Libraries</text><text x="16" y="529" fill="#484f58" font-size="9"
+            font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+            text-anchor="start" opacity="0.6">IPC Bridge</text><text x="16" y="639" fill="#484f58" font-size="9"
+            font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+            text-anchor="start" opacity="0.6">Rust Backend</text><text x="16" y="749" fill="#484f58" font-size="9"
+            font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+            text-anchor="start" opacity="0.6">System / External</text>
+
+  <!-- Edges -->
+  <g id="edges"><path d="M740,100 C740,132 1338.5,148 1338.5,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M740,100 C740,132 141.5,148 141.5,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M740,100 C740,132 289.5,148 289.5,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M740,100 C740,132 1029.5,148 1029.5,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M740,100 C740,132 881.5,148 881.5,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M740,100 C740,132 733.5,148 733.5,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M740,100 C740,132 1184,148 1184,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M740,100 C740,132 437.5,148 437.5,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M740,100 C740,132 585.5,148 585.5,180"
+          fill="none" stroke="#f0883e" stroke-width="1.5" opacity="0.45"/><path d="M1338.5,210 C1338.5,242 1355,258 1355,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M1338.5,210 C1338.5,242 421,258 421,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M1338.5,210 C1338.5,242 1200.5,258 1200.5,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M141.5,210 C141.5,242 273,258 273,290"
+          fill="none" stroke="#6e8efb" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M289.5,210 C289.5,242 273,258 273,290"
+          fill="none" stroke="#6e8efb" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M1338.5,210 C1338.5,242 892,258 892,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M141.5,210 C141.5,242 892,258 892,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M141.5,210 C141.5,242 744,258 744,290"
+          fill="none" stroke="#6e8efb" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M289.5,210 C289.5,242 892,258 892,290"
+          fill="none" stroke="#6e8efb" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M289.5,210 C289.5,242 744,258 744,290"
+          fill="none" stroke="#6e8efb" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M1029.5,210 C1029.5,242 892,258 892,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M1029.5,210 C1029.5,242 744,258 744,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M881.5,210 C881.5,242 744,258 744,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M733.5,210 C733.5,242 744,258 744,290"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M1184,210 C1184,242 892,258 892,290"
+          fill="none" stroke="#6e8efb" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M1355,320 C1355,352 1335,368 1335,400"
+          fill="none" stroke="#56d364" stroke-width="1.5" opacity="0.45"/><path d="M421,320 C421,352 589,368 589,400"
+          fill="none" stroke="#56d364" stroke-width="1.5" opacity="0.45"/><path d="M1200.5,320 C1200.5,352 1187,368 1187,400"
+          fill="none" stroke="#56d364" stroke-width="1.5" opacity="0.45"/><path d="M1200.5,320 C1200.5,352 885,368 885,400"
+          fill="none" stroke="#56d364" stroke-width="1.5" opacity="0.45"/><path d="M1200.5,320 C1200.5,352 1036,368 1036,400"
+          fill="none" stroke="#56d364" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M582.5,320 C582.5,352 737,368 737,400"
+          fill="none" stroke="#56d364" stroke-width="1.5" opacity="0.45"/><path d="M141.5,210 C141.5,286 441,324 441,400"
+          fill="none" stroke="#6e8efb" stroke-width="1.5" opacity="0.45"/><path d="M892,320 C892,396 740,434 740,510"
+          fill="none" stroke="#d2a8ff" stroke-width="1.5" opacity="0.45"/><path d="M744,320 C744,396 740,434 740,510"
+          fill="none" stroke="#d2a8ff" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M589,430 C589,462 592,478 592,510"
+          fill="none" stroke="#79c0ff" stroke-width="1.5" opacity="0.45"/><path d="M441,430 C441,462 592,478 592,510"
+          fill="none" stroke="#79c0ff" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M737,430 C737,462 888,478 888,510"
+          fill="none" stroke="#79c0ff" stroke-width="1.5" opacity="0.45"/><path d="M592,540 C592,572 518,588 518,620"
+          fill="none" stroke="#f78166" stroke-width="1.5" opacity="0.45"/><path d="M740,540 C740,572 962,588 962,620"
+          fill="none" stroke="#f78166" stroke-width="1.5" opacity="0.45"/><path d="M888,540 C888,572 962,588 962,620"
+          fill="none" stroke="#f78166" stroke-width="1.5" opacity="0.45"/><path d="M518,650 C518,680 962,590 962,620"
+          fill="none" stroke="#ff7b72" stroke-width="1.5" opacity="0.45"/><path d="M518,650 C518,680 666,590 666,620"
+          fill="none" stroke="#ff7b72" stroke-width="1.5" opacity="0.45"/><path d="M962,650 C962,680 666,590 666,620"
+          fill="none" stroke="#ff7b72" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M962,650 C962,680 814,590 814,620"
+          fill="none" stroke="#ff7b72" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M518,650 C518,682 592,698 592,730"
+          fill="none" stroke="#ff7b72" stroke-width="1.5" opacity="0.45"/><path d="M962,650 C962,682 740,698 740,730"
+          fill="none" stroke="#ff7b72" stroke-width="1.5" opacity="0.45"/><path d="M666,650 C666,682 740,698 740,730"
+          fill="none" stroke="#ff7b72" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M814,650 C814,682 740,698 740,730"
+          fill="none" stroke="#ff7b72" stroke-width="1" opacity="0.18" stroke-dasharray="4,4"/><path d="M888,760 C888,790 740,700 740,730"
+          fill="none" stroke="#8b949e" stroke-width="1.5" opacity="0.45"/><path d="M885,430 C885,550 888,610 888,730"
+          fill="none" stroke="#79c0ff" stroke-width="1.5" opacity="0.45"/></g>
+
+  <!-- Nodes -->
+  <g id="nodes"><rect x="673" y="68" width="134" height="34" rx="8" fill="none" stroke="#f0883e" stroke-width="1" opacity="0.3"/>
+    <rect x="675" y="70" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#f0883e" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="685" cy="85" r="3.5" fill="#f0883e" opacity="0.8"/>
+    <text x="695" y="89" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">App.tsx</text>
+    <rect x="1273.5" y="180" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="1283.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="1293.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">TerminalPanel</text>
+    <rect x="76.5" y="180" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="86.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="96.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">CommandBar</text>
+    <rect x="224.5" y="180" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="234.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="244.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">StatusBar</text>
+    <rect x="964.5" y="180" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="974.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="984.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">SessionLauncher</text>
+    <rect x="816.5" y="180" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="826.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="836.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">ResumePicker</text>
+    <rect x="668.5" y="180" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="678.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="688.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">ConfigManager</text>
+    <rect x="1112.5" y="180" width="143" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="1122.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="1132.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">SubagentInspector</text>
+    <rect x="372.5" y="180" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="382.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="392.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">CommandPalette</text>
+    <rect x="520.5" y="180" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#6e8efb" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="530.5" cy="195" r="3.5" fill="#6e8efb" opacity="0.8"/>
+    <text x="540.5" y="199" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">DebugPanel</text>
+    <rect x="1290" y="290" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#56d364" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="1300" cy="305" r="3.5" fill="#56d364" opacity="0.8"/>
+    <text x="1310" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">useTerminal</text>
+    <rect x="356" y="290" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#56d364" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="366" cy="305" r="3.5" fill="#56d364" opacity="0.8"/>
+    <text x="376" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">usePty</text>
+    <rect x="1129" y="290" width="143" height="30" rx="6"
+          fill="#0d1117" stroke="#56d364" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="1139" cy="305" r="3.5" fill="#56d364" opacity="0.8"/>
+    <text x="1149" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">useInspectorState</text>
+    <rect x="60" y="290" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#56d364" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="70" cy="305" r="3.5" fill="#56d364" opacity="0.8"/>
+    <text x="80" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">useCliWatcher</text>
+    <rect x="504" y="290" width="157" height="30" rx="6"
+          fill="#0d1117" stroke="#56d364" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="514" cy="305" r="3.5" fill="#56d364" opacity="0.8"/>
+    <text x="524" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">useCommandDiscovery</text>
+    <rect x="975" y="290" width="136" height="30" rx="6"
+          fill="#0d1117" stroke="#56d364" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="985" cy="305" r="3.5" fill="#56d364" opacity="0.8"/>
+    <text x="995" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">useNotifications</text>
+    <rect x="208" y="290" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#56d364" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="218" cy="305" r="3.5" fill="#56d364" opacity="0.8"/>
+    <text x="228" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">useCtrlKey</text>
+    <rect x="827" y="290" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#d2a8ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="837" cy="305" r="3.5" fill="#d2a8ff" opacity="0.8"/>
+    <text x="847" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">sessions</text>
+    <rect x="679" y="290" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#d2a8ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="689" cy="305" r="3.5" fill="#d2a8ff" opacity="0.8"/>
+    <text x="699" y="309" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">settings</text>
+    <rect x="524" y="400" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="534" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="544" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">ptyProcess</text>
+    <rect x="376" y="400" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="386" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="396" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">ptyRegistry</text>
+    <rect x="1122" y="400" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="1132" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="1142" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">inspectorHooks</text>
+    <rect x="820" y="400" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="830" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="840" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">inspectorPort</text>
+    <rect x="1270" y="400" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="1280" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="1290" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">theme</text>
+    <rect x="672" y="400" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="682" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="692" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">settingsSchema</text>
+    <rect x="80" y="400" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="90" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="100" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">claude</text>
+    <rect x="228" y="400" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="238" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="248" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">paths</text>
+    <rect x="968" y="400" width="136" height="30" rx="6"
+          fill="#0d1117" stroke="#79c0ff" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="978" cy="415" r="3.5" fill="#79c0ff" opacity="0.8"/>
+    <text x="988" y="419" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">functionResolver</text>
+    <rect x="527" y="510" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#f78166" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="537" cy="525" r="3.5" fill="#f78166" opacity="0.8"/>
+    <text x="547" y="529" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">plugin:pty</text>
+    <rect x="675" y="510" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#f78166" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="685" cy="525" r="3.5" fill="#f78166" opacity="0.8"/>
+    <text x="695" y="529" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">app commands</text>
+    <rect x="823" y="510" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#f78166" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="833" cy="525" r="3.5" fill="#f78166" opacity="0.8"/>
+    <text x="843" y="529" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">config commands</text>
+    <rect x="453" y="620" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#ff7b72" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="463" cy="635" r="3.5" fill="#ff7b72" opacity="0.8"/>
+    <text x="473" y="639" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">lib.rs</text>
+    <rect x="897" y="620" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#ff7b72" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="907" cy="635" r="3.5" fill="#ff7b72" opacity="0.8"/>
+    <text x="917" y="639" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">commands.rs</text>
+    <rect x="601" y="620" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#ff7b72" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="611" cy="635" r="3.5" fill="#ff7b72" opacity="0.8"/>
+    <text x="621" y="639" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">session/*</text>
+    <rect x="749" y="620" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#ff7b72" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="759" cy="635" r="3.5" fill="#ff7b72" opacity="0.8"/>
+    <text x="769" y="639" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">jsonl_watcher</text>
+    <rect x="527" y="730" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#8b949e" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="537" cy="745" r="3.5" fill="#8b949e" opacity="0.8"/>
+    <text x="547" y="749" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">ConPTY</text>
+    <rect x="675" y="730" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#8b949e" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="685" cy="745" r="3.5" fill="#8b949e" opacity="0.8"/>
+    <text x="695" y="749" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">Claude CLI</text>
+    <rect x="823" y="730" width="130" height="30" rx="6"
+          fill="#0d1117" stroke="#8b949e" stroke-width="1.5" opacity="0.95"/>
+    <circle cx="833" cy="745" r="3.5" fill="#8b949e" opacity="0.8"/>
+    <text x="843" y="749" fill="#e6edf3" font-size="11"
+          font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">BUN_INSPECT</text></g>
+
+  <!-- Legend -->
+  <circle cx="60" cy="790" r="4" fill="#f0883e" opacity="0.8"/><text x="68" y="794" fill="#8b949e" font-size="10"
+              font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">Root</text><circle cx="114.8" cy="790" r="4" fill="#6e8efb" opacity="0.8"/><text x="122.8" y="794" fill="#8b949e" font-size="10"
+              font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">Components</text><circle cx="206.8" cy="790" r="4" fill="#56d364" opacity="0.8"/><text x="214.8" y="794" fill="#8b949e" font-size="10"
+              font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">Hooks</text><circle cx="267.8" cy="790" r="4" fill="#d2a8ff" opacity="0.8"/><text x="275.8" y="794" fill="#8b949e" font-size="10"
+              font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">Stores</text><circle cx="335" cy="790" r="4" fill="#79c0ff" opacity="0.8"/><text x="343" y="794" fill="#8b949e" font-size="10"
+              font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">Libraries</text><circle cx="420.8" cy="790" r="4" fill="#f78166" opacity="0.8"/><text x="428.8" y="794" fill="#8b949e" font-size="10"
+              font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">IPC Bridge</text><circle cx="512.8" cy="790" r="4" fill="#ff7b72" opacity="0.8"/><text x="520.8" y="794" fill="#8b949e" font-size="10"
+              font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">Rust Backend</text><circle cx="617.1999999999999" cy="790" r="4" fill="#8b949e" opacity="0.8"/><text x="625.1999999999999" y="794" fill="#8b949e" font-size="10"
+              font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace">System</text>
+
+  <!-- Timestamp -->
+  <text x="1464" y="802" fill="#484f58" font-size="9"
+        font-family="'JetBrains Mono','Cascadia Code','Fira Code',monospace"
+        text-anchor="end" opacity="0.5">Generated 2026-03-22</text>
+</svg>

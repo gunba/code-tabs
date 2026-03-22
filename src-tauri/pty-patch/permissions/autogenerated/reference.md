@@ -12,6 +12,7 @@ Allows all PTY commands
 - `allow-exitstatus`
 - `allow-destroy`
 - `allow-get-child-pid`
+- `allow-drain-output`
 
 ## Permission Table
 
@@ -44,6 +45,32 @@ Enables the destroy command without any pre-configured scope.
 <td>
 
 Denies the destroy command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pty:allow-drain-output`
+
+</td>
+<td>
+
+Enables the drain_output command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pty:deny-drain-output`
+
+</td>
+<td>
+
+Denies the drain_output command without any pre-configured scope.
 
 </td>
 </tr>
