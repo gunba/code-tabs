@@ -55,8 +55,9 @@ export function useCommandDiscovery(): void {
         ]),
       ];
 
+      const claudePath = useSessionStore.getState().claudePath;
       const builtinPromise = traceAsync("commandDiscovery: discover_builtin_commands", () =>
-        invoke<Array<{ cmd: string; desc: string }>>("discover_builtin_commands")
+        invoke<Array<{ cmd: string; desc: string }>>("discover_builtin_commands", { cliPath: claudePath })
       ).catch(() => [] as Array<{ cmd: string; desc: string }>);
 
       const pluginPromise = traceAsync("commandDiscovery: discover_plugin_commands", () =>

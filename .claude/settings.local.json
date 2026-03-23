@@ -18,7 +18,8 @@
       "Bash(npm run:*)",
       "Bash(bash \"$LOCALAPPDATA/claude-agent-logs/bin/tag-info.sh\" stats)",
       "Bash(bash \"$LOCALAPPDATA/claude-agent-logs/bin/tag-info.sh\" lookup TB-01)",
-      "Bash(bash \"$LOCALAPPDATA/claude-agent-logs/bin/start.sh\" 2>&1)"
+      "Bash(bash \"$LOCALAPPDATA/claude-agent-logs/bin/start.sh\" 2>&1)",
+      "Bash(bash \"C:/Users/jorda/AppData/Local/claude-agent-logs/bin/tag-edit.sh\" --tag PT-14 --remove 2>&1)"
     ]
   },
   "hooks": {

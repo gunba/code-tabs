@@ -1,4 +1,4 @@
-import type { Session, SessionConfig, SessionState } from "./session";
+import type { ContentSearchMatch, Session, SessionConfig, SessionState } from "./session";
 
 // Tauri IPC command signatures — mirrors src-tauri/src/commands.rs
 export interface IpcCommands {
@@ -30,4 +30,10 @@ export interface IpcCommands {
     config: SessionConfig;
   }) => Promise<string[]>;
   shell_open: (args: { path: string }) => Promise<void>;
+  search_session_content: (args: { query: string }) => Promise<ContentSearchMatch[]>;
+  plugin_list: () => Promise<string>;
+  plugin_install: (args: { name: string; scope: string }) => Promise<string>;
+  plugin_uninstall: (args: { name: string }) => Promise<string>;
+  plugin_enable: (args: { name: string }) => Promise<string>;
+  plugin_disable: (args: { name: string }) => Promise<string>;
 }

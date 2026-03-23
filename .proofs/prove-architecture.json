@@ -46,6 +46,7 @@
     "PT-16",
     "PT-17",
     "PT-18",
+    "PT-19",
     "RC-01",
     "RC-02",
     "RC-03",
@@ -61,6 +62,9 @@
     "RC-13",
     "RC-14",
     "RC-15",
+    "RC-16",
+    "RC-17",
+    "RC-18",
     "RS-01",
     "RS-02",
     "RS-03",
@@ -87,6 +91,7 @@
     "SI-15",
     "SI-16",
     "SI-17",
+    "SI-18",
     "SS-01",
     "SS-02",
     "SS-03"
@@ -470,22 +475,22 @@
     {
       "tag": "RC-11",
       "status": "pass",
-      "note": "register_active_pid at commands.rs:1133 confirmed. RunEvent::Exit handler at lib.rs:115-123 iterates ActivePids and calls kill_process_tree_sync."
+      "note": "register_active_pid at commands.rs:1364. RunEvent::Exit handler at lib.rs:176-183 iterates ActivePids and calls kill_process_tree_sync. lib.rs:115 manages ActivePids state. Doc line refs updated to 1370/176."
     },
     {
       "tag": "RC-12",
       "status": "pass",
-      "note": "read_config_file at commands.rs:1521 (not 1501 \u00e2\u20ac\u201d resolve_config_path helper is at 1491). write_config_file at commands.rs:1532 (not 1512). list_agents confirmed. Agent paths: user=~/.claude/agents/, project={wd}/.claude/agents/, local={wd}/.claude/local/agents/ at lines 1509-1511."
+      "note": "read_config_file at commands.rs:1758. write_config_file at commands.rs:1769. list_agents at 1799. Agent paths confirmed: user=~/.claude/agents/ (line 1740), project={wd}/.claude/agents/ (line 1741), local={wd}/.claude/local/agents/ (line 1742). Parent dirs auto-created on write (line 1782). Doc line refs updated."
     },
     {
       "tag": "RC-13",
       "status": "pass",
-      "note": "kill_orphan_sessions at commands.rs:1400 confirmed. Takes Vec<String> session IDs, WMIC matching at line 1416-1419. sessions.ts:90 invocation confirmed."
+      "note": "kill_orphan_sessions at commands.rs:1637. Takes Vec<String> session IDs, WMIC on Windows (line 1658), pgrep on Unix (line 1693). kills all without ancestry check. Returns count. sessions.ts:90 invocation confirmed. Doc line refs updated."
     },
     {
       "tag": "RC-14",
       "status": "pass",
-      "note": "send_notification at commands.rs:1599 confirmed. Uses tauri_winrt_notification Toast with on_activated callback emitting notification-clicked event. Dev mode PowerShell app ID at line 1612, production bundle identifier at line 1614. spawn_blocking at line 1605. useNotifications.ts:44 listens for notification-clicked."
+      "note": "send_notification at commands.rs:1836. Uses tauri_winrt_notification Toast with on_activated callback emitting notification-clicked event. Dev mode PowerShell app ID at line 1849, production bundle identifier at line 1851. spawn_blocking at line 1842. Doc line refs updated."
     },
     {
       "tag": "CM-01",
@@ -508,80 +513,124 @@
       "note": "lastPtyDimsRef tracks {cols, rows} at TerminalPanel.tsx:358. handleResize compares current dims to last, returns early if unchanged (line 361). Reset to null on respawn (line 319)."
     },
     {
-      "tag": "PT-14",
+      "tag": "PT-15",
       "status": "pass",
-      "note": "height: 40px on .subagent-bar at App.css:516 confirmed. Prevents content-driven height changes from triggering ResizeObserver \u00e2\u2020\u2019 fit() \u00e2\u2020\u2019 pty.resize() cascade."
+      "note": "Background reader thread at lib.rs:119 confirmed. OS thread reads ConPTY pipe (8 KiB buffer, line 122) into bounded sync_channel(64) at line 119. Decouples blocking pipe reads from IPC read command."
+    },
+    {
+      "tag": "RC-17",
+      "status": "pass",
+      "note": "commands.rs:407 search_session_content async+spawn_blocking. 20MB max (MAX_CONTENT_SEARCH_FILE_SIZE), 50 results cap (MAX_CONTENT_SEARCH_RESULTS). extract_message_text filters user/assistant events. 200-char snippet. lib.rs:137 registered."
+    },
+    {
+      "tag": "IN-09",
+      "status": "pass",
+      "note": "choiceHint detection uses terminal buffer tail at useInspectorState.ts:126-130. getSessionBufferTail(sid,15) checks '> 1.' and '2.' pattern. terminalRegistry.ts:30 exports getSessionBufferTail. useTerminal.ts:349 defines getBufferTail. Doc line refs updated."
+    },
+    {
+      "tag": "PT-16",
+      "status": "pass",
+      "note": "DEC 2026 sync coalescing confirmed. read command at lib.rs:179 filters through OutputFilter then SyncBlockDetector. Mid-sync-block 50ms timeout coalescing at lib.rs:210-234. sync_detector.rs:1 confirmed with BSU/ESU detection."
+    },
+    {
+      "tag": "PT-17",
+      "status": "pass",
+      "note": "OutputFilter at output_filter.rs:1-31 strips OSC 52, OSC 50, DCS, C1 controls (PendingC2 state at line 48), ESC[3J. ESC[2J stripped outside sync blocks after startup grace period of 2 (startup_clears_remaining:2 at line 63). Device queries pass through. OSC 2 titles sanitized. Hyperlinks pass through."
+    },
+    {
+      "tag": "PT-18",
+      "status": "pass",
+      "note": "drain_output at lib.rs:340 confirmed. 500ms deadline, 10ms recv_timeout intervals. ptyProcess.ts:170 calls invoke('plugin:pty|drain_output') during kill sequence."
+    },
+    {
+      "tag": "PT-19",
+      "status": "pass",
+      "note": "strip_clear_screen_into at lib.rs:27 uses memchr::memmem to remove ESC[2J. emit_sync_block at lib.rs:40 re-wraps with BSU/ESU, replaces ESC[2J with ESC[H ESC[J for full-redraw blocks (is_full_redraw flag). Doc line refs 25 and 40 are accurate (25=doc comment, 40=emit_sync_block)."
+    },
+    {
+      "tag": "RC-15",
+      "status": "pass",
+      "note": "drain_output at pty-patch lib.rs:340 confirmed. spawn_blocking wrapper, 500ms deadline, empties channel with 10ms recv_timeout intervals."
+    },
+    {
+      "tag": "RC-16",
+      "status": "pass",
+      "note": "read_claude_binary at commands.rs:624. 5-step chain confirmed: (1) .cmd shim parse for JS paths (line 643), (2) direct CLI path read (line 663), (3) sibling node_modules (line 672), (4) legacy versions dir (line 684), (5) npm root -g (line 702). Doc line ref updated."
+    },
+    {
+      "tag": "RC-18",
+      "status": "pass",
+      "note": "Plugin commands at commands.rs:1879-1909 (refactored to use run_claude_cli helper at line 538). plugin_list (--available --json), plugin_install (--scope), plugin_uninstall, plugin_enable, plugin_disable. All async+spawn_blocking via helper. CREATE_NO_WINDOW via run_claude_cli. Raw JSON passthrough for list, string for mutations. lib.rs:167-171 registered."
+    },
+    {
+      "tag": "SI-18",
+      "status": "pass",
+      "note": "WebFetch timeout protection confirmed. (1) globalThis.fetch wrapper at inspectorHooks.ts:357-369: 120s timeout for non-streaming Anthropic API calls, checks for 'stream':true to distinguish. Wires caller's AbortSignal. (2) https.request hard timeout at inspectorHooks.ts:340-348: 90s wall clock via setTimeout+req.destroy. Counters fetchTimeouts and httpsTimeouts exposed in poll state."
     }
   ],
-  "unchecked": [
-    "IN-09",
-    "PT-16",
-    "PT-17",
-    "PT-18",
-    "RC-15"
-  ],
+  "unchecked": [],
   "summary": {
-    "pass": 68,
+    "pass": 88,
     "drift": 6,
     "stale": 0,
-    "total": 74
+    "total": 94
   },
-  "proved_at": "2026-03-22",
+  "proved_at": "2026-03-23",
   "citations": {
     "SI-06": {
-      "up": 0,
+      "up": 1,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "SI-14": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 19
     },
     "SI-15": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
     "IN-04": {
       "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
     "IN-08": {
       "up": 1,
       "down": 0,
-      "seen": 8
+      "seen": 19
     },
     "PT-15": {
-      "up": 2,
+      "up": 1,
       "down": 0,
-      "seen": 5
+      "seen": 9
     },
     "PT-16": {
       "up": 2,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "PT-17": {
-      "up": 2,
+      "up": 1,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "PT-18": {
-      "up": 2,
+      "up": 1,
       "down": 0,
-      "seen": 8
+      "seen": 9
     },
     "DF-02": {
-      "up": 2,
+      "up": 0,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
     "RC-15": {
-      "up": 2,
+      "up": 1,
       "down": 0,
-      "seen": 8
+      "seen": 5
     },
     "PT-11": {
       "up": 0,
@@ -616,7 +665,387 @@
     "IN-09": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
+    },
+    "PT-19": {
+      "up": 2,
+      "down": 0,
+      "seen": 9
+    },
+    "RC-16": {
+      "up": 3,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-18": {
+      "up": 2,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-17": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-18": {
+      "up": 2,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-11": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-12": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-13": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-14": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-16": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "BF-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "BF-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-01": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DF-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DF-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DF-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DF-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DF-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DF-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DF-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DF-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "IN-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "IN-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "IN-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "IN-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "IN-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "IN-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PS-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PS-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PS-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PS-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PS-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "PT-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-09": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
+    },
+    "RC-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RS-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RS-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RS-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RS-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RS-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "RS-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-11": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-12": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-13": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SI-17": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SS-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SS-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SS-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
     }
   },
   "metadata": {
@@ -662,18 +1091,18 @@
     },
     "PT-15": {
       "files": [
-        "src-tauri/pty-patch/src/lib.rs:90"
+        "src-tauri/pty-patch/src/lib.rs:119"
       ],
-      "verified": "2026-03-22",
+      "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
     },
     "PT-16": {
       "files": [
-        "src-tauri/pty-patch/src/lib.rs:155",
+        "src-tauri/pty-patch/src/lib.rs:179",
         "src-tauri/pty-patch/src/sync_detector.rs:1"
       ],
-      "verified": "2026-03-22",
-      "notes": "Added during change documentation"
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
     },
     "PT-17": {
       "files": [
@@ -684,11 +1113,11 @@
     },
     "PT-18": {
       "files": [
-        "src-tauri/pty-patch/src/lib.rs:312",
+        "src-tauri/pty-patch/src/lib.rs:340",
         "src/lib/ptyProcess.ts:170"
       ],
-      "verified": "2026-03-22",
-      "notes": "Added during change documentation"
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
     },
     "DF-02": {
       "files": [
@@ -700,10 +1129,10 @@
     },
     "RC-15": {
       "files": [
-        "src-tauri/pty-patch/src/lib.rs:312"
+        "src-tauri/pty-patch/src/lib.rs:340"
       ],
-      "verified": "2026-03-22",
-      "notes": "Added during change documentation"
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
     },
     "PT-11": {
       "files": [
@@ -752,12 +1181,85 @@
     },
     "IN-09": {
       "files": [
-        "src/hooks/useInspectorState.ts:142",
-        "src/lib/terminalRegistry.ts:20",
-        "src/hooks/useTerminal.ts:344"
+        "src/hooks/useInspectorState.ts:126",
+        "src/lib/terminalRegistry.ts:30",
+        "src/hooks/useTerminal.ts:349"
       ],
-      "verified": "2026-03-22",
-      "notes": "Added during change documentation"
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "PT-19": {
+      "files": [
+        "src-tauri/pty-patch/src/lib.rs:25",
+        "src-tauri/pty-patch/src/lib.rs:40"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-16": {
+      "files": [
+        "src-tauri/src/commands.rs:624"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "SI-18": {
+      "files": [
+        "src/lib/inspectorHooks.ts:339",
+        "src/lib/inspectorHooks.ts:357"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-17": {
+      "files": [
+        "src-tauri/src/commands.rs:407",
+        "src-tauri/src/lib.rs:137"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-18": {
+      "files": [
+        "src-tauri/src/commands.rs:1879",
+        "src-tauri/src/lib.rs:167"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-11": {
+      "files": [
+        "src-tauri/src/commands.rs:1370",
+        "src-tauri/src/lib.rs:176"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-12": {
+      "files": [
+        "src-tauri/src/commands.rs:1758",
+        "src-tauri/src/commands.rs:1769"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-13": {
+      "files": [
+        "src-tauri/src/commands.rs:1637",
+        "src/store/sessions.ts:90"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-14": {
+      "files": [
+        "src-tauri/src/commands.rs:1836",
+        "src/hooks/useNotifications.ts:44"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
     }
-  }
+  },
+  "last_run": "2026-03-23T09:49:23.191714+00:00",
+  "cycle": 2
 }

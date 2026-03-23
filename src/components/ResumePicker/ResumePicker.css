@@ -372,3 +372,45 @@
   font-family: inherit;
   color: var(--text-secondary);
 }
+
+/* ── Content search ──────────────────────────────────────────── */
+
+.resume-picker-card-content-match {
+  border-left: 2px solid var(--accent-secondary);
+}
+
+.resume-picker-card-snippet {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.resume-picker-card-snippet-label {
+  color: var(--accent-secondary);
+  font-size: 9px;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.resume-picker-card-snippet-text {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+.resume-picker-content-searching {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 4px 0;
+}
+
+.resume-picker-content-divider {
+  border-top: 1px solid var(--border);
+  margin: 4px 8px;
+}

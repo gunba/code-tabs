@@ -5,6 +5,7 @@ import type { LaunchPreset, SessionConfig, PastSession } from "../types/session"
 import { DEFAULT_SESSION_CONFIG } from "../types/session";
 import { normalizePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
+import { useSessionStore } from "./sessions";
 
 export interface CliOption {
   flag: string;        // e.g. "--model"
@@ -246,7 +247,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       loadBinarySettingsSchema: async () => {
         try {
-          const fields = await invoke<BinarySettingField[]>("discover_settings_schema");
+          const claudePath = useSessionStore.getState().claudePath;
+          const fields = await invoke<BinarySettingField[]>("discover_settings_schema", { cliPath: claudePath });
           set({ binarySettingsSchema: fields });
         } catch {
           // Binary scan failed — no problem, CLI help + static fields still work

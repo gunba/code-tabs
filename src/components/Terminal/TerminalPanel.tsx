@@ -732,7 +732,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
             <button
               className="bar-btn"
               onClick={() => pty.handle.current?.write("\x15".repeat(20))}
-              title="Clear all input lines (Ctrl+Shift+U)"
+              title="Clear all input lines (Ctrl+Shift+X)"
               aria-label="Clear all input lines"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -134,6 +134,7 @@ pub fn run() {
             commands::fetch_settings_schema,
             commands::discover_plugin_commands,
             commands::list_past_sessions,
+            commands::search_session_content,
             commands::check_cli_version,
             commands::get_cli_help,
             commands::read_ui_config,
@@ -163,6 +164,11 @@ pub fn run() {
             jsonl_watcher::start_subagent_watcher,
             jsonl_watcher::stop_subagent_watcher,
             commands::shell_open,
+            commands::plugin_list,
+            commands::plugin_install,
+            commands::plugin_uninstall,
+            commands::plugin_enable,
+            commands::plugin_disable,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Claude Tabs")

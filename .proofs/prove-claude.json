@@ -1,64 +1,82 @@
 {
-  "results": [
-    {
-      "tag": "BV-01",
-      "status": "pass",
-      "note": "All build commands confirmed in package.json: build:quick (tauri build --no-bundle), build:debug (tauri build --debug --no-bundle), tauri dev (via vite+tauri), tauri build (full). Portable exe paths correct. xterm.js 6.0 confirmed (@xterm/xterm ^6.0.0)."
+  "file": "CLAUDE.md",
+  "all_tags": [
+    "BV-01",
+    "BV-02",
+    "BV-03",
+    "DR-01",
+    "DR-02",
+    "DR-03",
+    "DR-04",
+    "DR-05",
+    "DR-06",
+    "DR-07",
+    "TH-01",
+    "TH-02"
+  ],
+  "unchecked": [],
+  "citations": {
+    "BV-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "BV-02",
-      "status": "pass",
-      "note": "Policy entry — no code to verify. Build commands exist for quick/debug builds per BV-01."
+    "BV-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "BV-03",
-      "status": "pass",
-      "note": "Policy entry referencing toolchain checks. tsc, vitest, and cargo check are all available. package.json has test script (vitest run)."
+    "BV-03": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "DR-01",
-      "status": "pass",
-      "note": "All IPC commands defined in commands.rs with #[tauri::command], registered in lib.rs via tauri::generate_handler![...]. 42 commands registered including commands:: and jsonl_watcher:: namespaces."
+    "DR-01": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "DR-02",
-      "status": "drift",
-      "note": "Types mostly mirror with camelCase (Rust uses #[serde(rename_all = \"camelCase\")]). However: (1) TS SessionState has 'actionNeeded' which Rust SessionState lacks — it's a frontend-only refinement derived in useInspectorState.ts. (2) Rust SessionMetadata has 5 fields not in TS (subagent_count, task_progress, context_warning, recent_output, subagent_activity). The types diverge intentionally but the claim 'mirror' is inaccurate."
+    "DR-02": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "DR-03",
-      "status": "pass",
-      "note": "Zustand stores in src/store/ (sessions.ts, settings.ts). Hooks in src/hooks/ (useTerminal.ts, usePty.ts, useInspectorState.ts, useCommandDiscovery.ts, useCliWatcher.ts, useNotifications.ts, useCtrlKey.ts). All confirmed."
+    "DR-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "DR-04",
-      "status": "pass",
-      "note": "All components follow <Name>/<Name>.tsx pattern with co-located CSS. 10 CSS files found matching their component directories. Icons component has no CSS (SVG-only, uses currentColor). All component directories verified."
+    "DR-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "DR-05",
-      "status": "pass",
-      "note": "Tests exist for lib/ functions (13 test files in src/lib/__tests__/) and store actions (sessions.test.ts in src/store/__tests__/). Policy entry — compliance is ongoing."
+    "DR-05": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "DR-06",
-      "status": "pass",
-      "note": "All async Rust commands that spawn subprocesses use tokio::task::spawn_blocking(). 13 spawn_blocking calls found across commands.rs. Sync helper functions (detect_claude_cli_sync, list_past_sessions_sync, etc.) are always called from within spawn_blocking closures."
+    "DR-06": {
+      "up": 3,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "DR-07",
-      "status": "pass",
-      "note": "All Windows subprocess Command::new calls include .creation_flags(0x08000000) behind #[cfg(target_os = \"windows\")] guards. 5 creation_flags calls found covering: where, claude --version, claude --help, wmic (kill_session_holder), wmic (kill_orphan_sessions). Non-Windows pgrep calls correctly omit this flag."
+    "DR-07": {
+      "up": 3,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "TH-01",
-      "status": "pass",
-      "note": "All colors are CSS custom properties on :root via applyTheme() in theme.ts, called at startup in main.tsx. Components use var(--name) in CSS — the only hardcoded hex found in CSS files are fallback values inside var() expressions (e.g., var(--warning, #c47a20)). Model rarity colors in claude.ts are fixed hex (#ff8000, #a335ee, #4e9bff) as documented exception. getXtermTheme() reads CSS variables confirmed."
+    "TH-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
     },
-    {
-      "tag": "TH-02",
-      "status": "pass",
-      "note": "All key variables confirmed set in applyTheme(): --bg-primary, --bg-surface, --accent (clay #d4744a), --accent-secondary (blue #6ea8e0), --accent-tertiary (purple #bc8cff), --term-bg, --term-fg. Colors match described roles."
+    "TH-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
     }
-  ]
+  },
+  "cycle": 1,
+  "last_run": "2026-03-23T09:46:31.819248+00:00"
 }

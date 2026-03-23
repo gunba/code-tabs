@@ -13,6 +13,7 @@ interface InspectorPollResult {
   userPrompt: string | null; permPending: boolean; idleDetected: boolean;
   toolAction: string | null; choiceHint: boolean;
   inputBuf: string; inputTs: number; fetchBypassed: number;
+  fetchTimeouts: number; httpsTimeouts: number;
   subs: Array<{
     sid: string; desc: string; st: string; tok: number; act: string | null;
     msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number;
@@ -100,6 +101,8 @@ export function useInspectorState(
   const lastSidRef = useRef<string | null>(null);
   const knownSubsRef = useRef<Set<string>>(new Set());
   const fetchBypassLoggedRef = useRef(false);
+  const fetchTimeoutLoggedRef = useRef(false);
+  const httpsTimeoutLoggedRef = useRef(false);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
@@ -196,6 +199,14 @@ export function useInspectorState(
     if (data.fetchBypassed > 0 && !fetchBypassLoggedRef.current) {
       console.log(`[inspector] WebFetch domain blocklist bypass active`);
       fetchBypassLoggedRef.current = true;
+    }
+    if (data.fetchTimeouts > 0 && !fetchTimeoutLoggedRef.current) {
+      console.log(`[inspector] WebFetch API timeout triggered (non-streaming call exceeded 120s)`);
+      fetchTimeoutLoggedRef.current = true;
+    }
+    if (data.httpsTimeouts > 0 && !httpsTimeoutLoggedRef.current) {
+      console.log(`[inspector] HTTPS hard timeout triggered (external request exceeded 90s)`);
+      httpsTimeoutLoggedRef.current = true;
     }
   }, [updateState, updateMetadata]);
 

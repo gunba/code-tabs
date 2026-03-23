@@ -9,7 +9,7 @@ import {
   type PermissionMode,
   DEFAULT_SESSION_CONFIG,
 } from "../../types/session";
-import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning, IconReset } from "../Icons/Icons";
+import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning } from "../Icons/Icons";
 import "./SessionLauncher.css";
 
 // ── Option definitions ──────────────────────────────────────────────
@@ -534,7 +534,7 @@ export function SessionLauncher() {
               title="Reset to generated command"
               type="button"
             >
-              <IconReset size={14} />
+              ↻
             </button>
           </div>
         </div>

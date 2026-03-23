@@ -596,6 +596,7 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-window-state",
  "tauri-winrt-notification",
+ "tempfile",
  "tokio",
  "uuid",
  "windows-sys 0.59.0",

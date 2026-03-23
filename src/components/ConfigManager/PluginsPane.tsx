@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { PaneComponentProps } from "./ThreePaneEditor";
+import { formatTokenCount } from "../../lib/claude";
+import type { StatusMessage } from "../../lib/settingsSchema";
+
+// ── Types ────────────────────────────────────────────────────────────────
 
 interface McpServer {
   command: string;
@@ -9,6 +12,38 @@ interface McpServer {
 }
 
 type PluginsMap = Record<string, boolean>;
+
+interface InstalledPlugin {
+  id: string;
+  version?: string;
+  scope?: string;
+  enabled: boolean;
+  installPath?: string;
+  installedAt?: string;
+  lastUpdated?: string;
+  mcpServers?: Record<string, unknown>;
+}
+
+interface AvailablePlugin {
+  pluginId: string;
+  name: string;
+  description?: string;
+  marketplaceName?: string;
+  version?: string;
+  installCount?: number;
+}
+
+interface PluginListResult {
+  installed?: InstalledPlugin[];
+  available?: AvailablePlugin[];
+}
+
+interface PluginsTabProps {
+  projectDir: string;
+  onStatus: (msg: StatusMessage | null) => void;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
 
 /** Normalize enabledPlugins from either array or object format to Record<string, boolean>. */
 export function normalizePlugins(raw: unknown): PluginsMap {
@@ -30,154 +65,278 @@ export function normalizePlugins(raw: unknown): PluginsMap {
   return {};
 }
 
-export function PluginsPane({ scope, projectDir, onStatus }: PaneComponentProps) {
-  const [json, setJson] = useState<Record<string, unknown>>({});
-  const [saved, setSaved] = useState<string>("{}");
-  const [loading, setLoading] = useState(true);
-  const [newPlugin, setNewPlugin] = useState("");
+function formatInstallCount(n: number | undefined): string {
+  if (!n) return "";
+  return formatTokenCount(n);
+}
 
-  const load = useCallback(async () => {
+// ── Component ────────────────────────────────────────────────────────────
+
+export function PluginsTab({ projectDir: _projectDir, onStatus }: PluginsTabProps) {
+  const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
+  const [available, setAvailable] = useState<AvailablePlugin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [pendingOp, setPendingOp] = useState<string | null>(null); // plugin id being operated on
+  const [searchFilter, setSearchFilter] = useState("");
+  const [installScope, setInstallScope] = useState<"user" | "project">("user");
+  const [marketplaceOpen, setMarketplaceOpen] = useState(true);
+
+  // MCP Servers from settings.json (manual config, not CLI-managed)
+  const [mcpServers, setMcpServers] = useState<Record<string, McpServer>>({});
+  const [mcpDirty, setMcpDirty] = useState(false);
+
+  const loadPlugins = useCallback(async () => {
+    try {
+      const raw = await invoke<string>("plugin_list");
+      const result: PluginListResult = raw ? JSON.parse(raw) : {};
+      setInstalled(result.installed || []);
+      setAvailable(result.available || []);
+      setError(null);
+    } catch (err) {
+      const msg = String(err);
+      if (msg.includes("Failed to run") || msg.includes("plugin list failed")) {
+        setError("Plugin management requires a newer Claude CLI version.");
+      } else {
+        setError(msg);
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  const loadMcpServers = useCallback(async () => {
     try {
       const result = await invoke<string>("read_config_file", {
-        scope,
-        workingDir: scope === "user" ? "" : projectDir,
+        scope: "user",
+        workingDir: "",
         fileType: "settings",
       });
       const parsed = result ? JSON.parse(result) : {};
-      // Normalize enabledPlugins to object format on load
-      if (parsed.enabledPlugins) {
-        parsed.enabledPlugins = normalizePlugins(parsed.enabledPlugins);
-      }
-      setJson(parsed);
-      setSaved(JSON.stringify(parsed, null, 2));
+      setMcpServers((parsed.mcpServers as Record<string, McpServer>) || {});
     } catch {
-      setJson({});
-      setSaved("{}");
+      // Fine — no settings file
     }
-    setLoading(false);
-  }, [scope, projectDir]);
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadPlugins();
+    loadMcpServers();
+  }, [loadPlugins, loadMcpServers]);
 
-  const handleSave = useCallback(async () => {
+  const doPluginOp = useCallback(async (
+    opName: string,
+    pluginId: string,
+    op: () => Promise<string>,
+  ) => {
+    setPendingOp(pluginId);
     try {
-      // Re-read current settings to avoid clobbering SettingsPane edits
-      const workingDir = scope === "user" ? "" : projectDir;
+      await op();
+      onStatus({ text: `${opName} successful`, type: "success" });
+      setTimeout(() => onStatus(null), 2000);
+      await loadPlugins();
+    } catch (err) {
+      onStatus({ text: `${opName} failed: ${err}`, type: "error" });
+    }
+    setPendingOp(null);
+  }, [loadPlugins, onStatus]);
+
+  const handleInstall = useCallback((name: string) => {
+    doPluginOp("Install", name, () => invoke<string>("plugin_install", { name, scope: installScope }));
+  }, [doPluginOp, installScope]);
+
+  const handleUninstall = useCallback((name: string) => {
+    doPluginOp("Uninstall", name, () => invoke<string>("plugin_uninstall", { name }));
+  }, [doPluginOp]);
+
+  const handleEnable = useCallback((name: string) => {
+    doPluginOp("Enable", name, () => invoke<string>("plugin_enable", { name }));
+  }, [doPluginOp]);
+
+  const handleDisable = useCallback((name: string) => {
+    doPluginOp("Disable", name, () => invoke<string>("plugin_disable", { name }));
+  }, [doPluginOp]);
+
+  const removeMcpServer = useCallback(async (name: string) => {
+    const updated = { ...mcpServers };
+    delete updated[name];
+    setMcpServers(updated);
+    setMcpDirty(true);
+  }, [mcpServers]);
+
+  const saveMcpServers = useCallback(async () => {
+    try {
+      const workingDir = "";
       let current: Record<string, unknown> = {};
       try {
-        const raw = await invoke<string>("read_config_file", { scope, workingDir, fileType: "settings" });
+        const raw = await invoke<string>("read_config_file", { scope: "user", workingDir, fileType: "settings" });
         if (raw) current = JSON.parse(raw);
-      } catch { /* empty file is fine */ }
+      } catch { /* empty file */ }
 
-      // Merge only plugin keys into the fresh base
-      const merged = { ...current };
-      if (json.enabledPlugins && Object.keys(json.enabledPlugins as PluginsMap).length > 0) {
-        merged.enabledPlugins = json.enabledPlugins;
+      if (Object.keys(mcpServers).length > 0) {
+        current.mcpServers = mcpServers;
       } else {
-        delete merged.enabledPlugins;
+        delete current.mcpServers;
       }
-      if (json.mcpServers) merged.mcpServers = json.mcpServers;
-      else delete merged.mcpServers;
 
       await invoke("write_config_file", {
-        scope,
+        scope: "user",
         workingDir,
         fileType: "settings",
-        content: JSON.stringify(merged, null, 2),
+        content: JSON.stringify(current, null, 2),
       });
-      setJson(merged);
-      setSaved(JSON.stringify(merged, null, 2));
-      onStatus({ text: "Plugins saved", type: "success" });
+      setMcpDirty(false);
+      onStatus({ text: "MCP servers saved", type: "success" });
       setTimeout(() => onStatus(null), 2000);
     } catch (err) {
       onStatus({ text: `Save failed: ${err}`, type: "error" });
     }
-  }, [json, scope, projectDir, onStatus]);
+  }, [mcpServers, onStatus]);
 
-  const plugins = normalizePlugins(json.enabledPlugins);
-  const pluginEntries = Object.entries(plugins);
-  const mcpServers = (json.mcpServers as Record<string, McpServer> | undefined) || {};
-  const dirty = JSON.stringify(json, null, 2) !== saved;
+  // Filter marketplace plugins (exclude already-installed)
+  const installedIds = new Set(installed.map((p) => p.id));
+  const filteredAvailable = available.filter((p) => {
+    if (installedIds.has(p.pluginId)) return false;
+    if (!searchFilter) return true;
+    const q = searchFilter.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.pluginId.toLowerCase().includes(q) ||
+      (p.description || "").toLowerCase().includes(q)
+    );
+  });
 
-  const addPlugin = () => {
-    const trimmed = newPlugin.trim();
-    if (!trimmed || trimmed in plugins) return;
-    setJson((prev) => ({
-      ...prev,
-      enabledPlugins: { ...(prev.enabledPlugins as PluginsMap), [trimmed]: true },
-    }));
-    setNewPlugin("");
-  };
-
-  const togglePlugin = (name: string) => {
-    setJson((prev) => {
-      const current = prev.enabledPlugins as PluginsMap;
-      return { ...prev, enabledPlugins: { ...current, [name]: !current[name] } };
-    });
-  };
-
-  const removePlugin = (name: string) => {
-    setJson((prev) => {
-      const current = { ...(prev.enabledPlugins as PluginsMap) };
-      delete current[name];
-      const updated = { ...prev };
-      if (Object.keys(current).length > 0) updated.enabledPlugins = current;
-      else delete updated.enabledPlugins;
-      return updated;
-    });
-  };
-
-  const removeMcpServer = (name: string) => {
-    setJson((prev) => {
-      const updated = { ...prev };
-      const servers = { ...(updated.mcpServers as Record<string, McpServer> || {}) };
-      delete servers[name];
-      if (Object.keys(servers).length > 0) updated.mcpServers = servers;
-      else delete updated.mcpServers;
-      return updated;
-    });
-  };
-
-  if (loading) return <div className="pane-hint">Loading...</div>;
+  if (loading) {
+    return <div className="plugins-tab"><div className="pane-hint">Loading plugins...</div></div>;
+  }
 
   return (
-    <div className="plugins-pane">
-      {/* Enabled Plugins */}
-      <div className="plugins-section">
-        <div className="plugins-section-title">Enabled Plugins</div>
-        {pluginEntries.length > 0 ? (
-          <div className="plugins-tags">
-            {pluginEntries.map(([name, enabled]) => (
-              <span
-                key={name}
-                className={`plugins-tag${enabled ? "" : " plugins-tag-disabled"}`}
-                onClick={() => togglePlugin(name)}
-                title={enabled ? "Click to disable" : "Click to enable"}
-              >
-                {name}
-                <button
-                  className="plugins-tag-remove"
-                  onClick={(e) => { e.stopPropagation(); removePlugin(name); }}
-                >x</button>
-              </span>
-            ))}
-          </div>
-        ) : (
-          <div className="pane-hint">None</div>
-        )}
-        <div className="plugins-add-row">
-          <input
-            className="plugins-add-input"
-            value={newPlugin}
-            onChange={(e) => setNewPlugin(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") addPlugin(); }}
-            placeholder="plugin-name"
-          />
-          <button className="plugins-add-btn" onClick={addPlugin}>+</button>
-        </div>
-      </div>
+    <div className="plugins-tab">
+      {/* Error banner */}
+      {error && (
+        <div className="plugins-error">{error}</div>
+      )}
 
-      {/* MCP Servers */}
+      {/* Installed Plugins */}
+      {!error && (
+        <div className="plugins-section">
+          <div className="plugins-section-title">Installed Plugins</div>
+          {installed.length > 0 ? (
+            <div className="plugins-installed-list">
+              {installed.map((plugin) => {
+                const isPending = pendingOp === plugin.id;
+                return (
+                  <div key={plugin.id} className={`plugin-card${isPending ? " plugin-card-pending" : ""}`}>
+                    <div className="plugin-card-header">
+                      <div className="plugin-card-info">
+                        <span className="plugin-card-name">{plugin.id}</span>
+                        {plugin.version && <span className="plugin-card-version">v{plugin.version}</span>}
+                        {plugin.scope && (
+                          <span className={`plugin-scope-badge plugin-scope-${plugin.scope}`}>
+                            {plugin.scope}
+                          </span>
+                        )}
+                      </div>
+                      <div className="plugin-card-actions">
+                        <button
+                          className={`plugin-toggle-track${plugin.enabled ? " plugin-toggle-on" : ""}`}
+                          onClick={() => plugin.enabled ? handleDisable(plugin.id) : handleEnable(plugin.id)}
+                          disabled={!!pendingOp}
+                          title={plugin.enabled ? "Disable" : "Enable"}
+                        >
+                          <span className="plugin-toggle-thumb" />
+                        </button>
+                        <button
+                          className="hook-card-btn hook-card-btn-delete"
+                          onClick={() => handleUninstall(plugin.id)}
+                          disabled={!!pendingOp}
+                        >
+                          Del
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="pane-hint">No plugins installed</div>
+          )}
+        </div>
+      )}
+
+      {/* Marketplace */}
+      {!error && (
+        <div className="plugins-section">
+          <button
+            className="plugins-marketplace-toggle"
+            onClick={() => setMarketplaceOpen(!marketplaceOpen)}
+          >
+            <span className="plugins-marketplace-arrow">{marketplaceOpen ? "\u25BC" : "\u25B6"}</span>
+            Marketplace
+            {available.length > 0 && (
+              <span className="plugins-marketplace-count">{available.length} available</span>
+            )}
+          </button>
+
+          {marketplaceOpen && (
+            <>
+              <div className="plugins-marketplace-controls">
+                <input
+                  className="marketplace-search"
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder="Filter plugins..."
+                />
+                <select
+                  className="config-select"
+                  value={installScope}
+                  onChange={(e) => setInstallScope(e.target.value as "user" | "project")}
+                >
+                  <option value="user">User scope</option>
+                  <option value="project">Project scope</option>
+                </select>
+              </div>
+
+              {filteredAvailable.length > 0 ? (
+                <div className="marketplace-grid">
+                  {filteredAvailable.map((plugin) => {
+                    const isPending = pendingOp === plugin.pluginId;
+                    return (
+                      <div key={plugin.pluginId} className={`marketplace-card${isPending ? " plugin-card-pending" : ""}`}>
+                        <div className="marketplace-card-header">
+                          <span className="marketplace-card-name">{plugin.name || plugin.pluginId}</span>
+                          {plugin.installCount != null && plugin.installCount > 0 && (
+                            <span className="marketplace-card-installs">{formatInstallCount(plugin.installCount)} installs</span>
+                          )}
+                        </div>
+                        {plugin.description && (
+                          <div className="marketplace-card-desc">{plugin.description}</div>
+                        )}
+                        <div className="marketplace-card-footer">
+                          {plugin.version && <span className="plugin-card-version">v{plugin.version}</span>}
+                          <button
+                            className="plugin-install-btn"
+                            onClick={() => handleInstall(plugin.pluginId)}
+                            disabled={!!pendingOp}
+                          >
+                            Install
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="pane-hint">
+                  {searchFilter ? "No matching plugins" : "No additional plugins available"}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* MCP Servers (manual, from settings.json) */}
       <div className="plugins-section">
         <div className="plugins-section-title">MCP Servers</div>
         {Object.keys(mcpServers).length > 0 ? (
@@ -202,12 +361,11 @@ export function PluginsPane({ scope, projectDir, onStatus }: PaneComponentProps)
         ) : (
           <div className="pane-hint">None configured</div>
         )}
-      </div>
-
-      <div className="pane-footer">
-        <button className="pane-save-btn" onClick={handleSave} disabled={!dirty}>
-          {dirty ? "Save" : "Saved"}
-        </button>
+        {mcpDirty && (
+          <div className="pane-footer">
+            <button className="pane-save-btn" onClick={saveMcpServers}>Save MCP</button>
+          </div>
+        )}
       </div>
     </div>
   );

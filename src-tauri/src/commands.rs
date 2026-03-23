@@ -379,25 +379,185 @@ fn extract_user_text(parsed: &serde_json::Value) -> Option<String> {
     None
 }
 
+/// Extract full message text from a JSONL event (user or assistant), for content search.
+/// Unlike `extract_user_text`, this returns the complete text without truncation or filtering.
+fn extract_message_text(parsed: &serde_json::Value) -> Option<String> {
+    let msg_type = parsed["type"].as_str()?;
+    if msg_type != "user" && msg_type != "assistant" { return None; }
+    let content = &parsed["message"]["content"];
+
+    // User messages can be a plain string
+    if let Some(text) = content.as_str() {
+        if !text.is_empty() { return Some(text.to_string()); }
+    }
+    // Both user and assistant use text blocks in arrays
+    if let Some(arr) = content.as_array() {
+        let parts: Vec<&str> = arr.iter()
+            .filter(|b| b["type"].as_str() == Some("text"))
+            .filter_map(|b| b["text"].as_str())
+            .collect();
+        if !parts.is_empty() { return Some(parts.join(" ")); }
+    }
+    None
+}
+
+/// Search conversation content across all past sessions.
+/// Returns up to 50 matches with a snippet centered on the match.
+#[tauri::command]
+pub async fn search_session_content(query: String) -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || search_session_content_sync(&query))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+const MAX_CONTENT_SEARCH_FILE_SIZE: u64 = 20 * 1024 * 1024;
+const MAX_CONTENT_SEARCH_RESULTS: usize = 50;
+
+fn search_session_content_sync(query: &str) -> Result<Vec<serde_json::Value>, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let projects_dir = home.join(".claude").join("projects");
+
+    if !projects_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let query_lower = query.to_lowercase();
+
+    // Collect all .jsonl files with metadata, sorted by mtime descending
+    struct FileEntry {
+        path: std::path::PathBuf,
+        session_id: String,
+        modified: std::time::SystemTime,
+    }
+
+    let mut files: Vec<FileEntry> = Vec::new();
+
+    let project_dirs = std::fs::read_dir(&projects_dir)
+        .map_err(|e| format!("Failed to read projects dir: {}", e))?;
+
+    for entry in project_dirs.flatten() {
+        let path = entry.path();
+        if !path.is_dir() { continue; }
+
+        let dir_files = match std::fs::read_dir(&path) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+
+        for file in dir_files.flatten() {
+            let fpath = file.path();
+            if fpath.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                continue;
+            }
+
+            let metadata = match std::fs::metadata(&fpath) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+
+            let size = metadata.len();
+            if size > MAX_CONTENT_SEARCH_FILE_SIZE { continue; }
+
+            let session_id = fpath
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            if session_id.is_empty() { continue; }
+
+            files.push(FileEntry {
+                path: fpath,
+                session_id,
+                modified: metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
+            });
+        }
+    }
+
+    // Sort newest first — recent sessions are most relevant
+    files.sort_by(|a, b| b.modified.cmp(&a.modified));
+
+    let mut results: Vec<serde_json::Value> = Vec::new();
+
+    for file_entry in &files {
+        if results.len() >= MAX_CONTENT_SEARCH_RESULTS { break; }
+
+        let file_handle = match std::fs::File::open(&file_entry.path) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+
+        use std::io::BufRead;
+        let reader = std::io::BufReader::new(file_handle);
+
+        for line in reader.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+
+            let parsed = match serde_json::from_str::<serde_json::Value>(&line) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let text = match extract_message_text(&parsed) {
+                Some(t) => t,
+                None => continue,
+            };
+
+            let text_lower = text.to_lowercase();
+            if let Some(pos) = text_lower.find(&query_lower) {
+                // Build 200-char snippet centered on match.
+                // Byte offsets from text_lower.find() are valid for text too (lowercasing
+                // preserves byte length for ASCII; for non-ASCII, floor/ceil_char_boundary
+                // snaps to the nearest valid boundary in both strings).
+                let snippet_half = 100;
+                let start = pos.saturating_sub(snippet_half);
+                let start = text.floor_char_boundary(start);
+                let end = text.ceil_char_boundary((pos + query_lower.len() + snippet_half).min(text.len()));
+                let mut snippet = String::new();
+                if start > 0 { snippet.push_str("..."); }
+                snippet.push_str(&text[start..end]);
+                if end < text.len() { snippet.push_str("..."); }
+
+                results.push(serde_json::json!({
+                    "sessionId": file_entry.session_id,
+                    "snippet": snippet,
+                }));
+                break; // One match per session
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+/// Run a `claude` CLI subcommand and return trimmed stdout on success.
+/// Shared by check_cli_version, plugin_* commands, etc.
+fn run_claude_cli(args: &[&str], label: &str) -> Result<String, String> {
+    let mut cmd = std::process::Command::new("claude");
+    cmd.args(args);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output()
+        .map_err(|e| format!("Failed to run {}: {}", label, e))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(format!("{} failed: {}", label, if stderr.is_empty() { "unknown error".to_string() } else { stderr }))
+    }
+}
+
 /// Run `claude --version` — async to avoid blocking the WebView.
 #[tauri::command]
 pub async fn check_cli_version() -> Result<String, String> {
-    tokio::task::spawn_blocking(|| {
-        let mut cmd = std::process::Command::new("claude");
-        cmd.arg("--version");
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        }
-        let output = cmd.output()
-            .map_err(|e| format!("Failed to run claude --version: {}", e))?;
-        if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-        } else {
-            Err("claude --version failed".into())
-        }
-    }).await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(|| run_claude_cli(&["--version"], "claude --version"))
+        .await.map_err(|e| e.to_string())?
 }
 
 /// Run `claude --help` — async to avoid blocking the WebView.
@@ -459,44 +619,121 @@ pub fn write_ui_config(config_json: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to write ui-config.json: {}", e))
 }
 
-/// Read the Claude Code binary content (latest version).
-/// Shared by discover_builtin_commands and discover_settings_schema.
-fn read_claude_binary() -> Result<String, String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
-    let versions_dir = home.join(".local").join("share").join("claude").join("versions");
-    if !versions_dir.exists() {
-        return Err("No versions dir".into());
-    }
-
-    let mut versions: Vec<_> = std::fs::read_dir(&versions_dir)
-        .map_err(|e| e.to_string())?
-        .flatten()
-        .map(|e| e.file_name().to_string_lossy().to_string())
-        .collect();
-    versions.sort();
-
-    let binary_path = match versions.last() {
-        Some(v) => versions_dir.join(v),
-        None => return Err("No versions found".into()),
+/// Read the Claude Code binary content for pattern scanning.
+/// Resolution chain: direct CLI path → .cmd shim → sibling node_modules → legacy versions dir → npm root -g.
+fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
+    // Helper: read a file if it exists and is under 500MB, return lossy UTF-8
+    let read_if_exists = |p: &std::path::Path| -> Option<String> {
+        let meta = std::fs::metadata(p).ok()?;
+        if meta.len() > 500 * 1024 * 1024 { return None; }
+        let bytes = std::fs::read(p).ok()?;
+        Some(String::from_utf8_lossy(&bytes).to_string())
     };
 
-    match std::fs::read(&binary_path) {
-        Ok(bytes) => Ok(String::from_utf8_lossy(&bytes).to_string()),
-        Err(e) => Err(format!("Failed to read binary: {}", e)),
+    // Helper: validate content looks like a Claude binary (has command registration patterns)
+    let is_claude_content = |content: &str| -> bool {
+        content.contains(r#"name:""#) && content.contains(r#"",description:""#)
+    };
+
+    // 1. Direct CLI path
+    if let Some(path_str) = cli_path {
+        let path = std::path::Path::new(path_str);
+
+        // 2. Resolve .cmd shim — parse for quoted JS path
+        if path_str.to_lowercase().ends_with(".cmd") {
+            if let Ok(shim) = std::fs::read_to_string(path) {
+                // .cmd shims contain lines like: "C:\path\to\node.exe" "C:\path\to\cli.js" %*
+                for line in shim.lines() {
+                    // Find quoted paths ending in .js
+                    for segment in line.split('"') {
+                        if segment.ends_with(".js") {
+                            let js_path = std::path::Path::new(segment);
+                            if let Some(content) = read_if_exists(js_path) {
+                                if is_claude_content(&content) {
+                                    return Ok(content);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Direct read of the CLI path itself (standalone exe or JS entry)
+        if path.exists() {
+            if let Some(content) = read_if_exists(path) {
+                if is_claude_content(&content) {
+                    return Ok(content);
+                }
+            }
+        }
+
+        // 3. Sibling node_modules
+        if let Some(parent) = path.parent() {
+            let sibling = parent.join("node_modules")
+                .join("@anthropic-ai").join("claude-code").join("cli.js");
+            if let Some(content) = read_if_exists(&sibling) {
+                if is_claude_content(&content) {
+                    return Ok(content);
+                }
+            }
+        }
     }
+
+    // 4. Legacy versions dir (~/.local/share/claude/versions/<latest>)
+    if let Some(home) = dirs::home_dir() {
+        let versions_dir = home.join(".local").join("share").join("claude").join("versions");
+        if let Ok(entries) = std::fs::read_dir(&versions_dir) {
+            let mut versions: Vec<_> = entries.flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect();
+            versions.sort();
+            if let Some(v) = versions.last() {
+                let binary_path = versions_dir.join(v);
+                if let Some(content) = read_if_exists(&binary_path) {
+                    if is_claude_content(&content) {
+                        return Ok(content);
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. npm root -g fallback
+    #[cfg(target_os = "windows")]
+    use std::os::windows::process::CommandExt;
+    let mut npm_cmd = std::process::Command::new("npm");
+    npm_cmd.args(["root", "-g"]);
+    #[cfg(target_os = "windows")]
+    npm_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    if let Ok(output) = npm_cmd.output()
+    {
+        let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !root.is_empty() {
+            let npm_cli = std::path::Path::new(&root)
+                .join("@anthropic-ai").join("claude-code").join("cli.js");
+            if let Some(content) = read_if_exists(&npm_cli) {
+                if is_claude_content(&content) {
+                    return Ok(content);
+                }
+            }
+        }
+    }
+
+    Err("Could not locate Claude Code binary".into())
 }
 
 /// Scan the Claude Code binary for built-in slash commands.
 /// Extracts from the command registration pattern: name:"cmd",description:"..."
 #[tauri::command]
-pub async fn discover_builtin_commands() -> Result<Vec<serde_json::Value>, String> {
-    tokio::task::spawn_blocking(discover_builtin_commands_sync)
+pub async fn discover_builtin_commands(cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || discover_builtin_commands_sync(cli_path.as_deref()))
         .await
         .map_err(|e| e.to_string())?
 }
 
-fn discover_builtin_commands_sync() -> Result<Vec<serde_json::Value>, String> {
-    let content = match read_claude_binary() {
+fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_json::Value>, String> {
+    let content = match read_claude_binary(cli_path) {
         Ok(c) => c,
         Err(_) => return Ok(Vec::new()),
     };
@@ -533,14 +770,14 @@ fn discover_builtin_commands_sync() -> Result<Vec<serde_json::Value>, String> {
 /// Extracts Zod schema patterns: keyName:u.type().optional().describe("...")
 /// Returns discovered settings with key, type, description, choices.
 #[tauri::command]
-pub async fn discover_settings_schema() -> Result<Vec<serde_json::Value>, String> {
-    tokio::task::spawn_blocking(discover_settings_schema_sync)
+pub async fn discover_settings_schema(cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || discover_settings_schema_sync(cli_path.as_deref()))
         .await
         .map_err(|e| e.to_string())?
 }
 
-fn discover_settings_schema_sync() -> Result<Vec<serde_json::Value>, String> {
-    let content = match read_claude_binary() {
+fn discover_settings_schema_sync(cli_path: Option<&str>) -> Result<Vec<serde_json::Value>, String> {
+    let content = match read_claude_binary(cli_path) {
         Ok(c) => c,
         Err(_) => return Ok(Vec::new()),
     };
@@ -1633,4 +1870,438 @@ pub async fn send_notification(
 #[tauri::command]
 pub fn shell_open(path: String) -> Result<(), String> {
     open::that_detached(&path).map_err(|e| format!("shell_open failed for {path}: {e}"))
+}
+
+// ── Plugin management commands ───────────────────────────────────────────
+
+/// Run `claude plugin list --available --json` and return raw JSON output.
+#[tauri::command]
+pub async fn plugin_list() -> Result<String, String> {
+    tokio::task::spawn_blocking(|| run_claude_cli(&["plugin", "list", "--available", "--json"], "claude plugin list"))
+        .await.map_err(|e| e.to_string())?
+}
+
+/// Run `claude plugin install <name> --scope <scope>`.
+#[tauri::command]
+pub async fn plugin_install(name: String, scope: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || run_claude_cli(&["plugin", "install", &name, "--scope", &scope], "plugin install"))
+        .await.map_err(|e| e.to_string())?
+}
+
+/// Run `claude plugin uninstall <name>`.
+#[tauri::command]
+pub async fn plugin_uninstall(name: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || run_claude_cli(&["plugin", "uninstall", &name], "plugin uninstall"))
+        .await.map_err(|e| e.to_string())?
+}
+
+/// Run `claude plugin enable <name>`.
+#[tauri::command]
+pub async fn plugin_enable(name: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || run_claude_cli(&["plugin", "enable", &name], "plugin enable"))
+        .await.map_err(|e| e.to_string())?
+}
+
+/// Run `claude plugin disable <name>`.
+#[tauri::command]
+pub async fn plugin_disable(name: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || run_claude_cli(&["plugin", "disable", &name], "plugin disable"))
+        .await.map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A unique marker embedded in test content to prove the returned content
+    /// came from our temp file rather than a system-installed Claude binary.
+    const TEST_MARKER: &str = "TEST_MARKER_7f3a9c2e";
+
+    /// Valid content with an embedded marker for origin verification.
+    fn valid_content_with_marker() -> String {
+        format!(r#"stuff name:"review",description:"Review code" {} more stuff"#, TEST_MARKER)
+    }
+
+    // --- read_claude_binary tests ---
+
+    #[test]
+    fn read_binary_direct_js_path_valid_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+        let content = valid_content_with_marker();
+        std::fs::write(&js_path, &content).unwrap();
+
+        let result = read_claude_binary(Some(js_path.to_str().unwrap()));
+        assert!(result.is_ok(), "should read valid JS file directly");
+        let returned = result.unwrap();
+        // Verify the content came from our temp file, not a system fallback
+        assert!(returned.contains(TEST_MARKER), "should return content from the given path");
+    }
+
+    #[test]
+    fn read_binary_direct_path_invalid_content_skipped() {
+        // When the direct path has invalid content, read_claude_binary skips it
+        // and falls through to later resolution steps. The function may still
+        // succeed via system fallbacks (legacy versions dir, npm root -g).
+        // We verify the direct path's content is NOT returned.
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+        let invalid_with_marker = format!("console.log('{}');", TEST_MARKER);
+        std::fs::write(&js_path, &invalid_with_marker).unwrap();
+
+        let result = read_claude_binary(Some(js_path.to_str().unwrap()));
+        match result {
+            Ok(content) => {
+                // If fallback succeeded, verify it did NOT return our invalid content
+                assert!(!content.contains(TEST_MARKER),
+                    "invalid content should be skipped; fallback returned system binary");
+            }
+            Err(_) => {
+                // All fallbacks failed too — expected on machines without Claude
+            }
+        }
+    }
+
+    #[test]
+    fn read_binary_cmd_shim_resolves_to_js() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Create the JS file with valid content and marker
+        let js_path = dir.path().join("cli.js");
+        let content = valid_content_with_marker();
+        std::fs::write(&js_path, &content).unwrap();
+
+        // Create a .cmd shim pointing to it (mimics npm's Windows shims)
+        let cmd_path = dir.path().join("claude.cmd");
+        let shim_content = format!(
+            "@IF EXIST \"%~dp0\\node.exe\" (\r\n  \"%~dp0\\node.exe\"  \"{}\" %*\r\n) ELSE (\r\n  node  \"{}\" %*\r\n)",
+            js_path.display(),
+            js_path.display()
+        );
+        std::fs::write(&cmd_path, &shim_content).unwrap();
+
+        let result = read_claude_binary(Some(cmd_path.to_str().unwrap()));
+        assert!(result.is_ok(), "should resolve .cmd shim to JS file: {:?}", result.err());
+        assert!(result.unwrap().contains(TEST_MARKER),
+            "should return content from the .cmd shim's JS target");
+    }
+
+    #[test]
+    fn read_binary_cmd_shim_invalid_js_not_returned() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Create JS file with INVALID content bearing a marker
+        let js_path = dir.path().join("cli.js");
+        let invalid_with_marker = format!("console.log('{}');", TEST_MARKER);
+        std::fs::write(&js_path, &invalid_with_marker).unwrap();
+
+        // Create a .cmd shim pointing to it
+        let cmd_path = dir.path().join("claude.cmd");
+        let shim_content = format!(
+            "@\"%~dp0\\node.exe\" \"{}\" %*\r\n",
+            js_path.display()
+        );
+        std::fs::write(&cmd_path, &shim_content).unwrap();
+
+        let result = read_claude_binary(Some(cmd_path.to_str().unwrap()));
+        match result {
+            Ok(content) => {
+                assert!(!content.contains(TEST_MARKER),
+                    "invalid JS content via shim should not be returned");
+            }
+            Err(_) => {
+                // All fallbacks failed — expected behavior
+            }
+        }
+    }
+
+    #[test]
+    fn read_binary_cmd_shim_missing_js_not_returned() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // .cmd shim points to a JS file that does not exist
+        let cmd_path = dir.path().join("claude.cmd");
+        let missing_path = dir.path().join("nonexistent.js");
+        let shim_content = format!(
+            "@\"node\" \"{}\" %*\r\n",
+            missing_path.display()
+        );
+        std::fs::write(&cmd_path, &shim_content).unwrap();
+
+        let result = read_claude_binary(Some(cmd_path.to_str().unwrap()));
+        // The shim's target doesn't exist, so the .cmd resolution step fails.
+        // The function may still succeed via later fallbacks.
+        // We just verify it doesn't panic.
+        let _ = result;
+    }
+
+    #[test]
+    fn read_binary_sibling_node_modules_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Create the sibling node_modules structure with marked content
+        let sibling_dir = dir.path()
+            .join("node_modules")
+            .join("@anthropic-ai")
+            .join("claude-code");
+        std::fs::create_dir_all(&sibling_dir).unwrap();
+        let content = valid_content_with_marker();
+        std::fs::write(sibling_dir.join("cli.js"), &content).unwrap();
+
+        // Give an invalid direct path (non-.cmd file in same directory)
+        let fake_bin = dir.path().join("claude");
+        std::fs::write(&fake_bin, "not-valid-content").unwrap();
+
+        let result = read_claude_binary(Some(fake_bin.to_str().unwrap()));
+        assert!(result.is_ok(), "should fall through to sibling node_modules: {:?}", result.err());
+        assert!(result.unwrap().contains(TEST_MARKER),
+            "should return content from sibling node_modules");
+    }
+
+    #[test]
+    fn read_binary_none_path_does_not_panic() {
+        // With no cli_path, it tries legacy versions dir and npm root -g.
+        // Whether it succeeds depends on system state — just verify no panic.
+        let result = read_claude_binary(None);
+        let _ = result;
+    }
+
+    #[test]
+    fn read_binary_nonexistent_path_does_not_panic() {
+        // Nonexistent direct path causes fallthrough to later steps.
+        // Whether it ultimately succeeds depends on system state.
+        let result = read_claude_binary(Some("/nonexistent/path/to/claude"));
+        let _ = result;
+    }
+
+    // --- discover_builtin_commands_sync tests ---
+
+    #[test]
+    fn discover_builtin_extracts_commands() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        // Simulated minified binary content with command registrations
+        let content = concat!(
+            r#"something name:"review",description:"Review code changes" "#,
+            r#"something name:"init",description:"Initialize a new project" "#,
+            r#"something name:"compact",description:"Compact conversation history" "#,
+            r#"something name:"bug-report",description:"Report a bug""#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        assert!(result.is_ok());
+        let commands = result.unwrap();
+        assert!(commands.len() >= 4, "should extract at least 4 commands, got {}", commands.len());
+
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+        assert!(names.contains(&"/review"), "should contain /review");
+        assert!(names.contains(&"/init"), "should contain /init");
+        assert!(names.contains(&"/compact"), "should contain /compact");
+        assert!(names.contains(&"/bug-report"), "should contain /bug-report (hyphens allowed)");
+    }
+
+    #[test]
+    fn discover_builtin_deduplicates_commands() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = r#"name:"review",description:"First" name:"review",description:"Second""#;
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let review_count = commands.iter()
+            .filter(|c| c["cmd"].as_str() == Some("/review"))
+            .count();
+        assert_eq!(review_count, 1, "should deduplicate /review");
+    }
+
+    #[test]
+    fn discover_builtin_filters_noise() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"name:"review",description:"Review code" "#,
+            r#"name:"browser-tool",description:"Interact with DOM elements""#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(names.contains(&"/review"), "/review should be kept");
+        assert!(!names.contains(&"/browser-tool"), "DOM-related tool should be filtered");
+    }
+
+    #[test]
+    fn discover_builtin_cleans_escaped_newlines() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = r#"name:"review",description:"Line one\nLine two""#;
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let desc = commands[0]["desc"].as_str().unwrap();
+        assert!(!desc.contains("\\n"), "escaped newlines should be replaced with spaces");
+        assert!(desc.contains("Line one Line two"));
+    }
+
+    #[test]
+    fn discover_builtin_no_commands_in_content() {
+        // Content passes is_claude_content but has no extractable commands
+        // besides the validation pattern itself.
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+        // Minimal valid content — "ab" is too short to pass the >=4 char filter
+        let content = r#"name:"ab",description:"Too short""#;
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        assert!(result.is_ok());
+        // /ab is only 3 chars, filtered by cmd.len() >= 4
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+        assert!(!names.contains(&"/ab"), "/ab should be filtered (too short)");
+    }
+
+    // --- discover_settings_schema_sync tests ---
+
+    #[test]
+    fn discover_schema_extracts_boolean_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        // Must also pass is_claude_content validation
+        let content = concat!(
+            r#"name:"init",description:"Initialize" "#,
+            r#"verboseMode:u.boolean().optional().describe("Enable verbose logging")"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
+        assert!(result.is_ok());
+        let fields = result.unwrap();
+        let verbose = fields.iter().find(|f| f["key"] == "verboseMode");
+        assert!(verbose.is_some(), "should find verboseMode field");
+        let v = verbose.unwrap();
+        assert_eq!(v["type"], "boolean");
+        assert_eq!(v["optional"], true);
+        assert!(v["description"].as_str().unwrap().contains("verbose logging"));
+    }
+
+    #[test]
+    fn discover_schema_extracts_enum_with_choices() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"name:"init",description:"Initialize" "#,
+            r#"themeMode:u.enum(["light","dark","system"]).optional().describe("UI theme preference")"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
+        let fields = result.unwrap();
+        let theme = fields.iter().find(|f| f["key"] == "themeMode");
+        assert!(theme.is_some(), "should find themeMode field");
+        let t = theme.unwrap();
+        assert_eq!(t["type"], "enum");
+        let choices: Vec<&str> = t["choices"].as_array().unwrap()
+            .iter().filter_map(|v| v.as_str()).collect();
+        assert_eq!(choices, vec!["light", "dark", "system"]);
+    }
+
+    #[test]
+    fn discover_schema_skips_noise_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        // "type", "name", "value" are in the skip list
+        let content = concat!(
+            r#"name:"init",description:"Initialize" "#,
+            r#"type:u.string().describe("Should be skipped") "#,
+            r#"value:u.string().describe("Should be skipped") "#,
+            r#"customSetting:u.string().describe("Should be kept")"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
+        let fields = result.unwrap();
+        let keys: Vec<&str> = fields.iter()
+            .filter_map(|f| f["key"].as_str())
+            .collect();
+        assert!(!keys.contains(&"type"), "noise key 'type' should be skipped");
+        assert!(!keys.contains(&"value"), "noise key 'value' should be skipped");
+        assert!(keys.contains(&"customSetting"), "valid key should be kept");
+    }
+
+    #[test]
+    fn discover_schema_skips_fields_without_describe() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        // Separate the two fields with enough distance that noDescription's lookahead
+        // cannot reach hasDescription's .describe(). The lookahead window is 400 chars.
+        // Use non-alphanumeric padding so regex key boundaries work correctly.
+        let padding = ";".repeat(500);
+        let content = format!(
+            r#"name:"init",description:"Initialize" noDescription:u.boolean().optional() {}hasDescription:u.boolean().optional().describe("Has a description")"#,
+            padding
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
+        let fields = result.unwrap();
+        let keys: Vec<&str> = fields.iter()
+            .filter_map(|f| f["key"].as_str())
+            .collect();
+        assert!(!keys.contains(&"noDescription"), "field without .describe() should be skipped");
+        assert!(keys.contains(&"hasDescription"), "field with .describe() should be kept");
+    }
+
+    #[test]
+    fn discover_schema_no_schemas_in_content() {
+        // Content passes is_claude_content but has no Zod patterns
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+        let content = r#"name:"init",description:"Initialize" no zod here"#;
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty(), "no Zod patterns means no schema fields");
+    }
+
+    #[test]
+    fn discover_schema_sorts_alphabetically() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"name:"init",description:"Initialize" "#,
+            r#"zebraSetting:u.string().describe("Zebra setting") "#,
+            r#"alphaSetting:u.string().describe("Alpha setting") "#,
+            r#"middleSetting:u.string().describe("Middle setting")"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
+        let fields = result.unwrap();
+        let keys: Vec<&str> = fields.iter()
+            .filter_map(|f| f["key"].as_str())
+            .collect();
+        assert_eq!(keys, vec!["alphaSetting", "middleSetting", "zebraSetting"], "should be sorted alphabetically");
+    }
 }

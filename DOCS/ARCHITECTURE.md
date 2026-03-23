@@ -28,8 +28,7 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [SI-04] Permission detection via `permPending` notification flag (not PTY regex)
 - [SI-05] Idle detection via `idleDetected` notification flag (not PTY regex); sticky, cleared only by user event; pushed in real-time via `__ispPush`
   - Files: src/lib/inspectorHooks.ts:77
-- [SI-06] `choiceHint` detection: poll result computes choiceHint from numbered list items in last 200 chars of assistant text when stop=end_turn and no tools in turn; auto-clears on user input (resets stop to null)
-  - Files: src/lib/inspectorHooks.ts:374, src/hooks/useInspectorState.ts:69
+- [SI-06] `choiceHint` detection: terminal buffer tail scan (last 15 lines via `getSessionBufferTail`) detects numbered list items when stop=end_turn and no tools in turn; auto-clears on user input (resets stop to null)
 - [SI-07] Tool actions, user prompts, assistant text, subagent descriptions captured inline
 - [SI-08] State is NEVER inferred from timers or arbitrary delays — only from real signals
 - [SI-09] Subagent descriptions, state, tokens, actions, and messages all captured via inspector (no JSONL subagent watcher)
@@ -48,6 +47,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/lib/inspectorHooks.ts:298
 - [SI-17] Interrupt signal detection: Ctrl+C (\x03) and Escape (\x1b) on stdin emit a synthetic result event, set state to end_turn, clear permission/tool flags, and mark all subagents idle — enabling immediate idle detection without waiting for Claude's actual response.
   - Files: src/lib/inspectorHooks.ts:272
+- [SI-18] WebFetch timeout protection: two hooks prevent indefinite hangs. (1) globalThis.fetch wrapper applies 120s timeout to non-streaming Anthropic API calls (the summarization path via callSmallModel), distinguishing from streaming main conversation by checking for "stream":true in the request body. Wires caller's AbortSignal through a wrapper AbortController. (2) https.request hard timeout applies 90s wall clock to all non-bypassed external HTTPS requests (the axios HTTP GET path), via setTimeout + req.destroy. Counters fetchTimeouts and httpsTimeouts exposed in poll state.
+  - Files: src/lib/inspectorHooks.ts:339, src/lib/inspectorHooks.ts:357
 
 ## PTY Internals
 
@@ -73,13 +74,14 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [PT-13] Same-dimension gate: handleResize tracks last PTY dims in a ref; skips redundant pty.resize() calls when cols/rows unchanged. Prevents ConPTY reflow duplication from layout-triggered ResizeObserver events.
   - Files: src/components/Terminal/TerminalPanel.tsx:359
 - [PT-15] Background reader thread per session: OS thread reads ConPTY pipe (8 KiB buffer) into bounded sync_channel(64). Decouples blocking pipe reads from IPC, enabling timeout-based sync block coalescing in the read command.
-  - Files: src-tauri/pty-patch/src/lib.rs:90
+  - Files: src-tauri/pty-patch/src/lib.rs:119
 - [PT-16] DEC 2026 sync coalescing: read command filters output through OutputFilter then SyncBlockDetector. When mid-sync-block (BSU seen, ESU pending), reads continue with 50ms timeout to coalesce the complete synchronized update into a single IPC response. Eliminates scroll jumping from ConPTY-fragmented redraws.
-  - Files: src-tauri/pty-patch/src/lib.rs:155, src-tauri/pty-patch/src/sync_detector.rs:1
-- [PT-17] Output security filter: byte-level state machine strips OSC 52 (clipboard hijack), OSC 50 (font query), device queries (DA1/DA2/DSR/CPR/DECRQM/Kitty keyboard), DCS sequences, C1 controls (including cross-chunk PendingC2 state), ESC[3J (scrollback erase). ESC[2J stripped outside sync blocks after startup grace period of 2. OSC 2 titles sanitized. All hyperlinks pass through.
-  - Files: src-tauri/pty-patch/src/output_filter.rs:1
+  - Files: src-tauri/pty-patch/src/lib.rs:179, src-tauri/pty-patch/src/sync_detector.rs:1
+- [PT-17] Output security filter: byte-level state machine strips OSC 52 (clipboard hijack), OSC 50 (font query), DCS sequences, C1 controls (including cross-chunk PendingC2 state), ESC[3J (scrollback erase). ESC[2J stripped outside sync blocks after startup grace period of 2. Device queries (DA1/DA2/DSR/CPR/DECRQM/Kitty keyboard) pass through for ConPTY handshake. OSC 2 titles sanitized. All hyperlinks pass through.
 - [PT-18] Shutdown drain: drain_output command empties the channel (500ms deadline, 10ms intervals) before session destroy, preventing the background reader thread from blocking on a full channel.
-  - Files: src-tauri/pty-patch/src/lib.rs:312, src/lib/ptyProcess.ts:170
+  - Files: src-tauri/pty-patch/src/lib.rs:340, src/lib/ptyProcess.ts:170
+- [PT-19] Sync block re-wrapping: completed sync blocks are re-wrapped with BSU/ESU before sending to xterm.js. Full-redraw blocks (`is_full_redraw: true`) replace ESC[2J (pushes viewport to scrollback) with ESC[H ESC[J (cursor home + erase below, no scrollback push). `strip_clear_screen_into` uses memchr::memmem to efficiently remove all ESC[2J occurrences.
+  - Files: src-tauri/pty-patch/src/lib.rs:25, src-tauri/pty-patch/src/lib.rs:40
 
 ## Persistence
 
@@ -129,7 +131,7 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [IN-08] SubagentInspector tool block collapse: MessageBlock uses local useState for collapsed state; getToolPreview extracts first non-empty line (120 char cap). Parent computes lastToolIndex via reduce; only the last tool message auto-expands when subagent is active (not dead/idle). React key={i} ensures stable mounting.
   - Files: src/components/SubagentInspector/SubagentInspector.tsx:12, src/components/SubagentInspector/SubagentInspector.tsx:78
 - [IN-09] choiceHint detection uses terminal buffer tail (last 15 lines from xterm.js) to find active Ink selectors via "> 1." + "2." pattern, replacing the previous lastText regex approach. getBufferTail reads only the last N lines for efficiency.
-  - Files: src/hooks/useInspectorState.ts:142, src/lib/terminalRegistry.ts:20, src/hooks/useTerminal.ts:344
+  - Files: src/hooks/useInspectorState.ts:126, src/lib/terminalRegistry.ts:30, src/hooks/useTerminal.ts:349
 
 ## Background Buffering
 
@@ -149,15 +151,21 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [RC-09] `discover_builtin_commands` / `discover_plugin_commands` — Slash command discovery
 - [RC-10] `discover_hooks` / `save_hooks` — Hook configuration
 - [RC-11] register_active_pid / unregister_active_pid -- frontend registers OS PIDs of PTY children; RunEvent::Exit handler iterates ActivePids and calls kill_process_tree_sync for each
-  - Files: src-tauri/src/commands.rs:1133, src-tauri/src/lib.rs:115
+  - Files: src-tauri/src/commands.rs:1370, src-tauri/src/lib.rs:176
 - [RC-12] Config files read/write: read_config_file and write_config_file handle settings JSON, CLAUDE.md (3 scopes), and agent files (3 scopes: user=~/.claude/agents/, project={wd}/.claude/agents/, local={wd}/.claude/local/agents/). list_agents takes scope param. Parent dirs auto-created on write.
-  - Files: src-tauri/src/commands.rs:1501, src-tauri/src/commands.rs:1512
+  - Files: src-tauri/src/commands.rs:1758, src-tauri/src/commands.rs:1769
 - [RC-13] kill_orphan_sessions: takes Vec<String> session IDs, finds processes by command line match (WMIC on Windows, pgrep on Unix), kills all without ancestry check (safe at startup since no live sessions exist yet). Returns count of killed processes
-  - Files: src-tauri/src/commands.rs:1400, src/store/sessions.ts:90
+  - Files: src-tauri/src/commands.rs:1637, src/store/sessions.ts:90
 - [RC-14] send_notification: Custom WinRT toast command bypassing Tauri notification plugin. Uses tauri-winrt-notification Toast with on_activated callback that emits notification-clicked event to frontend. Dev mode uses PowerShell app ID, production uses bundle identifier. spawn_blocking + CREATE_NO_WINDOW compliant.
-  - Files: src-tauri/src/commands.rs:1599, src/hooks/useNotifications.ts:44
+  - Files: src-tauri/src/commands.rs:1836, src/hooks/useNotifications.ts:44
 - [RC-15] drain_output -- drain channel before session destroy (spawn_blocking, 500ms deadline)
-  - Files: src-tauri/pty-patch/src/lib.rs:312
+  - Files: src-tauri/pty-patch/src/lib.rs:340
+- [RC-16] read_claude_binary(cli_path) resolves Claude Code binary through 5-step chain: .cmd shim parse -> direct CLI path -> sibling node_modules -> legacy versions dir -> npm root -g. Enables slash command/settings discovery on standalone installs.
+  - Files: src-tauri/src/commands.rs:624
+- [RC-17] search_session_content: async Rust command scanning JSONL files for substring matches. Walks ~/.claude/projects/, skips files >20MB, stops at 50 results, returns sessionId + 200-char snippet. Uses extract_message_text helper for full text extraction from user/assistant events.
+  - Files: src-tauri/src/commands.rs:407, src-tauri/src/lib.rs:137
+- [RC-18] Plugin management IPC: plugin_list (claude plugin list --available --json), plugin_install (--scope), plugin_uninstall, plugin_enable, plugin_disable. All async with spawn_blocking + CREATE_NO_WINDOW (via run_claude_cli helper). Raw JSON passthrough for plugin_list; string result for mutations.
+  - Files: src-tauri/src/commands.rs:1879, src-tauri/src/lib.rs:167
 
 ## Config Manager
 

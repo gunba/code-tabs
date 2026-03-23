@@ -85,6 +85,10 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       if (ev.ctrlKey && ev.key === "e" && ev.type === "keydown") {
         return false;
       }
+      // Ctrl+Shift+X: block from PTY — handled by App.tsx (clear all input)
+      if (ev.ctrlKey && ev.shiftKey && ev.key === "X" && ev.type === "keydown") {
+        return false;
+      }
       return true; // Let it through
     });
 

@@ -6,7 +6,7 @@ import { ThreePaneEditor } from "./ThreePaneEditor";
 import { SettingsTab } from "./SettingsTab";
 import { MarkdownPane } from "./MarkdownPane";
 import { HooksPane } from "./HooksPane";
-import { PluginsPane } from "./PluginsPane";
+import { PluginsTab } from "./PluginsPane";
 import { AgentEditor } from "./AgentEditor";
 import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconClose } from "../Icons/Icons";
 import type { StatusMessage } from "../../lib/settingsSchema";
@@ -108,7 +108,7 @@ export function ConfigManager() {
           <ThreePaneEditor component={HooksPane} projectDir={projectDir} onStatus={setStatusMsg} tabId="hooks" />
         )}
         {tab === "plugins" && (
-          <ThreePaneEditor component={PluginsPane} projectDir={projectDir} onStatus={setStatusMsg} tabId="plugins" />
+          <PluginsTab projectDir={projectDir} onStatus={setStatusMsg} />
         )}
         {tab === "agents" && (
           <ThreePaneEditor component={AgentEditor} projectDir={projectDir} onStatus={setStatusMsg} tabId="agents" />

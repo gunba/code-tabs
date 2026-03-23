@@ -101,6 +101,11 @@ export interface PastSession {
   model: string;
 }
 
+export interface ContentSearchMatch {
+  sessionId: string;
+  snippet: string;
+}
+
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   workingDir: "",
   model: null,

@@ -31,6 +31,7 @@
     "CM-23",
     "CM-24",
     "CM-25",
+    "CM-26",
     "DP-01",
     "DP-02",
     "DP-03",
@@ -95,6 +96,7 @@
     "SR-04",
     "SR-05",
     "SR-06",
+    "SR-07",
     "TB-01",
     "TB-02",
     "TB-03",
@@ -122,6 +124,7 @@
     "TB-25",
     "TB-26",
     "TB-27",
+    "TB-28",
     "TR-01",
     "TR-02",
     "TR-03",
@@ -134,6 +137,8 @@
     "TR-10",
     "TR-11",
     "TR-12",
+    "TR-13",
+    "TR-14",
     "WN-01",
     "WN-02",
     "WN-03"
@@ -441,8 +446,8 @@
     },
     {
       "tag": "SL-07",
-      "status": "drift",
-      "note": "settings.ts cacheSessionConfig at line 197 (was 194). Drift +3"
+      "status": "pass",
+      "note": "FIXED: Entry now lists all 16 cached fields and removes runMode. settings.ts:199 cacheSessionConfig confirmed with model, permissionMode, dangerouslySkipPermissions, effort, agent, maxBudget, verbose, debug, projectDir, extraFlags, systemPrompt, appendSystemPrompt, allowedTools, disallowedTools, additionalDirs, mcpConfig"
     },
     {
       "tag": "SL-08",
@@ -492,32 +497,32 @@
     {
       "tag": "CB-01",
       "status": "pass",
-      "note": "CommandBar sorts by usage frequency then alphabetically via sortedCommands"
+      "note": "CommandBar.tsx:44-50 sortedCommands: sort by count desc, then a.cmd.localeCompare(b.cmd). Confirmed"
     },
     {
       "tag": "CB-02",
       "status": "pass",
-      "note": "4-tier heat gradient based on usage relative to most-used command"
+      "note": "claude.ts:118-148 computeHeatLevel(0-3) + getHeatStyle. Level 0=default, 1=30% accent, 2=65% accent, 3=full accent+bg. CommandBar.tsx:101-106 applies heat styles. Confirmed"
     },
     {
       "tag": "CB-03",
-      "status": "pass",
-      "note": "settings.ts:180 scan_command_usage invoke; commands.rs:1063 scans up to 200 JSONL files"
+      "status": "drift",
+      "note": "settings.ts:181 bootstrapCommandUsage invokes scan_command_usage (+1). commands.rs:1300 scan_command_usage (was 1063, drift +237). files.truncate(200) at :1333. Called from useCommandDiscovery.ts:92. Confirmed"
     },
     {
       "tag": "CB-04",
       "status": "pass",
-      "note": "CommandBar pill click types command without sending; records usage"
+      "note": "FIXED: Removed '(records usage)' from entry. Normal click calls typeCommand (CommandBar.tsx:66) which writes without \\r and without recording. Entry now accurately says 'types without sending'. Confirmed"
     },
     {
       "tag": "CB-05",
       "status": "pass",
-      "note": "Ctrl+Click sends immediately via sendCommand"
+      "note": "CommandBar.tsx:62-64 e.ctrlKey branch calls sendCommand. sendCommand at :24-31 writes command+\\r, records usage, adds to history. Confirmed"
     },
     {
       "tag": "CB-07",
       "status": "pass",
-      "note": "Ctrl held shows blue border on pills via .ctrl-held styling; heat gradient suppressed"
+      "note": "CommandBar.tsx:106 ctrlHeld ? undefined : getHeatStyle(heat) suppresses heat gradient. Title text changes to show Ctrl+Click hint. Confirmed"
     },
     {
       "tag": "CB-09",
@@ -597,7 +602,7 @@
     {
       "tag": "CM-05",
       "status": "pass",
-      "note": "ConfigManager.tsx:102-114 all five tabs use ThreePaneEditor. Line matches"
+      "note": "ConfigManager.tsx:101-115. claudemd/hooks/agents use ThreePaneEditor. plugins uses PluginsTab (single-pane). settings uses SettingsTab (unified ref panel). Lines match"
     },
     {
       "tag": "CM-06",
@@ -607,7 +612,7 @@
     {
       "tag": "CM-07",
       "status": "pass",
-      "note": "AgentEditor.tsx:6 function def. ConfigManager.css:701 .config-agent-item.active styling. Both match"
+      "note": "AgentEditor.tsx:6 function def. ConfigManager.css:701 .config-agent-item.active styling. Agent file list, markdown editor, dashed + new agent pill, duplicate validation, Ctrl+S dispatch all confirmed in code"
     },
     {
       "tag": "CM-08",
@@ -637,7 +642,7 @@
     {
       "tag": "CM-13",
       "status": "pass",
-      "note": "SettingsPane.tsx:15 highlightJson. ConfigManager.css:858 .sh-container with position:absolute;inset:0. Keys=accent(clay), strings=accent-secondary(blue), numbers/bools=accent-tertiary(purple) at CSS:891-894. Both match"
+      "note": "FIXED line refs. SettingsPane.tsx:15 highlightJson (match). ConfigManager.css:1050 .sh-container. position:absolute;inset:0 at :1058-1059 and :1078-1079. Keys=accent(clay) :1083, strings=accent-secondary(blue) :1084, numbers/bools=accent-tertiary(purple) :1085-1086. Scroll sync at SettingsPane.tsx:285. All confirmed"
     },
     {
       "tag": "CM-14",
@@ -652,7 +657,7 @@
     {
       "tag": "CM-16",
       "status": "pass",
-      "note": "PluginsPane.tsx:14 normalizePlugins handles array-to-Record conversion. ConfigManager.css:548 .plugins-tag styling. Both match"
+      "note": "PluginsPane.tsx:49 normalizePlugins export. :75 PluginsTab component. CLI-driven: 5 IPC commands (lib.rs:167-171). Toggle+uninstall cards, marketplace search+scope, 2-column grid (CSS:734-736), formatTokenCount (via claude.ts), graceful fallback for older CLI (:98-99), MCP servers (:340-369). ConfigManager.css:517 .plugins-tab. All confirmed"
     },
     {
       "tag": "CM-17",
@@ -682,12 +687,12 @@
     {
       "tag": "CM-24",
       "status": "pass",
-      "note": "SettingsPane.tsx:83 SettingsReference function. ConfigManager.css:898 .sr-panel. Both match"
+      "note": "FIXED: Removed unimplemented scope dots claim. Entry now accurately describes: full-width panel (SettingsTab.tsx:102 UnifiedSettingsReference), alphabetical sort (:133), 3-column CSS grid (.sr-body-wide CSS:1301-1304), type badges (CSS:1230-1235 boolean=blue, string=green, number=purple, enum=purple, array=yellow, object=clay), search/filter (:113), click-to-insert (:175), 2-line clamp (CSS:1248), collapse to localStorage (:115). All confirmed"
     },
     {
       "tag": "CM-25",
-      "status": "drift",
-      "note": "SettingsPane.tsx unknownKeys/typeMismatches at line 208-209 (was 203). settingsSchema.ts:295 getTypeMismatches (match). Drift +5 in SettingsPane"
+      "status": "pass",
+      "note": "FIXED line ref. SettingsPane.tsx:297 validation footer rendering. :210-227 useMemo computes unknownKeys/typeMismatches. :338 shows 'Valid' when no errors. settingsSchema.ts:295 getTypeMismatches, :325 getUnknownKeys. All confirmed"
     },
     {
       "tag": "DP-01",
@@ -823,83 +828,733 @@
       "tag": "TR-13",
       "status": "pass",
       "note": "TerminalPanel.tsx:183 prevClaudeSessionIdRef. useEffect at 184-195 watches claudeSessionId, calls terminal.clear() on change from non-null prev. Signal-based, no input parsing."
+    },
+    {
+      "tag": "SR-07",
+      "status": "pass",
+      "note": "FIXED line refs. ResumePicker.tsx:121 debounced search. commands.rs:407 search_session_content. 400ms debounce, 3-char min, counter-based stale discard, blue left border all confirmed"
+    },
+    {
+      "tag": "TB-28",
+      "status": "pass",
+      "note": "FIXED line ref. useInspectorState.ts:126-130 detects Ink selector via terminal buffer tail scanning for '> 1.' + '2.' pattern. selectorActive assigned at :130, fed to data.choiceHint. Entry now references :126. Confirmed"
+    },
+    {
+      "tag": "CM-26",
+      "status": "pass",
+      "note": "DUPLICATE of CM-16. PluginsPane.tsx:75 PluginsTab. CLI-driven: 5 IPC commands (lib.rs:167-171). Toggle+uninstall cards, marketplace search+scope, 2-column grid (CSS:734-736), formatTokenCount, graceful fallback (PluginsPane.tsx:98-99), MCP section. All confirmed"
+    },
+    {
+      "tag": "CM-27",
+      "status": "pass",
+      "note": "DUPLICATE of CM-26 and CM-16. Exact same text. Should be deduplicated in FEATURES.md"
     }
   ],
   "citations": {
     "TB-23": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "DS-09": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "TR-07": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "TR-08": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "TR-10": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "TR-11": {
       "up": 1,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "TR-12": {
       "up": 3,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "SL-07": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 5
     },
     "CM-23": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "CM-25": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 4
     },
     "KB-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "TR-09": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 20
     },
     "TB-24": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 14
     },
     "CM-05": {
-      "up": 0,
+      "up": 3,
       "down": 0,
-      "seen": 1
+      "seen": 8
     },
     "CM-24": {
+      "up": 1,
+      "down": 0,
+      "seen": 4
+    },
+    "KB-07": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 10
+    },
+    "TR-14": {
+      "up": 1,
+      "down": 0,
+      "seen": 9
+    },
+    "CM-12": {
+      "up": 2,
+      "down": 0,
+      "seen": 8
+    },
+    "CM-16": {
+      "up": 3,
+      "down": 0,
+      "seen": 8
+    },
+    "CM-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CB-01": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
+    },
+    "CB-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CB-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CB-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CB-05": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
+    },
+    "CB-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CB-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-01": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-11": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-13": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-14": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-15": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-17": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-18": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-20": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-22": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "CM-26": {
+      "up": 1,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-11": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DP-12": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DS-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DS-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DS-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DS-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DS-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DS-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DS-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "DS-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "HM-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "KB-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "KB-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "KB-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "KB-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "KB-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "KB-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "KB-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "KB-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "MO-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-09": {
+      "up": 1,
+      "down": 0,
+      "seen": 4
+    },
+    "SL-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-11": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-12": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-13": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-14": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-15": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SL-16": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SR-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SR-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SR-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SR-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SR-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SR-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "SR-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-11": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-12": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-13": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-14": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-15": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-16": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-17": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-18": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-19": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-20": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-21": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-22": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-25": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-26": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-27": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TB-28": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TR-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TR-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TR-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TR-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TR-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TR-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "TR-13": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "WN-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "WN-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
+    },
+    "WN-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 5
     }
   },
   "metadata": {
@@ -959,9 +1614,9 @@
     },
     "SL-07": {
       "files": [
-        "src/store/settings.ts:197"
+        "src/store/settings.ts:199"
       ],
-      "verified": "2026-03-22",
+      "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
     },
     "CM-23": {
@@ -974,10 +1629,10 @@
     },
     "CM-25": {
       "files": [
-        "src/components/ConfigManager/SettingsPane.tsx:282",
+        "src/components/ConfigManager/SettingsPane.tsx:297",
         "src/lib/settingsSchema.ts:295"
       ],
-      "verified": "2026-03-22",
+      "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
     },
     "KB-03": {
@@ -998,18 +1653,76 @@
     "CM-05": {
       "files": [
         "src/components/ConfigManager/ConfigManager.tsx:102",
-        "src/components/ConfigManager/SettingsTab.tsx:1"
+        "src/components/ConfigManager/SettingsTab.tsx:1",
+        "src/components/ConfigManager/PluginsPane.tsx:75"
       ],
-      "verified": "2026-03-22",
+      "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
     },
     "CM-24": {
       "files": [
-        "src/components/ConfigManager/SettingsTab.tsx:112",
-        "src/components/ConfigManager/ConfigManager.css:1101"
+        "src/components/ConfigManager/SettingsTab.tsx:102",
+        "src/components/ConfigManager/ConfigManager.css:1293"
       ],
-      "verified": "2026-03-22",
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "TR-14": {
+      "files": [
+        "src-tauri/pty-patch/src/lib.rs:40"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "CM-12": {
+      "files": [
+        "src/components/ConfigManager/ThreePaneEditor.tsx:1",
+        "src/components/ConfigManager/ConfigManager.css:129"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "CM-16": {
+      "files": [
+        "src/components/ConfigManager/PluginsPane.tsx:75",
+        "src/components/ConfigManager/ConfigManager.css:517"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "CM-03": {
+      "files": [
+        "src/lib/settingsSchema.ts:223",
+        "src-tauri/src/commands.rs:890"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "CM-13": {
+      "files": [
+        "src/components/ConfigManager/SettingsPane.tsx:15",
+        "src/components/ConfigManager/ConfigManager.css:1050"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "TB-28": {
+      "files": [
+        "src/hooks/useInspectorState.ts:126"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "SR-07": {
+      "files": [
+        "src/components/ResumePicker/ResumePicker.tsx:121",
+        "src-tauri/src/commands.rs:407"
+      ],
+      "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
     }
-  }
+  },
+  "unchecked": [],
+  "cycle": 1,
+  "last_run": "2026-03-23T09:49:33.952981+00:00"
 }

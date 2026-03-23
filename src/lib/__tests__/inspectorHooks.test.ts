@@ -590,7 +590,7 @@ describe("deriveStateFromPoll", () => {
     firstMsg: null, lastText: null, userPrompt: null,
     permPending: false, idleDetected: false, choiceHint: false,
     toolAction: null,
-    inputBuf: "", inputTs: 0, fetchBypassed: 0,
+    inputBuf: "", inputTs: 0, fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
     subs: [] as Array<{ sid: string; desc: string; st: string; tok: number; act: string | null;
       msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number }>,
   };
@@ -1896,7 +1896,7 @@ describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
       choiceHint: false,
       inputBuf: state.inputBuf as string,
       inputTs: state.inputTs as number,
-      fetchBypassed: 0,
+      fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
       subs: [],
     };
 
@@ -1936,11 +1936,572 @@ describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
       choiceHint: false,
       inputBuf: state.inputBuf as string,
       inputTs: state.inputTs as number,
-      fetchBypassed: 0,
+      fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
       subs: [],
     };
 
     const derived = deriveStateFromPoll(pollData, "idle");
     expect(derived).toBe("thinking");
+  });
+});
+
+// ── globalThis.fetch wrapper (WebFetch timeout) ─────────────────────
+
+describe("INSTALL_HOOK globalThis.fetch wrapper", () => {
+  let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
+  let savedFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
+    savedFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
+    globalThis.fetch = savedFetch;
+    cleanupGlobalHook();
+  });
+
+  function installAndGetState(): Record<string, unknown> {
+    const g = globalThis as unknown as Record<string, unknown>;
+    cleanupGlobalHook();
+    const fn = new Function(`return ${INSTALL_HOOK}`);
+    fn();
+    return g.__inspectorState as Record<string, unknown>;
+  }
+
+  it("passes through non-Anthropic URLs without modification", async () => {
+    let capturedInit: RequestInit | undefined;
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response("ok");
+    };
+    installAndGetState();
+
+    await globalThis.fetch("https://example.com/api", { method: "POST", body: '{"data":true}' });
+    // Non-Anthropic URL should pass through directly (no signal override)
+    expect(capturedInit?.signal).toBeUndefined();
+  });
+
+  it("passes through streaming Anthropic calls without modification", async () => {
+    let capturedInit: RequestInit | undefined;
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response("ok");
+    };
+    installAndGetState();
+
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","stream":true,"messages":[]}',
+    });
+    // Streaming calls pass through — no AbortController signal injected
+    expect(capturedInit?.signal).toBeUndefined();
+  });
+
+  it("passes through streaming calls with space in stream field", async () => {
+    let capturedInit: RequestInit | undefined;
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response("ok");
+    };
+    installAndGetState();
+
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","stream": true,"messages":[]}',
+    });
+    expect(capturedInit?.signal).toBeUndefined();
+  });
+
+  it("wraps non-streaming Anthropic calls with AbortController signal", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Response("ok");
+    };
+    installAndGetState();
+
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","stream":false,"messages":[]}',
+    });
+    // Non-streaming call should have an AbortController signal injected
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal!.aborted).toBe(false);
+  });
+
+  it("clears timeout timer on successful response", async () => {
+    globalThis.fetch = async () => new Response("ok");
+    installAndGetState();
+
+    // This should resolve without leaving a dangling timer
+    const resp = await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","messages":[]}',
+    });
+    expect(resp).toBeInstanceOf(Response);
+  });
+
+  it("clears timeout timer on fetch rejection", async () => {
+    globalThis.fetch = async () => { throw new Error("network error"); };
+    installAndGetState();
+
+    await expect(
+      globalThis.fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        body: '{"model":"claude-opus-4-6","messages":[]}',
+      })
+    ).rejects.toThrow("network error");
+  });
+
+  it("forwards original signal abort to the new AbortController", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedSignal = init?.signal ?? undefined;
+      return new Response("ok");
+    };
+    const origAc = new AbortController();
+    installAndGetState();
+
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","messages":[]}',
+      signal: origAc.signal,
+    });
+
+    // The wrapped signal is NOT the original one — it's a new AbortController's signal
+    expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    expect(capturedSignal).not.toBe(origAc.signal);
+  });
+
+  it("passes through immediately when original signal is already aborted", async () => {
+    let callCount = 0;
+    globalThis.fetch = async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      callCount++;
+      return new Response("ok");
+    };
+    const origAc = new AbortController();
+    origAc.abort("pre-aborted");
+    installAndGetState();
+
+    // When signal is already aborted, it should call origFetch directly
+    // (passing original arguments, not creating a new AbortController)
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","messages":[]}',
+      signal: origAc.signal,
+    });
+    expect(callCount).toBe(1);
+  });
+
+  it("copies all init properties except signal to new init object", async () => {
+    let capturedInit: Record<string, unknown> | undefined;
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedInit = init as unknown as Record<string, unknown>;
+      return new Response("ok");
+    };
+    installAndGetState();
+
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","messages":[]}',
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(capturedInit?.method).toBe("POST");
+    expect(capturedInit?.body).toBe('{"model":"claude-opus-4-6","messages":[]}');
+    expect(capturedInit?.headers).toEqual({ "Content-Type": "application/json" });
+    // Signal should be from new AbortController, not undefined
+    expect(capturedInit?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("removes abort listener from original signal on success", async () => {
+    const origAc = new AbortController();
+    const listenerCounts = { add: 0, remove: 0 };
+    const origAdd = origAc.signal.addEventListener.bind(origAc.signal);
+    const origRemove = origAc.signal.removeEventListener.bind(origAc.signal);
+    origAc.signal.addEventListener = (...args: Parameters<typeof origAc.signal.addEventListener>) => {
+      listenerCounts.add++;
+      return origAdd(...args);
+    };
+    origAc.signal.removeEventListener = (...args: Parameters<typeof origAc.signal.removeEventListener>) => {
+      listenerCounts.remove++;
+      return origRemove(...args);
+    };
+
+    globalThis.fetch = async () => new Response("ok");
+    installAndGetState();
+
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","messages":[]}',
+      signal: origAc.signal,
+    });
+
+    expect(listenerCounts.add).toBe(1);
+    expect(listenerCounts.remove).toBe(1);
+  });
+
+  it("removes abort listener from original signal on rejection", async () => {
+    const origAc = new AbortController();
+    const listenerCounts = { add: 0, remove: 0 };
+    const origAdd = origAc.signal.addEventListener.bind(origAc.signal);
+    const origRemove = origAc.signal.removeEventListener.bind(origAc.signal);
+    origAc.signal.addEventListener = (...args: Parameters<typeof origAc.signal.addEventListener>) => {
+      listenerCounts.add++;
+      return origAdd(...args);
+    };
+    origAc.signal.removeEventListener = (...args: Parameters<typeof origAc.signal.removeEventListener>) => {
+      listenerCounts.remove++;
+      return origRemove(...args);
+    };
+
+    globalThis.fetch = async () => { throw new Error("fail"); };
+    installAndGetState();
+
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","messages":[]}',
+      signal: origAc.signal,
+    }).catch(() => {});
+
+    expect(listenerCounts.add).toBe(1);
+    expect(listenerCounts.remove).toBe(1);
+  });
+
+  it("increments fetchTimeouts counter on timeout abort", async () => {
+    // Use fake timers for deterministic timeout testing
+    const { vi } = await import("vitest");
+    vi.useFakeTimers();
+    try {
+      let capturedSignal: AbortSignal | undefined;
+      globalThis.fetch = (_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedSignal = init?.signal ?? undefined;
+        // Return a promise that never resolves (simulating a hung request)
+        return new Promise<Response>(() => {});
+      };
+      const state = installAndGetState();
+      expect(state.fetchTimeouts).toBeUndefined();
+
+      // Start a non-streaming Anthropic call (will hang forever)
+      const fetchPromise = globalThis.fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        body: '{"model":"claude-opus-4-6","messages":[]}',
+      });
+      // Verify signal is wired
+      expect(capturedSignal).toBeInstanceOf(AbortSignal);
+      expect(capturedSignal!.aborted).toBe(false);
+
+      // Advance past the 120s timeout
+      vi.advanceTimersByTime(120001);
+
+      // fetchTimeouts should be incremented
+      expect(state.fetchTimeouts).toBe(1);
+      // Signal should now be aborted
+      expect(capturedSignal!.aborted).toBe(true);
+
+      // Clean up the dangling promise (it will reject from the abort)
+      fetchPromise.catch(() => {});
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not increment fetchTimeouts for successful calls", async () => {
+    globalThis.fetch = async () => new Response("ok");
+    const state = installAndGetState();
+
+    await globalThis.fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      body: '{"model":"claude-opus-4-6","messages":[]}',
+    });
+
+    expect(state.fetchTimeouts).toBeUndefined();
+  });
+});
+
+// ── https.request hard timeout ──────────────────────────────────────
+// NOTE: require() is not available inside new Function() in Vitest's ESM
+// environment, so INSTALL_HOOK's https/fetch wrappers silently no-op in tests.
+// We test the wrapper logic directly by installing via eval (which has require
+// in its lexical scope) using the same code from INSTALL_HOOK.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const getHttpsModule = (): any => { try { return eval("require('https')"); } catch { return null; } };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const EventEmitterClass = (): any => { try { return eval("require('events')"); } catch { return null; } };
+
+/**
+ * Install ONLY the https.request wrapper from INSTALL_HOOK, using eval so
+ * require() is available. Sets up a state object and returns it.
+ * The mockReqFactory is pre-installed as https.request before the wrapper
+ * captures it as origHttpsRequest.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function installHttpsWrapper(mockReqFactory: (...args: any[]) => any): Record<string, unknown> {
+  const https = getHttpsModule();
+  if (!https) throw new Error("https module not available");
+  https.request = mockReqFactory;
+  // Install wrapper via eval (same code as INSTALL_HOOK's https section)
+  const state: Record<string, unknown> = {};
+  eval(`
+    (function() {
+      var https = require('https');
+      var origHttpsRequest = https.request;
+      var state = arguments[0];
+      https.request = function(options) {
+        var h = (options && options.hostname) || '';
+        var p = (options && options.path) || '';
+        if (h === 'api.anthropic.com' && p.indexOf('/api/web/domain_info') !== -1) {
+          var EventEmitter = require('events');
+          var res = new EventEmitter();
+          res.statusCode = 200;
+          res.headers = { 'content-type': 'application/json' };
+          res.destroy = function() {};
+          var req = new EventEmitter();
+          req.write = function() {};
+          req.end = function() {
+            setTimeout(function() {
+              req.emit('response', res);
+              res.emit('data', Buffer.from(JSON.stringify({ domain: h, can_fetch: true })));
+              res.emit('end');
+            }, 0);
+          };
+          req.abort = function() {};
+          req.destroy = function() { return req; };
+          req.on('error', function() {});
+          req.setTimeout = function() { return req; };
+          req.destroyed = false;
+          if (typeof arguments[1] === 'function') {
+            req.on('response', arguments[1]);
+          }
+          return req;
+        }
+        var origReq = origHttpsRequest.apply(this, arguments);
+        var hardTimer = setTimeout(function() {
+          if (!origReq.destroyed) {
+            state.httpsTimeouts = (state.httpsTimeouts || 0) + 1;
+            origReq.destroy(new Error('HTTPS hard timeout: request exceeded 90000ms'));
+          }
+        }, 90000);
+        origReq.on('close', function() { clearTimeout(hardTimer); });
+        return origReq;
+      };
+    })(state)
+  `);
+  return state;
+}
+
+describe("INSTALL_HOOK https.request hard timeout", () => {
+  let savedStringify: typeof JSON.stringify;
+  let savedParse: typeof JSON.parse;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let origHttpsRequest: any;
+
+  beforeEach(() => {
+    savedStringify = JSON.stringify;
+    savedParse = JSON.parse;
+    const https = getHttpsModule();
+    if (https) origHttpsRequest = https.request;
+  });
+
+  afterEach(() => {
+    JSON.stringify = savedStringify;
+    JSON.parse = savedParse;
+    const https = getHttpsModule();
+    if (https && origHttpsRequest) https.request = origHttpsRequest;
+    cleanupGlobalHook();
+  });
+
+  it("wraps https.request after installation", () => {
+    const https = getHttpsModule();
+    if (!https) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mock = function() {} as any;
+    installHttpsWrapper(mock);
+    // After install, https.request should be a different function (the wrapper)
+    expect(https.request).not.toBe(mock);
+  });
+
+  it("domain blocklist bypass returns fake req for domain_info", () => {
+    const EE = EventEmitterClass();
+    if (!EE) return;
+    const mock = () => new EE();
+    installHttpsWrapper(mock);
+    const https = getHttpsModule();
+
+    const req = https.request({ hostname: "api.anthropic.com", path: "/api/web/domain_info?domain=example.com" });
+    expect(typeof req.write).toBe("function");
+    expect(typeof req.end).toBe("function");
+    expect(typeof req.destroy).toBe("function");
+  });
+
+  it("clears hard timer when request emits close", async () => {
+    const { vi } = await import("vitest");
+    const EE = EventEmitterClass();
+    if (!EE) return;
+
+    const mockReq = new EE();
+    mockReq.destroyed = false;
+    mockReq.destroy = function() { this.destroyed = true; this.emit("close"); };
+    // Install wrapper before fake timers (eval needs real require)
+    const state = installHttpsWrapper(() => mockReq);
+
+    vi.useFakeTimers();
+    try {
+      const https = getHttpsModule();
+      https.request({ hostname: "api.example.com", path: "/data" });
+
+      // Request completes normally
+      mockReq.emit("close");
+
+      // Advance past 90s — timer should already be cleared
+      vi.advanceTimersByTime(91000);
+
+      expect(state.httpsTimeouts).toBeUndefined();
+      expect(mockReq.destroyed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("destroys request and increments httpsTimeouts on timeout", async () => {
+    const { vi } = await import("vitest");
+    const EE = EventEmitterClass();
+    if (!EE) return;
+
+    const mockReq = new EE();
+    mockReq.destroyed = false;
+    mockReq.destroy = function() { this.destroyed = true; };
+    const state = installHttpsWrapper(() => mockReq);
+
+    vi.useFakeTimers();
+    try {
+      const https = getHttpsModule();
+      https.request({ hostname: "api.example.com", path: "/data" });
+
+      vi.advanceTimersByTime(90001);
+
+      expect(mockReq.destroyed).toBe(true);
+      expect(state.httpsTimeouts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not destroy already-destroyed request on timeout", async () => {
+    const { vi } = await import("vitest");
+    const EE = EventEmitterClass();
+    if (!EE) return;
+
+    let destroyCallCount = 0;
+    const mockReq = new EE();
+    mockReq.destroyed = true; // Already destroyed
+    mockReq.destroy = function() { destroyCallCount++; };
+    const state = installHttpsWrapper(() => mockReq);
+
+    vi.useFakeTimers();
+    try {
+      const https = getHttpsModule();
+      https.request({ hostname: "api.example.com", path: "/data" });
+
+      vi.advanceTimersByTime(90001);
+
+      expect(destroyCallCount).toBe(0);
+      expect(state.httpsTimeouts).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("increments httpsTimeouts for each timed-out request independently", async () => {
+    const { vi } = await import("vitest");
+    const EE = EventEmitterClass();
+    if (!EE) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mockReqs: any[] = [];
+    const state = installHttpsWrapper(() => {
+      const req = new EE();
+      req.destroyed = false;
+      req.destroy = function() { this.destroyed = true; };
+      mockReqs.push(req);
+      return req;
+    });
+
+    vi.useFakeTimers();
+    try {
+      const https = getHttpsModule();
+      https.request({ hostname: "api.example.com", path: "/a" });
+      https.request({ hostname: "api.example.com", path: "/b" });
+
+      // First completes, second hangs
+      mockReqs[0].emit("close");
+
+      vi.advanceTimersByTime(90001);
+
+      expect(mockReqs[0].destroyed).toBe(false);
+      expect(mockReqs[1].destroyed).toBe(true);
+      expect(state.httpsTimeouts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ── POLL_STATE fetchTimeouts and httpsTimeouts fields ───────────────
+
+describe("POLL_STATE timeout counter fields", () => {
+  afterEach(cleanupGlobalHook);
+
+  it("exposes fetchTimeouts from state", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 1, sid: null, cost: 0, model: null, stop: null,
+      tools: [], inTok: 0, outTok: 0, events: [], lastEvent: null,
+      firstMsg: null, lastText: null, userPrompt: null,
+      permPending: false, idleDetected: false, toolAction: null,
+      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
+      _sealed: false, fetchBypassed: 0, fetchTimeouts: 3, httpsTimeouts: 0,
+    };
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.fetchTimeouts).toBe(3);
+  });
+
+  it("exposes httpsTimeouts from state", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 1, sid: null, cost: 0, model: null, stop: null,
+      tools: [], inTok: 0, outTok: 0, events: [], lastEvent: null,
+      firstMsg: null, lastText: null, userPrompt: null,
+      permPending: false, idleDetected: false, toolAction: null,
+      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
+      _sealed: false, fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 5,
+    };
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.httpsTimeouts).toBe(5);
+  });
+
+  it("defaults to 0 when fields are undefined on state", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 1, sid: null, cost: 0, model: null, stop: null,
+      tools: [], inTok: 0, outTok: 0, events: [], lastEvent: null,
+      firstMsg: null, lastText: null, userPrompt: null,
+      permPending: false, idleDetected: false, toolAction: null,
+      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
+      _sealed: false,
+    };
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.fetchTimeouts).toBe(0);
+    expect(result.httpsTimeouts).toBe(0);
+    expect(result.fetchBypassed).toBe(0);
   });
 });

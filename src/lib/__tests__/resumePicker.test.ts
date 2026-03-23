@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { normalizeForFilter } from "../paths";
-import type { PastSession } from "../../types/session";
+import type { PastSession, ContentSearchMatch } from "../../types/session";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -244,5 +244,237 @@ describe("normalizeForFilter: session name patterns", () => {
     const nameNorm = normalizeForFilter("project/subdir");
     const dirNorm = normalizeForFilter("project\\subdir");
     expect(nameNorm).toBe(dirNorm);
+  });
+});
+
+// ── Snippet map from content search results ─────────────────────────
+// Mirrors ResumePicker lines ~288-294: useMemo building Map<string, string>
+
+function buildSnippetMap(results: ContentSearchMatch[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const r of results) {
+    map.set(r.sessionId, r.snippet);
+  }
+  return map;
+}
+
+describe("ResumePicker snippetMap: content search results", () => {
+  it("builds map from results array", () => {
+    const results: ContentSearchMatch[] = [
+      { sessionId: "s1", snippet: "...matched text..." },
+      { sessionId: "s2", snippet: "...other match..." },
+    ];
+    const map = buildSnippetMap(results);
+    expect(map.size).toBe(2);
+    expect(map.get("s1")).toBe("...matched text...");
+    expect(map.get("s2")).toBe("...other match...");
+  });
+
+  it("returns empty map for empty results", () => {
+    const map = buildSnippetMap([]);
+    expect(map.size).toBe(0);
+  });
+
+  it("last result wins when duplicate sessionIds exist", () => {
+    const results: ContentSearchMatch[] = [
+      { sessionId: "s1", snippet: "first" },
+      { sessionId: "s1", snippet: "second" },
+    ];
+    const map = buildSnippetMap(results);
+    expect(map.size).toBe(1);
+    expect(map.get("s1")).toBe("second");
+  });
+
+  it("handles single result", () => {
+    const results: ContentSearchMatch[] = [
+      { sessionId: "solo", snippet: "only match" },
+    ];
+    const map = buildSnippetMap(results);
+    expect(map.get("solo")).toBe("only match");
+  });
+});
+
+// ── Content search merge logic ──────────────────────────────────────
+// Mirrors ResumePicker lines ~297-334: computing displayList + contentDividerIndex
+
+interface MergedChain {
+  resumeSession: PastSession;
+  members: PastSession[];
+  displayName: string | null;
+  latestDate: string;
+  totalSize: number;
+  firstMessage: string;
+  lastMessage: string;
+  model: string;
+  chainLength: number;
+}
+
+function mkChain(ps: PastSession, members?: PastSession[]): MergedChain {
+  return {
+    resumeSession: ps,
+    members: members || [ps],
+    displayName: null,
+    latestDate: ps.lastModified,
+    totalSize: ps.sizeBytes,
+    firstMessage: ps.firstMessage,
+    lastMessage: ps.lastMessage,
+    model: ps.model,
+    chainLength: members ? members.length : 1,
+  };
+}
+
+function computeDisplayList(
+  mergedList: MergedChain[],
+  contentResults: ContentSearchMatch[],
+  pastSessions: PastSession[],
+  sessionNames: Record<string, string>,
+): { displayList: MergedChain[]; contentDividerIndex: number } {
+  const metadataIds = new Set<string>();
+  for (const chain of mergedList) {
+    for (const m of chain.members) {
+      metadataIds.add(m.id);
+    }
+  }
+
+  const pastSessionMap = new Map<string, PastSession>();
+  for (const ps of pastSessions) {
+    pastSessionMap.set(ps.id, ps);
+  }
+
+  const additionalChains: MergedChain[] = [];
+  for (const r of contentResults) {
+    if (metadataIds.has(r.sessionId)) continue;
+    const ps = pastSessionMap.get(r.sessionId);
+    if (!ps) continue;
+
+    additionalChains.push({
+      resumeSession: ps,
+      members: [ps],
+      displayName: sessionNames[ps.id] || null,
+      latestDate: ps.lastModified,
+      totalSize: ps.sizeBytes,
+      firstMessage: ps.firstMessage,
+      lastMessage: ps.lastMessage,
+      model: ps.model,
+      chainLength: 1,
+    });
+  }
+
+  return {
+    displayList: [...mergedList, ...additionalChains],
+    contentDividerIndex: additionalChains.length > 0 ? mergedList.length : -1,
+  };
+}
+
+describe("ResumePicker content search merge", () => {
+  const s1 = mkPastSession({ id: "s1", directory: "C:/proj1" });
+  const s2 = mkPastSession({ id: "s2", directory: "C:/proj2" });
+  const s3 = mkPastSession({ id: "s3", directory: "C:/proj3" });
+  const s4 = mkPastSession({ id: "s4", directory: "C:/proj4" });
+
+  it("appends content-only results after metadata results", () => {
+    const mergedList = [mkChain(s1)];
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "s2", snippet: "found in s2" },
+    ];
+    const result = computeDisplayList(mergedList, contentResults, [s1, s2], {});
+    expect(result.displayList).toHaveLength(2);
+    expect(result.displayList[0].resumeSession.id).toBe("s1");
+    expect(result.displayList[1].resumeSession.id).toBe("s2");
+  });
+
+  it("sets contentDividerIndex to mergedList length when there are additional chains", () => {
+    const mergedList = [mkChain(s1), mkChain(s2)];
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "s3", snippet: "found" },
+    ];
+    const result = computeDisplayList(mergedList, contentResults, [s1, s2, s3], {});
+    expect(result.contentDividerIndex).toBe(2);
+  });
+
+  it("sets contentDividerIndex to -1 when no additional chains", () => {
+    const mergedList = [mkChain(s1)];
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "s1", snippet: "already in metadata" },
+    ];
+    const result = computeDisplayList(mergedList, contentResults, [s1], {});
+    expect(result.contentDividerIndex).toBe(-1);
+    expect(result.displayList).toHaveLength(1);
+  });
+
+  it("deduplicates: content results for sessions already in metadata are skipped", () => {
+    const chain = mkChain(s1, [s1, s2]); // chain containing s1 and s2
+    const mergedList = [chain];
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "s1", snippet: "duplicate" },
+      { sessionId: "s2", snippet: "also duplicate" },
+      { sessionId: "s3", snippet: "new match" },
+    ];
+    const result = computeDisplayList(mergedList, contentResults, [s1, s2, s3], {});
+    expect(result.displayList).toHaveLength(2);
+    expect(result.displayList[1].resumeSession.id).toBe("s3");
+  });
+
+  it("skips content results whose sessionId is not in pastSessions", () => {
+    const mergedList: MergedChain[] = [];
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "nonexistent", snippet: "orphan match" },
+    ];
+    const result = computeDisplayList(mergedList, contentResults, [s1], {});
+    expect(result.displayList).toHaveLength(0);
+    expect(result.contentDividerIndex).toBe(-1);
+  });
+
+  it("resolves displayName from sessionNames for content-only results", () => {
+    const mergedList: MergedChain[] = [];
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "s1", snippet: "match" },
+    ];
+    const names = { s1: "My Named Session" };
+    const result = computeDisplayList(mergedList, contentResults, [s1], names);
+    expect(result.displayList[0].displayName).toBe("My Named Session");
+  });
+
+  it("sets displayName to null when session has no name", () => {
+    const mergedList: MergedChain[] = [];
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "s1", snippet: "match" },
+    ];
+    const result = computeDisplayList(mergedList, contentResults, [s1], {});
+    expect(result.displayList[0].displayName).toBeNull();
+  });
+
+  it("handles empty content results with non-empty metadata", () => {
+    const mergedList = [mkChain(s1)];
+    const result = computeDisplayList(mergedList, [], [s1], {});
+    expect(result.displayList).toHaveLength(1);
+    expect(result.contentDividerIndex).toBe(-1);
+  });
+
+  it("handles both empty metadata and empty content results", () => {
+    const result = computeDisplayList([], [], [], {});
+    expect(result.displayList).toHaveLength(0);
+    expect(result.contentDividerIndex).toBe(-1);
+  });
+
+  it("preserves metadata order, appends content-only in content result order", () => {
+    const mergedList = [mkChain(s2), mkChain(s1)]; // s2 before s1
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "s4", snippet: "fourth" },
+      { sessionId: "s3", snippet: "third" },
+    ];
+    const result = computeDisplayList(mergedList, contentResults, [s1, s2, s3, s4], {});
+    expect(result.displayList.map((c) => c.resumeSession.id)).toEqual(["s2", "s1", "s4", "s3"]);
+    expect(result.contentDividerIndex).toBe(2);
+  });
+
+  it("content-only chains always have chainLength 1", () => {
+    const mergedList: MergedChain[] = [];
+    const contentResults: ContentSearchMatch[] = [
+      { sessionId: "s1", snippet: "match" },
+    ];
+    const result = computeDisplayList(mergedList, contentResults, [s1], {});
+    expect(result.displayList[0].chainLength).toBe(1);
+    expect(result.displayList[0].members).toHaveLength(1);
   });
 });

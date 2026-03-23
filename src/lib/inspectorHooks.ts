@@ -336,7 +336,55 @@ export const INSTALL_HOOK = `(function() {
         }
         return req;
       }
-      return origHttpsRequest.apply(this, arguments);
+      var origReq = origHttpsRequest.apply(this, arguments);
+      var hardTimer = setTimeout(function() {
+        if (!origReq.destroyed) {
+          state.httpsTimeouts = (state.httpsTimeouts || 0) + 1;
+          origReq.destroy(new Error('HTTPS hard timeout: request exceeded 90000ms'));
+        }
+      }, 90000);
+      origReq.on('close', function() { clearTimeout(hardTimer); });
+      return origReq;
+    };
+  } catch(e) {}
+
+  // Timeout for non-streaming Anthropic API calls (WebFetch summarization path)
+  //
+  // Call path: summarizeContent() → callSmallModel() → Anthropic SDK → globalThis.fetch
+  // Non-streaming calls lack "stream":true in body. Main conversation is streaming
+  // and passes through untouched. Non-Anthropic URLs also pass through.
+  try {
+    var origFetch = globalThis.fetch;
+    var FETCH_TIMEOUT = 120000;
+    globalThis.fetch = function(input, init) {
+      var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+      if (url.indexOf('api.anthropic.com') === -1) {
+        return origFetch.apply(globalThis, arguments);
+      }
+      var body = (init && init.body) || '';
+      if (typeof body === 'string' && (body.indexOf('"stream":true') !== -1 || body.indexOf('"stream": true') !== -1)) {
+        return origFetch.apply(globalThis, arguments);
+      }
+      var ac = new AbortController();
+      var origSignal = (init && init.signal) || null;
+      if (origSignal && origSignal.aborted) return origFetch.apply(globalThis, arguments);
+      var onAbort = null;
+      if (origSignal) {
+        onAbort = function() { ac.abort(origSignal.reason); };
+        origSignal.addEventListener('abort', onAbort);
+      }
+      var timer = setTimeout(function() {
+        state.fetchTimeouts = (state.fetchTimeouts || 0) + 1;
+        ac.abort(new Error('WebFetch timeout: non-streaming API call exceeded ' + FETCH_TIMEOUT + 'ms'));
+      }, FETCH_TIMEOUT);
+      var newInit = {};
+      if (init) { var ks = Object.keys(init); for (var ki = 0; ki < ks.length; ki++) if (ks[ki] !== 'signal') newInit[ks[ki]] = init[ks[ki]]; }
+      newInit.signal = ac.signal;
+      var cleanup = function() { clearTimeout(timer); if (onAbort && origSignal) origSignal.removeEventListener('abort', onAbort); };
+      return origFetch.call(globalThis, input, newInit).then(
+        function(resp) { cleanup(); return resp; },
+        function(err)  { cleanup(); throw err; }
+      );
     };
   } catch(e) {}
 
@@ -373,6 +421,8 @@ export const POLL_STATE = `(function() {
     inputTs: s.inputTs,
     choiceHint: false,
     fetchBypassed: s.fetchBypassed || 0,
+    fetchTimeouts: s.fetchTimeouts || 0,
+    httpsTimeouts: s.httpsTimeouts || 0,
     subs: s.subs.map(function(sub) {
       var msgs = sub.msgs.splice(0);
       return { sid: sub.sid, desc: sub.desc, st: sub.st, tok: sub.tok, act: sub.act, msgs: msgs, lastTs: sub.lastTs };

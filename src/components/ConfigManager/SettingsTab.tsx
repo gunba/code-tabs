@@ -161,7 +161,7 @@ function UnifiedSettingsReference({
       </button>
 
       {!collapsed && (
-        <div className="sr-body sr-body-wide">
+        <div className="sr-body sr-body-wide" style={{ "--active-scope-color": SCOPES.find(s => s.value === activeScope)?.colorVar } as React.CSSProperties}>
           {sorted.length === 0 && (
             <div className="sr-empty">No matching settings</div>
           )}
@@ -182,21 +182,6 @@ function UnifiedSettingsReference({
                     {field.type === "stringArray" ? "string[]" :
                       field.type === "stringMap" ? "Record" : field.type}
                   </span>
-                  <span className="sr-scope-dots">
-                    {SCOPES.map(({ value, dotColor }) => {
-                      const setInScope = scopeKeys[value].has(field.key);
-                      const isActive = value === activeScope;
-                      return (
-                        <span
-                          key={value}
-                          className={`sr-scope-dot${setInScope ? " sr-scope-dot-filled" : ""}${isActive ? " sr-scope-dot-active" : ""}`}
-                          style={{ borderColor: dotColor, ...(setInScope ? { backgroundColor: dotColor } : {}) }}
-                          title={`${value}${setInScope ? " (set)" : ""}`}
-                        />
-                      );
-                    })}
-                  </span>
-                  {isSet && <span className="sr-field-check">{"\u2713"}</span>}
                 </div>
                 <div className="sr-field-desc">
                   {field.description}

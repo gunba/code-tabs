@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
@@ -7,6 +8,7 @@ import { dirToTabName, abbreviatePath, normalizeForFilter } from "../../lib/path
 import { useCtrlKey } from "../../hooks/useCtrlKey";
 import {
   type PastSession,
+  type ContentSearchMatch,
   type SessionConfig,
   DEFAULT_SESSION_CONFIG,
 } from "../../types/session";
@@ -103,11 +105,50 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
   const filterRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // Content search state (modal-scoped, not in Zustand)
+  const [contentResults, setContentResults] = useState<ContentSearchMatch[]>([]);
+  const [contentSearching, setContentSearching] = useState(false);
+  const searchCounterRef = useRef(0);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Refresh past sessions on mount (background, non-blocking — data may already be preloaded)
   useEffect(() => {
     loadPastSessions();
     filterRef.current?.focus();
   }, [loadPastSessions]);
+
+  // Debounced content search — triggers 400ms after typing stops, min 3 chars
+  useEffect(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
+    if (dirFilter.trim().length < 3) {
+      setContentResults([]);
+      setContentSearching(false);
+      return;
+    }
+
+    setContentSearching(true);
+    const counter = ++searchCounterRef.current;
+
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await invoke<ContentSearchMatch[]>("search_session_content", { query: dirFilter.trim() });
+        if (searchCounterRef.current === counter) {
+          setContentResults(results);
+        }
+      } catch (err) {
+        console.error("Content search failed:", err);
+      } finally {
+        if (searchCounterRef.current === counter) {
+          setContentSearching(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [dirFilter]);
 
   // Dead session map: CLI session ID -> DeadEntry
   const deadSessionMap = useMemo(() => {
@@ -243,6 +284,55 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
     return chains;
   }, [filteredPastSessions, sessionNames]);
 
+  // Snippet map from content search results
+  const snippetMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of contentResults) {
+      map.set(r.sessionId, r.snippet);
+    }
+    return map;
+  }, [contentResults]);
+
+  // Merge metadata results with content-only results
+  const { displayList, contentDividerIndex } = useMemo(() => {
+    const metadataIds = new Set<string>();
+    for (const chain of mergedList) {
+      for (const m of chain.members) {
+        metadataIds.add(m.id);
+      }
+    }
+
+    // Find content-only matches (sessions not already in metadata results)
+    const pastSessionMap = new Map<string, PastSession>();
+    for (const ps of pastSessions) {
+      pastSessionMap.set(ps.id, ps);
+    }
+
+    const additionalChains: MergedChain[] = [];
+    for (const r of contentResults) {
+      if (metadataIds.has(r.sessionId)) continue;
+      const ps = pastSessionMap.get(r.sessionId);
+      if (!ps) continue;
+
+      additionalChains.push({
+        resumeSession: ps,
+        members: [ps],
+        displayName: sessionNames[ps.id] || null,
+        latestDate: ps.lastModified,
+        totalSize: ps.sizeBytes,
+        firstMessage: ps.firstMessage,
+        lastMessage: ps.lastMessage,
+        model: ps.model,
+        chainLength: 1,
+      });
+    }
+
+    return {
+      displayList: [...mergedList, ...additionalChains],
+      contentDividerIndex: additionalChains.length > 0 ? mergedList.length : -1,
+    };
+  }, [mergedList, contentResults, pastSessions, sessionNames]);
+
   // Reset selection when filter changes
   useEffect(() => {
     setSelectedIndex(0);
@@ -332,9 +422,9 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         onClose();
         return;
       }
-      if (e.key === "Enter" && mergedList.length > 0) {
+      if (e.key === "Enter" && displayList.length > 0) {
         e.preventDefault();
-        const chain = mergedList[selectedIndex] ?? mergedList[0];
+        const chain = displayList[selectedIndex] ?? displayList[0];
         if (e.ctrlKey) {
           handleConfigure(chain);
         } else {
@@ -342,18 +432,18 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         }
         return;
       }
-      if (e.key === "ArrowDown" && mergedList.length > 0) {
+      if (e.key === "ArrowDown" && displayList.length > 0) {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.min(prev + 1, mergedList.length - 1));
+        setSelectedIndex((prev) => Math.min(prev + 1, displayList.length - 1));
       }
-      if (e.key === "ArrowUp" && mergedList.length > 0) {
+      if (e.key === "ArrowUp" && displayList.length > 0) {
         e.preventDefault();
         setSelectedIndex((prev) => Math.max(prev - 1, 0));
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, mergedList, selectedIndex, handleResume, handleConfigure]);
+  }, [onClose, displayList, selectedIndex, handleResume, handleConfigure]);
 
   return (
     <div className="resume-picker-overlay" onClick={onClose}>
@@ -368,7 +458,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
             type="text"
             value={dirFilter}
             onChange={(e) => setDirFilter(e.target.value)}
-            placeholder="Filter by name or directory..."
+            placeholder="Filter by name, directory, or conversation content..."
             autoComplete="off"
           />
           <button
@@ -383,7 +473,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
 
         {/* Session list */}
         <div className="resume-picker-list" ref={listRef}>
-          {mergedList.length === 0 && (
+          {displayList.length === 0 && !contentSearching && (
             <div className="resume-picker-empty">
               {pastSessionsLoading
                 ? "Loading sessions..."
@@ -392,11 +482,13 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                   : "No sessions match filter"}
             </div>
           )}
-          {mergedList.map((chain, idx) => {
+          {displayList.map((chain, idx) => {
             const ps = chain.resumeSession;
             const dead = findDead(chain);
             const isSelected = idx === selectedIndex;
             const modelBadge = shortModelBadge(chain.model);
+            const isContentOnly = idx >= contentDividerIndex && contentDividerIndex >= 0;
+            const snippet = snippetMap.get(ps.id);
 
             // Resolve config for badge display
             const cached = sessionConfigs[ps.id];
@@ -418,11 +510,15 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
               "resume-picker-card",
               isSelected && "resume-picker-card-selected",
               chain.chainLength > 1 && "resume-picker-card-chain",
+              isContentOnly && "resume-picker-card-content-match",
             ].filter(Boolean).join(" ");
 
             return (
+              <React.Fragment key={ps.id}>
+                {idx === contentDividerIndex && (
+                  <div className="resume-picker-content-divider" />
+                )}
               <div
-                key={ps.id}
                 className={cardClass}
                 onClick={(e) => {
                   if (e.ctrlKey) {
@@ -500,6 +596,13 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                     </>
                   )}
                 </div>
+                {/* Content search snippet */}
+                {snippet && (
+                  <div className="resume-picker-card-snippet">
+                    <span className="resume-picker-card-snippet-label">MATCH</span>
+                    <span className="resume-picker-card-snippet-text">{snippet}</span>
+                  </div>
+                )}
                 {/* Expanded chain members */}
                 {chain.chainLength > 1 && expandedChains.has(ps.id) && (
                   <div className="resume-picker-chain-members">
@@ -524,8 +627,12 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                   </div>
                 )}
               </div>
+              </React.Fragment>
             );
           })}
+          {contentSearching && dirFilter.trim().length >= 3 && (
+            <div className="resume-picker-content-searching">Searching conversations...</div>
+          )}
         </div>
 
         {/* Hint */}

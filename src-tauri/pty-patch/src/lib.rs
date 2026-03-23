@@ -22,6 +22,32 @@ mod sync_detector;
 use output_filter::OutputFilter;
 use sync_detector::{SyncBlockDetector, SyncEvent};
 
+/// Copy `src` into `dst`, skipping all occurrences of ESC[2J (Clear Screen).
+/// Uses SIMD-accelerated memchr::memmem for efficient scanning.
+fn strip_clear_screen_into(src: &[u8], dst: &mut Vec<u8>) {
+    const CLEAR_SCREEN: &[u8] = b"\x1b[2J";
+    let finder = memchr::memmem::Finder::new(CLEAR_SCREEN);
+    let mut pos = 0;
+    while let Some(found) = finder.find(&src[pos..]) {
+        dst.extend_from_slice(&src[pos..pos + found]);
+        pos += found + CLEAR_SCREEN.len();
+    }
+    dst.extend_from_slice(&src[pos..]);
+}
+
+/// Re-wrap a completed sync block with BSU/ESU for xterm.js.
+/// Full-redraw blocks replace ESC[2J with ESC[H ESC[J to avoid scrollback push.
+fn emit_sync_block(data: &[u8], is_full_redraw: bool, result: &mut Vec<u8>) {
+    result.extend_from_slice(b"\x1b[?2026h"); // BSU
+    if is_full_redraw {
+        result.extend_from_slice(b"\x1b[H\x1b[J");
+        strip_clear_screen_into(data, result);
+    } else {
+        result.extend_from_slice(data);
+    }
+    result.extend_from_slice(b"\x1b[?2026l"); // ESU
+}
+
 #[derive(Default)]
 struct PluginState {
     session_id: AtomicU32,
@@ -173,7 +199,9 @@ async fn read(pid: PtyHandler, state: tauri::State<'_, PluginState>) -> Result<V
         for event in sync_detector.process(filtered) {
             match event {
                 SyncEvent::PassThrough(data) => result.extend_from_slice(data),
-                SyncEvent::SyncBlock { data, .. } => result.extend_from_slice(&data),
+                SyncEvent::SyncBlock { data, is_full_redraw } => {
+                    emit_sync_block(&data, is_full_redraw, &mut result);
+                }
             }
         }
 
@@ -194,8 +222,8 @@ async fn read(pid: PtyHandler, state: tauri::State<'_, PluginState>) -> Result<V
                                 SyncEvent::PassThrough(data) => {
                                     result.extend_from_slice(data);
                                 }
-                                SyncEvent::SyncBlock { data, .. } => {
-                                    result.extend_from_slice(&data);
+                                SyncEvent::SyncBlock { data, is_full_redraw } => {
+                                    emit_sync_block(&data, is_full_redraw, &mut result);
                                 }
                             }
                         }
@@ -330,6 +358,211 @@ async fn drain_output(pid: PtyHandler, state: tauri::State<'_, PluginState>) -> 
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_clear_screen_no_occurrences() {
+        let src = b"hello world";
+        let mut dst = Vec::new();
+        strip_clear_screen_into(src, &mut dst);
+        assert_eq!(dst, b"hello world");
+    }
+
+    #[test]
+    fn test_strip_clear_screen_single() {
+        let mut src = Vec::new();
+        src.extend_from_slice(b"before\x1b[2Jafter");
+        let mut dst = Vec::new();
+        strip_clear_screen_into(&src, &mut dst);
+        assert_eq!(dst, b"beforeafter");
+    }
+
+    #[test]
+    fn test_strip_clear_screen_multiple() {
+        let mut src = Vec::new();
+        src.extend_from_slice(b"\x1b[2J\x1b[Hcontent\x1b[2J");
+        let mut dst = Vec::new();
+        strip_clear_screen_into(&src, &mut dst);
+        assert_eq!(dst, b"\x1b[Hcontent");
+    }
+
+    #[test]
+    fn test_strip_clear_screen_preserves_other_escapes() {
+        let mut src = Vec::new();
+        src.extend_from_slice(b"\x1b[2J\x1b[H\x1b[1;31mred\x1b[0m");
+        let mut dst = Vec::new();
+        strip_clear_screen_into(&src, &mut dst);
+        assert_eq!(dst, b"\x1b[H\x1b[1;31mred\x1b[0m");
+    }
+
+    #[test]
+    fn test_strip_clear_screen_empty() {
+        let mut dst = Vec::new();
+        strip_clear_screen_into(b"", &mut dst);
+        assert!(dst.is_empty());
+    }
+
+    #[test]
+    fn test_emit_sync_block_non_full_redraw() {
+        let mut result = Vec::new();
+        emit_sync_block(b"content", false, &mut result);
+        // Should wrap with BSU/ESU, no ESC[2J replacement
+        let mut expected = Vec::new();
+        expected.extend_from_slice(b"\x1b[?2026h");
+        expected.extend_from_slice(b"content");
+        expected.extend_from_slice(b"\x1b[?2026l");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_emit_sync_block_full_redraw_strips_clear() {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"\x1b[2J\x1b[Hscreen content");
+        let mut result = Vec::new();
+        emit_sync_block(&data, true, &mut result);
+        // Should: BSU + ESC[H ESC[J + stripped data (no ESC[2J) + ESU
+        let mut expected = Vec::new();
+        expected.extend_from_slice(b"\x1b[?2026h");
+        expected.extend_from_slice(b"\x1b[H\x1b[J");
+        expected.extend_from_slice(b"\x1b[Hscreen content"); // ESC[2J removed
+        expected.extend_from_slice(b"\x1b[?2026l");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_emit_sync_block_full_redraw_no_clear_in_data() {
+        // Full redraw flagged but data happens to not contain ESC[2J
+        // (edge case -- still prepends ESC[H ESC[J)
+        let mut result = Vec::new();
+        emit_sync_block(b"\x1b[Hcontent", true, &mut result);
+        let mut expected = Vec::new();
+        expected.extend_from_slice(b"\x1b[?2026h");
+        expected.extend_from_slice(b"\x1b[H\x1b[J");
+        expected.extend_from_slice(b"\x1b[Hcontent");
+        expected.extend_from_slice(b"\x1b[?2026l");
+        assert_eq!(result, expected);
+    }
+
+    // --- Edge case: input is exactly ESC[2J with nothing else ---
+    #[test]
+    fn test_strip_clear_screen_only_clear() {
+        let src = b"\x1b[2J";
+        let mut dst = Vec::new();
+        strip_clear_screen_into(src, &mut dst);
+        assert!(dst.is_empty(), "stripping sole ESC[2J should produce empty output");
+    }
+
+    // --- Edge case: adjacent ESC[2J sequences with no bytes between them ---
+    #[test]
+    fn test_strip_clear_screen_adjacent() {
+        let src = b"\x1b[2J\x1b[2J";
+        let mut dst = Vec::new();
+        strip_clear_screen_into(src, &mut dst);
+        assert!(dst.is_empty(), "two adjacent ESC[2J should both be stripped");
+    }
+
+    // --- Sync block has ESC[2J but is NOT a full redraw (no cursor-home) ---
+    // Verifies SyncBlockDetector returns is_full_redraw=false and preserves ESC[2J
+    #[test]
+    fn test_sync_block_clear_screen_without_cursor_home_not_full_redraw() {
+        let mut detector = SyncBlockDetector::new();
+        let mut data = Vec::new();
+        data.extend_from_slice(b"\x1b[?2026h"); // BSU
+        data.extend_from_slice(b"\x1b[2J");     // Clear screen, no cursor-home
+        data.extend_from_slice(b"new content");
+        data.extend_from_slice(b"\x1b[?2026l"); // ESU
+
+        let events = detector.process(&data);
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            SyncEvent::SyncBlock { data, is_full_redraw } => {
+                assert!(!is_full_redraw,
+                    "ESC[2J without cursor-home should NOT be a full redraw");
+                // Block data must still contain ESC[2J unchanged
+                assert!(data.windows(4).any(|w| w == b"\x1b[2J"),
+                    "block data must preserve ESC[2J when is_full_redraw=false");
+            }
+            _ => panic!("expected SyncBlock"),
+        }
+    }
+
+    // --- emit_sync_block: non-full-redraw preserves ESC[2J in data ---
+    #[test]
+    fn test_emit_sync_block_non_full_redraw_preserves_clear_screen() {
+        let block_data = b"\x1b[2Jsome content";
+        let mut result = Vec::new();
+        emit_sync_block(block_data, false, &mut result);
+
+        assert!(result.starts_with(b"\x1b[?2026h"), "must start with BSU");
+        assert!(result.ends_with(b"\x1b[?2026l"), "must end with ESU");
+        // Inner content must match block_data exactly -- ESC[2J NOT stripped
+        let inner = &result[8..result.len() - 8];
+        assert_eq!(inner, block_data,
+            "non-full-redraw must pass ESC[2J through unchanged");
+    }
+
+    // --- emit_sync_block: full redraw with multiple ESC[2J strips all ---
+    #[test]
+    fn test_emit_sync_block_full_redraw_strips_all_clears() {
+        let mut block_data = Vec::new();
+        block_data.extend_from_slice(b"\x1b[2J\x1b[Hscreen\x1b[2Jmore\x1b[2J");
+        let mut result = Vec::new();
+        emit_sync_block(&block_data, true, &mut result);
+
+        // No ESC[2J should remain anywhere in the output
+        assert!(!result.windows(4).any(|w| w == b"\x1b[2J"),
+            "all ESC[2J must be stripped from full redraw output");
+        // Structure: BSU + ESC[H ESC[J + stripped content + ESU
+        assert!(result.starts_with(b"\x1b[?2026h\x1b[H\x1b[J"),
+            "full redraw must have BSU + ESC[H + ESC[J prefix");
+        assert!(result.ends_with(b"\x1b[?2026l"), "must end with ESU");
+        // Verify content survived (only ESC[2J removed)
+        let inner = &result[8..result.len() - 8]; // skip BSU and ESU
+        assert!(inner.windows(6).any(|w| w == b"screen"),
+            "screen content must be preserved");
+        assert!(inner.windows(4).any(|w| w == b"more"),
+            "more content must be preserved");
+    }
+
+    // --- End-to-end: non-full-redraw sync block through detector + emit ---
+    // Verifies the full pipeline: detector identifies is_full_redraw=false,
+    // then emit_sync_block wraps without stripping ESC[2J.
+    #[test]
+    fn test_pipeline_non_full_redraw_preserves_clear_screen() {
+        let mut detector = SyncBlockDetector::new();
+        let mut input = Vec::new();
+        input.extend_from_slice(b"\x1b[?2026h"); // BSU
+        input.extend_from_slice(b"\x1b[2J");     // Clear screen, no cursor-home
+        input.extend_from_slice(b"partial update");
+        input.extend_from_slice(b"\x1b[?2026l"); // ESU
+
+        let events = detector.process(&input);
+        // Now run through emit_sync_block (as read() would)
+        let mut result = Vec::new();
+        for event in &events {
+            match event {
+                SyncEvent::PassThrough(data) => result.extend_from_slice(data),
+                SyncEvent::SyncBlock { data, is_full_redraw } => {
+                    emit_sync_block(data, *is_full_redraw, &mut result);
+                }
+            }
+        }
+
+        // BSU + block_data + ESU
+        assert!(result.starts_with(b"\x1b[?2026h"), "must start with BSU");
+        assert!(result.ends_with(b"\x1b[?2026l"), "must end with ESU");
+        // ESC[2J must survive -- not stripped because is_full_redraw=false
+        let inner = &result[8..result.len() - 8];
+        assert!(inner.windows(4).any(|w| w == b"\x1b[2J"),
+            "ESC[2J must pass through unchanged for non-full-redraw");
+        // No ESC[H ESC[J prepended
+        assert!(!inner.starts_with(b"\x1b[H\x1b[J"),
+            "non-full-redraw must NOT prepend ESC[H ESC[J");
+    }
 }
 
 /// Initializes the plugin.

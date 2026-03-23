@@ -231,7 +231,7 @@ export default function App() {
         }
       }
 
-      if (e.ctrlKey && e.shiftKey && e.key === "U") {
+      if (e.ctrlKey && e.shiftKey && e.key === "X") {
         e.preventDefault();
         if (activeTabId) writeToPty(activeTabId, "\x15".repeat(20));
       }
@@ -378,6 +378,7 @@ export default function App() {
                       <input
                         className="tab-name-input"
                         value={editingTabName}
+                        onFocus={(e) => e.currentTarget.select()}
                         onChange={(e) => setEditingTabName(e.target.value)}
                         onBlur={() => {
                           if (!editDoneRef.current && editingTabName.trim()) {
