@@ -595,6 +595,7 @@ describe("deriveStateFromPoll", () => {
     lastEvent: null as string | null,
     firstMsg: null, lastText: null, userPrompt: null,
     permPending: false, idleDetected: false, choiceHint: false,
+    promptDetected: false,
     toolAction: null,
     inputBuf: "", inputTs: 0, fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
     subs: [] as Array<{ sid: string; desc: string; st: string; tok: number; act: string | null;
@@ -708,6 +709,36 @@ describe("deriveStateFromPoll", () => {
     expect(deriveStateFromPoll({
       ...basePoll, stop: "end_turn", choiceHint: true, permPending: true,
     }, "idle")).toBe("waitingPermission");
+  });
+
+  it("promptDetected forces thinking -> idle when no events", () => {
+    expect(deriveStateFromPoll({ ...basePoll, promptDetected: true }, "thinking")).toBe("idle");
+  });
+
+  it("promptDetected forces toolUse -> idle when no events", () => {
+    expect(deriveStateFromPoll({ ...basePoll, stop: null, promptDetected: true }, "toolUse")).toBe("idle");
+  });
+
+  it("promptDetected does not change idle state", () => {
+    expect(deriveStateFromPoll({ ...basePoll, stop: "end_turn", promptDetected: true }, "idle")).toBe("idle");
+  });
+
+  it("promptDetected + choiceHint -> actionNeeded (prompt forces idle, choiceHint refines)", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, promptDetected: true, choiceHint: true,
+    }, "thinking")).toBe("actionNeeded");
+  });
+
+  it("permPending overrides promptDetected -> waitingPermission", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, promptDetected: true, permPending: true,
+    }, "thinking")).toBe("waitingPermission");
+  });
+
+  it("events take precedence over promptDetected (assistant still generating)", () => {
+    expect(deriveStateFromPoll({
+      ...basePoll, events: [{ t: "assistant" }], promptDetected: true,
+    }, "idle")).toBe("thinking");
   });
 });
 
@@ -1900,6 +1931,7 @@ describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
       idleDetected: state.idleDetected as boolean,
       toolAction: state.toolAction as string | null,
       choiceHint: false,
+      promptDetected: false,
       inputBuf: state.inputBuf as string,
       inputTs: state.inputTs as number,
       fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
@@ -1940,6 +1972,7 @@ describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
       idleDetected: state.idleDetected as boolean,
       toolAction: state.toolAction as string | null,
       choiceHint: false,
+      promptDetected: false,
       inputBuf: state.inputBuf as string,
       inputTs: state.inputTs as number,
       fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,

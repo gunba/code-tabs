@@ -14,6 +14,7 @@ interface InspectorPollResult {
   toolAction: string | null; choiceHint: boolean;
   inputBuf: string; inputTs: number; fetchBypassed: number;
   fetchTimeouts: number; httpsTimeouts: number;
+  promptDetected: boolean;
   subs: Array<{
     sid: string; desc: string; st: string; tok: number; act: string | null;
     msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number;
@@ -22,6 +23,10 @@ interface InspectorPollResult {
 
 /** Map inspector sub-state codes to SessionState values. */
 const SUB_STATE_MAP: Record<string, SessionState> = { s: "starting", t: "thinking", u: "toolUse", i: "idle" };
+
+/** Prompt markers for terminal buffer idle detection (matches useTerminal.ts). */
+const PROMPT_MARKER_NEW = ">\u00A0"; // > + NBSP — current Claude Code prompt
+const PROMPT_MARKER_OLD = "\u276F"; // ❯ — legacy Claude Code prompt
 
 /** Delay before first connection attempt (PTY needs ~50ms to spawn, Bun ~1s to init). */
 const CONNECT_DELAY_MS = 1000;
@@ -67,6 +72,10 @@ export function deriveStateFromPoll(
   // Notification flags override
   if (data.idleDetected) state = "idle";
 
+  // Terminal buffer fallback: prompt visible + no events flowing → force idle.
+  // Catches stuck thinking/toolUse when events are missed (e.g. POLL_STATE errors).
+  if ((state === "thinking" || state === "toolUse") && data.events.length === 0 && data.promptDetected) state = "idle";
+
   // Refine idle → actionNeeded for CLI selectors (detected via terminal buffer)
   if (state === "idle" && data.choiceHint) state = "actionNeeded";
 
@@ -103,6 +112,7 @@ export function useInspectorState(
   const fetchBypassLoggedRef = useRef(false);
   const fetchTimeoutLoggedRef = useRef(false);
   const httpsTimeoutLoggedRef = useRef(false);
+  const noEventTicksRef = useRef(0);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
@@ -123,11 +133,28 @@ export function useInspectorState(
     const sid = sessionIdRef.current;
     if (!sid) return;
 
+    // Track consecutive polls with no events (detects stale state)
+    if (data.events.length === 0) {
+      noEventTicksRef.current++;
+    } else {
+      noEventTicksRef.current = 0;
+    }
+
     // Detect CLI selectors from terminal buffer: Ink renders "> 1." for the
     // selected item and "  2." for subsequent items. Check last 15 lines.
     const tail = getSessionBufferTail(sid, 15);
     const selectorActive = tail !== null && tail.includes("> 1.") && tail.includes("2.");
     data.choiceHint = selectorActive;
+
+    // Terminal buffer idle fallback: if no events for 2+ polls (500ms) and
+    // the Claude Code prompt is visible on the last terminal line, flag it.
+    // Guards against stuck thinking/toolUse when POLL_STATE errors lose events.
+    if (noEventTicksRef.current >= 2 && tail !== null) {
+      const lastLine = tail.split("\n").pop() || "";
+      data.promptDetected = lastLine.includes(PROMPT_MARKER_NEW) || lastLine.includes(PROMPT_MARKER_OLD);
+    } else {
+      data.promptDetected = false;
+    }
 
     const derivedState = deriveStateFromPoll(data, lastStateRef.current);
     if (derivedState !== lastStateRef.current) {
@@ -262,6 +289,11 @@ export function useInspectorState(
             processPollResult(pollData);
           }
         }
+
+        // Log Runtime.evaluate exceptions (e.g. POLL_STATE crash)
+        if (msg.result?.exceptionDetails) {
+          console.warn("[inspector] evaluation error:", msg.result.exceptionDetails.text || msg.result.exceptionDetails.exception?.description);
+        }
       } catch {
         // Invalid message — skip
       }
@@ -310,6 +342,7 @@ export function useInspectorState(
     lastFingerprintRef.current = "";
     lastSidRef.current = null;
     knownSubsRef.current = new Set();
+    noEventTicksRef.current = 0;
     msgIdRef.current = 1;
     setClaudeSessionId(null);
     setInputText("");

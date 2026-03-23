@@ -400,7 +400,17 @@ export const INSTALL_HOOK = `(function() {
 export const POLL_STATE = `(function() {
   var s = globalThis.__inspectorState;
   if (!s) return null;
-  var result = {
+  var evts = s.events.slice();
+  s.events = [];
+  var subsData = [];
+  try {
+    for (var i = 0; i < s.subs.length; i++) {
+      var sub = s.subs[i];
+      var msgs = sub.msgs.splice(0);
+      subsData.push({ sid: sub.sid, desc: sub.desc, st: sub.st, tok: sub.tok, act: sub.act, msgs: msgs, lastTs: sub.lastTs });
+    }
+  } catch(e) {}
+  return {
     n: s.n,
     sid: s.sid,
     cost: s.cost,
@@ -409,7 +419,7 @@ export const POLL_STATE = `(function() {
     tools: s.tools.slice(),
     inTok: s.inTok,
     outTok: s.outTok,
-    events: s.events.slice(),
+    events: evts,
     lastEvent: s.lastEvent,
     firstMsg: s.firstMsg,
     lastText: s.lastText,
@@ -420,14 +430,10 @@ export const POLL_STATE = `(function() {
     inputBuf: s.inputBuf,
     inputTs: s.inputTs,
     choiceHint: false,
+    promptDetected: false,
     fetchBypassed: s.fetchBypassed || 0,
     fetchTimeouts: s.fetchTimeouts || 0,
     httpsTimeouts: s.httpsTimeouts || 0,
-    subs: s.subs.map(function(sub) {
-      var msgs = sub.msgs.splice(0);
-      return { sid: sub.sid, desc: sub.desc, st: sub.st, tok: sub.tok, act: sub.act, msgs: msgs, lastTs: sub.lastTs };
-    })
+    subs: subsData
   };
-  s.events = [];
-  return result;
 })()`;

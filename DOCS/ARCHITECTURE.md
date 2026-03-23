@@ -24,10 +24,10 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [SI-01] Sole source: BUN_INSPECT WebSocket inspector via JSON.stringify interception (~2-6ms latency)
 - [SI-02] Inspector connects after 1s delay (Bun init time), retries 3x with backoff on failure
 - [SI-03] deriveStateFromPoll() -- pure function for state derivation from poll payloads; replaces poll-based derivation
-  - Files: src/hooks/useInspectorState.ts:39
+  - Files: src/hooks/useInspectorState.ts:44
 - [SI-04] Permission detection via `permPending` notification flag (not PTY regex)
-- [SI-05] Idle detection via `idleDetected` notification flag (not PTY regex); sticky, cleared only by user event; set synchronously in JSON.stringify hook, drained by poll loop
-  - Files: src/lib/inspectorHooks.ts:77
+- [SI-05] Idle detection via `idleDetected` notification flag (not PTY regex); sticky, cleared only by user event; set synchronously in JSON.stringify hook, drained by poll loop. Fallback: `promptDetected` scans terminal buffer tail for Claude Code prompt markers (NBSP-delimited) after 2+ polls with no events.
+  - Files: src/lib/inspectorHooks.ts:77, src/hooks/useInspectorState.ts:152
 - [SI-06] `choiceHint` detection: terminal buffer tail scan (last 15 lines via `getSessionBufferTail`) detects numbered list items when stop=end_turn and no tools in turn; auto-clears on user input (resets stop to null)
 - [SI-07] Tool actions, user prompts, assistant text, subagent descriptions captured inline
 - [SI-08] State is NEVER inferred from timers or arbitrary delays — only from real signals
@@ -37,16 +37,18 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/lib/inspectorHooks.ts:53, src/lib/inspectorHooks.ts:181, src/lib/inspectorHooks.ts:211, src/lib/inspectorHooks.ts:235
 - [SI-12] idleDetected is sticky: cleared only by user events in the hook; prevents state oscillation between idle and stale tool_use
   - Files: src/lib/inspectorHooks.ts:236
-- [SI-13] deriveStateFromPoll override chain: ExitPlanMode refines toolUse to actionNeeded; idleDetected overrides to idle; choiceHint refines idle to actionNeeded; permPending always wins (waitingPermission)
-  - Files: src/hooks/useInspectorState.ts:39, src/hooks/useInspectorState.ts:65
-- [SI-14] Poll-based architecture: INSTALL_HOOK wraps JSON.stringify to capture state into globalThis.__inspectorState; useInspectorState polls via POLL_STATE expression every 250ms, draining events and transient flags each cycle. No push binding; state detection disabled if hook install fails.
-  - Files: src/hooks/useInspectorState.ts:214, src/lib/inspectorHooks.ts:27
-- [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (computed from lastText)
+- [SI-13] deriveStateFromPoll override chain: ExitPlanMode refines toolUse to actionNeeded; idleDetected overrides to idle; promptDetected overrides thinking/toolUse to idle (no-events guard); choiceHint refines idle to actionNeeded; permPending always wins (waitingPermission)
+  - Files: src/hooks/useInspectorState.ts:44, src/hooks/useInspectorState.ts:70
+- [SI-14] Poll-based architecture: INSTALL_HOOK wraps JSON.stringify to capture state into globalThis.__inspectorState; useInspectorState polls via POLL_STATE expression every 250ms. POLL_STATE drains events unconditionally before subs processing; subs iteration wrapped in try/catch to prevent cascading failures. Evaluation errors logged via onmessage exceptionDetails check.
+  - Files: src/hooks/useInspectorState.ts:241, src/lib/inspectorHooks.ts:27, src/lib/inspectorHooks.ts:400
+- [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (terminal selector), promptDetected (terminal prompt fallback)
   - Files: src/lib/inspectorHooks.ts:400, src/hooks/useInspectorState.ts:8
 - [SI-16] WebFetch domain blocklist bypass: intercepts require('https').request to return can_fetch:true for api.anthropic.com/api/web/domain_info, eliminating the 10s preflight that blocks all WebFetch calls. Axios in Bun uses the Node http adapter (not globalThis.fetch), so the hook targets the shared https module singleton. Bypass count exposed as fetchBypassed in poll state.
   - Files: src/lib/inspectorHooks.ts:298
 - [SI-17] Interrupt signal detection: Ctrl+C (\x03) and Escape (\x1b) on stdin emit a synthetic result event, set state to end_turn, clear permission/tool flags, and mark all subagents idle — enabling immediate idle detection without waiting for Claude's actual response.
   - Files: src/lib/inspectorHooks.ts:272
+- [SI-19] Terminal buffer prompt fallback: when no events flow for 2+ consecutive polls (noEventTicksRef) and the terminal tail's last line contains a Claude Code prompt marker (`>\u00A0` or `❯`), `promptDetected` is set. deriveStateFromPoll overrides thinking/toolUse to idle when promptDetected is true and events are empty. Prevents stuck states from POLL_STATE failures or missed events.
+  - Files: src/hooks/useInspectorState.ts:152, src/hooks/useInspectorState.ts:77
 - [SI-18] WebFetch timeout protection: two hooks prevent indefinite hangs. (1) globalThis.fetch wrapper applies 120s timeout to non-streaming Anthropic API calls (the summarization path via callSmallModel), distinguishing from streaming main conversation by checking for "stream":true in the request body. Wires caller's AbortSignal through a wrapper AbortController. (2) https.request hard timeout applies 90s wall clock to all non-bypassed external HTTPS requests (the axios HTTP GET path), via setTimeout + req.destroy. Counters fetchTimeouts and httpsTimeouts exposed in poll state.
   - Files: src/lib/inspectorHooks.ts:339, src/lib/inspectorHooks.ts:357
 
@@ -122,8 +124,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [IN-02] `INSTALL_HOOK` JS expression in `inspectorHooks.ts`; wraps JSON.stringify to capture events into globalThis.__inspectorState. Polled every 250ms via POLL_STATE.
   - Files: src/lib/inspectorHooks.ts:27
 - [IN-03] Subagent tracking: inspector detects Agent tool_use -> queues description -> matches with new session ID system event -> routes events to subagent entry
-- [IN-04] Subagent conversation messages captured via POLL_STATE splice (sub.msgs.splice(0)) each poll cycle; messages accumulated in INSTALL_HOOK's subagent tracking and drained by the frontend poller
-  - Files: src/lib/inspectorHooks.ts:427, src/hooks/useInspectorState.ts:157
+- [IN-04] Subagent conversation messages captured via POLL_STATE splice (sub.msgs.splice(0)) in a try/catch for-loop each poll cycle; messages accumulated in INSTALL_HOOK's subagent tracking and drained by the frontend poller
+  - Files: src/lib/inspectorHooks.ts:407, src/hooks/useInspectorState.ts:190
 - [IN-05] Stale subagent detection removed -- push-based architecture handles subagent lifecycle via real-time state events only
   - Files: src/hooks/useInspectorState.ts:156
 - [IN-06] Dead subagent purge removed -- push-based architecture relies on real-time state transitions; idle subs remain visible until session ends
@@ -133,7 +135,7 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [IN-08] SubagentInspector tool block collapse: MessageBlock uses local useState for collapsed state; getToolPreview extracts first non-empty line (120 char cap). Parent computes lastToolIndex via reduce; only the last tool message auto-expands when subagent is active (not dead/idle). React key={i} ensures stable mounting.
   - Files: src/components/SubagentInspector/SubagentInspector.tsx:12, src/components/SubagentInspector/SubagentInspector.tsx:78
 - [IN-09] choiceHint detection uses terminal buffer tail (last 15 lines from xterm.js) to find active Ink selectors via "> 1." + "2." pattern, replacing the previous lastText regex approach. getBufferTail reads only the last N lines for efficiency.
-  - Files: src/hooks/useInspectorState.ts:126, src/lib/terminalRegistry.ts:30, src/hooks/useTerminal.ts:349
+  - Files: src/hooks/useInspectorState.ts:143, src/lib/terminalRegistry.ts:30, src/hooks/useTerminal.ts:349
 
 ## Background Buffering
 
