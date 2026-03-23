@@ -90,6 +90,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── ConfigManager/HooksPane.tsx      # Per-scope hooks CRUD (absorbed from HooksManager)
   │   ├── ConfigManager/PluginsPane.tsx    # Per-scope enabledPlugins (Record<string,boolean>) + mcpServers
   │   ├── ConfigManager/AgentEditor.tsx    # Per-scope agent file list + markdown editor
+  │   ├── ConfigManager/SettingsTab.tsx    # Unified per-scope settings layout with schema-driven fields
   │   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
   │   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper
   │   └── DebugPanel/DebugPanel.tsx        # Debug log viewer (Ctrl+Shift+D)

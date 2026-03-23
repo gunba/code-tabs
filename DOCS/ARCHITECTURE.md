@@ -82,8 +82,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src-tauri/pty-patch/src/lib.rs:348, src/lib/ptyProcess.ts:170
 - [PT-19] Sync block re-wrapping: completed sync blocks are re-wrapped with BSU/ESU before sending to xterm.js. Full-redraw blocks (`is_full_redraw: true`) replace ESC[2J (pushes viewport to scrollback) with ESC[H ESC[J (cursor home + erase below, no scrollback push). `strip_clear_screen_into` uses memchr::memmem to efficiently remove all ESC[2J occurrences.
   - Files: src-tauri/pty-patch/src/lib.rs:27, src-tauri/pty-patch/src/lib.rs:42
-- [PT-20] [OF-05] Full-redraw sync blocks clear scrollback (ESC[3J) before clearing viewport. Prevents ink's full-conversation re-render from duplicating into scrollback on resize.
-  - Files: src-tauri/pty-patch/src/lib.rs:50
+- [PT-20] Full-redraw sync blocks preserve scrollback — only the viewport is cleared (ESC[H ESC[J). Ink's full re-renders may duplicate lines into scrollback, but this is bounded by xterm.js's 100K scrollback limit and preserves the user's scroll position. The deferred PTY resize mechanism handles tab-switch duplication separately.
+  - Files: src-tauri/pty-patch/src/lib.rs:42
 
 ## Persistence
 
