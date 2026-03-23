@@ -36,18 +36,14 @@ fn strip_clear_screen_into(src: &[u8], dst: &mut Vec<u8>) {
 }
 
 /// Re-wrap a completed sync block with BSU/ESU for xterm.js.
-/// Full-redraw blocks clear scrollback (ESC[3J) then viewport (ESC[H ESC[J),
-/// replacing the original ESC[2J. Ink re-renders the full conversation on resize,
-/// which would otherwise duplicate into scrollback.
+/// Full-redraw blocks replace ESC[2J with ESC[H ESC[J to avoid viewport reset.
+/// Scrollback is deliberately preserved — ink's full re-renders produce duplicate
+/// lines in scrollback, but the user's scroll position is maintained because
+/// viewportY still points to the same buffer content. The deferred PTY resize
+/// mechanism handles the tab-switch duplication case separately.
 fn emit_sync_block(data: &[u8], is_full_redraw: bool, result: &mut Vec<u8>) {
     result.extend_from_slice(b"\x1b[?2026h"); // BSU
     if is_full_redraw {
-        // Clear scrollback BEFORE clearing the viewport. Ink re-renders the
-        // entire conversation history on resize, which exceeds the viewport
-        // and scrolls into the scrollback buffer — duplicating content that
-        // was already there. Clearing scrollback first prevents this; ink's
-        // re-render re-populates it with the full conversation.
-        result.extend_from_slice(b"\x1b[3J");
         result.extend_from_slice(b"\x1b[H\x1b[J");
         strip_clear_screen_into(data, result);
     } else {
@@ -432,10 +428,9 @@ mod tests {
         data.extend_from_slice(b"\x1b[2J\x1b[Hscreen content");
         let mut result = Vec::new();
         emit_sync_block(&data, true, &mut result);
-        // Should: BSU + ESC[3J + ESC[H ESC[J + stripped data (no ESC[2J) + ESU
+        // Should: BSU + ESC[H ESC[J + stripped data (no ESC[2J) + ESU
         let mut expected = Vec::new();
         expected.extend_from_slice(b"\x1b[?2026h");
-        expected.extend_from_slice(b"\x1b[3J");
         expected.extend_from_slice(b"\x1b[H\x1b[J");
         expected.extend_from_slice(b"\x1b[Hscreen content"); // ESC[2J removed
         expected.extend_from_slice(b"\x1b[?2026l");
@@ -445,12 +440,11 @@ mod tests {
     #[test]
     fn test_emit_sync_block_full_redraw_no_clear_in_data() {
         // Full redraw flagged but data happens to not contain ESC[2J
-        // (edge case -- still prepends ESC[3J ESC[H ESC[J)
+        // (edge case -- still prepends ESC[H ESC[J)
         let mut result = Vec::new();
         emit_sync_block(b"\x1b[Hcontent", true, &mut result);
         let mut expected = Vec::new();
         expected.extend_from_slice(b"\x1b[?2026h");
-        expected.extend_from_slice(b"\x1b[3J");
         expected.extend_from_slice(b"\x1b[H\x1b[J");
         expected.extend_from_slice(b"\x1b[Hcontent");
         expected.extend_from_slice(b"\x1b[?2026l");
@@ -526,12 +520,12 @@ mod tests {
         // No ESC[2J should remain anywhere in the output
         assert!(!result.windows(4).any(|w| w == b"\x1b[2J"),
             "all ESC[2J must be stripped from full redraw output");
-        // Structure: BSU + ESC[3J + ESC[H ESC[J + stripped content + ESU
-        assert!(result.starts_with(b"\x1b[?2026h\x1b[3J\x1b[H\x1b[J"),
-            "full redraw must have BSU + ESC[3J + ESC[H + ESC[J prefix");
+        // Structure: BSU + ESC[H ESC[J + stripped content + ESU
+        assert!(result.starts_with(b"\x1b[?2026h\x1b[H\x1b[J"),
+            "full redraw must have BSU + ESC[H + ESC[J prefix");
         assert!(result.ends_with(b"\x1b[?2026l"), "must end with ESU");
         // Verify content survived (only ESC[2J removed)
-        let inner = &result[12..result.len() - 8]; // skip BSU + ESC[3J and ESU
+        let inner = &result[8..result.len() - 8]; // skip BSU and ESU
         assert!(inner.windows(6).any(|w| w == b"screen"),
             "screen content must be preserved");
         assert!(inner.windows(4).any(|w| w == b"more"),
@@ -547,30 +541,21 @@ mod tests {
             "non-full-redraw must NOT emit ESC[3J (scrollback clear)");
     }
 
-    // --- emit_sync_block: full redraw with ESC[3J before ESC[H ESC[J ---
-    // Verifies the exact ordering: BSU, then ESC[3J, then ESC[H ESC[J.
-    // ESC[3J must precede ESC[H ESC[J so scrollback is cleared before
-    // viewport reset, preventing stale content from surviving.
+    // --- emit_sync_block: full redraw must NOT contain ESC[3J ---
+    // ESC[3J destroys scrollback, which makes scroll position preservation
+    // impossible. Full redraws only clear the viewport (ESC[H ESC[J).
     #[test]
-    fn test_emit_sync_block_full_redraw_3j_ordering() {
+    fn test_emit_sync_block_full_redraw_no_scrollback_clear() {
         let mut result = Vec::new();
         emit_sync_block(b"\x1b[2Jcontent", true, &mut result);
 
-        // Find positions of the key sequences
-        let esc3j_pos = result.windows(4)
-            .position(|w| w == b"\x1b[3J")
-            .expect("ESC[3J must be present in full redraw");
-        let esc_h_pos = result.windows(3)
-            .position(|w| w == b"\x1b[H")
-            .expect("ESC[H must be present in full redraw");
-        let esc_j_pos = result.windows(3)
-            .position(|w| w == b"\x1b[J")
-            .expect("ESC[J must be present in full redraw");
-
-        assert!(esc3j_pos < esc_h_pos,
-            "ESC[3J (pos {}) must precede ESC[H (pos {})", esc3j_pos, esc_h_pos);
-        assert!(esc_h_pos < esc_j_pos,
-            "ESC[H (pos {}) must precede ESC[J (pos {})", esc_h_pos, esc_j_pos);
+        assert!(!result.windows(4).any(|w| w == b"\x1b[3J"),
+            "full redraw must NOT emit ESC[3J (scrollback clear)");
+        // ESC[H and ESC[J must still be present
+        assert!(result.windows(3).any(|w| w == b"\x1b[H"),
+            "ESC[H must be present in full redraw");
+        assert!(result.windows(3).any(|w| w == b"\x1b[J"),
+            "ESC[J must be present in full redraw");
     }
 
     // --- emit_sync_block: empty data with full redraw ---
@@ -579,18 +564,17 @@ mod tests {
     fn test_emit_sync_block_full_redraw_empty_data() {
         let mut result = Vec::new();
         emit_sync_block(b"", true, &mut result);
-        // Should still have: BSU + ESC[3J + ESC[H ESC[J + (empty) + ESU
+        // Should still have: BSU + ESC[H ESC[J + (empty) + ESU
         let mut expected = Vec::new();
         expected.extend_from_slice(b"\x1b[?2026h");
-        expected.extend_from_slice(b"\x1b[3J");
         expected.extend_from_slice(b"\x1b[H\x1b[J");
         expected.extend_from_slice(b"\x1b[?2026l");
         assert_eq!(result, expected);
     }
 
-    // --- End-to-end pipeline: full redraw through detector + emit produces ESC[3J ---
+    // --- End-to-end pipeline: full redraw preserves scrollback ---
     #[test]
-    fn test_pipeline_full_redraw_produces_scrollback_clear() {
+    fn test_pipeline_full_redraw_preserves_scrollback() {
         let mut detector = SyncBlockDetector::new();
         let mut input = Vec::new();
         input.extend_from_slice(b"\x1b[?2026h"); // BSU
@@ -610,9 +594,9 @@ mod tests {
             }
         }
 
-        // Must contain ESC[3J (scrollback clear)
-        assert!(result.windows(4).any(|w| w == b"\x1b[3J"),
-            "full redraw pipeline must emit ESC[3J");
+        // Must NOT contain ESC[3J (scrollback must be preserved for scroll position)
+        assert!(!result.windows(4).any(|w| w == b"\x1b[3J"),
+            "full redraw pipeline must NOT emit ESC[3J");
         // Must NOT contain ESC[2J (original clear screen should be stripped)
         assert!(!result.windows(4).any(|w| w == b"\x1b[2J"),
             "full redraw pipeline must strip ESC[2J");
