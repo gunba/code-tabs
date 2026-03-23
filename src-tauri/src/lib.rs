@@ -163,6 +163,7 @@ pub fn run() {
             jsonl_watcher::stop_jsonl_watcher,
             jsonl_watcher::start_subagent_watcher,
             jsonl_watcher::stop_subagent_watcher,
+            commands::check_port_available,
             commands::shell_open,
             commands::plugin_list,
             commands::plugin_install,

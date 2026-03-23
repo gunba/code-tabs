@@ -146,16 +146,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const [respawnCounter, setRespawnCounter] = useState(0);
   const [inspectorReconnectKey, setInspectorReconnectKey] = useState(0);
 
-  // Inspector: allocate port once per session. Always allocate — we spawn the PTY
-  // even for resumed sessions, so BUN_INSPECT is always available.
-  // Uses -1 sentinel to call allocateInspectorPort() only once (it has side effects).
-  const inspectorPortRef = useRef<number | null>(-1);
-  if (inspectorPortRef.current === -1) {
-    inspectorPortRef.current = allocateInspectorPort();
-  }
+  // Inspector port: allocated async in doSpawn via OS probe (check_port_available IPC).
+  // State triggers re-render so useInspectorState receives the port after allocation.
+  const [inspectorPort, setInspectorPort] = useState<number | null>(null);
   const inspector = useInspectorState(
     session.state !== "dead" ? session.id : null,
-    inspectorPortRef.current,
+    inspectorPort,
     inspectorReconnectKey
   );
 
@@ -319,14 +315,14 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     terminalRef.current?.write("\x1b[90m[Resuming...]\x1b[0m\r\n");
     setLoading(!!newConfig.resumeSession);
 
-    // 5. Reset internal state and inspector port
+    // 5. Reset internal state (inspector port allocated in doSpawn)
     lastPtyDimsRef.current = null;
     spawnedRef.current = false;
     earlyOutputRef.current = "";
     sessionInUseRef.current = false;
     sessionInUseRetried.current = false;
     setExternalHolder(null);
-    inspectorPortRef.current = allocateInspectorPort();
+    setInspectorPort(null);
 
     // 6. Trigger re-spawn
     updateState(session.id, "starting");
@@ -413,17 +409,21 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     const doSpawn = async () => {
       spawnedRef.current = true;
       try {
+        // Allocate a verified-free inspector port before spawning.
+        // Register immediately so concurrent allocations (multi-tab restore) skip it.
+        const inspPort = await allocateInspectorPort();
+        registerInspectorPort(session.id, inspPort);
+        setInspectorPort(inspPort);
+
         const args = await buildClaudeArgs(session.config);
         terminal.fit(); // Force fit before reading dimensions
         const { cols, rows } = terminal.getDimensions();
         // Normalize path slashes for Windows PTY spawn
         const cwd = session.config.workingDir.replace(/\//g, "\\");
         // Pass BUN_INSPECT env for inspector-based state detection
-        const inspPort = inspectorPortRef.current;
-        const env = inspPort ? { BUN_INSPECT: `ws://127.0.0.1:${inspPort}/0` } : undefined;
+        const env = { BUN_INSPECT: `ws://127.0.0.1:${inspPort}/0` };
         const handle = await pty.spawn(claudePath, args, cwd, cols, rows, env);
         registerPtyWriter(session.id, handle.write);
-        if (inspPort) registerInspectorPort(session.id, inspPort);
         updateState(session.id, "idle");
 
         // Post-spawn dimension verification — catches cases where font metrics

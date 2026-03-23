@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+
+// Mock @tauri-apps/api/core — allocateInspectorPort calls invoke("check_port_available")
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn().mockResolvedValue(true),
+}));
+
+const mockInvoke = vi.mocked(invoke);
+
 import {
   allocateInspectorPort,
   registerInspectorPort,
@@ -114,12 +123,12 @@ describe("inspectorPort registry", () => {
   // ── Integration: full lifecycle ───────────────────────────────────
 
   describe("full lifecycle", () => {
-    it("register → disconnect → reconnect → unregister", () => {
+    it("register → disconnect → reconnect → unregister", async () => {
       const disconnect = vi.fn();
       const reconnect = vi.fn();
 
       // 1. Register port and callbacks
-      const port = allocateInspectorPort();
+      const port = await allocateInspectorPort();
       registerInspectorPort(S1, port);
       registerInspectorCallbacks(S1, { disconnect, reconnect });
       expect(getInspectorPort(S1)).toBe(port);
@@ -144,7 +153,7 @@ describe("inspectorPort registry", () => {
       expect(reconnect).toHaveBeenCalledOnce(); // still 1
     });
 
-    it("respawn lifecycle: unregister + re-register works cleanly", () => {
+    it("respawn lifecycle: unregister + re-register works cleanly", async () => {
       const disconnect = vi.fn();
       registerInspectorCallbacks(S1, { disconnect, reconnect: vi.fn() });
       registerInspectorPort(S1, 6400);
@@ -157,7 +166,7 @@ describe("inspectorPort registry", () => {
       unregisterInspectorCallbacks(S1);
 
       // Re-register with new port (simulating respawn)
-      const newPort = allocateInspectorPort();
+      const newPort = await allocateInspectorPort();
       registerInspectorPort(S1, newPort);
       const newDisconnect = vi.fn();
       const newReconnect = vi.fn();
@@ -167,6 +176,60 @@ describe("inspectorPort registry", () => {
       expect(getInspectorPort(S1)).toBe(newPort);
       disconnectInspectorForSession(S1);
       expect(newDisconnect).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ── allocateInspectorPort edge cases ──────────────────────────────
+
+  describe("allocateInspectorPort", () => {
+    beforeEach(() => {
+      mockInvoke.mockClear();
+      mockInvoke.mockResolvedValue(true);
+    });
+
+    it("calls invoke('check_port_available') with the candidate port", async () => {
+      mockInvoke.mockResolvedValue(true);
+      const port = await allocateInspectorPort();
+      expect(mockInvoke).toHaveBeenCalledWith("check_port_available", { port });
+    });
+
+    it("skips ports already in the registry", async () => {
+      // Allocate a port to learn the current cursor position
+      mockInvoke.mockResolvedValue(true);
+      const first = await allocateInspectorPort();
+      // Register it as "in use"
+      registerInspectorPort("blocker", first);
+
+      // Next allocation should skip `first` without probing it
+      mockInvoke.mockClear();
+      const second = await allocateInspectorPort();
+      expect(second).not.toBe(first);
+      // The skipped port should not have been probed
+      const probedPorts = mockInvoke.mock.calls.map(c => (c[1] as { port: number }).port);
+      expect(probedPorts).not.toContain(first);
+
+      // Cleanup
+      unregisterInspectorPort("blocker");
+    });
+
+    it("skips ports where check_port_available returns false", async () => {
+      // First candidate will be OS-occupied, second will be free
+      mockInvoke
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+      const port = await allocateInspectorPort();
+      expect(mockInvoke).toHaveBeenCalledTimes(2);
+      // Returned port is the second candidate (the free one)
+      const secondProbed = (mockInvoke.mock.calls[1]![1] as { port: number }).port;
+      expect(port).toBe(secondProbed);
+    });
+
+    it("throws when all ports are exhausted", async () => {
+      // Fill the entire range via OS probe returning false
+      mockInvoke.mockResolvedValue(false);
+      await expect(allocateInspectorPort()).rejects.toThrow(
+        "No free inspector ports in range 6400-6499"
+      );
     });
   });
 });

@@ -1,6 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { INSTALL_HOOK, POLL_STATE } from "../inspectorHooks";
 import { deriveStateFromPoll } from "../../hooks/useInspectorState";
+
+// Mock @tauri-apps/api/core — allocateInspectorPort calls invoke("check_port_available")
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn().mockResolvedValue(true),
+}));
+
 import { allocateInspectorPort } from "../inspectorPort";
 
 // The INSTALL_HOOK IIFE uses real globalThis, so tests that check install/idempotency
@@ -753,9 +759,9 @@ describe("POLL_STATE", () => {
 });
 
 describe("allocateInspectorPort", () => {
-  it("returns sequential ports (wraps at boundary)", () => {
-    const p1 = allocateInspectorPort();
-    const p2 = allocateInspectorPort();
+  it("returns sequential ports (wraps at boundary)", async () => {
+    const p1 = await allocateInspectorPort();
+    const p2 = await allocateInspectorPort();
     // Ports are sequential, but wrap from 6499 -> 6400
     if (p1 === 6499) {
       expect(p2).toBe(6400);

@@ -1,17 +1,34 @@
 /**
- * Sequential port allocator for BUN_INSPECT WebSocket connections.
- * Each session gets a unique port. Ports are never reused within app lifetime.
+ * Port allocator for BUN_INSPECT WebSocket connections.
+ * Each session gets a unique port verified free at the OS level.
  * Range: 6400-6499 (100 ports, well above typical concurrent session count).
- * Wraps around to 6400 if exhausted (old sessions will have closed by then).
  */
+import { invoke } from "@tauri-apps/api/core";
+
 const PORT_MIN = 6400;
 const PORT_MAX = 6499;
-let nextPort = PORT_MIN + (Date.now() % (PORT_MAX - PORT_MIN + 1));
+let nextPort = PORT_MIN;
 
-export function allocateInspectorPort(): number {
-  const port = nextPort++;
-  if (nextPort > PORT_MAX) nextPort = PORT_MIN;
-  return port;
+/**
+ * Allocate a free inspector port. Skips ports held by active sessions
+ * and probes the OS via TcpListener::bind to guarantee availability.
+ * Throws if all 100 ports are occupied.
+ */
+export async function allocateInspectorPort(): Promise<number> {
+  const usedPorts = new Set(portRegistry.values());
+  const rangeSize = PORT_MAX - PORT_MIN + 1;
+
+  for (let i = 0; i < rangeSize; i++) {
+    const port = nextPort;
+    nextPort = nextPort >= PORT_MAX ? PORT_MIN : nextPort + 1;
+
+    if (usedPorts.has(port)) continue;
+
+    const available = await invoke<boolean>("check_port_available", { port });
+    if (available) return port;
+  }
+
+  throw new Error("No free inspector ports in range 6400-6499");
 }
 
 /** Registry mapping app session IDs to their BUN_INSPECT ports. */

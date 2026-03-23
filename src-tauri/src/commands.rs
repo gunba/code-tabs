@@ -1909,6 +1909,13 @@ pub async fn plugin_disable(name: String) -> Result<String, String> {
         .await.map_err(|e| e.to_string())?
 }
 
+/// Check if a TCP port is available for binding on 127.0.0.1.
+/// Used by the frontend to find a free port for BUN_INSPECT before spawning.
+#[tauri::command]
+pub fn check_port_available(port: u16) -> bool {
+    std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

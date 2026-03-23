@@ -36,4 +36,5 @@ export interface IpcCommands {
   plugin_uninstall: (args: { name: string }) => Promise<string>;
   plugin_enable: (args: { name: string }) => Promise<string>;
   plugin_disable: (args: { name: string }) => Promise<string>;
+  check_port_available: (args: { port: number }) => Promise<boolean>;
 }

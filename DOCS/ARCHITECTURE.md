@@ -118,7 +118,7 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 
 ## Inspector
 
-- [IN-01] Inspector port allocation and registry in `inspectorPort.ts`
+- [IN-01] Inspector port allocation and registry in `inspectorPort.ts`. Async `allocateInspectorPort()` probes OS via `check_port_available` IPC (Rust TcpListener::bind) and skips registry-held ports.
 - [IN-02] `INSTALL_HOOK` JS expression in `inspectorHooks.ts`; wraps JSON.stringify to capture events into globalThis.__inspectorState. Polled every 250ms via POLL_STATE.
   - Files: src/lib/inspectorHooks.ts:27
 - [IN-03] Subagent tracking: inspector detects Agent tool_use -> queues description -> matches with new session ID system event -> routes events to subagent entry
@@ -128,8 +128,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/hooks/useInspectorState.ts:156
 - [IN-06] Dead subagent purge removed -- push-based architecture relies on real-time state transitions; idle subs remain visible until session ends
   - Files: src/hooks/useInspectorState.ts:156
-- [IN-07] Inspector port allocator uses random start offset (Date.now() mod range) to reduce collisions with orphan processes during the brief window between app startup and cleanup
-  - Files: src/lib/inspectorPort.ts:9
+- [IN-07] Inspector port allocator verifies each candidate port is free via `check_port_available` IPC (Rust TcpListener::bind on 127.0.0.1). Skips ports already in the registry. Throws if all 100 ports (6400-6499) are exhausted.
+  - Files: src/lib/inspectorPort.ts:17, src-tauri/src/commands.rs:1914
 - [IN-08] SubagentInspector tool block collapse: MessageBlock uses local useState for collapsed state; getToolPreview extracts first non-empty line (120 char cap). Parent computes lastToolIndex via reduce; only the last tool message auto-expands when subagent is active (not dead/idle). React key={i} ensures stable mounting.
   - Files: src/components/SubagentInspector/SubagentInspector.tsx:12, src/components/SubagentInspector/SubagentInspector.tsx:78
 - [IN-09] choiceHint detection uses terminal buffer tail (last 15 lines from xterm.js) to find active Ink selectors via "> 1." + "2." pattern, replacing the previous lastText regex approach. getBufferTail reads only the last N lines for efficiency.
