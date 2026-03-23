@@ -1,9 +1,15 @@
 {
   "file": "CLAUDE.md",
   "all_tags": [
+    "AR-01",
     "BV-01",
     "BV-02",
     "BV-03",
+    "CD-01",
+    "DC-01",
+    "DC-02",
+    "DC-03",
+    "DC-04",
     "DR-01",
     "DR-02",
     "DR-03",
@@ -11,70 +17,125 @@
     "DR-05",
     "DR-06",
     "DR-07",
+    "FS-01",
+    "LO-01",
     "TH-01",
     "TH-02"
   ],
-  "unchecked": [],
+  "unchecked": [
+    "AR-01",
+    "BV-01",
+    "BV-02",
+    "BV-03",
+    "CD-01",
+    "DC-01",
+    "DC-02",
+    "DC-03",
+    "DC-04",
+    "DR-01",
+    "DR-02",
+    "DR-03",
+    "DR-04",
+    "DR-05",
+    "DR-06",
+    "DR-07",
+    "FS-01",
+    "LO-01",
+    "TH-01",
+    "TH-02"
+  ],
   "citations": {
     "BV-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "BV-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "BV-03": {
       "up": 1,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DR-01": {
       "up": 1,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DR-02": {
       "up": 1,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DR-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DR-04": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DR-05": {
       "up": 1,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DR-06": {
       "up": 3,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DR-07": {
       "up": 3,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "TH-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "TH-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
+    },
+    "FS-01": {
+      "up": 0,
+      "seen": 0
+    },
+    "AR-01": {
+      "up": 0,
+      "seen": 0
+    },
+    "LO-01": {
+      "up": 0,
+      "seen": 0
+    },
+    "CD-01": {
+      "up": 0,
+      "seen": 0
+    },
+    "DC-01": {
+      "up": 0,
+      "seen": 0
+    },
+    "DC-02": {
+      "up": 0,
+      "seen": 0
+    },
+    "DC-03": {
+      "up": 0,
+      "seen": 0
+    },
+    "DC-04": {
+      "up": 0,
+      "seen": 0
     }
   },
   "cycle": 1,

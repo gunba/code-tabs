@@ -3,9 +3,9 @@
   "all_tags": [
     "BF-01",
     "BF-02",
-    "CM-01",
-    "CM-02",
-    "CM-03",
+    "CI-01",
+    "CI-02",
+    "CI-03",
     "DF-01",
     "DF-02",
     "DF-03",
@@ -583,475 +583,477 @@
     "SI-06": {
       "up": 1,
       "down": 0,
-      "seen": 13
+      "seen": 14
     },
     "SI-14": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "SI-15": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "IN-04": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "IN-08": {
       "up": 1,
       "down": 0,
-      "seen": 23
+      "seen": 24
     },
     "PT-15": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "PT-16": {
       "up": 2,
       "down": 0,
-      "seen": 13
+      "seen": 14
     },
     "PT-17": {
       "up": 1,
       "down": 0,
-      "seen": 13
+      "seen": 14
     },
     "PT-18": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "DF-02": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "RC-15": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "PT-11": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "PT-12": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "PT-13": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "RS-07": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "RS-08": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "RS-09": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "IN-09": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-19": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 1
     },
     "RC-16": {
       "up": 3,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-18": {
       "up": 2,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-17": {
       "up": 1,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-18": {
       "up": 2,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-11": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-12": {
       "up": 1,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-13": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-14": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-16": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-08": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "PT-09": {
       "up": 0,
       "down": 0,
-      "seen": 1
-    },
-    "CM-03": {
-      "up": 0,
-      "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "BF-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "BF-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
-    },
-    "CM-01": {
-      "up": 1,
-      "down": 0,
-      "seen": 9
-    },
-    "CM-02": {
-      "up": 0,
-      "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DF-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DF-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DF-04": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DF-05": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DF-06": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DF-07": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DF-08": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "DF-09": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "IN-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "IN-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "IN-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "IN-05": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "IN-06": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "IN-07": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PS-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PS-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PS-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PS-04": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PS-05": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-04": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-05": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-06": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-07": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-10": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-04": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-05": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-06": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-07": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-08": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-09": {
       "up": 1,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RC-10": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RS-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RS-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RS-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RS-04": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RS-05": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "RS-06": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-03": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "SI-04": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-05": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-07": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-08": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-09": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-10": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-11": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-12": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SI-13": {
       "up": 0,
       "down": 0,
-      "seen": 1
+      "seen": 2
     },
     "SI-17": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SS-01": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SS-02": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "SS-03": {
       "up": 0,
       "down": 0,
-      "seen": 9
+      "seen": 10
     },
     "PT-20": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 1
+    },
+    "CI-01": {
+      "up": 1,
+      "down": 0,
+      "seen": 10
+    },
+    "CI-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 10
+    },
+    "CI-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
     }
   },
   "metadata": {
@@ -1320,7 +1322,7 @@
       "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
     },
-    "CM-03": {
+    "CI-03": {
       "files": [
         "src/lib/settingsSchema.ts:62",
         "src-tauri/src/commands.rs:890",

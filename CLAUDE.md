@@ -1,12 +1,15 @@
 # Claude Tabs
 
-<!-- Codes: BV=Build & Validate, DR=Development Rules, TH=Theme System -->
+<!-- Codes: AR=Architecture, BV=Build & Validate, CD=Commands, LO=Layout, DC=Doc Cross-references, FS=Frontend Structure, DR=Development Rules, TH=Theme System -->
 
 Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
 
-```
-React UI (WebView2) ←→ Tauri IPC ←→ Rust Backend ←→ ConPTY ←→ Claude Code CLI
-```
+## Architecture
+
+- [AR-01] Core data flow: React UI (WebView2) communicates with Rust backend via Tauri IPC, which manages ConPTY sessions to the Claude Code CLI
+  ```
+  React UI (WebView2) ←→ Tauri IPC ←→ Rust Backend ←→ ConPTY ←→ Claude Code CLI
+  ```
 
 ## Build & Validate
 
@@ -21,87 +24,92 @@ React UI (WebView2) ←→ Tauri IPC ←→ Rust Backend ←→ ConPTY ←→ Cl
 
 ## Commands
 
-Global slash commands in `~/.claude/commands/`:
-
-| Command | What it does |
-|---------|-------------|
-| `/r` | Review: document change → review + simplify + test (3 agents). Repeatable. |
-| `/j` | Maintain: prove entries (3 parallel provers) → sync CLAUDE.md → folder audit → hooks |
-| `/b` | Build: [commit?] → build → [release+push?] — choose steps upfront |
-| `/rj` | Review then janitor in sequence |
+- [CD-01] Global slash commands in `~/.claude/commands/`:
+  | Command | What it does |
+  |---------|-------------|
+  | `/r` | Review: document change → review + simplify + test (3 agents) in worktree |
+  | `/j` | Maintain: prove entries (3 provers) → sync → audit in worktree |
+  | `/b` | Build: [commit?] → build → [release+push?] — choose steps upfront |
+  | `/rj` | Review then janitor in sequence (2 worktrees) |
+  | `/p` | Full pipeline: /r → /j → /b |
 
 ## Layout
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ Tab Bar  [● session1 | ● session2 | + ]                      │
-├──────────────────────────────────────────────────────────────┤
-│ Subagent Bar  [▐ agent-task-1  12K] [▐ agent-task-2  8K]     │
-├──────────────────────────────────────────────────────────────┤
-│  Terminal (xterm.js 6.0)                              │ bar │
-│  (CSS display toggle, not unmount)                    │ 28px│
-├──────────────────────────────────────────────────────────────┤
-│ Command History  [/r] [/j] [/r] ...  (per-session, newest←)  │
-│ Command Bar (slash commands)                                  │
-├──────────────────────────────────────────────────────────────┤
-│ StatusBar (model, cost, tokens, duration)                     │
-└──────────────────────────────────────────────────────────────┘
-```
+- [LO-01] Main window layout: tab bar, subagent bar, terminal with button bar, command history, command bar, status bar
+  ```
+  ┌──────────────────────────────────────────────────────────────┐
+  │ Tab Bar  [● session1 | ● session2 | + ]                      │
+  ├──────────────────────────────────────────────────────────────┤
+  │ Subagent Bar  [▐ agent-task-1  12K] [▐ agent-task-2  8K]     │
+  ├──────────────────────────────────────────────────────────────┤
+  │  Terminal (xterm.js 6.0)                              │ bar │
+  │  (CSS display toggle, not unmount)                    │ 28px│
+  ├──────────────────────────────────────────────────────────────┤
+  │ Command History  [/r] [/j] [/r] ...  (per-session, newest←)  │
+  │ Command Bar (slash commands)                                  │
+  ├──────────────────────────────────────────────────────────────┤
+  │ StatusBar (model, cost, tokens, duration)                     │
+  └──────────────────────────────────────────────────────────────┘
+  ```
 
-See **DOCS/ARCHITECTURE.md** for data flow, state inspection, PTY internals, persistence, and other implementation details.
-See **DOCS/FEATURES.md** for user-facing behaviors. See **DOCS/ARCHITECTURE.md** for technical internals.
-All three docs are tagged `[XX-NN]` and proved. Code implementing a tagged entry is not dead code.
+## Doc Cross-references
 
-### Frontend Structure
+- [DC-01] See **DOCS/ARCHITECTURE.md** for data flow, state inspection, PTY internals, persistence, and other implementation details.
+- [DC-02] See **DOCS/FEATURES.md** for user-facing behaviors.
+- [DC-03] See **DOCS/PHILOSOPHY.md** for design principles (democratised voting, worktree isolation, prove cycles).
+- [DC-04] All tagged docs are proved. Code implementing a tagged entry is not dead code.
 
-```
-src/
-├── App.tsx                              # Root: tab bar, subagent bar, terminals
-├── store/sessions.ts                    # Zustand: sessions, active tab, subagents, command history
-├── store/settings.ts                    # Zustand: preferences, CLI info (persisted to localStorage)
-├── hooks/
-│   ├── useTerminal.ts                   # xterm.js lifecycle, write batching, fixed 100K scrollback
-│   ├── usePty.ts                        # PTY spawn wrapper (uses lib/ptyProcess)
-│   ├── useInspectorState.ts             # BUN_INSPECT WebSocket: state detection, metadata, subagent tracking
-│   ├── useCommandDiscovery.ts           # Slash command discovery (binary scan + --help fallback + plugins)
-│   ├── useCliWatcher.ts                 # CLI version + capabilities
-│   ├── useNotifications.ts              # Desktop notifications (WinRT toast, click-to-switch)
-│   └── useCtrlKey.ts                    # Ctrl-key held state for alternate-action highlights
-├── components/
-│   ├── Terminal/TerminalPanel.tsx        # PTY + terminal + inspector + background buffering
-│   ├── SessionLauncher/SessionLauncher.tsx  # New/resume session modal
-│   ├── ResumePicker/ResumePicker.tsx     # Browse past sessions to resume
-│   ├── CommandBar/CommandBar.tsx         # Slash commands with usage-based sorting
-│   ├── StatusBar/StatusBar.tsx           # Model, cost, tokens, duration
-│   ├── CommandPalette/CommandPalette.tsx # Ctrl+K search
-│   ├── SubagentInspector/SubagentInspector.tsx  # Markdown-rendered subagent conversation viewer
-│   ├── ConfigManager/ConfigManager.tsx  # 5-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents
-│   ├── ConfigManager/ThreePaneEditor.tsx # 3-column User/Project/Local scope layout (color-coded)
-│   ├── ConfigManager/SettingsPane.tsx   # Per-scope JSON editor with syntax highlighting overlay
-│   ├── ConfigManager/MarkdownPane.tsx   # Per-scope CLAUDE.md editor with preview toggle
-│   ├── ConfigManager/HooksPane.tsx      # Per-scope hooks CRUD (absorbed from HooksManager)
-│   ├── ConfigManager/PluginsPane.tsx    # Per-scope enabledPlugins (Record<string,boolean>) + mcpServers
-│   ├── ConfigManager/AgentEditor.tsx    # Per-scope agent file list + markdown editor
-│   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
-│   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper
-│   └── DebugPanel/DebugPanel.tsx        # Debug log viewer (Ctrl+Shift+D)
-├── lib/
-│   ├── inspectorHooks.ts                # INSTALL_HOOK + POLL_STATE JS expressions for BUN_INSPECT
-│   ├── inspectorPort.ts                 # Inspector port allocation and registry
-│   ├── claude.ts                        # Color assignment, dirToTabName, formatTokenCount
-│   ├── theme.ts                         # Theme definitions, CSS variable setter, xterm theme
-│   ├── ptyProcess.ts                    # Direct PTY wrapper + active PID cleanup registry
-│   ├── ptyRegistry.ts                   # Global PTY writer registry
-│   ├── terminalRegistry.ts             # Terminal buffer reader registry
-│   ├── paths.ts                         # Path helpers, tab grouping (groupSessionsByDir, swapWithinGroup, TabGroup)
-│   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
-│   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
-│   ├── uiConfig.ts                     # Persisted UI configuration
-│   └── perfTrace.ts                    # Performance tracing utilities
-└── types/
-    ├── session.ts                       # TypeScript types mirroring Rust (camelCase)
-    └── ipc.ts                           # Tauri IPC command signatures
-```
+## Frontend Structure
+
+- [FS-01] Frontend source tree:
+  ```
+  src/
+  ├── App.tsx                              # Root: tab bar, subagent bar, terminals
+  ├── store/sessions.ts                    # Zustand: sessions, active tab, subagents, command history
+  ├── store/settings.ts                    # Zustand: preferences, CLI info (persisted to localStorage)
+  ├── hooks/
+  │   ├── useTerminal.ts                   # xterm.js lifecycle, write batching, fixed 100K scrollback
+  │   ├── usePty.ts                        # PTY spawn wrapper (uses lib/ptyProcess)
+  │   ├── useInspectorState.ts             # BUN_INSPECT WebSocket: state detection, metadata, subagent tracking
+  │   ├── useCommandDiscovery.ts           # Slash command discovery (binary scan + --help fallback + plugins)
+  │   ├── useCliWatcher.ts                 # CLI version + capabilities
+  │   ├── useNotifications.ts              # Desktop notifications (WinRT toast, click-to-switch)
+  │   └── useCtrlKey.ts                    # Ctrl-key held state for alternate-action highlights
+  ├── components/
+  │   ├── Terminal/TerminalPanel.tsx        # PTY + terminal + inspector + background buffering
+  │   ├── SessionLauncher/SessionLauncher.tsx  # New/resume session modal
+  │   ├── ResumePicker/ResumePicker.tsx     # Browse past sessions to resume
+  │   ├── CommandBar/CommandBar.tsx         # Slash commands with usage-based sorting
+  │   ├── StatusBar/StatusBar.tsx           # Model, cost, tokens, duration
+  │   ├── CommandPalette/CommandPalette.tsx # Ctrl+K search
+  │   ├── SubagentInspector/SubagentInspector.tsx  # Markdown-rendered subagent conversation viewer
+  │   ├── ConfigManager/ConfigManager.tsx  # 5-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents
+  │   ├── ConfigManager/ThreePaneEditor.tsx # 3-column User/Project/Local scope layout (color-coded)
+  │   ├── ConfigManager/SettingsPane.tsx   # Per-scope JSON editor with syntax highlighting overlay
+  │   ├── ConfigManager/MarkdownPane.tsx   # Per-scope CLAUDE.md editor with preview toggle
+  │   ├── ConfigManager/HooksPane.tsx      # Per-scope hooks CRUD (absorbed from HooksManager)
+  │   ├── ConfigManager/PluginsPane.tsx    # Per-scope enabledPlugins (Record<string,boolean>) + mcpServers
+  │   ├── ConfigManager/AgentEditor.tsx    # Per-scope agent file list + markdown editor
+  │   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
+  │   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper
+  │   └── DebugPanel/DebugPanel.tsx        # Debug log viewer (Ctrl+Shift+D)
+  ├── lib/
+  │   ├── inspectorHooks.ts                # INSTALL_HOOK + POLL_STATE JS expressions for BUN_INSPECT
+  │   ├── inspectorPort.ts                 # Inspector port allocation and registry
+  │   ├── claude.ts                        # Color assignment, dirToTabName, formatTokenCount
+  │   ├── theme.ts                         # Theme definitions, CSS variable setter, xterm theme
+  │   ├── ptyProcess.ts                    # Direct PTY wrapper + active PID cleanup registry
+  │   ├── ptyRegistry.ts                   # Global PTY writer registry
+  │   ├── terminalRegistry.ts             # Terminal buffer reader registry
+  │   ├── paths.ts                         # Path helpers, tab grouping (groupSessionsByDir, swapWithinGroup, TabGroup)
+  │   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
+  │   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
+  │   ├── uiConfig.ts                     # Persisted UI configuration
+  │   └── perfTrace.ts                    # Performance tracing utilities
+  └── types/
+      ├── session.ts                       # TypeScript types mirroring Rust (camelCase)
+      └── ipc.ts                           # Tauri IPC command signatures
+  ```
 
 ## Development Rules
 

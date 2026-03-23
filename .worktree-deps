@@ -1,0 +1,18 @@
+# Shared dependencies for git worktrees
+# Generic format: works for any project stack
+# setup-worktree.sh reads this on WorktreeCreate hook
+
+symlinks:
+  # Node dependencies — shared across all worktrees
+  - target: node_modules
+    source: ${MAIN_TREE}/node_modules
+  # Rust build cache — shared to avoid ~3GB per worktree
+  - target: src-tauri/target
+    source: ${MAIN_TREE}/src-tauri/target
+  # Local PTY patch build cache
+  - target: src-tauri/pty-patch/target
+    source: ${MAIN_TREE}/src-tauri/pty-patch/target
+
+copy:
+  # Linker config must be per-worktree (Cargo reads relative to manifest)
+  - src-tauri/.cargo/config.toml
