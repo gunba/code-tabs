@@ -12,8 +12,32 @@ export function normalizePath(p: string): string {
   return p.replace(/\//g, "\\").replace(/\\+$/, "");
 }
 
+export interface WorktreeInfo {
+  projectName: string;   // last component of project root (e.g., "claude_tabs")
+  worktreeName: string;  // full slug (e.g., "sorted-marinating-dove")
+  projectRoot: string;   // path before /.claude/worktrees/
+}
+
+/** Detect if a directory is a `.claude/worktrees/<name>` path and extract info. */
+export function parseWorktreePath(dir: string): WorktreeInfo | null {
+  const normalized = dir.replace(/\\/g, "/");
+  const match = normalized.match(/^(.+)\/\.claude\/worktrees\/([^/]+)\/?$/);
+  if (!match) return null;
+  const projectRoot = match[1];
+  const worktreeName = match[2];
+  const projectName = projectRoot.split("/").filter(Boolean).pop() || projectRoot;
+  return { projectName, worktreeName, projectRoot };
+}
+
+/** Acronym from hyphen-separated slug: "sorted-marinating-dove" → "SMD". */
+export function worktreeAcronym(name: string): string {
+  return name.split("-").map((s) => (s[0] || "").toUpperCase()).join("");
+}
+
 /** Derive a short tab name from the last component of a directory path. */
 export function dirToTabName(dir: string): string {
+  const wt = parseWorktreePath(dir);
+  if (wt) return wt.projectName;
   const parts = dir.replace(/\\/g, "/").split("/").filter(Boolean);
   return parts[parts.length - 1] || dir;
 }

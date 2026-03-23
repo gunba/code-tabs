@@ -16,8 +16,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [DF-07] Visibility change handler: clears texture atlas and redraws on OS wake / tab restore (fixes GPU corruption after sleep)
 - [DF-08] Icons module: src/components/Icons/Icons.tsx exports 24 inline SVG icon components (stroke-based, 16x16 viewBox, currentColor inheritance, pointerEvents none). No dependencies. All UI icons are monochrome SVGs — no emoji or unicode icon chars.
   - Files: src/components/Icons/Icons.tsx:1
-- [DF-09] groupSessionsByDir() and swapWithinGroup() in paths.ts: pure functions for tab grouping by normalized workingDir (Map-based, O(n) single pass, insertion-order groups) and position swapping within group boundaries. TabGroup type exported.
-  - Files: src/lib/paths.ts:49, src/lib/paths.ts:64
+- [DF-09] groupSessionsByDir() and swapWithinGroup() in paths.ts: pure functions for tab grouping by normalized workingDir (Map-based, O(n) single pass, insertion-order groups) and position swapping within group boundaries. TabGroup type exported. parseWorktreePath() detects `.claude/worktrees/<slug>` paths, worktreeAcronym() abbreviates slugs by hyphen initials.
+  - Files: src/lib/paths.ts:73, src/lib/paths.ts:88, src/lib/paths.ts:22, src/lib/paths.ts:33
 
 ## State Inspection
 

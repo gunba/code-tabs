@@ -5,6 +5,9 @@ import {
   formatScopePath,
   groupSessionsByDir,
   swapWithinGroup,
+  parseWorktreePath,
+  worktreeAcronym,
+  dirToTabName,
 } from "../paths";
 // TabGroup type used implicitly via groupSessionsByDir return
 import { scopePath } from "../../components/ConfigManager/ThreePaneEditor";
@@ -165,6 +168,93 @@ describe("scopePath", () => {
     it("falls back to '.' for agents", () => {
       expect(scopePath("project", "", "agents")).toBe("./.claude/agents/");
     });
+  });
+});
+
+// ── parseWorktreePath ──────────────────────────────────────────
+
+describe("parseWorktreePath", () => {
+  it("detects a worktree path with backslashes", () => {
+    const result = parseWorktreePath("C:\\Users\\jorda\\Projects\\claude_tabs\\.claude\\worktrees\\sorted-marinating-dove");
+    expect(result).toEqual({
+      projectName: "claude_tabs",
+      worktreeName: "sorted-marinating-dove",
+      projectRoot: "C:/Users/jorda/Projects/claude_tabs",
+    });
+  });
+
+  it("detects a worktree path with forward slashes", () => {
+    const result = parseWorktreePath("C:/Users/jorda/Projects/my-app/.claude/worktrees/fix-bug");
+    expect(result).toEqual({
+      projectName: "my-app",
+      worktreeName: "fix-bug",
+      projectRoot: "C:/Users/jorda/Projects/my-app",
+    });
+  });
+
+  it("handles trailing slash", () => {
+    const result = parseWorktreePath("C:/code/proj/.claude/worktrees/wt1/");
+    expect(result).toEqual({
+      projectName: "proj",
+      worktreeName: "wt1",
+      projectRoot: "C:/code/proj",
+    });
+  });
+
+  it("returns null for non-worktree path", () => {
+    expect(parseWorktreePath("C:\\Users\\jorda\\Projects\\claude_tabs")).toBeNull();
+  });
+
+  it("returns null for path containing .claude but not worktrees", () => {
+    expect(parseWorktreePath("C:/code/proj/.claude/settings.json")).toBeNull();
+  });
+
+  it("returns null for empty string", () => {
+    expect(parseWorktreePath("")).toBeNull();
+  });
+
+  it("returns null for root-level .claude path (no project parent)", () => {
+    expect(parseWorktreePath("/.claude/worktrees/wt1")).toBeNull();
+  });
+});
+
+// ── worktreeAcronym ────────────────────────────────────────────
+
+describe("worktreeAcronym", () => {
+  it("creates acronym from hyphen-separated words", () => {
+    expect(worktreeAcronym("sorted-marinating-dove")).toBe("SMD");
+  });
+
+  it("handles single word", () => {
+    expect(worktreeAcronym("hotfix")).toBe("H");
+  });
+
+  it("handles two words", () => {
+    expect(worktreeAcronym("fix-bug")).toBe("FB");
+  });
+
+  it("drops empty segments from consecutive hyphens", () => {
+    expect(worktreeAcronym("a--b")).toBe("AB");
+  });
+
+  it("drops leading hyphen empty segment", () => {
+    expect(worktreeAcronym("-foo")).toBe("F");
+  });
+});
+
+// ── dirToTabName (worktree) ────────────────────────────────────
+
+describe("dirToTabName", () => {
+  it("returns project name for worktree path", () => {
+    expect(dirToTabName("C:\\Users\\jorda\\Projects\\claude_tabs\\.claude\\worktrees\\sorted-marinating-dove")).toBe("claude_tabs");
+  });
+
+  it("returns last component for non-worktree path", () => {
+    expect(dirToTabName("C:\\Users\\jorda\\Projects\\claude_tabs")).toBe("claude_tabs");
+  });
+
+  it("returns empty string for empty input", () => {
+    expect(dirToTabName("")).toBe("");
   });
 });
 

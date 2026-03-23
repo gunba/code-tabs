@@ -13,8 +13,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [TB-05] No `-webkit-app-region` drag regions — native titlebar handles window dragging
 - [TB-06] State dot colors: idle=green, thinking=clay pulse, toolUse=blue pulse, actionNeeded=purple pulse, waitingPermission=purple pulse, error=red, dead=muted, starting=muted pulse
 - [TB-07] All dot pulse animations unified: `dot-pulse 2s ease infinite` with min opacity 0.5 (no separate scale animation)
-- [TB-08] Tab meta text color-coded: model color matches type (Opus=orange, Sonnet=purple, Haiku=blue via hardcoded hex), effort=clay, agents=muted text-secondary; dot separators
-  - Files: src/App.tsx:293, src/lib/claude.ts:25
+- [TB-08] Tab meta text color-coded: model color matches type (Opus=orange, Sonnet=purple, Haiku=blue via hardcoded hex), effort=clay, agents=muted text-secondary, worktree acronym=blue accent-secondary; dot separators
+  - Files: src/App.tsx:294, src/lib/claude.ts:30
 - [TB-09] Ctrl+E renames the active tab (inline input, Enter to confirm, Esc to cancel)
   - Files: src/App.tsx:239
 - [TB-10] Non-active tabs flash green for 5s when transitioning to idle from an active state; hovering or clicking dismisses early
@@ -42,6 +42,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/App.tsx:282
 - [TB-28] Purple pulse (actionNeeded) triggers for CLI selectors: plan approval, permission prompts, and checkbox inputs. Detected by scanning terminal buffer for Ink selector pattern ("> 1." + "2."), not by lastText regex.
   - Files: src/hooks/useInspectorState.ts:126
+- [TB-29] Worktree indicator: when workingDir is a `.claude/worktrees/<slug>` path, tab shows project name as title (not slug) and a hyphen-acronym badge in the meta row (e.g., "sorted-marinating-dove" → "SMD") in blue (accent-secondary). Hover the acronym for the full worktree name. Tab tooltip includes `Worktree: <full-name>`.
+  - Files: src/lib/paths.ts:18, src/App.tsx:293, src/App.tsx:304
 
 ## Session Resume
 

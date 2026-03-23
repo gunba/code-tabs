@@ -25,7 +25,7 @@ import { killAllActivePtys } from "./lib/ptyProcess";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
 import { startTestHarness } from "./lib/testHarness";
 import { IconPencil, IconStop, IconClose, IconReturn, IconGear, IconArrowRight } from "./components/Icons/Icons";
-import { groupSessionsByDir, swapWithinGroup } from "./lib/paths";
+import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
 import type { Subagent } from "./types/session";
 import "./App.css";
 
@@ -290,7 +290,8 @@ export default function App() {
 
               // Meta row: model | effort | agents (each colored)
               const m = effectiveModel(session);
-              const metaSpans: { text: string; color: string }[] = [];
+              const wt = parseWorktreePath(session.config.workingDir);
+              const metaSpans: { text: string; color: string; title?: string }[] = [];
               if (m) {
                 const vMatch = m.match(/(\d+)[.-](\d+)/);
                 const ver = vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
@@ -300,6 +301,7 @@ export default function App() {
               const subs = subagentMap.get(session.id) || [];
               const liveAgents = subs.filter((s) => s.state !== "dead" && s.state !== "idle").length;
               if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
+              if (wt) metaSpans.push({ text: worktreeAcronym(wt.worktreeName), color: "var(--accent-secondary)", title: wt.worktreeName });
 
               return (
                 <div
@@ -370,7 +372,7 @@ export default function App() {
                     setTabContextMenu({ x: e.clientX, y: e.clientY, sessionId: session.id });
                   }}
                   onMouseEnter={() => dismissFlash(session.id)}
-                  title={ctrlHeld ? `Ctrl+Click: Relaunch ${fullName}` : `${fullName} — ${session.state}\n${session.config.workingDir}`}
+                  title={ctrlHeld ? `Ctrl+Click: Relaunch ${fullName}` : `${fullName} — ${session.state}\n${session.config.workingDir}${wt ? `\nWorktree: ${wt.worktreeName}` : ""}`}
                 >
                   <span className={`tab-dot state-${session.state}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
                   <span className="tab-label">
@@ -419,7 +421,7 @@ export default function App() {
                         {metaSpans.map((s, i) => (
                           <span key={i}>
                             {i > 0 && <span style={{ color: "var(--text-muted)", opacity: 0.5 }}> &middot; </span>}
-                            <span style={{ color: s.color }}>{s.text}</span>
+                            <span style={{ color: s.color }} title={s.title}>{s.text}</span>
                           </span>
                         ))}
                       </span>
