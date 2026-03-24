@@ -41,8 +41,10 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/hooks/useInspectorState.ts:44, src/hooks/useInspectorState.ts:70
 - [SI-14] Poll-based architecture: INSTALL_HOOK wraps JSON.stringify to capture state into globalThis.__inspectorState; useInspectorState polls via POLL_STATE expression every 250ms. POLL_STATE drains events unconditionally before subs processing; subs iteration wrapped in try/catch to prevent cascading failures. Evaluation errors logged via onmessage exceptionDetails check.
   - Files: src/hooks/useInspectorState.ts:241, src/lib/inspectorHooks.ts:27, src/lib/inspectorHooks.ts:400
-- [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (terminal selector), promptDetected (terminal prompt fallback)
+- [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (terminal selector), promptDetected (terminal prompt fallback), cwd (process.cwd() for worktree detection)
   - Files: src/lib/inspectorHooks.ts:400, src/hooks/useInspectorState.ts:8
+- [SI-20] Worktree cwd detection: when POLL_STATE returns a changed cwd (e.g., after Claude enters a worktree via -w), useInspectorState updates the session's workingDir. Enables tab acronym display, correct resume cwd, and worktree prune on close. Uses a ref to fire only on change, not every poll cycle.
+  - Files: src/hooks/useInspectorState.ts:186
 - [SI-16] WebFetch domain blocklist bypass: intercepts require('https').request to return can_fetch:true for api.anthropic.com/api/web/domain_info, eliminating the 10s preflight that blocks all WebFetch calls. Axios in Bun uses the Node http adapter (not globalThis.fetch), so the hook targets the shared https module singleton. Bypass count exposed as fetchBypassed in poll state.
   - Files: src/lib/inspectorHooks.ts:298
 - [SI-17] Interrupt signal detection: Ctrl+C (\x03) and Escape (\x1b) on stdin emit a synthetic result event, set state to end_turn, clear permission/tool flags, and mark all subagents idle — enabling immediate idle detection without waiting for Claude's actual response.
@@ -170,6 +172,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src-tauri/src/commands.rs:407, src-tauri/src/lib.rs:137
 - [RC-18] Plugin management IPC: plugin_list (claude plugin list --available --json), plugin_install (--scope), plugin_uninstall, plugin_enable, plugin_disable. All async with spawn_blocking + CREATE_NO_WINDOW (via run_claude_cli helper). Raw JSON passthrough for plugin_list; string result for mutations.
   - Files: src-tauri/src/commands.rs:1879, src-tauri/src/lib.rs:167
+- [RC-19] prune_worktree: runs `git worktree remove <path>` with optional --force flag. Async with spawn_blocking + CREATE_NO_WINDOW. Takes worktree_path, project_root (cwd for git), and force boolean. Returns error string on failure (e.g., dirty worktree).
+  - Files: src-tauri/src/commands.rs:1877, src-tauri/src/lib.rs:168
 
 ## Config Implementation
 

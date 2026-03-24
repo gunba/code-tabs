@@ -1872,6 +1872,32 @@ pub fn shell_open(path: String) -> Result<(), String> {
     open::that_detached(&path).map_err(|e| format!("shell_open failed for {path}: {e}"))
 }
 
+/// Remove a git worktree directory.
+#[tauri::command]
+pub async fn prune_worktree(worktree_path: String, project_root: String, force: bool) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let mut args = vec!["worktree", "remove"];
+        if force {
+            args.push("--force");
+        }
+        args.push(&worktree_path);
+
+        let mut cmd = std::process::Command::new("git");
+        cmd.args(&args).current_dir(&project_root);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+        let output = cmd.output().map_err(|e| format!("Failed to run git: {e}"))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        }
+    }).await.map_err(|e| e.to_string())?
+}
+
 // ── Plugin management commands ───────────────────────────────────────────
 
 /// Run `claude plugin list --available --json` and return raw JSON output.

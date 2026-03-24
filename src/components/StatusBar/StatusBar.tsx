@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { effectiveModel, modelLabel, modelColor, formatTokenCount } from "../../lib/claude";
+import { parseWorktreePath, worktreeAcronym } from "../../lib/paths";
 import {
   IconPencil, IconLightning, IconUnlock, IconClipboard,
   IconHalfCircle, IconDiamond, IconClock, IconBudget,
@@ -39,6 +40,7 @@ function SessionStatus({ session }: { session: Session }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
   const model = effectiveModel(session);
+  const wt = parseWorktreePath(session.config.workingDir);
 
   return (
     <div className="status-bar-content">
@@ -50,6 +52,11 @@ function SessionStatus({ session }: { session: Session }) {
       <span className="status-item status-model" title="Model" style={{ color: modelColor(model) }}>
         {modelLabel(model)}
       </span>
+      {wt && (
+        <span className="status-item status-worktree" title={wt.worktreeName} style={{ color: "var(--accent-secondary)" }}>
+          {worktreeAcronym(wt.worktreeName)}
+        </span>
+      )}
       {perm && (
         <span className="status-item status-perm" title={perm.tip}>
           {perm.icon}

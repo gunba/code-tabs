@@ -42,8 +42,10 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/App.tsx:282
 - [TB-28] Purple pulse (actionNeeded) triggers for CLI selectors: plan approval, permission prompts, and checkbox inputs. Detected by scanning terminal buffer for Ink selector pattern ("> 1." + "2."), not by lastText regex.
   - Files: src/hooks/useInspectorState.ts:126
-- [TB-29] Worktree indicator: when workingDir is a `.claude/worktrees/<slug>` path, tab shows project name as title (not slug) and a hyphen-acronym badge in the meta row (e.g., "sorted-marinating-dove" → "SMD") in blue (accent-secondary). Hover the acronym for the full worktree name. Tab tooltip includes `Worktree: <full-name>`.
-  - Files: src/lib/paths.ts:18, src/App.tsx:293, src/App.tsx:304
+- [TB-29] Worktree indicator: when workingDir is a `.claude/worktrees/<slug>` path, tab shows project name as title (not slug) and a hyphen-acronym badge in the meta row (e.g., "sorted-marinating-dove" → "SMD") in blue (accent-secondary). Hover the acronym for the full worktree name. Tab tooltip includes `Worktree: <full-name>`. StatusBar also shows worktree acronym after the model label.
+  - Files: src/lib/paths.ts:18, src/App.tsx:293, src/App.tsx:304, src/components/StatusBar/StatusBar.tsx:55
+- [TB-30] Worktree prune on close: manually closing a worktree tab (Ctrl+W, X button, context menu Close) shows a confirmation dialog with "Keep worktree" and "Prune worktree" options. If prune fails (dirty worktree), the error is shown inline with a "Force prune" fallback. Skipped for bulk actions (Close Group, app close). Uses ModalOverlay and `prune_worktree` IPC command [RC-19].
+  - Files: src/App.tsx:173, src/App.tsx:617, src-tauri/src/commands.rs:1877
 
 ## Session Resume
 
@@ -56,6 +58,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/components/Terminal/TerminalPanel.css:33
 - [SR-07] Content search: typing 3+ chars in the filter bar triggers a debounced (400ms) Rust backend scan of all conversation JSONL files, matching user and assistant messages. Results appear below metadata matches with a blue left border and snippet. Stale results discarded via counter-based ref.
   - Files: src/components/ResumePicker/ResumePicker.tsx:121, src-tauri/src/commands.rs:407
+- [SR-08] Worktree flag stripping on resume: `-w` and `--worktree` flags are stripped from extraFlags via `stripWorktreeFlags()` when resuming or respawning a session. Prevents creating a duplicate worktree — the session resumes in the existing worktree directory (workingDir was updated by inspector cwd detection [SI-20]).
+  - Files: src/lib/claude.ts:25, src/components/Terminal/TerminalPanel.tsx:302, src/components/ResumePicker/ResumePicker.tsx:362
 
 ## Dead Session Overlay
 

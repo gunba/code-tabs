@@ -434,6 +434,7 @@ export const POLL_STATE = `(function() {
     fetchBypassed: s.fetchBypassed || 0,
     fetchTimeouts: s.fetchTimeouts || 0,
     httpsTimeouts: s.httpsTimeouts || 0,
-    subs: subsData
+    subs: subsData,
+    cwd: (function() { try { return process.cwd(); } catch(e) { return null; } })()
   };
 })()`;

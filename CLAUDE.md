@@ -48,7 +48,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │ Command History  [/r] [/j] [/r] ...  (per-session, newest←)  │
   │ Command Bar (slash commands)                                  │
   ├──────────────────────────────────────────────────────────────┤
-  │ StatusBar (model, cost, tokens, duration)                     │
+  │ StatusBar (model, worktree, context%, tokens, duration)        │
   └──────────────────────────────────────────────────────────────┘
   ```
 
@@ -97,12 +97,12 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   ├── lib/
   │   ├── inspectorHooks.ts                # INSTALL_HOOK + POLL_STATE JS expressions for BUN_INSPECT
   │   ├── inspectorPort.ts                 # Inspector port allocation and registry
-  │   ├── claude.ts                        # Color assignment, dirToTabName, formatTokenCount
+  │   ├── claude.ts                        # Color assignment, model resolution, resume helpers, stripWorktreeFlags, buildClaudeArgs
   │   ├── theme.ts                         # Theme definitions, CSS variable setter, xterm theme
   │   ├── ptyProcess.ts                    # Direct PTY wrapper + active PID cleanup registry
   │   ├── ptyRegistry.ts                   # Global PTY writer registry
   │   ├── terminalRegistry.ts             # Terminal buffer reader registry
-  │   ├── paths.ts                         # Path helpers, tab grouping (groupSessionsByDir, swapWithinGroup, TabGroup)
+  │   ├── paths.ts                         # Path helpers, worktree detection (parseWorktreePath, worktreeAcronym), tab grouping
   │   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
   │   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
   │   ├── uiConfig.ts                     # Persisted UI configuration

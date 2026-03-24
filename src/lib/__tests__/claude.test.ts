@@ -14,6 +14,7 @@ import {
   forceSessionColor,
   getResumeId,
   effectiveModel,
+  stripWorktreeFlags,
 } from "../claude";
 import type { Session } from "../../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../../types/session";
@@ -395,5 +396,47 @@ describe("effectiveModel", () => {
   it("falls back to runtimeModel for empty string model", () => {
     const s = makeSession({ model: "", runtimeModel: "claude-sonnet-4-6" });
     expect(effectiveModel(s)).toBe("claude-sonnet-4-6");
+  });
+});
+
+describe("stripWorktreeFlags", () => {
+  it("returns null for null input", () => {
+    expect(stripWorktreeFlags(null)).toBeNull();
+  });
+
+  it("strips -w alone", () => {
+    expect(stripWorktreeFlags("-w")).toBeNull();
+  });
+
+  it("strips --worktree alone", () => {
+    expect(stripWorktreeFlags("--worktree")).toBeNull();
+  });
+
+  it("strips -w among other flags", () => {
+    expect(stripWorktreeFlags("-w --verbose")).toBe("--verbose");
+  });
+
+  it("strips --worktree among other flags", () => {
+    expect(stripWorktreeFlags("--verbose --worktree --debug")).toBe("--verbose --debug");
+  });
+
+  it("preserves unrelated flags", () => {
+    expect(stripWorktreeFlags("--verbose --debug")).toBe("--verbose --debug");
+  });
+
+  it("returns null for empty string", () => {
+    expect(stripWorktreeFlags("")).toBeNull();
+  });
+
+  it("does not strip -watch (false positive guard)", () => {
+    expect(stripWorktreeFlags("-watch")).toBe("-watch");
+  });
+
+  it("does not strip --width (false positive guard)", () => {
+    expect(stripWorktreeFlags("--width 80")).toBe("--width 80");
+  });
+
+  it("strips multiple occurrences of -w", () => {
+    expect(stripWorktreeFlags("-w --verbose -w")).toBe("--verbose");
   });
 });

@@ -14,6 +14,7 @@ import { CommandBar } from "./components/CommandBar/CommandBar";
 import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { ConfigManager } from "./components/ConfigManager/ConfigManager";
 import { DebugPanel } from "./components/DebugPanel/DebugPanel";
+import { ModalOverlay } from "./components/ModalOverlay/ModalOverlay";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
 import { useNotifications } from "./hooks/useNotifications";
@@ -64,6 +65,10 @@ export default function App() {
   const dragTabRef = useRef<string | null>(null);
   const editDoneRef = useRef(false);
   const initRef = useRef(false);
+  const [pruneConfirm, setPruneConfirm] = useState<{
+    sessionId: string; worktreePath: string; worktreeName: string; projectRoot: string;
+    error?: string; forcing?: boolean;
+  } | null>(null);
 
   useCliWatcher();
   useNotifications();
@@ -167,6 +172,22 @@ export default function App() {
     [activeTabId, dismissFlash, setActiveTab]
   );
 
+  // Close session, prompting for worktree prune on manual single-tab close
+  const handleCloseSession = useCallback((id: string) => {
+    const session = sessions.find((s) => s.id === id);
+    if (session) {
+      const wt = parseWorktreePath(session.config.workingDir);
+      if (wt) {
+        setPruneConfirm({
+          sessionId: id, worktreePath: session.config.workingDir,
+          worktreeName: wt.worktreeName, projectRoot: wt.projectRoot,
+        });
+        return;
+      }
+    }
+    closeSession(id);
+  }, [sessions, closeSession]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -186,7 +207,7 @@ export default function App() {
 
       if (e.ctrlKey && e.key === "w") {
         e.preventDefault();
-        if (activeTabId) closeSession(activeTabId);
+        if (activeTabId) handleCloseSession(activeTabId);
       }
 
       if (e.ctrlKey && e.key === "k") {
@@ -257,7 +278,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, sessions, setActiveTab, closeSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showDebugPanel, inspectedSubagent, tabContextMenu, quickLaunch]);
+  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showDebugPanel, inspectedSubagent, tabContextMenu, quickLaunch]);
 
   const regularSessions = useMemo(() => sessions.filter((s) => !s.isMetaAgent), [sessions]);
   const groups = useMemo(() => groupSessionsByDir(regularSessions), [regularSessions]);
@@ -469,7 +490,7 @@ export default function App() {
                     )}
                     <button
                       className="tab-close"
-                      onClick={(e) => { e.stopPropagation(); closeSession(session.id); }}
+                      onClick={(e) => { e.stopPropagation(); handleCloseSession(session.id); }}
                       title="Close"
                     >
                       <IconClose size={12} />
@@ -593,6 +614,43 @@ export default function App() {
       {showPalette && <CommandPalette onClose={() => setShowPalette(false)} />}
       {showConfigManager && <ConfigManager />}
 
+      {/* Worktree prune confirmation */}
+      {pruneConfirm && (
+        <ModalOverlay onClose={() => setPruneConfirm(null)}>
+          <div className="prune-dialog">
+            <div className="prune-title">Close worktree session</div>
+            <div className="prune-body">
+              Prune worktree <strong>{pruneConfirm.worktreeName}</strong>?
+            </div>
+            {pruneConfirm.error && (
+              <div className="prune-error">{pruneConfirm.error}</div>
+            )}
+            <div className="prune-actions">
+              <button onClick={() => {
+                closeSession(pruneConfirm.sessionId);
+                setPruneConfirm(null);
+              }}>Keep worktree</button>
+              <button className="prune-actions-danger" disabled={pruneConfirm.forcing} onClick={async () => {
+                const force = !!pruneConfirm.error;
+                if (force) setPruneConfirm((p) => p ? { ...p, forcing: true, error: undefined } : p);
+                try {
+                  await invoke("prune_worktree", {
+                    worktreePath: pruneConfirm.worktreePath,
+                    projectRoot: pruneConfirm.projectRoot,
+                    force,
+                  });
+                } catch (err) {
+                  setPruneConfirm((p) => p ? { ...p, forcing: false, error: String(err) } : p);
+                  return;
+                }
+                closeSession(pruneConfirm.sessionId);
+                setPruneConfirm(null);
+              }}>{pruneConfirm.error ? "Force prune" : "Prune worktree"}</button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
+
       {/* Tab context menu portal */}
       {tabContextMenu && createPortal(
         <div
@@ -707,7 +765,7 @@ export default function App() {
                     <button
                       className="tab-context-menu-item"
                       onClick={() => {
-                        closeSession(ctxSession.id);
+                        handleCloseSession(ctxSession.id);
                         setTabContextMenu(null);
                       }}
                     >

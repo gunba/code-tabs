@@ -21,6 +21,13 @@ export function canResumeSession(session: Session): boolean {
   return !!session.config.sessionId || !!session.config.resumeSession || !!session.metadata.nodeSummary;
 }
 
+/** Strip -w / --worktree from extra flags (used on resume to avoid creating a new worktree). */
+export function stripWorktreeFlags(flags: string | null): string | null {
+  if (!flags) return null;
+  const stripped = flags.replace(/\s*--?w(?:orktree)?\b/g, "").trim();
+  return stripped || null;
+}
+
 /** Effective model: user-configured model, falling back to runtime-detected model. */
 export function effectiveModel(session: Session): string | null {
   return session.config.model || session.metadata.runtimeModel || null;

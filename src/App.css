@@ -691,3 +691,63 @@
   margin: 0 2px;
 }
 
+/* ── Prune worktree dialog ───────────────────────────────────── */
+
+.prune-dialog {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  min-width: 320px;
+  max-width: 420px;
+}
+.prune-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.prune-body {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.prune-body strong {
+  color: var(--accent-secondary);
+}
+.prune-error {
+  font-size: 11px;
+  color: var(--error, #e55);
+  background: rgba(255, 80, 80, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.prune-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.prune-actions button {
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.prune-actions button:hover {
+  background: var(--bg-hover);
+}
+.prune-actions .prune-actions-danger {
+  background: rgba(255, 80, 80, 0.15);
+  color: var(--error, #e55);
+  border-color: var(--error, #e55);
+}
+.prune-actions .prune-actions-danger:hover {
+  background: rgba(255, 80, 80, 0.25);
+}

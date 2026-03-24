@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTerminal } from "../../hooks/useTerminal";
 import { usePty } from "../../hooks/usePty";
 import { useSessionStore } from "../../store/sessions";
-import { buildClaudeArgs, getResumeId, canResumeSession } from "../../lib/claude";
+import { buildClaudeArgs, getResumeId, canResumeSession, stripWorktreeFlags } from "../../lib/claude";
 import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, registerInspectorCallbacks, unregisterInspectorCallbacks } from "../../lib/inspectorPort";
 import { useInspectorState } from "../../hooks/useInspectorState";
 import { registerPtyWriter, unregisterPtyWriter } from "../../lib/ptyRegistry";
@@ -299,6 +299,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       ...session.config,
       resumeSession: canResume ? getResumeId(session) : null,
       continueSession: false,
+      extraFlags: stripWorktreeFlags(session.config.extraFlags),
     };
 
     // 3. Update session in store

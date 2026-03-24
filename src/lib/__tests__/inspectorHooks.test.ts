@@ -600,6 +600,7 @@ describe("deriveStateFromPoll", () => {
     inputBuf: "", inputTs: 0, fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
     subs: [] as Array<{ sid: string; desc: string; st: string; tok: number; act: string | null;
       msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number }>,
+    cwd: null as string | null,
   };
 
   it("returns waitingPermission when permPending is true", () => {
@@ -1936,6 +1937,7 @@ describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
       inputTs: state.inputTs as number,
       fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
       subs: [],
+      cwd: null,
     };
 
     const derived = deriveStateFromPoll(pollData, "toolUse");
@@ -1977,6 +1979,7 @@ describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
       inputTs: state.inputTs as number,
       fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
       subs: [],
+      cwd: null,
     };
 
     const derived = deriveStateFromPoll(pollData, "idle");

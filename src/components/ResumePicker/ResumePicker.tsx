@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
-import { getResumeId, modelLabel } from "../../lib/claude";
+import { getResumeId, modelLabel, stripWorktreeFlags } from "../../lib/claude";
 import { dirToTabName, abbreviatePath, normalizeForFilter } from "../../lib/paths";
 import { useCtrlKey } from "../../hooks/useCtrlKey";
 import {
@@ -359,6 +359,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         workingDir,
         resumeSession: ps.id,
         continueSession: false,
+        extraFlags: stripWorktreeFlags(baseConfig.extraFlags),
       };
       addRecentDir(workingDir);
       const name = displayName || sessionNames[ps.id] || ps.path;
@@ -397,6 +398,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         workingDir: ps.directory,
         resumeSession: ps.id,
         continueSession: false,
+        extraFlags: stripWorktreeFlags(baseConfig.extraFlags),
       };
       setLastConfig(prefillConfig);
       onClose();

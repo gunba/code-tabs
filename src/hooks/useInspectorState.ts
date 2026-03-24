@@ -19,6 +19,7 @@ interface InspectorPollResult {
     sid: string; desc: string; st: string; tok: number; act: string | null;
     msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number;
   }>;
+  cwd: string | null;
 }
 
 /** Map inspector sub-state codes to SessionState values. */
@@ -113,11 +114,13 @@ export function useInspectorState(
   const fetchTimeoutLoggedRef = useRef(false);
   const httpsTimeoutLoggedRef = useRef(false);
   const noEventTicksRef = useRef(0);
+  const lastCwdRef = useRef<string | null>(null);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
   const updateState = useSessionStore((s) => s.updateState);
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
+  const updateConfig = useSessionStore((s) => s.updateConfig);
 
   // Send a WebSocket message with auto-incrementing id
   const wsSend = useCallback((method: string, params?: Record<string, unknown>): number => {
@@ -180,6 +183,19 @@ export function useInspectorState(
       updateMetadata(sid, metadata);
     }
 
+    // ── Worktree cwd detection ──
+    // When Claude enters a worktree via -w, process.cwd() changes.
+    // Update workingDir so tab acronym, resume cwd, and prune all work.
+    if (data.cwd && data.cwd !== lastCwdRef.current) {
+      lastCwdRef.current = data.cwd;
+      // Normalize to backslashes on Windows for consistent comparison
+      const normalized = data.cwd.replace(/\//g, "\\");
+      const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+      if (session && normalized !== session.config.workingDir) {
+        updateConfig(sid, { workingDir: normalized });
+      }
+    }
+
     // ── Subagent tracking (routed by agentId in the hook) ──
     if (data.subs.length > 0) {
       const { addSubagent, updateSubagent, clearIdleSubagents, subagents } = useSessionStore.getState();
@@ -235,7 +251,7 @@ export function useInspectorState(
       console.log(`[inspector] HTTPS hard timeout triggered (external request exceeded 90s)`);
       httpsTimeoutLoggedRef.current = true;
     }
-  }, [updateState, updateMetadata]);
+  }, [updateState, updateMetadata, updateConfig]);
 
   // Start polling loop
   const startPolling = useCallback(() => {
