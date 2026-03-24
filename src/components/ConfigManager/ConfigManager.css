@@ -352,6 +352,7 @@
   font-size: 11px;
   color: var(--text-secondary);
   display: flex;
+  align-items: baseline;
   gap: 4px;
 }
 
