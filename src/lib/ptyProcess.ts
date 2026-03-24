@@ -3,6 +3,7 @@
  * Calls `invoke('plugin:pty|...')` directly, with proper cleanup lifecycle.
  */
 import { invoke } from "@tauri-apps/api/core";
+import { dlog } from "./debugLog";
 
 // ── Active PID registry for cleanup on app close ──────────────────
 
@@ -56,7 +57,7 @@ export async function spawnPty(
     env: options.env ?? {},
   });
 
-  console.log(`[pty] spawned pid=${pid} file=${file}`);
+  dlog("pty", null, `spawned pid=${pid} file=${file}`);
 
   // Get OS PID immediately and register for cleanup on app close
   let osPid: number | null = null;
@@ -77,7 +78,7 @@ export async function spawnPty(
     if (exitFired) return;
     exitFired = true;
     aborted = true;
-    console.log(`[pty] exit callback fired pid=${pid} code=${code}`);
+    dlog("pty", null, `exit pid=${pid} code=${code}`);
     exitCallback?.({ exitCode: code });
   };
 
@@ -95,7 +96,7 @@ export async function spawnPty(
         break;
       }
     }
-    console.log(`[pty] read loop exited pid=${pid} aborted=${aborted}`);
+    dlog("pty", null, `read loop exited pid=${pid} aborted=${aborted}`);
     let exitCode = -1;
     try {
       exitCode = await invoke("plugin:pty|exitstatus", { pid });
@@ -131,7 +132,7 @@ export async function spawnPty(
     async kill() {
       if (aborted) return;
       aborted = true;
-      console.log(`[pty] kill started pid=${pid}`);
+      dlog("pty", null, `kill started pid=${pid}`);
 
       // Unregister from cleanup registry (we're handling it ourselves)
       if (osPid) unregisterActivePid(osPid);
@@ -181,7 +182,7 @@ export async function spawnPty(
         // Best effort
       }
 
-      console.log(`[pty] kill completed pid=${pid}`);
+      dlog("pty", null, `kill completed pid=${pid}`);
       fireExit(-1);
     },
 

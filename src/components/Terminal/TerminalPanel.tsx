@@ -4,6 +4,7 @@ import { useTerminal } from "../../hooks/useTerminal";
 import { usePty } from "../../hooks/usePty";
 import { useSessionStore } from "../../store/sessions";
 import { buildClaudeArgs, getResumeId, canResumeSession, stripWorktreeFlags } from "../../lib/claude";
+import { dlog } from "../../lib/debugLog";
 import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, registerInspectorCallbacks, unregisterInspectorCallbacks } from "../../lib/inspectorPort";
 import { useInspectorState } from "../../hooks/useInspectorState";
 import { registerPtyWriter, unregisterPtyWriter } from "../../lib/ptyRegistry";
@@ -240,7 +241,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
   const handlePtyExit = useCallback(
     (info: { exitCode: number }) => {
-      console.log(`[TerminalPanel] handlePtyExit session=${session.id} code=${info.exitCode}`);
+      dlog("terminal", session.id, `exit code=${info.exitCode}`);
       // If the CLI exited because the session is already in use,
       // try to kill stale orphans (our own descendants) and retry.
       if (sessionInUseRef.current && !sessionInUseRetried.current) {
@@ -285,7 +286,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const triggerRespawnRef = useRef<(config?: SessionConfig, name?: string) => void>(() => {});
   // Stable ref so callbacks can call triggerRespawn without stale closures
   triggerRespawnRef.current = (config?: SessionConfig, name?: string) => {
-    console.log(`[TerminalPanel] respawn triggered session=${session.id}`);
+    dlog("terminal", session.id, "respawn triggered");
     // 1. Clean up old PTY, watchers, and inspector
     pty.cleanup();
     inspector.disconnect();
@@ -404,6 +405,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         const env = { BUN_INSPECT: `ws://127.0.0.1:${inspPort}/0` };
         const handle = await pty.spawn(claudePath, args, cwd, cols, rows, env);
         registerPtyWriter(session.id, handle.write);
+        dlog("terminal", session.id, `spawned pid=${handle.pid} port=${inspPort} cols=${cols} rows=${rows}`);
         updateState(session.id, "idle");
 
         // Post-spawn dimension verification — catches cases where font metrics
@@ -416,7 +418,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           }
         });
       } catch (err) {
-        console.error("Failed to spawn PTY:", err);
+        dlog("terminal", session.id, `spawn failed: ${err}`, "ERR");
         updateState(session.id, "error");
         terminal.write(
           `\r\n\x1b[31mFailed to start Claude: ${err}\x1b[0m\r\n`
@@ -475,7 +477,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   useEffect(() => {
     if (killRequest === session.id && session.state !== "dead") {
       clearKillRequest();
-      console.log(`[TerminalPanel] kill effect triggered for session=${session.id}`);
+      dlog("terminal", session.id, "kill effect triggered");
       pty.cleanup();
       // pty.kill() fires exitCallback → handlePtyExit → state "dead"
     }

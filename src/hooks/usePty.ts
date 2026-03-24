@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import { spawnPty, type PtyProcess } from "../lib/ptyProcess";
+import { dlog } from "../lib/debugLog";
 
 export interface PtyHandle {
   pid: number;
@@ -33,7 +34,7 @@ export function usePty({ onData, onExit }: UsePtyOptions) {
         ...(env ? { env } : {}),
       });
 
-      console.log(`[usePty] spawn success pid=${pty.pid} cwd=${cwd}`);
+      dlog("pty", null, `spawn success pid=${pty.pid} cwd=${cwd}`);
       ptyRef.current = pty;
 
       pty.onData(onData);

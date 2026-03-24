@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { getXtermTheme } from "../lib/theme";
+import { dlog } from "../lib/debugLog";
 
 const PROMPT_MARKER_NEW = ">\u00A0"; // > + NBSP — current Claude Code prompt
 const PROMPT_MARKER_OLD = "\u276F"; // ❯ — legacy Claude Code prompt
@@ -158,7 +159,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       try {
         const addon = new WebglAddon();
         addon.onContextLoss(() => {
-          console.warn("WebGL context lost — disposing addon");
+          dlog("terminal", null, "WebGL context lost — disposing addon", "WARN");
           try { addon.dispose(); } catch {}
           webglRef.current = null;
           if (canRetry) {
@@ -170,7 +171,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       } catch {
         webglRef.current = null;
         if (!canRetry) {
-          console.warn("WebGL retry failed — using canvas renderer");
+          dlog("terminal", null, "WebGL retry failed — using canvas renderer", "WARN");
         }
       }
     };

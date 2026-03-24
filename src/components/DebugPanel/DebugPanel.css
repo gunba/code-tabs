@@ -48,6 +48,15 @@
   color: var(--text-primary);
 }
 
+.debug-panel-btn-active {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+.debug-panel-btn-active:hover {
+  opacity: 0.9;
+}
+
 .debug-panel-close {
   background: none;
   border: none;
@@ -62,8 +71,65 @@
   color: var(--text-primary);
 }
 
+/* Filter chip rows */
+.debug-panel-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.debug-filter-chip {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+}
+
+.chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  min-width: 0;
+}
+
+.debug-filter-chip:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.debug-filter-chip.active {
+  background: var(--bg-primary);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.debug-filter-chip-mod {
+  font-family: var(--font-mono, "SF Mono", "Cascadia Code", "Consolas", monospace);
+}
+
+.chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Text filter */
 .debug-panel-filter {
-  padding: 6px 12px;
+  padding: 4px 12px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -84,6 +150,7 @@
   border-color: var(--accent);
 }
 
+/* Log body */
 .debug-panel-body {
   flex: 1;
   overflow-y: auto;
@@ -99,10 +166,13 @@
 .debug-panel-body::-webkit-scrollbar-track { background: transparent; }
 .debug-panel-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
 
+/* Log lines — session-colored left border */
 .debug-line {
   white-space: pre-wrap;
   word-break: break-all;
   color: var(--text-secondary);
+  border-left: 3px solid transparent;
+  padding-left: 6px;
 }
 
 .debug-line-warn {
@@ -111,6 +181,22 @@
 
 .debug-line-err {
   color: var(--error, #e05050);
+}
+
+.debug-line-debug {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* Inline timestamp and module tag */
+.debug-ts {
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.debug-mod {
+  color: var(--accent-secondary, #6ea8e0);
+  margin-right: 2px;
 }
 
 .debug-panel-empty {

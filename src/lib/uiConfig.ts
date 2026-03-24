@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { dlog } from "./debugLog";
 
 /**
  * Shared UI configuration stored at %LOCALAPPDATA%/claude-tabs/ui-config.json.
@@ -66,7 +67,7 @@ export const useUiConfigStore = create<UiConfigState>((set) => ({
         set({ config: DEFAULT_UI_CONFIG, loaded: true });
       }
     } catch (err) {
-      console.error("[uiConfig] Failed to load:", err);
+      dlog("config", null, `uiConfig load failed: ${err}`, "ERR");
       set({ config: DEFAULT_UI_CONFIG, loaded: true });
     }
   },

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
+import { dlog } from "../../lib/debugLog";
 import { getResumeId, modelLabel, stripWorktreeFlags } from "../../lib/claude";
 import { dirToTabName, abbreviatePath, normalizeForFilter } from "../../lib/paths";
 import { useCtrlKey } from "../../hooks/useCtrlKey";
@@ -137,7 +138,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
           setContentResults(results);
         }
       } catch (err) {
-        console.error("Content search failed:", err);
+        dlog("resume", null, `content search failed: ${err}`, "ERR");
       } finally {
         if (searchCounterRef.current === counter) {
           setContentSearching(false);
@@ -374,7 +375,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         await createSession(name, resumeConfig);
         onClose();
       } catch (err) {
-        console.error("Failed to resume session:", err);
+        dlog("resume", null, `resume failed: ${err}`, "ERR");
       }
     },
     [deadSessionMap, sessionConfigs, sessionNames, activeIsDead, activeSession, createSession, addRecentDir, requestRespawn, onClose]

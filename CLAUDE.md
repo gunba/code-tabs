@@ -93,7 +93,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── ConfigManager/SettingsTab.tsx    # Unified per-scope settings layout with schema-driven fields
   │   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
   │   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper
-  │   └── DebugPanel/DebugPanel.tsx        # Debug log viewer (Ctrl+Shift+D)
+  │   └── DebugPanel/DebugPanel.tsx        # Structured log viewer: session/module filters, color-coded (Ctrl+Shift+D)
   ├── lib/
   │   ├── inspectorHooks.ts                # INSTALL_HOOK + POLL_STATE JS expressions for BUN_INSPECT
   │   ├── inspectorPort.ts                 # Inspector port allocation and registry
@@ -104,6 +104,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── terminalRegistry.ts             # Terminal buffer reader registry
   │   ├── paths.ts                         # Path helpers, worktree detection (parseWorktreePath, worktreeAcronym), tab grouping
   │   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
+  │   ├── debugLog.ts                      # Structured debug logging (dlog function, session-scoped entries)
   │   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
   │   ├── uiConfig.ts                     # Persisted UI configuration
   │   └── perfTrace.ts                    # Performance tracing utilities
@@ -121,6 +122,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
 - [DR-05] Add tests for any new pure-logic functions in `src/lib/` and store actions in `src/store/`
 - [DR-06] All Rust commands that spawn subprocesses MUST use `tokio::task::spawn_blocking()` to avoid blocking the WebView event loop
 - [DR-07] All Rust commands that spawn subprocesses MUST add `CREATE_NO_WINDOW` flag on Windows (`cmd.creation_flags(0x08000000)`)
+- [DR-08] Use `dlog(module, sessionId, message, level?)` from `src/lib/debugLog.ts` for all application logging. Never use raw `console.log/warn/error`. Module names: `pty`, `inspector`, `terminal`, `session`, `config`, `launcher`, `resume`. Pass `sessionId` when in scope, `null` otherwise. Use `"DEBUG"` level for verbose tracing, `"WARN"`/`"ERR"` for problems.
 
 ## Theme System
 

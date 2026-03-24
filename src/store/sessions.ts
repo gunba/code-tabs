@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { trace, traceAsync } from "../lib/perfTrace";
 import { assignSessionColor, releaseSessionColor } from "../lib/claude";
+import { dlog } from "../lib/debugLog";
 import type {
   Session,
   SessionConfig,
@@ -85,12 +86,12 @@ export const useSessionStore = create<SessionsState>((set) => ({
     // complete before claudePath is set (which gates PTY spawning)
     const [claudePath] = await Promise.all([
       traceAsync("init: detect_claude_cli", () => invoke<string>("detect_claude_cli"))
-        .catch((e) => { console.error("CLI detection failed:", e); return null as string | null; }),
+        .catch((e) => { dlog("session", null, `CLI detection failed: ${e}`, "ERR"); return null as string | null; }),
       sessionIds.size > 0
         ? traceAsync("init: kill_orphan_sessions", () =>
             invoke<number>("kill_orphan_sessions", { sessionIds: [...sessionIds] })
           ).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`); })
-           .catch((e) => console.error("Orphan cleanup failed:", e))
+           .catch((e) => dlog("session", null, `orphan cleanup failed: ${e}`, "ERR"))
         : Promise.resolve(),
     ]);
     if (claudePath) {
@@ -155,6 +156,10 @@ export const useSessionStore = create<SessionsState>((set) => ({
   },
 
   updateState: (id, state) => {
+    const prev = useSessionStore.getState().sessions.find((x) => x.id === id);
+    if (prev && prev.state !== state) {
+      dlog("session", id, `state ${prev.state} → ${state}`, "DEBUG");
+    }
     set((s) => ({
       sessions: s.sessions.map((x) =>
         x.id === id ? { ...x, state } : x

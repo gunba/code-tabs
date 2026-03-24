@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { useSessionStore } from "../store/sessions";
 import { INSTALL_HOOK, POLL_STATE } from "../lib/inspectorHooks";
 import { getSessionBufferTail } from "../lib/terminalRegistry";
+import { dlog } from "../lib/debugLog";
 import type { SessionState, SubagentMessage } from "../types/session";
 
 /** Compact state returned by POLL_STATE expression. */
@@ -176,7 +177,7 @@ export function useInspectorState(
     }
 
     if (derivedState !== lastStateRef.current) {
-      console.log(`[inspector] state ${lastStateRef.current} → ${derivedState} session=${sid}`);
+      dlog("inspector", sid, `state ${lastStateRef.current} → ${derivedState}`);
       updateState(sid, derivedState);
       lastStateRef.current = derivedState;
     }
@@ -227,6 +228,7 @@ export function useInspectorState(
 
         if (!knownSubsRef.current.has(sub.sid)) {
           knownSubsRef.current.add(sub.sid);
+          dlog("inspector", sid, `subagent discovered id=${sub.sid} desc="${sub.desc}"`, "DEBUG");
           addSubagent(sid, {
             id: sub.sid, parentSessionId: sid, state: subState,
             description: sub.desc, tokenCount: sub.tok,
@@ -245,6 +247,7 @@ export function useInspectorState(
 
     // Track Claude's internal session ID (changes on /resume, plan-mode fork, compaction)
     if (data.sid && data.sid !== lastSidRef.current) {
+      dlog("inspector", sid, `claude sessionId changed ${lastSidRef.current} → ${data.sid}`, "DEBUG");
       lastSidRef.current = data.sid;
       setClaudeSessionId(data.sid);
     }
@@ -261,15 +264,15 @@ export function useInspectorState(
 
     // Log WebFetch domain blocklist bypass (only on first occurrence)
     if (data.fetchBypassed > 0 && !fetchBypassLoggedRef.current) {
-      console.log(`[inspector] WebFetch domain blocklist bypass active`);
+      dlog("inspector", sid, "WebFetch domain blocklist bypass active", "WARN");
       fetchBypassLoggedRef.current = true;
     }
     if (data.fetchTimeouts > 0 && !fetchTimeoutLoggedRef.current) {
-      console.log(`[inspector] WebFetch API timeout triggered (non-streaming call exceeded 120s)`);
+      dlog("inspector", sid, "WebFetch API timeout (non-streaming >120s)", "WARN");
       fetchTimeoutLoggedRef.current = true;
     }
     if (data.httpsTimeouts > 0 && !httpsTimeoutLoggedRef.current) {
-      console.log(`[inspector] HTTPS hard timeout triggered (external request exceeded 90s)`);
+      dlog("inspector", sid, "HTTPS hard timeout (external >90s)", "WARN");
       httpsTimeoutLoggedRef.current = true;
     }
   }, [updateState, updateMetadata, updateConfig]);
@@ -298,7 +301,7 @@ export function useInspectorState(
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log(`[inspector] connected port=${wsPort}`);
+      dlog("inspector", sessionIdRef.current, `connected port=${wsPort}`);
       retryCountRef.current = 0;
       wsSend("Console.enable");
       if (!hookInstalledRef.current) {
@@ -314,6 +317,7 @@ export function useInspectorState(
         if (msg.result?.result?.value === "ok" || msg.result?.result?.value === "already") {
           if (!hookInstalledRef.current) {
             hookInstalledRef.current = true;
+            dlog("inspector", sessionIdRef.current, `hook installed (${msg.result.result.value})`, "DEBUG");
             setConnected(true);
             startPolling();
           }
@@ -329,7 +333,7 @@ export function useInspectorState(
 
         // Log Runtime.evaluate exceptions (e.g. POLL_STATE crash)
         if (msg.result?.exceptionDetails) {
-          console.warn("[inspector] evaluation error:", msg.result.exceptionDetails.text || msg.result.exceptionDetails.exception?.description);
+          dlog("inspector", sessionIdRef.current, `evaluation error: ${msg.result.exceptionDetails.text || msg.result.exceptionDetails.exception?.description}`, "WARN");
         }
       } catch {
         // Invalid message — skip
@@ -337,7 +341,7 @@ export function useInspectorState(
     };
 
     ws.onclose = () => {
-      console.log(`[inspector] disconnected port=${wsPort}`);
+      dlog("inspector", sessionIdRef.current, `disconnected port=${wsPort}`);
       setConnected(false);
       stopPolling();
       wsRef.current = null;
@@ -346,6 +350,7 @@ export function useInspectorState(
       if (retryCountRef.current < MAX_RETRIES && sessionIdRef.current) {
         const delay = RETRY_DELAYS[retryCountRef.current] || 8000;
         retryCountRef.current++;
+        dlog("inspector", sessionIdRef.current, `reconnecting attempt=${retryCountRef.current}/${MAX_RETRIES} delay=${delay}ms`, "DEBUG");
         retryTimerRef.current = setTimeout(() => {
           retryTimerRef.current = null;
           if (sessionIdRef.current) connectRef.current(wsPort);

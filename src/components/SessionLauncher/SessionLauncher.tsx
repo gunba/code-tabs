@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
+import { dlog } from "../../lib/debugLog";
 import type { CliOption, CliCommand } from "../../store/settings";
 import { dirToTabName, computeHeatLevel, getHeatStyle } from "../../lib/claude";
 import {
@@ -220,7 +221,7 @@ export function SessionLauncher() {
       await createSession(name, finalConfig);
       setShowLauncher(false);
     } catch (err) {
-      console.error("Failed to create session:", err);
+      dlog("launcher", null, `create session failed: ${err}`, "ERR");
     }
   }, [launchConfig, isNonSessionCommand, commandTokens, createSession, closeSession, setShowLauncher, addRecentDir, setLastConfig]);
 
