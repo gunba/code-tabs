@@ -327,6 +327,33 @@ export function getUnknownKeys(json: Record<string, unknown>, schema: SettingFie
   return Object.keys(json).filter((k) => !known.has(k));
 }
 
+/** Which schema sources contributed fields */
+export interface SchemaSourceInfo {
+  hasSchemaStore: boolean;
+  hasCli: boolean;
+  hasBinary: boolean;
+}
+
+/** Report which schema sources are available */
+export function getSchemaSourceInfo(
+  cliOptions: CliOption[],
+  binaryFields?: BinarySettingField[],
+  jsonSchema?: JsonSchema | null,
+): SchemaSourceInfo {
+  return {
+    hasSchemaStore: !!jsonSchema?.properties && Object.keys(jsonSchema.properties).length > 0,
+    hasCli: cliOptions.length > 0,
+    hasBinary: !!binaryFields && binaryFields.length > 0,
+  };
+}
+
+/** Truncate a list to `max` items, appending "+N more" if needed */
+export function summarizeList(items: string[], max = 3): string {
+  const shown = items.slice(0, max);
+  const rest = items.length - shown.length;
+  return shown.join(", ") + (rest > 0 ? `, +${rest} more` : "");
+}
+
 /** Group fields by category */
 export function groupByCategory(fields: SettingField[]): Map<string, SettingField[]> {
   const groups = new Map<string, SettingField[]>();

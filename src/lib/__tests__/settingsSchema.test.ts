@@ -3,6 +3,8 @@ import {
   buildSettingsSchema,
   getUnknownKeys,
   getTypeMismatches,
+  getSchemaSourceInfo,
+  summarizeList,
   groupByCategory,
   parseJsonSchema,
   defaultForType,
@@ -722,5 +724,75 @@ describe("groupByCategory", () => {
     expect(general.length).toBe(2);
     expect(general.map((f) => f.key)).toContain("model");
     expect(general.map((f) => f.key)).toContain("verbose");
+  });
+});
+
+describe("getSchemaSourceInfo", () => {
+  it("returns all false when no sources available", () => {
+    expect(getSchemaSourceInfo([])).toEqual({
+      hasSchemaStore: false, hasCli: false, hasBinary: false,
+    });
+  });
+
+  it("returns all false for null/undefined/empty inputs", () => {
+    expect(getSchemaSourceInfo([], [], null)).toEqual({
+      hasSchemaStore: false, hasCli: false, hasBinary: false,
+    });
+  });
+
+  it("detects schemastore when properties are present", () => {
+    const info = getSchemaSourceInfo([], undefined, {
+      type: "object",
+      properties: { model: { type: "string" } },
+    });
+    expect(info.hasSchemaStore).toBe(true);
+    expect(info.hasCli).toBe(false);
+    expect(info.hasBinary).toBe(false);
+  });
+
+  it("returns false for schemastore with empty properties", () => {
+    const info = getSchemaSourceInfo([], undefined, { type: "object", properties: {} });
+    expect(info.hasSchemaStore).toBe(false);
+  });
+
+  it("detects CLI options", () => {
+    const info = getSchemaSourceInfo([{ flag: "--model", description: "Model" }]);
+    expect(info.hasCli).toBe(true);
+  });
+
+  it("detects binary fields", () => {
+    const info = getSchemaSourceInfo([], [{ key: "model", type: "string", description: "Model" }]);
+    expect(info.hasBinary).toBe(true);
+  });
+
+  it("returns all true when all sources present", () => {
+    const info = getSchemaSourceInfo(
+      [{ flag: "--model", description: "Model" }],
+      [{ key: "verbose", type: "boolean", description: "Verbose" }],
+      { type: "object", properties: { model: { type: "string" } } },
+    );
+    expect(info).toEqual({ hasSchemaStore: true, hasCli: true, hasBinary: true });
+  });
+});
+
+describe("summarizeList", () => {
+  it("returns single item", () => {
+    expect(summarizeList(["foo"])).toBe("foo");
+  });
+
+  it("joins up to 3 items without overflow", () => {
+    expect(summarizeList(["a", "b", "c"])).toBe("a, b, c");
+  });
+
+  it("truncates beyond 3 with +N more", () => {
+    expect(summarizeList(["a", "b", "c", "d"])).toBe("a, b, c, +1 more");
+  });
+
+  it("handles 5 items", () => {
+    expect(summarizeList(["a", "b", "c", "d", "e"])).toBe("a, b, c, +2 more");
+  });
+
+  it("respects custom max", () => {
+    expect(summarizeList(["a", "b", "c"], 2)).toBe("a, b, +1 more");
   });
 });

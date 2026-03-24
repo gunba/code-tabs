@@ -7,6 +7,8 @@ import {
   groupByCategory,
   getUnknownKeys,
   getTypeMismatches,
+  getSchemaSourceInfo,
+  summarizeList,
   defaultForType,
 } from "../../lib/settingsSchema";
 import type { SettingField } from "../../lib/settingsSchema";
@@ -201,10 +203,10 @@ export function SettingsPane({ scope, projectDir, onStatus, hideReference, onKey
 
   const { cliCapabilities, binarySettingsSchema, settingsJsonSchema } = useSettingsStore();
 
-  const schema = useMemo(
-    () => buildSettingsSchema(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema),
-    [cliCapabilities.options, binarySettingsSchema, settingsJsonSchema],
-  );
+  const { schema, sourceInfo } = useMemo(() => ({
+    schema: buildSettingsSchema(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema),
+    sourceInfo: getSchemaSourceInfo(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema),
+  }), [cliCapabilities.options, binarySettingsSchema, settingsJsonSchema]);
 
   // Parse current JSON for validation + "already set" tracking
   const { currentKeys, unknownKeys, typeMismatches, parseError } = useMemo(() => {
@@ -293,11 +295,27 @@ export function SettingsPane({ scope, projectDir, onStatus, hideReference, onKey
 
   if (loading) return <div className="pane-hint">Loading...</div>;
 
-  // Validation summary for footer
-  const validationParts: string[] = [];
-  if (parseError) validationParts.push("Invalid JSON");
-  if (unknownKeys.length > 0) validationParts.push(`${unknownKeys.length} unknown key${unknownKeys.length > 1 ? "s" : ""}`);
-  if (typeMismatches.length > 0) validationParts.push(`${typeMismatches.length} type error${typeMismatches.length > 1 ? "s" : ""}`);
+  // Validation segments for footer (rendered as separate spans for per-segment tooltips)
+  const hasErrors = !!parseError || typeMismatches.length > 0;
+
+  const unknownLabel = unknownKeys.length > 0
+    ? `${unknownKeys.length} unknown key${unknownKeys.length > 1 ? "s" : ""}: ${summarizeList(unknownKeys)}`
+    : null;
+
+  const mismatchLabel = typeMismatches.length > 0
+    ? `${typeMismatches.length} type error${typeMismatches.length > 1 ? "s" : ""}: ${summarizeList(typeMismatches.map((m) => `${m.key} (expected ${m.expected}, got ${m.actual})`))}`
+    : null;
+
+  // Tooltip explaining schema completeness — only for unknown keys segment
+  const unknownTooltip = unknownKeys.length > 0
+    ? sourceInfo.hasSchemaStore
+      ? "Schema loaded from schemastore.org \u2014 key may be misspelled or from a newer CLI version"
+      : sourceInfo.hasCli || sourceInfo.hasBinary
+        ? "Schema built from CLI discovery (schemastore.org unavailable) \u2014 key may be valid but undiscoverable"
+        : "Limited schema available \u2014 key may be valid"
+    : undefined;
+
+  const hasValidation = !!parseError || !!unknownLabel || !!mismatchLabel;
 
   return (
     <div className="pane-editor" onFocus={onEditorFocus}>
@@ -330,12 +348,16 @@ export function SettingsPane({ scope, projectDir, onStatus, hideReference, onKey
       )}
 
       <div className="pane-footer">
-        {validationParts.length > 0 && (
-          <span className={`sr-validation ${parseError || typeMismatches.length > 0 ? "sr-validation-error" : "sr-validation-warn"}`}>
-            {validationParts.join(" \u2022 ")}
+        {hasValidation && (
+          <span className="sr-validation">
+            {parseError && <span className="sr-validation-error">Invalid JSON</span>}
+            {parseError && unknownLabel && " \u2022 "}
+            {unknownLabel && <span className={hasErrors ? "sr-validation-error" : "sr-validation-warn"} title={unknownTooltip}>{unknownLabel}</span>}
+            {(parseError || unknownLabel) && mismatchLabel && " \u2022 "}
+            {mismatchLabel && <span className="sr-validation-error">{mismatchLabel}</span>}
           </span>
         )}
-        {validationParts.length === 0 && !parseError && currentKeys.size > 0 && (
+        {!hasValidation && !parseError && currentKeys.size > 0 && (
           <span className="sr-validation sr-validation-ok">Valid</span>
         )}
         <button className="pane-save-btn" onClick={handleSave} disabled={!dirty}>
