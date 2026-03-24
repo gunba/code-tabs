@@ -245,6 +245,8 @@ export default function App() {
         if (showResumePicker) { setShowResumePicker(false); return; }
         if (showLauncher) { setShowLauncher(false); return; }
         if (inspectedSubagent) { e.preventDefault(); setInspectedSubagent(null); return; }
+        const el = document.activeElement as HTMLElement;
+        if (el && !el.closest('.xterm')) el.blur();
       }
 
       if (e.ctrlKey && e.key === "Tab") {
