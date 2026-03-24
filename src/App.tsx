@@ -317,7 +317,7 @@ export default function App() {
               const subs = subagentMap.get(session.id) || [];
               const liveAgents = subs.filter((s) => s.state !== "dead" && s.state !== "idle").length;
               if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
-              if (wt) metaSpans.push({ text: worktreeAcronym(wt.worktreeName), color: "var(--accent-secondary)", title: wt.worktreeName });
+              if (wt) metaSpans.push({ text: worktreeAcronym(wt.worktreeName), color: "var(--accent-tertiary)", title: wt.worktreeName });
 
               return (
                 <div

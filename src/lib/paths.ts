@@ -65,18 +65,20 @@ export function normalizeForFilter(s: string): string {
 export interface TabGroup {
   key: string;          // normalizePath(workingDir) — stable identity
   label: string;        // dirToTabName(workingDir)
-  fullPath: string;     // original workingDir (for tooltip)
+  fullPath: string;     // effective dir (projectRoot for worktrees, original workingDir otherwise)
   sessions: Session[];  // ordered subset preserving relative order from flat array
 }
 
-/** Group sessions by normalized workingDir. Group order = first occurrence. */
+/** Group sessions by normalized workingDir. Worktrees collapse into their project root. Group order = first occurrence. */
 export function groupSessionsByDir(sessions: Session[]): TabGroup[] {
   const map = new Map<string, TabGroup>();
   for (const s of sessions) {
-    const key = normalizePath(s.config.workingDir);
+    const wt = parseWorktreePath(s.config.workingDir);
+    const effectiveDir = wt ? wt.projectRoot : s.config.workingDir;
+    const key = normalizePath(effectiveDir);
     let group = map.get(key);
     if (!group) {
-      group = { key, label: dirToTabName(s.config.workingDir), fullPath: s.config.workingDir, sessions: [] };
+      group = { key, label: dirToTabName(effectiveDir), fullPath: effectiveDir, sessions: [] };
       map.set(key, group);
     }
     group.sessions.push(s);

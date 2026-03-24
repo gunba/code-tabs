@@ -395,6 +395,19 @@ describe("groupSessionsByDir", () => {
     expect(groups[0].label).toBe("");
     expect(groups[0].fullPath).toBe("");
   });
+
+  it("groups worktree sessions with their project root", () => {
+    const sessions = [
+      mkSession("root", "C:\\Users\\jorda\\PycharmProjects\\claude_tabs"),
+      mkSession("wt1", "C:\\Users\\jorda\\PycharmProjects\\claude_tabs\\.claude\\worktrees\\gentle-wandering-dongarra"),
+      mkSession("wt2", "C:\\Users\\jorda\\PycharmProjects\\claude_tabs\\.claude\\worktrees\\sorted-marinating-dove"),
+    ];
+    const groups = groupSessionsByDir(sessions);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].sessions.map((s) => s.id)).toEqual(["root", "wt1", "wt2"]);
+    expect(groups[0].label).toBe("claude_tabs");
+    expect(groups[0].key).toBe("C:\\Users\\jorda\\PycharmProjects\\claude_tabs");
+  });
 });
 
 // ── swapWithinGroup ────────────────────────────────────────────
