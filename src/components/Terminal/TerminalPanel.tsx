@@ -330,35 +330,13 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     setRespawnCounter((c) => c + 1);
   };
 
-  // Accumulate user keystrokes for command history detection.
-  // Reading from xterm.js buffer is racy — PTY echo goes through write batching
-  // and xterm.js processes writes async, so the buffer may be stale on Enter.
-  const inputAccRef = useRef("");
-
   const handleTermData = useCallback(
     (data: string) => {
-      // Swallow all input when session is dead (overlay handles actions)
       if (session.state === "dead") {
         if (!session.config.runMode && (data === "\r" || data === "\n")) {
           triggerRespawnRef.current();
         }
         return;
-      }
-      // Track user input for command history detection
-      if (data === "\r") {
-        const input = inputAccRef.current.trim();
-        if (input && input.startsWith("/")) {
-          useSessionStore.getState().addCommandHistory(session.id, input.split(" ")[0]);
-        }
-        inputAccRef.current = "";
-      } else if (data === "\x7f" || data === "\b") {
-        inputAccRef.current = inputAccRef.current.slice(0, -1);
-      } else if (data === "\x15" || data === "\x03") {
-        inputAccRef.current = "";
-      } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
-        inputAccRef.current += data;
-      } else if (data.length > 1 && !data.startsWith("\x1b")) {
-        inputAccRef.current += data;
       }
       pty.handle.current?.write(data);
     },

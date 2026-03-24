@@ -18,17 +18,15 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
   const commandUsage = useSettingsStore((s) => s.commandUsage);
   const recordCommandUsage = useSettingsStore((s) => s.recordCommandUsage);
   const history = useSessionStore((s) => sessionId ? s.commandHistory.get(sessionId) : undefined) ?? [];
-  const addCommandHistory = useSessionStore((s) => s.addCommandHistory);
 
-  /** Send a slash command immediately and record it. */
+  /** Send a slash command immediately. History is recorded by the inspector. */
   const sendCommand = useCallback(
     (command: string) => {
       if (!sessionId) return;
       writeToPty(sessionId, command + "\r");
       recordCommandUsage(command);
-      addCommandHistory(sessionId, command);
     },
-    [sessionId, recordCommandUsage, addCommandHistory]
+    [sessionId, recordCommandUsage]
   );
 
   /** Type a command into the terminal without sending (no Enter). */

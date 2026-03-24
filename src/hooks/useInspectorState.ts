@@ -249,6 +249,12 @@ export function useInspectorState(
       setClaudeSessionId(data.sid);
     }
 
+    // Detect slash commands from actual sent messages.
+    // Use user events (not userPrompt comparison) so repeated same-commands are caught.
+    if (data.events.some(e => e.t === "user") && data.userPrompt?.startsWith("/")) {
+      useSessionStore.getState().addCommandHistory(sid, data.userPrompt.split(" ")[0]);
+    }
+
     setUserPrompt(data.userPrompt);
     setInputText(data.inputBuf);
     setInputTs(data.inputTs);
