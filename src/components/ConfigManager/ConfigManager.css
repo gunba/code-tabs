@@ -27,8 +27,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  position: relative;
-  z-index: 1;
+  justify-self: end;
 }
 
 .config-title {
@@ -40,9 +39,7 @@
 .config-tabs {
   display: flex;
   gap: 2px;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  justify-self: center;
 }
 
 .config-tab {
@@ -73,10 +70,6 @@
 }
 
 .config-close {
-  position: absolute;
-  top: 50%;
-  right: 14px;
-  transform: translateY(-50%);
   background: transparent;
   border: none;
   color: var(--text-muted);
