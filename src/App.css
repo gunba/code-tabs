@@ -198,6 +198,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 18px;
 }
 
 .tab-summary {
@@ -289,16 +290,17 @@
   font-family: inherit;
   background: var(--bg-primary);
   color: var(--text-primary);
-  border: 1px solid var(--accent);
+  border: none;
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
   border-radius: 3px;
   padding: 0 4px;
   margin: 0;
-  outline: none;
   width: 100%;
   min-width: 0;
-  line-height: normal;
+  line-height: 18px;
   box-sizing: border-box;
-  height: 20px;
+  height: 18px;
 }
 
 .tab-kill {
