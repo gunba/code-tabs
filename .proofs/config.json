@@ -1,0 +1,14 @@
+{
+  "docs": [
+    "CLAUDE.md",
+    "DOCS/FEATURES.md",
+    "DOCS/ARCHITECTURE.md",
+    "DOCS/PHILOSOPHY.md"
+  ],
+  "review_agents": [
+    "reviewer",
+    "simplifier",
+    "tester"
+  ],
+  "batch_size": 12
+}

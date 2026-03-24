@@ -48,94 +48,94 @@
     "BV-01": {
       "up": 0,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "BV-02": {
       "up": 0,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "BV-03": {
       "up": 1,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "DR-01": {
       "up": 1,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "DR-02": {
       "up": 1,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "DR-03": {
       "up": 0,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "DR-04": {
       "up": 0,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "DR-05": {
       "up": 1,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "DR-06": {
       "up": 3,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "DR-07": {
       "up": 3,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "TH-01": {
       "up": 0,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "TH-02": {
       "up": 0,
       "down": 0,
-      "seen": 10
+      "seen": 11
     },
     "FS-01": {
       "up": 0,
-      "seen": 0
+      "seen": 1
     },
     "AR-01": {
       "up": 0,
-      "seen": 0
+      "seen": 1
     },
     "LO-01": {
       "up": 0,
-      "seen": 0
+      "seen": 1
     },
     "CD-01": {
       "up": 0,
-      "seen": 0
+      "seen": 1
     },
     "DC-01": {
       "up": 0,
-      "seen": 0
+      "seen": 1
     },
     "DC-02": {
       "up": 0,
-      "seen": 0
+      "seen": 1
     },
     "DC-03": {
       "up": 0,
-      "seen": 0
+      "seen": 1
     },
     "DC-04": {
       "up": 0,
-      "seen": 0
+      "seen": 1
     }
   },
   "cycle": 1,
