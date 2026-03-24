@@ -77,6 +77,7 @@ export function SessionLauncher() {
     runMode: false,
   });
   const isUtilityRef = useRef(false);
+  const mountedRef = useRef(false);
   const [showCliOptions, setShowCliOptions] = useState(true);
   const [showUtility, setShowUtility] = useState(false);
   const [defaultsSaved, setDefaultsSaved] = useState(false);
@@ -97,8 +98,9 @@ export function SessionLauncher() {
 
   const [commandLine, setCommandLine] = useState(() => buildFullCommand(config, defaults.extraFlags || ""));
 
-  // Regenerate command line when config dropdowns change (skip in utility mode)
+  // Regenerate command line when config dropdowns change (skip on mount and in utility mode)
   useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
     if (isUtilityRef.current) return;
     setCommandLine(buildFullCommand(config));
   }, [config.model, config.permissionMode, config.effort, config.dangerouslySkipPermissions, config.projectDir, config.resumeSession, buildFullCommand]);
