@@ -441,6 +441,43 @@ describe("INSTALL_HOOK JSON.stringify interception", () => {
       prompt: "Hello Claude, please help me with this task",
     });
     expect(state.userPrompt).toBe("Hello Claude, please help me with this task");
+    expect(state.slashCmd).toBeNull();
+  });
+
+  it("sets slashCmd when UserPromptSubmit starts with /", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      hook_event_name: "UserPromptSubmit",
+      prompt: "/rj",
+    });
+    expect(state.userPrompt).toBe("/rj");
+    expect(state.slashCmd).toBe("/rj");
+  });
+
+  it("extracts only the command name from slashCmd (strips args)", () => {
+    const state = installAndGetState();
+    JSON.stringify({
+      hook_event_name: "UserPromptSubmit",
+      prompt: "/r --verbose some extra text",
+    });
+    expect(state.slashCmd).toBe("/r");
+  });
+
+  it("slashCmd survives overwrite by user event expanded text", () => {
+    const state = installAndGetState();
+    // UserPromptSubmit fires first with raw input
+    JSON.stringify({
+      hook_event_name: "UserPromptSubmit",
+      prompt: "/rj",
+    });
+    // Then user event fires with expanded command text
+    JSON.stringify({
+      type: "user",
+      message: { content: [{ type: "text", text: "Review then janitor in sequence..." }] },
+    });
+    // userPrompt is overwritten, but slashCmd is preserved
+    expect(state.userPrompt).toBe("Review then janitor in sequence...");
+    expect(state.slashCmd).toBe("/rj");
   });
 
   it("clears inputBuf on user event", () => {
@@ -597,7 +634,7 @@ describe("deriveStateFromPoll", () => {
     permPending: false, idleDetected: false, choiceHint: false,
     promptDetected: false,
     toolAction: null,
-    inputBuf: "", inputTs: 0, fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
+    inputBuf: "", inputTs: 0, slashCmd: null as string | null, fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
     subs: [] as Array<{ sid: string; desc: string; st: string; tok: number; act: string | null;
       msgs: Array<{ r: string; x: string; tn?: string }>; lastTs: number }>,
     cwd: null as string | null,
@@ -770,6 +807,23 @@ describe("POLL_STATE", () => {
     expect(result.sid).toBe("test-123");
     expect(result.events).toHaveLength(2);
     expect((g.__inspectorState as Record<string, unknown[]>).events).toHaveLength(0);
+  });
+
+  it("drains slashCmd after poll", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.__inspectorState = {
+      n: 1, sid: null, cost: 0, model: null, stop: null,
+      tools: [], inTok: 0, outTok: 0, events: [], lastEvent: null,
+      firstMsg: null, lastText: null, userPrompt: "/rj",
+      permPending: false, idleDetected: false, toolAction: null,
+      inputBuf: "", inputTs: 0, pendingDescs: [], subs: [],
+      slashCmd: "/rj", _sealed: false,
+    };
+    const fn = new Function(`return ${POLL_STATE}`);
+    const result = fn() as Record<string, unknown>;
+    expect(result.slashCmd).toBe("/rj");
+    const stateObj = g.__inspectorState as Record<string, unknown>;
+    expect(stateObj.slashCmd).toBeNull();
   });
 
   it("preserves permPending after poll (reset only by user event in INSTALL_HOOK)", () => {
@@ -1935,6 +1989,7 @@ describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
       promptDetected: false,
       inputBuf: state.inputBuf as string,
       inputTs: state.inputTs as number,
+      slashCmd: null,
       fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
       subs: [],
       cwd: null,
@@ -1977,6 +2032,7 @@ describe("INSTALL_HOOK stdin handler — interrupt signals", () => {
       promptDetected: false,
       inputBuf: state.inputBuf as string,
       inputTs: state.inputTs as number,
+      slashCmd: null,
       fetchBypassed: 0, fetchTimeouts: 0, httpsTimeouts: 0,
       subs: [],
       cwd: null,

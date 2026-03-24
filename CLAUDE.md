@@ -64,6 +64,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
 - [FS-01] Frontend source tree:
   ```
   src/
+  ├── main.tsx                             # React entry point, theme init
   ├── App.tsx                              # Root: tab bar, subagent bar, terminals
   ├── store/sessions.ts                    # Zustand: sessions, active tab, subagents, command history
   ├── store/settings.ts                    # Zustand: preferences, CLI info (persisted to localStorage)
@@ -106,6 +107,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
   │   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
   │   ├── uiConfig.ts                     # Persisted UI configuration
+  │   ├── debugLog.ts                     # Structured debug logging (dlog) + global buffer
   │   └── perfTrace.ts                    # Performance tracing utilities
   └── types/
       ├── session.ts                       # TypeScript types mirroring Rust (camelCase)

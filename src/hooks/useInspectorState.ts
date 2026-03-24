@@ -12,7 +12,7 @@ interface InspectorPollResult {
   lastEvent: string | null; firstMsg: string | null; lastText: string | null;
   userPrompt: string | null; permPending: boolean; idleDetected: boolean;
   toolAction: string | null; choiceHint: boolean;
-  inputBuf: string; inputTs: number; fetchBypassed: number;
+  inputBuf: string; inputTs: number; slashCmd: string | null; fetchBypassed: number;
   fetchTimeouts: number; httpsTimeouts: number;
   promptDetected: boolean;
   subs: Array<{
@@ -249,10 +249,10 @@ export function useInspectorState(
       setClaudeSessionId(data.sid);
     }
 
-    // Detect slash commands from actual sent messages.
-    // Use user events (not userPrompt comparison) so repeated same-commands are caught.
-    if (data.events.some(e => e.t === "user") && data.userPrompt?.startsWith("/")) {
-      useSessionStore.getState().addCommandHistory(sid, data.userPrompt.split(" ")[0]);
+    // Detect slash commands via dedicated slashCmd field set by UserPromptSubmit hook.
+    // Can't use userPrompt — the user conversation event overwrites it with expanded text.
+    if (data.slashCmd) {
+      useSessionStore.getState().addCommandHistory(sid, data.slashCmd);
     }
 
     setUserPrompt(data.userPrompt);

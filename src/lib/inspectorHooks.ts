@@ -50,6 +50,7 @@ export const INSTALL_HOOK = `(function() {
     inputTs: 0,
     pendingDescs: [],
     subs: [],
+    slashCmd: null,
     _sealed: false
   };
   globalThis.__inspectorState = state;
@@ -77,7 +78,10 @@ export const INSTALL_HOOK = `(function() {
           if (obj.notification_type === 'idle_prompt') state.idleDetected = true;
           if (obj.hook_event_name === 'UserPromptSubmit') {
             var hp = obj.prompt || '';
-            if (typeof hp === 'string' && hp) state.userPrompt = hp.slice(0, 200);
+            if (typeof hp === 'string' && hp) {
+              state.userPrompt = hp.slice(0, 200);
+              if (hp.charAt(0) === '/') state.slashCmd = hp.split(' ')[0].slice(0, 50);
+            }
           }
 
           if (obj.type) {
@@ -402,6 +406,8 @@ export const POLL_STATE = `(function() {
   if (!s) return null;
   var evts = s.events.slice();
   s.events = [];
+  var sc = s.slashCmd;
+  s.slashCmd = null;
   var subsData = [];
   try {
     for (var i = 0; i < s.subs.length; i++) {
@@ -434,6 +440,7 @@ export const POLL_STATE = `(function() {
     fetchBypassed: s.fetchBypassed || 0,
     fetchTimeouts: s.fetchTimeouts || 0,
     httpsTimeouts: s.httpsTimeouts || 0,
+    slashCmd: sc,
     subs: subsData,
     cwd: (function() { try { return process.cwd(); } catch(e) { return null; } })()
   };

@@ -12,11 +12,21 @@ Test framework, test suites, manual test cases, and coverage notes.
 
 | Suite | File | Count | What it tests |
 |-------|------|-------|---------------|
-| `inspectorHooks` | `src/lib/__tests__/inspectorHooks.test.ts` | 65 | Inspector hook install/idempotency, JSON.stringify interception, state derivation, subagent tracking |
-| `claude` | `src/lib/__tests__/claude.test.ts` | 23 | Color assignment, `dirToTabName`, `formatTokenCount` |
+| `inspectorHooks` | `src/lib/__tests__/inspectorHooks.test.ts` | 150 | Inspector hook install/idempotency, JSON.stringify interception, state derivation, subagent tracking, slash command detection, stdin handler, fetch/https wrappers |
+| `paths` | `src/lib/__tests__/paths.test.ts` | 78 | Path helpers, worktree detection, tab grouping |
+| `claude` | `src/lib/__tests__/claude.test.ts` | 73 | Color assignment, `dirToTabName`, `formatTokenCount`, model resolution |
+| `settingsSchema` | `src/lib/__tests__/settingsSchema.test.ts` | 70 | CLI settings.json schema discovery and parsing |
+| `resumePicker` | `src/lib/__tests__/resumePicker.test.ts` | 46 | Resume session picker logic |
+| `highlightJson` | `src/lib/__tests__/highlightJson.test.ts` | 27 | JSON syntax highlighting |
+| `sessions` | `src/store/__tests__/sessions.test.ts` | 25 | Zustand session store actions |
 | `deadSession` | `src/lib/__tests__/deadSession.test.ts` | 18 | Dead session detection heuristics |
-| `theme` | `src/lib/theme.test.ts` | 4 | Theme definitions, CSS variable generation |
-| `ptyRegistry` | `src/lib/ptyRegistry.test.ts` | 6 | Global PTY writer registry |
+| `inspectorPort` | `src/lib/__tests__/inspectorPort.test.ts` | 17 | Inspector port allocation and registry |
+| `normalizePlugins` | `src/lib/__tests__/normalizePlugins.test.ts` | 17 | Plugin normalization |
+| `deferredResize` | `src/lib/__tests__/deferredResize.test.ts` | 15 | Deferred terminal resize logic |
+| `ptyCleanup` | `src/lib/__tests__/ptyCleanup.test.ts` | 9 | PTY cleanup on session close |
+| `ptyRegistry` | `src/lib/__tests__/ptyRegistry.test.ts` | 6 | Global PTY writer registry |
+| `theme` | `src/lib/__tests__/theme.test.ts` | 4 | Theme definitions, CSS variable generation |
+| `ptySpawn` | `src/lib/__tests__/ptySpawn.test.ts` | 4 | PTY spawn with parallel exit waiter |
 
 ## Conventions
 
