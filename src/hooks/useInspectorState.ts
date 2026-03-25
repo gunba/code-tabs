@@ -252,11 +252,8 @@ export function useInspectorState(
       setClaudeSessionId(data.sid);
     }
 
-    // Detect slash commands via dedicated slashCmd field set by UserPromptSubmit hook.
-    // Can't use userPrompt — the user conversation event overwrites it with expanded text.
-    if (data.slashCmd) {
-      useSessionStore.getState().addCommandHistory(sid, data.slashCmd);
-    }
+    // Slash command detection moved to line accumulator in ptyRegistry.ts —
+    // detects at the point of write, no inspector dependency needed.
 
     setUserPrompt(data.userPrompt);
     setInputText(data.inputBuf);

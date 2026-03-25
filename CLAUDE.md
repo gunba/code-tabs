@@ -103,7 +103,8 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── claude.ts                        # Color assignment, model resolution, resume helpers, stripWorktreeFlags, buildClaudeArgs
   │   ├── theme.ts                         # Theme definitions, CSS variable setter, xterm theme
   │   ├── ptyProcess.ts                    # Direct PTY wrapper + active PID cleanup registry
-  │   ├── ptyRegistry.ts                   # Global PTY writer + kill registry
+  │   ├── inputAccumulator.ts              # PTY input line accumulator for slash-command detection
+  │   ├── ptyRegistry.ts                   # Global PTY writer + kill registry + slash-command detection via LineAccumulator
   │   ├── terminalRegistry.ts             # Terminal buffer reader registry
   │   ├── paths.ts                         # Path helpers, IS_WINDOWS detection, platform-aware normalizePath, worktree detection, tab grouping
   │   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
@@ -114,12 +115,13 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   └── diffParser.ts                   # Git porcelain/numstat/unified-diff parsers
   └── types/
       ├── session.ts                       # TypeScript types mirroring Rust (camelCase)
-      └── ipc.ts                           # Tauri IPC command signatures
+      ├── ipc.ts                           # Tauri IPC command signatures
+      └── git.ts                           # Git status and diff types (GitStatusData, FileDiff, DiffLine)
   ```
 
 ## Development Rules
 
-- [DR-01] Rust IPC commands in `commands.rs`, registered in `lib.rs` via `generate_handler!`
+- [DR-01] Rust IPC commands in `commands.rs` and `jsonl_watcher.rs`, registered in `lib.rs` via `generate_handler!`
 - [DR-02] TypeScript types in `src/types/` mirror Rust types with camelCase
 - [DR-03] Zustand stores in `src/store/`, hooks in `src/hooks/`
 - [DR-04] Components in `src/components/<Name>/<Name>.tsx` with co-located CSS

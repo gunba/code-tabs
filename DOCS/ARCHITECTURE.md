@@ -6,7 +6,7 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 
 ## Data Flow
 
-- [DF-01] User types in xterm.js -> `onData` -> PTY `write` -> PTY (ConPTY on Windows, openpty on Linux) -> Claude stdin
+- [DF-01] User types in xterm.js -> `onData` -> `writeToPty()` (ptyRegistry.ts: LineAccumulator detects slash commands) -> PTY `write` -> PTY (ConPTY on Windows, openpty on Linux) -> Claude stdin
 - [DF-02] Claude stdout -> PTY -> background reader thread (8 KiB) -> sync_channel(64) -> OutputFilter (security) -> SyncBlockDetector (DEC 2026 coalescing) -> IPC response -> Uint8Array
   - Files: src-tauri/pty-patch/src/lib.rs:179, src/lib/ptyProcess.ts:88
 - [DF-03] PTY data handler: `writeBytes(data)` to xterm.js (debounce-batched, 4ms/50ms). Background tabs buffer PTY data in bgBufferRef, flushed as single merged write on tab focus.
@@ -41,7 +41,7 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/hooks/useInspectorState.ts:44, src/hooks/useInspectorState.ts:70
 - [SI-14] Poll-based architecture: INSTALL_HOOK wraps JSON.stringify to capture state into globalThis.__inspectorState; useInspectorState polls via POLL_STATE expression every 250ms. POLL_STATE drains events unconditionally before subs processing; subs iteration wrapped in try/catch to prevent cascading failures. Evaluation errors logged via onmessage exceptionDetails check.
   - Files: src/hooks/useInspectorState.ts:241, src/lib/inspectorHooks.ts:27, src/lib/inspectorHooks.ts:400
-- [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (terminal selector), promptDetected (terminal prompt fallback), cwd (process.cwd() for worktree detection)
+- [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (terminal selector), promptDetected (terminal prompt fallback), cwd (process.cwd() for worktree detection). Note: slashCmd is still captured in POLL_STATE but no longer consumed — slash command detection moved to LineAccumulator in ptyRegistry.ts
   - Files: src/lib/inspectorHooks.ts:400, src/hooks/useInspectorState.ts:8
 - [SI-20] Worktree cwd detection: when POLL_STATE returns a changed cwd (e.g., after Claude enters a worktree via -w), useInspectorState updates the session's workingDir. Enables tab acronym display, correct resume cwd, and worktree prune on close. Uses a ref to fire only on change, not every poll cycle.
   - Files: src/hooks/useInspectorState.ts:186
