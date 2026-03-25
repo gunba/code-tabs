@@ -16,6 +16,8 @@ import type { Session, SessionConfig, SessionState } from "../../types/session";
 import "@xterm/xterm/css/xterm.css";
 import "./TerminalPanel.css";
 
+const EMPTY_TAP_SET = new Set<string>();
+
 interface TerminalPanelProps {
   session: Session;
   visible: boolean;
@@ -158,7 +160,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     inspectorReconnectKey
   );
 
-  const tapCategories = useSessionStore((s) => s.tapCategories.get(session.id) ?? new Set<string>());
+  const tapCategories = useSessionStore((s) => s.tapCategories.get(session.id) ?? EMPTY_TAP_SET);
   useTapRecorder({
     sessionId: session.state !== "dead" ? session.id : null,
     wsSend: inspector.wsSend,
