@@ -26,18 +26,6 @@
     ]
   },
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'BIN=\"${AGENT_PROOFS_BIN:-${LOCALAPPDATA:+$LOCALAPPDATA/claude-agent-logs/bin}}\"; BIN=\"${BIN:-${XDG_DATA_HOME:-$HOME/.local/share}/claude-agent-logs/bin}\"; echo \"export AGENT_PROOFS_BIN=$BIN\" >> \"$CLAUDE_ENV_FILE\"'",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
