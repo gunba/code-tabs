@@ -14,7 +14,7 @@ npm run tauri build     # Full NSIS installer (only for releases)
 ### Outputs
 
 - **Portable exe**: `src-tauri/target/release/claude-tabs.exe`
-- **NSIS installer**: `src-tauri/target/release/bundle/nsis/claude-tabs_<version>_x64-setup.exe`
+- **NSIS installer**: `src-tauri/target/release/bundle/nsis/Claude Tabs_<version>_x64-setup.exe`
 
 Never do a full NSIS build just to test. Use `build:quick` or `build:debug`.
 
@@ -37,17 +37,22 @@ Version must be bumped in all three files:
 
 1. Bump version in all three files
 2. Run validation (tsc + test + cargo check)
-3. Build full NSIS installer: `npm run tauri build`
-4. Create GitHub release:
+3. Build locally with `build:quick` to verify compilation
+4. Commit version bump, push with tag:
    ```bash
-   gh release create v<version> \
-     "src-tauri/target/release/bundle/nsis/claude-tabs_<version>_x64-setup.exe" \
-     "src-tauri/target/release/claude-tabs.exe#claude-tabs-portable.exe" \
-     --title "v<version>" \
-     --generate-notes
+   git tag v<version>
+   git push origin master --tags
+   ```
+5. Create GitHub release (no artifacts — CI handles uploads):
+   ```bash
+   gh release create v<version> --title "v<version>" --generate-notes
    ```
 
-**IMPORTANT**: Always include BOTH the NSIS installer AND the portable exe in releases. The portable exe should be uploaded with the display name `claude-tabs-portable.exe`.
+CI workflows (`.github/workflows/build-windows.yml` and `build-linux.yml`) trigger on the `v*` tag push and upload platform artifacts automatically:
+- **Windows**: NSIS installer + `claude-tabs-windows-portable.exe`
+- **Linux**: `.deb`, `.rpm`, `.AppImage` + `claude-tabs-linux-portable`
+
+Both workflows include a release-existence guard — whichever finishes first creates the release if `/b` hasn't already, the other appends with `--clobber`.
 
 ## Build Notes
 
