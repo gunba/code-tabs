@@ -16,17 +16,15 @@ interface CommandBarProps {
 export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProps) {
   const slashCommands = useSettingsStore((s) => s.slashCommands);
   const commandUsage = useSettingsStore((s) => s.commandUsage);
-  const recordCommandUsage = useSettingsStore((s) => s.recordCommandUsage);
   const history = useSessionStore((s) => sessionId ? s.commandHistory.get(sessionId) : undefined) ?? [];
 
-  /** Send a slash command immediately. History is recorded by the inspector. */
+  /** Send a slash command immediately. History recorded by line accumulator in writeToPty. */
   const sendCommand = useCallback(
     (command: string) => {
       if (!sessionId) return;
       writeToPty(sessionId, command + "\r");
-      recordCommandUsage(command);
     },
-    [sessionId, recordCommandUsage]
+    [sessionId]
   );
 
   /** Type a command into the terminal without sending (no Enter). */

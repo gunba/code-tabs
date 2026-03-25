@@ -7,7 +7,7 @@ import { buildClaudeArgs, getResumeId, canResumeSession, stripWorktreeFlags } fr
 import { dlog } from "../../lib/debugLog";
 import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, registerInspectorCallbacks, unregisterInspectorCallbacks } from "../../lib/inspectorPort";
 import { useInspectorState } from "../../hooks/useInspectorState";
-import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill } from "../../lib/ptyRegistry";
+import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill, writeToPty } from "../../lib/ptyRegistry";
 import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader } from "../../lib/terminalRegistry";
 import { useSettingsStore } from "../../store/settings";
 import { normalizePath } from "../../lib/paths";
@@ -341,11 +341,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         }
         return;
       }
-      pty.handle.current?.write(data);
+      writeToPty(session.id, data);
     },
-    // pty.handle is a stable ref — omitted from deps intentionally
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session.state]
+    [session.id, session.state]
   );
 
   const lastPtyDimsRef = useRef<{ cols: number; rows: number } | null>(null);
@@ -557,7 +556,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     }
     const text = terminalRef.current?.getCurrentInput() ?? "";
     if (!text) return;
-    pty.handle.current?.write("\x15"); // Clear terminal input line
+    writeToPty(session.id, "\x15"); // Clear terminal input line
     setQueuedInput(text);
     // pty.handle and terminalRef are stable refs — omitted from deps intentionally
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -570,7 +569,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     if (session.state === "dead") { setQueuedInput(null); return; }
     const timer = setTimeout(() => {
       if (session.state !== "idle") return; // Belt-and-suspenders: verify still idle
-      pty.handle.current?.write(queuedInput + "\r");
+      writeToPty(session.id, queuedInput + "\r");
       setQueuedInput(null);
     }, 300);
     return () => clearTimeout(timer);
