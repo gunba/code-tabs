@@ -236,13 +236,15 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       if (wasAtBottom) {
         term.scrollToBottom();
       } else {
+        const newViewportY = term.buffer.active.viewportY;
         const newBaseY = term.buffer.active.baseY;
-        // Detect scrollback clear (ESC[3J from full-redraw sync blocks):
-        // baseY shrinks when scrollback is wiped and re-rendered content
-        // hasn't yet filled the same amount. Restore proportional position.
-        if (prevBaseY > 0 && newBaseY > 0 && newBaseY < prevBaseY) {
-          const ratio = prevViewportY / prevBaseY;
-          term.scrollToLine(Math.round(ratio * newBaseY));
+        if (newBaseY < prevBaseY) {
+          // Scrollback was cleared (ESC[3J — content exceeded viewport).
+          // The content the user was reading is gone — show latest output.
+          term.scrollToBottom();
+        } else if (newViewportY !== prevViewportY) {
+          // Viewport moved unexpectedly — restore absolute position
+          term.scrollToLine(Math.min(prevViewportY, newBaseY));
         }
       }
     });

@@ -97,8 +97,8 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/components/SubagentInspector/SubagentInspector.tsx:18, src/components/SubagentInspector/SubagentInspector.css:122
 - [TR-13] Context clear detection: terminal scrollback auto-clears when Claude session ID changes (/clear, plan approval, compaction). Signal-based via inspector — no input parsing or timers.
   - Files: src/components/Terminal/TerminalPanel.tsx:183
-- [TR-14] Scroll position preservation: full-redraw sync blocks clear scrollback (ESC[3J) to prevent duplication, then replace ESC[2J with ESC[H ESC[J. Frontend `flushWrites` detects the scrollback clear and restores proportional scroll position. Tab switches use `useLayoutEffect` + `visibility:hidden` for flicker-free buffer flush.
-  - Files: src-tauri/pty-patch/src/lib.rs:42, src/hooks/useTerminal.ts:243, src/components/Terminal/TerminalPanel.tsx:509
+- [TR-14] Scroll position preservation: full-redraw sync blocks conditionally clear scrollback (ESC[3J only when content exceeds terminal height), preserving scroll position for redraws that fit the viewport. ESC[2J is replaced with ESC[H ESC[J. Frontend `flushWrites` detects scrollback clear (baseY shrinkage) and scrolls to bottom, or restores absolute viewport position if moved unexpectedly. Tab switches use `useLayoutEffect` + `visibility:hidden` for flicker-free buffer flush.
+  - Files: src-tauri/pty-patch/src/lib.rs:42, src/hooks/useTerminal.ts:239, src/components/Terminal/TerminalPanel.tsx:509
 
 ## Session Launcher
 
