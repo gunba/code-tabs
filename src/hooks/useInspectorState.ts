@@ -96,12 +96,14 @@ export function useInspectorState(
   sessionId: string | null,
   port: number | null,
   reconnectKey?: number
-): { connected: boolean; disconnect: () => void; inputText: string; inputTs: number; userPrompt: string | null; claudeSessionId: string | null; completionCount: number } {
+): { connected: boolean; disconnect: () => void; inputText: string; inputTs: number; userPrompt: string | null; claudeSessionId: string | null; completionCount: number; wsSend: (method: string, params?: Record<string, unknown>) => number; registerExternalHandler: (handler: ((msg: Record<string, unknown>) => void) | null) => void } {
   const [connected, setConnected] = useState(false);
   const [inputText, setInputText] = useState("");
   const [inputTs, setInputTs] = useState(0);
   const [userPrompt, setUserPrompt] = useState<string | null>(null);
   const [claudeSessionId, setClaudeSessionId] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const externalHandlerRef = useRef<((msg: Record<string, any>) => void) | null>(null);
   const [completionCount, setCompletionCount] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -335,6 +337,9 @@ export function useInspectorState(
         if (msg.result?.exceptionDetails) {
           dlog("inspector", sessionIdRef.current, `evaluation error: ${msg.result.exceptionDetails.text || msg.result.exceptionDetails.exception?.description}`, "WARN");
         }
+
+        // Forward to external handler (used by tap recorder)
+        externalHandlerRef.current?.(msg);
       } catch {
         // Invalid message — skip
       }
@@ -410,5 +415,9 @@ export function useInspectorState(
     };
   }, [sessionId, port, connect, disconnect, reconnectKey]);
 
-  return { connected, disconnect, inputText, inputTs, userPrompt, claudeSessionId, completionCount };
+  const registerExternalHandler = useCallback((handler: ((msg: Record<string, unknown>) => void) | null) => {
+    externalHandlerRef.current = handler;
+  }, []);
+
+  return { connected, disconnect, inputText, inputTs, userPrompt, claudeSessionId, completionCount, wsSend, registerExternalHandler };
 }

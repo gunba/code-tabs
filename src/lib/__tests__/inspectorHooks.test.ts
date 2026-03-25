@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { INSTALL_HOOK, POLL_STATE } from "../inspectorHooks";
+import { INSTALL_HOOK, POLL_STATE, INSTALL_TAPS, POLL_TAPS, tapToggleExpr, tapToggleAllExpr } from "../inspectorHooks";
 import { deriveStateFromPoll } from "../../hooks/useInspectorState";
 
 // Mock @tauri-apps/api/core — allocateInspectorPort calls invoke("check_port_available")
@@ -2601,5 +2601,363 @@ describe("POLL_STATE timeout counter fields", () => {
     expect(result.fetchTimeouts).toBe(0);
     expect(result.httpsTimeouts).toBe(0);
     expect(result.fetchBypassed).toBe(0);
+  });
+});
+
+// ── Tap hooks ────────────────────────────────────────────────────────
+
+function cleanupTapHooks() {
+  const g = globalThis as unknown as Record<string, unknown>;
+  delete g.__tapsInstalled;
+  delete g.__tapFlags;
+  delete g.__tapBuffer;
+  delete g.__tapFetchInstalled;
+}
+
+describe("INSTALL_TAPS", () => {
+  beforeEach(cleanupTapHooks);
+  afterEach(cleanupTapHooks);
+
+  it("returns 'ok' on first install", () => {
+    const fn = new Function(`return ${INSTALL_TAPS}`);
+    expect(fn()).toBe("ok");
+  });
+
+  it("returns 'already' on second install", () => {
+    const fn = new Function(`return ${INSTALL_TAPS}`);
+    fn();
+    expect(fn()).toBe("already");
+  });
+
+  it("initializes __tapFlags as all false", () => {
+    new Function(`return ${INSTALL_TAPS}`)();
+    const g = globalThis as unknown as Record<string, unknown>;
+    const flags = g.__tapFlags as Record<string, boolean>;
+    expect(flags.parse).toBe(false);
+    expect(flags.console).toBe(false);
+    expect(flags.fs).toBe(false);
+    expect(flags.spawn).toBe(false);
+    expect(flags.fetch).toBe(false);
+    expect(flags.exit).toBe(false);
+    expect(flags.timer).toBe(false);
+    expect(flags.stdout).toBe(false);
+    expect(flags.require).toBe(false);
+  });
+
+  it("initializes __tapBuffer as empty array", () => {
+    new Function(`return ${INSTALL_TAPS}`)();
+    const g = globalThis as unknown as Record<string, unknown>;
+    expect(g.__tapBuffer).toEqual([]);
+  });
+});
+
+describe("INSTALL_TAPS JSON.parse hook", () => {
+  beforeEach(() => { cleanupTapHooks(); new Function(`return ${INSTALL_TAPS}`)(); });
+  afterEach(cleanupTapHooks);
+
+  it("is no-op when parse flag is false", () => {
+    const big = JSON.stringify({ type: "message", content: "x".repeat(100) });
+    JSON.parse(big);
+    const g = globalThis as unknown as Record<string, unknown>;
+    expect((g.__tapBuffer as unknown[]).length).toBe(0);
+  });
+
+  it("captures when parse flag is true", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).parse = true;
+    const big = JSON.stringify({ type: "message", content: "x".repeat(100) });
+    JSON.parse(big);
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    expect(buf.length).toBe(1);
+    expect(buf[0].cat).toBe("parse");
+    expect(buf[0].hint).toBe("api");
+    expect(typeof buf[0].ts).toBe("number");
+    expect(typeof buf[0].len).toBe("number");
+    expect(typeof buf[0].snap).toBe("string");
+  });
+
+  it("skips strings shorter than 50 chars", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).parse = true;
+    JSON.parse('{"a":1}');
+    expect((g.__tapBuffer as unknown[]).length).toBe(0);
+  });
+
+  it("skips primitives", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).parse = true;
+    // A long string that parses to a primitive-wrapping doesn't match
+    JSON.parse('"' + "x".repeat(100) + '"');
+    expect((g.__tapBuffer as unknown[]).length).toBe(0);
+  });
+
+  it("hints config when settings present", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).parse = true;
+    const cfg = JSON.stringify({ settings: { model: "opus" }, padding: "x".repeat(50) });
+    JSON.parse(cfg);
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    expect(buf[0].hint).toBe("config");
+  });
+});
+
+describe("INSTALL_TAPS console hooks", () => {
+  let origLog: typeof console.log;
+  let origWarn: typeof console.warn;
+  let origError: typeof console.error;
+
+  beforeEach(() => {
+    cleanupTapHooks();
+    // Save original console methods (pre-hook)
+    origLog = console.log;
+    origWarn = console.warn;
+    origError = console.error;
+    new Function(`return ${INSTALL_TAPS}`)();
+  });
+  afterEach(() => {
+    cleanupTapHooks();
+    // Restore console methods
+    console.log = origLog;
+    console.warn = origWarn;
+    console.error = origError;
+  });
+
+  it("captures console.warn when flag is true", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).console = true;
+    console.warn("test warning");
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    expect(buf.length).toBe(1);
+    expect(buf[0].cat).toBe("console.warn");
+    expect(buf[0].msg).toBe("test warning");
+  });
+
+  it("is no-op when console flag is false", () => {
+    console.log("invisible");
+    const g = globalThis as unknown as Record<string, unknown>;
+    expect((g.__tapBuffer as unknown[]).length).toBe(0);
+  });
+});
+
+describe("INSTALL_TAPS ring buffer", () => {
+  beforeEach(() => { cleanupTapHooks(); new Function(`return ${INSTALL_TAPS}`)(); });
+  afterEach(cleanupTapHooks);
+
+  it("evicts oldest when full (500 cap)", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).parse = true;
+    const big = JSON.stringify({ data: "x".repeat(100) });
+    for (let i = 0; i < 510; i++) JSON.parse(big);
+    const buf = g.__tapBuffer as unknown[];
+    expect(buf.length).toBe(500);
+  });
+});
+
+describe("POLL_TAPS", () => {
+  beforeEach(() => { cleanupTapHooks(); new Function(`return ${INSTALL_TAPS}`)(); });
+  afterEach(cleanupTapHooks);
+
+  it("returns null when taps not installed", () => {
+    cleanupTapHooks();
+    const fn = new Function(`return ${POLL_TAPS}`);
+    expect(fn()).toBeNull();
+  });
+
+  it("drains buffer and returns entries", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).parse = true;
+    const big = JSON.stringify({ data: "x".repeat(100) });
+    JSON.parse(big);
+    JSON.parse(big);
+    const fn = new Function(`return ${POLL_TAPS}`);
+    const result = fn() as { entries: unknown[]; flags: Record<string, boolean> };
+    expect(result.entries.length).toBe(2);
+    expect(result.flags.parse).toBe(true);
+    // Buffer should be empty after drain
+    expect((g.__tapBuffer as unknown[]).length).toBe(0);
+  });
+});
+
+describe("tapToggleExpr / tapToggleAllExpr", () => {
+  beforeEach(() => { cleanupTapHooks(); new Function(`return ${INSTALL_TAPS}`)(); });
+  afterEach(cleanupTapHooks);
+
+  it("toggles a single category", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    new Function(`return ${tapToggleExpr("parse", true)}`)();
+    expect((g.__tapFlags as Record<string, boolean>).parse).toBe(true);
+    expect((g.__tapFlags as Record<string, boolean>).console).toBe(false);
+    new Function(`return ${tapToggleExpr("parse", false)}`)();
+    expect((g.__tapFlags as Record<string, boolean>).parse).toBe(false);
+  });
+
+  it("toggles all categories", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    new Function(`return ${tapToggleAllExpr(true)}`)();
+    const flags = g.__tapFlags as Record<string, boolean>;
+    expect(flags.parse).toBe(true);
+    expect(flags.console).toBe(true);
+    expect(flags.fs).toBe(true);
+    expect(flags.spawn).toBe(true);
+    expect(flags.fetch).toBe(true);
+    expect(flags.exit).toBe(true);
+    expect(flags.timer).toBe(true);
+    expect(flags.stdout).toBe(true);
+    expect(flags.require).toBe(true);
+    new Function(`return ${tapToggleAllExpr(false)}`)();
+    expect(flags.parse).toBe(false);
+    expect(flags.console).toBe(false);
+    expect(flags.fs).toBe(false);
+    expect(flags.spawn).toBe(false);
+    expect(flags.fetch).toBe(false);
+    expect(flags.exit).toBe(false);
+    expect(flags.timer).toBe(false);
+    expect(flags.stdout).toBe(false);
+    expect(flags.require).toBe(false);
+  });
+
+  it("toggles new categories individually", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    const flags = g.__tapFlags as Record<string, boolean>;
+    new Function(`return ${tapToggleExpr("spawn", true)}`)();
+    expect(flags.spawn).toBe(true);
+    expect(flags.fetch).toBe(false);
+    new Function(`return ${tapToggleExpr("fetch", true)}`)();
+    expect(flags.fetch).toBe(true);
+    new Function(`return ${tapToggleExpr("timer", true)}`)();
+    expect(flags.timer).toBe(true);
+    new Function(`return ${tapToggleExpr("stdout", true)}`)();
+    expect(flags.stdout).toBe(true);
+  });
+
+  it("tapToggleExpr is safe when __tapFlags is absent", () => {
+    cleanupTapHooks();
+    const result = new Function(`return ${tapToggleExpr("parse", true)}`)();
+    expect(result).toBe("ok");
+  });
+});
+
+// NOTE: fs, spawn, and require hooks wrap Node modules accessed via require(),
+// which is not available inside new Function() in the Vitest environment.
+// Those hooks are only testable in a real Bun process (the actual target runtime).
+
+describe("INSTALL_TAPS console hooks — all methods", () => {
+  let origLog: typeof console.log;
+  let origWarn: typeof console.warn;
+  let origError: typeof console.error;
+
+  beforeEach(() => {
+    cleanupTapHooks();
+    origLog = console.log;
+    origWarn = console.warn;
+    origError = console.error;
+    new Function(`return ${INSTALL_TAPS}`)();
+  });
+  afterEach(() => {
+    cleanupTapHooks();
+    console.log = origLog;
+    console.warn = origWarn;
+    console.error = origError;
+  });
+
+  it("captures console.log", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).console = true;
+    console.log("test log");
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    expect(buf.some((e) => e.cat === "console.log" && e.msg === "test log")).toBe(true);
+  });
+
+  it("captures console.error", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).console = true;
+    console.error("test error");
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    expect(buf.some((e) => e.cat === "console.error" && e.msg === "test error")).toBe(true);
+  });
+
+  it("joins multiple arguments with space", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).console = true;
+    console.log("a", "b", "c");
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    expect(buf.some((e) => e.msg === "a b c")).toBe(true);
+  });
+});
+
+describe("INSTALL_TAPS stdout hook", () => {
+  const proc = () => (globalThis as unknown as { process: { stdout: { write: (s: string) => boolean } } }).process;
+  let origWrite: (s: string) => boolean;
+
+  beforeEach(() => {
+    cleanupTapHooks();
+    origWrite = proc().stdout.write;
+    new Function(`return ${INSTALL_TAPS}`)();
+  });
+  afterEach(() => {
+    cleanupTapHooks();
+    proc().stdout.write = origWrite;
+  });
+
+  it("captures stdout.write with length and snap", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).stdout = true;
+    proc().stdout.write("test output");
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    const entry = buf.find((e) => e.cat === "stdout");
+    expect(entry).toBeDefined();
+    expect(entry!.len).toBe(11);
+    expect(entry!.snap).toBe("test output");
+  });
+
+  it("is no-op when stdout flag is false", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    proc().stdout.write("invisible");
+    expect((g.__tapBuffer as Array<Record<string, unknown>>).filter((e) => e.cat === "stdout").length).toBe(0);
+  });
+});
+
+describe("INSTALL_TAPS timer hook", () => {
+  beforeEach(() => { cleanupTapHooks(); new Function(`return ${INSTALL_TAPS}`)(); });
+  afterEach(cleanupTapHooks);
+
+  it("captures setTimeout with delay >= 100", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).timer = true;
+    const id = setTimeout(() => {}, 200);
+    clearTimeout(id);
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    const entry = buf.find((e) => e.cat === "setTimeout");
+    expect(entry).toBeDefined();
+    expect(entry!.delay).toBe(200);
+    expect(typeof entry!.caller).toBe("string");
+  });
+
+  it("skips setTimeout with delay < 100", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).timer = true;
+    const id = setTimeout(() => {}, 10);
+    clearTimeout(id);
+    const buf = g.__tapBuffer as Array<Record<string, unknown>>;
+    expect(buf.filter((e) => e.cat === "setTimeout").length).toBe(0);
+  });
+});
+
+// require hook test omitted — see note above about require() in new Function() scope.
+
+describe("POLL_TAPS edge cases", () => {
+  beforeEach(() => { cleanupTapHooks(); new Function(`return ${INSTALL_TAPS}`)(); });
+  afterEach(cleanupTapHooks);
+
+  it("returns empty entries on second drain (not null)", () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).parse = true;
+    const big = JSON.stringify({ data: "x".repeat(100) });
+    JSON.parse(big);
+    const fn = new Function(`return ${POLL_TAPS}`);
+    fn(); // first drain
+    const result = fn() as { entries: unknown[]; flags: Record<string, boolean> };
+    expect(result).not.toBeNull();
+    expect(result.entries).toEqual([]);
   });
 });

@@ -40,9 +40,9 @@ Technical implementation details. Code implementing a tagged entry is not dead c
 - [SI-13] deriveStateFromPoll override chain: ExitPlanMode refines toolUse to actionNeeded; idleDetected overrides to idle; promptDetected overrides thinking/toolUse to idle (no-events guard); choiceHint refines idle to actionNeeded; permPending always wins (waitingPermission)
   - Files: src/hooks/useInspectorState.ts:44, src/hooks/useInspectorState.ts:70
 - [SI-14] Poll-based architecture: INSTALL_HOOK wraps JSON.stringify to capture state into globalThis.__inspectorState; useInspectorState polls via POLL_STATE expression every 250ms. POLL_STATE drains events unconditionally before subs processing; subs iteration wrapped in try/catch to prevent cascading failures. Evaluation errors logged via onmessage exceptionDetails check.
-  - Files: src/hooks/useInspectorState.ts:241, src/lib/inspectorHooks.ts:27, src/lib/inspectorHooks.ts:400
+  - Files: src/hooks/useInspectorState.ts:285, src/lib/inspectorHooks.ts:27, src/lib/inspectorHooks.ts:737
 - [SI-15] Poll result fields: InspectorPollResult includes n (event count), sid, cost, model, stop, tools, inTok/outTok, events (ring buffer), permPending/idleDetected (notification flags), subs (subagent state with spliced msgs), inputBuf/inputTs (stdin capture), choiceHint (terminal selector), promptDetected (terminal prompt fallback), cwd (process.cwd() for worktree detection)
-  - Files: src/lib/inspectorHooks.ts:400, src/hooks/useInspectorState.ts:8
+  - Files: src/lib/inspectorHooks.ts:737, src/hooks/useInspectorState.ts:8
 - [SI-20] Worktree cwd detection: when POLL_STATE returns a changed cwd (e.g., after Claude enters a worktree via -w), useInspectorState updates the session's workingDir. Enables tab acronym display, correct resume cwd, and worktree prune on close. Uses a ref to fire only on change, not every poll cycle.
   - Files: src/hooks/useInspectorState.ts:186
 - [SI-16] WebFetch domain blocklist bypass: intercepts require('https').request to return can_fetch:true for api.anthropic.com/api/web/domain_info, eliminating the 10s preflight that blocks all WebFetch calls. Axios in Bun uses the Node http adapter (not globalThis.fetch), so the hook targets the shared https module singleton. Bypass count exposed as fetchBypassed in poll state.
@@ -51,6 +51,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/lib/inspectorHooks.ts:272
 - [SI-19] Terminal buffer prompt fallback: when no events flow for 2+ consecutive polls (noEventTicksRef) and the terminal tail's last line contains a Claude Code prompt marker (`>\u00A0` or `❯`), `promptDetected` is set. deriveStateFromPoll overrides thinking/toolUse to idle when promptDetected is true and events are empty. Prevents stuck states from POLL_STATE failures or missed events.
   - Files: src/hooks/useInspectorState.ts:152, src/hooks/useInspectorState.ts:77
+- [SI-21] Tap hooks: separate INSTALL_TAPS/POLL_TAPS expressions for capturing raw internal traffic. 9 categories: parse (JSON.parse), console (log/warn/error), fs (read/write/exists/stat/readdir), spawn (child_process spawn/exec/spawnSync/execSync), fetch (request metadata + timing), exit (process.exit), timer (setTimeout/clearTimeout with caller stack), stdout (process.stdout.write), require (module loading). Dormant by default — enabled per-session via tab context menu. Ring buffer (500) in hooked process, drained at 500ms, flushed to JSONL at 2s intervals via append_tap_data IPC. Files written to %LOCALAPPDATA%/claude-tabs/taps/{session-id}.jsonl.
+  - Files: src/lib/inspectorHooks.ts, src/hooks/useTapRecorder.ts, src-tauri/src/commands.rs
 - [SI-18] WebFetch timeout protection: two hooks prevent indefinite hangs. (1) globalThis.fetch wrapper applies 120s timeout to non-streaming Anthropic API calls (the summarization path via callSmallModel), distinguishing from streaming main conversation by checking for "stream":true in the request body. Wires caller's AbortSignal through a wrapper AbortController. (2) https.request hard timeout applies 90s wall clock to all non-bypassed external HTTPS requests (the axios HTTP GET path), via setTimeout + req.destroy. Counters fetchTimeouts and httpsTimeouts exposed in poll state.
   - Files: src/lib/inspectorHooks.ts:339, src/lib/inspectorHooks.ts:357
 
@@ -127,7 +129,7 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/lib/inspectorHooks.ts:27
 - [IN-03] Subagent tracking: inspector detects Agent tool_use -> queues description -> matches with new session ID system event -> routes events to subagent entry
 - [IN-04] Subagent conversation messages captured via POLL_STATE splice (sub.msgs.splice(0)) in a try/catch for-loop each poll cycle; messages accumulated in INSTALL_HOOK's subagent tracking and drained by the frontend poller
-  - Files: src/lib/inspectorHooks.ts:407, src/hooks/useInspectorState.ts:190
+  - Files: src/lib/inspectorHooks.ts:748, src/hooks/useInspectorState.ts:190
 - [IN-05] Stale subagent detection removed -- push-based architecture handles subagent lifecycle via real-time state events only
   - Files: src/hooks/useInspectorState.ts:156
 - [IN-06] Dead subagent purge removed -- push-based architecture relies on real-time state transitions; idle subs remain visible until session ends

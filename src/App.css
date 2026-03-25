@@ -525,6 +525,15 @@
   background: var(--border-subtle);
 }
 
+.tab-context-menu-label {
+  padding: 4px 12px 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
 .tab-context-menu-item-danger:hover {
   color: var(--error, #e55);
 }

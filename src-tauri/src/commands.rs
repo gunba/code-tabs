@@ -1906,6 +1906,70 @@ pub fn shell_open(path: String) -> Result<(), String> {
     open::that_detached(&path).map_err(|e| format!("shell_open failed for {path}: {e}"))
 }
 
+// ── Tap logging (inspector hook data capture) ─────────────────────
+
+/// Get the taps subdirectory inside the data dir, creating if needed.
+fn get_taps_dir() -> Result<std::path::PathBuf, String> {
+    let dir = get_data_dir()?.join("taps");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create taps dir: {}", e))?;
+    }
+    Ok(dir)
+}
+
+/// Append pre-serialized JSONL lines to the session's tap log file.
+/// Returns the current file size in bytes (for frontend rotation decisions).
+#[tauri::command]
+pub fn append_tap_data(session_id: String, lines: String) -> Result<u64, String> {
+    let path = get_taps_dir()?.join(format!("{}.jsonl", session_id));
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| format!("Failed to open tap file: {}", e))?;
+    file.write_all(lines.as_bytes())
+        .map_err(|e| format!("Failed to write tap data: {}", e))?;
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    Ok(meta.len())
+}
+
+/// Open the tap log file in the system's default editor/viewer.
+#[tauri::command]
+pub fn open_tap_log(session_id: String) -> Result<(), String> {
+    let path = get_taps_dir()?.join(format!("{}.jsonl", session_id));
+    if !path.exists() {
+        return Err("No tap log exists for this session".into());
+    }
+    open::that_detached(&path)
+        .map_err(|e| format!("Failed to open tap log: {}", e))
+}
+
+/// Delete tap log files older than max_age_hours. Returns count of files removed.
+#[tauri::command]
+pub fn cleanup_tap_logs(max_age_hours: u64) -> Result<u32, String> {
+    let dir = get_taps_dir()?;
+    let mut removed = 0u32;
+    let cutoff = std::time::SystemTime::now()
+        - std::time::Duration::from_secs(max_age_hours * 3600);
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                continue;
+            }
+            if let Ok(meta) = path.metadata() {
+                if meta.modified().unwrap_or(std::time::UNIX_EPOCH) < cutoff {
+                    let _ = std::fs::remove_file(&path);
+                    removed += 1;
+                }
+            }
+        }
+    }
+    Ok(removed)
+}
+
 /// Remove a git worktree directory.
 #[tauri::command]
 pub async fn prune_worktree(worktree_path: String, project_root: String) -> Result<(), String> {

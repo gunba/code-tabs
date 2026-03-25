@@ -40,6 +40,7 @@ function permissionIcon(mode: PermissionMode): { icon: React.ReactNode; tip: str
 function SessionStatus({ session }: { session: Session }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
+  const tapEnabled = useSessionStore((s) => (s.tapCategories.get(session.id)?.size ?? 0) > 0);
   const model = effectiveModel(session);
   const wt = parseWorktreePath(session.config.workingDir);
 
@@ -48,6 +49,11 @@ function SessionStatus({ session }: { session: Session }) {
       {inspectorOff && (
         <span className="status-item status-inspector-off" title="Inspector disconnected — right-click tab to reconnect">
           <IconCircleOutline size={12} /> Inspector off
+        </span>
+      )}
+      {tapEnabled && (
+        <span className="status-item" title="Tap recording active — right-click tab to stop" style={{ color: "var(--accent)" }}>
+          <IconCircleFilled size={10} /> TAP
         </span>
       )}
       <span className="status-item status-model" title="Model" style={{ color: modelColor(model) }}>

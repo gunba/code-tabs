@@ -46,6 +46,9 @@ export default function App() {
   const requestKill = useSessionStore((s) => s.requestKill);
   const inspectorOffSessions = useSessionStore((s) => s.inspectorOffSessions);
   const setInspectorOff = useSessionStore((s) => s.setInspectorOff);
+  const tapCategories = useSessionStore((s) => s.tapCategories);
+  const toggleTapCategory = useSessionStore((s) => s.toggleTapCategory);
+  const stopAllTaps = useSessionStore((s) => s.stopAllTaps);
   const showLauncher = useSettingsStore((s) => s.showLauncher);
   const setShowLauncher = useSettingsStore((s) => s.setShowLauncher);
   const setLastConfig = useSettingsStore((s) => s.setLastConfig);
@@ -122,6 +125,7 @@ export default function App() {
     useUiConfigStore.getState().loadConfig();
     useSettingsStore.getState().loadPastSessions();
     startTestHarness();
+    invoke("cleanup_tap_logs", { maxAgeHours: 48 }).catch(() => {});
   }, [init]);
 
   // Quick launch with saved defaults (Ctrl+Click "+" or Ctrl+Shift+T)
@@ -758,6 +762,61 @@ export default function App() {
                       )}
                     </>
                   )}
+                  {(() => {
+                    const cats = tapCategories.get(ctxSession.id);
+                    const hasTaps = cats && cats.size > 0;
+                    const allCats: Array<{ key: string; label: string }> = [
+                      { key: "parse", label: "JSON.parse" },
+                      { key: "console", label: "console.*" },
+                      { key: "fs", label: "fs ops" },
+                      { key: "spawn", label: "child_process" },
+                      { key: "fetch", label: "fetch" },
+                      { key: "exit", label: "process.exit" },
+                      { key: "timer", label: "setTimeout" },
+                      { key: "stdout", label: "stdout" },
+                      { key: "require", label: "require()" },
+                    ];
+                    return (
+                      <>
+                        <div className="tab-context-menu-label">Tap Recording</div>
+                        {allCats.map(({ key, label }) => (
+                          <button
+                            key={key}
+                            className="tab-context-menu-item"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTapCategory(ctxSession.id, key);
+                            }}
+                          >
+                            <span style={{ opacity: cats?.has(key) ? 1 : 0.3, marginRight: 6 }}>●</span>
+                            {label}
+                          </button>
+                        ))}
+                        {hasTaps && (
+                          <>
+                            <button
+                              className="tab-context-menu-item"
+                              onClick={() => {
+                                stopAllTaps(ctxSession.id);
+                                setTabContextMenu(null);
+                              }}
+                            >
+                              Stop All Taps
+                            </button>
+                            <button
+                              className="tab-context-menu-item"
+                              onClick={() => {
+                                invoke("open_tap_log", { sessionId: ctxSession.id });
+                                setTabContextMenu(null);
+                              }}
+                            >
+                              Open Tap Log
+                            </button>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                   {isDead && (
                     <button
                       className="tab-context-menu-item"

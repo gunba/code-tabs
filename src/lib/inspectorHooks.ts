@@ -396,6 +396,339 @@ export const INSTALL_HOOK = `(function() {
 })()`;
 
 /**
+ * Runtime.evaluate expression that installs tap hooks for deeper inspection
+ * of Claude Code internals. Separate from INSTALL_HOOK — only evaluated on demand.
+ *
+ * Hooks JSON.parse, console.log/warn/error, and fs.readFileSync/writeFileSync.
+ * All hooks check __tapFlags before capturing — zero overhead when disabled.
+ * Captures to __tapBuffer ring buffer (500 entries max).
+ *
+ * Idempotent — checks globalThis.__tapsInstalled before installing.
+ * Returns 'ok' on success, 'already' if already installed.
+ */
+export const INSTALL_TAPS = `(function() {
+  if (globalThis.__tapsInstalled) return 'already';
+  globalThis.__tapsInstalled = true;
+
+  var flags = { parse: false, console: false, fs: false, spawn: false, fetch: false, exit: false, timer: false, stdout: false, require: false };
+  globalThis.__tapFlags = flags;
+
+  var buf = [];
+  var MAX = 500;
+  globalThis.__tapBuffer = buf;
+
+  function push(cat, d) {
+    if (buf.length >= MAX) buf.shift();
+    d.ts = Date.now();
+    d.cat = cat;
+    buf.push(d);
+  }
+
+  // 1. JSON.parse — captures API responses, config parsing, JSONL reads
+  var origParse = JSON.parse;
+  JSON.parse = function(text) {
+    var result = origParse.apply(this, arguments);
+    if (flags.parse) {
+      try {
+        if (typeof text === 'string' && text.length > 50 && typeof result === 'object' && result !== null) {
+          var hint = 'other';
+          if (text.indexOf('"type":"message"') !== -1 || text.indexOf('"content_block"') !== -1) hint = 'api';
+          else if (text.indexOf('"settings"') !== -1 || text.indexOf('"permissions"') !== -1) hint = 'config';
+          push('parse', { hint: hint, len: text.length, snap: text.slice(0, 2000) });
+        }
+      } catch(e) {}
+    }
+    return result;
+  };
+
+  // 2. Console hooks — Claude Code's internal debug output
+  var methods = ['log', 'warn', 'error'];
+  for (var mi = 0; mi < methods.length; mi++) {
+    (function(method) {
+      var orig = console[method];
+      console[method] = function() {
+        if (flags.console) {
+          try {
+            var parts = [];
+            for (var ai = 0; ai < arguments.length; ai++) parts.push(String(arguments[ai]));
+            var msg = parts.join(' ');
+            if (msg.length > 0) push('console.' + method, { msg: msg.slice(0, 1000) });
+          } catch(e) {}
+        }
+        return orig.apply(console, arguments);
+      };
+    })(methods[mi]);
+  }
+
+  // Shared helper: extract size + text preview from a buffer or string, skipping binary.
+  function snip(raw) {
+    var b = Buffer.isBuffer(raw) ? raw : null;
+    var size = b ? b.length : (typeof raw === 'string' ? raw.length : 0);
+    var content = null;
+    if (b && size < 50000) {
+      var isBin = false;
+      var head = b.slice(0, 100);
+      for (var i = 0; i < head.length; i++) { if (head[i] === 0) { isBin = true; break; } }
+      if (!isBin) content = b.toString('utf8').slice(0, 500);
+    } else if (typeof raw === 'string' && size < 50000) {
+      content = raw.slice(0, 500);
+    }
+    return { size: size, content: content };
+  }
+
+  // 3. FS hooks — file I/O tracking (sync only + probing)
+  try {
+    var fs = require('fs');
+    var origRead = fs.readFileSync;
+    fs.readFileSync = function(path) {
+      var result = origRead.apply(this, arguments);
+      if (flags.fs) {
+        try {
+          var p = typeof path === 'string' ? path : String(path);
+          var s = snip(result);
+          push('fs.read', { path: p.slice(-200), size: s.size, content: s.content });
+        } catch(e) {}
+      }
+      return result;
+    };
+    var origWrite = fs.writeFileSync;
+    fs.writeFileSync = function(path, data) {
+      if (flags.fs) {
+        try {
+          var p = typeof path === 'string' ? path : String(path);
+          var s = snip(data);
+          push('fs.write', { path: p.slice(-200), size: s.size, content: s.content });
+        } catch(e) {}
+      }
+      return origWrite.apply(this, arguments);
+    };
+    // fs probing: existsSync, statSync, readdirSync
+    var origExists = fs.existsSync;
+    fs.existsSync = function(path) {
+      var result = origExists.apply(this, arguments);
+      if (flags.fs) {
+        try {
+          push('fs.exists', { path: (typeof path === 'string' ? path : String(path)).slice(-200), result: result });
+        } catch(e) {}
+      }
+      return result;
+    };
+    var origStat = fs.statSync;
+    fs.statSync = function(path) {
+      var result = origStat.apply(this, arguments);
+      if (flags.fs) {
+        try {
+          push('fs.stat', { path: (typeof path === 'string' ? path : String(path)).slice(-200), isDir: result.isDirectory(), size: result.size });
+        } catch(e) {}
+      }
+      return result;
+    };
+    var origReaddir = fs.readdirSync;
+    fs.readdirSync = function(path) {
+      var result = origReaddir.apply(this, arguments);
+      if (flags.fs) {
+        try {
+          push('fs.readdir', { path: (typeof path === 'string' ? path : String(path)).slice(-200), count: result.length });
+        } catch(e) {}
+      }
+      return result;
+    };
+  } catch(e) {}
+
+  // 4. child_process — tool execution (spawn, exec, spawnSync, execSync)
+  try {
+    var cp = require('child_process');
+    function fmtCmd(file, args) {
+      var s = String(file || '');
+      if (args && args.length) s += ' ' + Array.prototype.slice.call(args, 0, 10).join(' ');
+      return s.slice(0, 500);
+    }
+    var origSpawn = cp.spawn;
+    cp.spawn = function(file, args, opts) {
+      var result = origSpawn.apply(this, arguments);
+      if (flags.spawn) {
+        try {
+          var cwd = (opts && opts.cwd) ? String(opts.cwd).slice(-200) : null;
+          var pid = result && result.pid;
+          push('spawn', { cmd: fmtCmd(file, args), cwd: cwd, pid: pid });
+          if (result && typeof result.on === 'function') {
+            result.on('close', function(code) {
+              if (flags.spawn) push('spawn.exit', { pid: pid, code: code, cmd: String(file || '').slice(0, 100) });
+            });
+          }
+        } catch(e) {}
+      }
+      return result;
+    };
+    var origExec = cp.exec;
+    cp.exec = function(cmd) {
+      if (flags.spawn) {
+        try {
+          push('exec', { cmd: String(cmd || '').slice(0, 500) });
+        } catch(e) {}
+      }
+      return origExec.apply(this, arguments);
+    };
+    var origSpawnSync = cp.spawnSync;
+    cp.spawnSync = function(file, args, opts) {
+      var t0 = Date.now();
+      var result = origSpawnSync.apply(this, arguments);
+      if (flags.spawn) {
+        try {
+          var cwd = (opts && opts.cwd) ? String(opts.cwd).slice(-200) : null;
+          push('spawnSync', { cmd: fmtCmd(file, args), cwd: cwd, code: result && result.status, dur: Date.now() - t0 });
+        } catch(e) {}
+      }
+      return result;
+    };
+    var origExecSync = cp.execSync;
+    cp.execSync = function(cmd) {
+      var t0 = Date.now();
+      var result;
+      try {
+        result = origExecSync.apply(this, arguments);
+      } catch(err) {
+        if (flags.spawn) {
+          try { push('execSync', { cmd: String(cmd || '').slice(0, 500), err: String(err.message || '').slice(0, 200), dur: Date.now() - t0 }); } catch(e) {}
+        }
+        throw err;
+      }
+      if (flags.spawn) {
+        try { push('execSync', { cmd: String(cmd || '').slice(0, 500), dur: Date.now() - t0 }); } catch(e) {}
+      }
+      return result;
+    };
+  } catch(e) {}
+
+  // 5. fetch request metadata — API call patterns (URL, method, status, timing)
+  try {
+    // Only wrap if not already wrapped by INSTALL_HOOK (check for our marker)
+    if (globalThis.fetch && !globalThis.__tapFetchInstalled) {
+      globalThis.__tapFetchInstalled = true;
+      var prevFetch = globalThis.fetch;
+      globalThis.fetch = function(input, init) {
+        if (!flags.fetch) return prevFetch.apply(globalThis, arguments);
+        var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+        var method = (init && init.method) || 'GET';
+        var t0 = Date.now();
+        try {
+          var p = prevFetch.apply(globalThis, arguments);
+          if (p && typeof p.then === 'function') {
+            return p.then(function(resp) {
+              try { push('fetch', { url: url.slice(0, 300), method: method, status: resp.status, dur: Date.now() - t0 }); } catch(e) {}
+              return resp;
+            }, function(err) {
+              try { push('fetch', { url: url.slice(0, 300), method: method, err: String(err.message || err).slice(0, 200), dur: Date.now() - t0 }); } catch(e) {}
+              throw err;
+            });
+          }
+          return p;
+        } catch(err) {
+          try { push('fetch', { url: url.slice(0, 300), method: method, err: String(err.message || err).slice(0, 200), dur: Date.now() - t0 }); } catch(e) {}
+          throw err;
+        }
+      };
+    }
+  } catch(e) {}
+
+  // 6. process.exit — clean vs unexpected exits
+  try {
+    var origExit = process.exit;
+    process.exit = function(code) {
+      if (flags.exit) {
+        try { push('exit', { code: code }); } catch(e) {}
+      }
+      return origExit.apply(process, arguments);
+    };
+  } catch(e) {}
+
+  // 7. setTimeout / clearTimeout — internal timing and retry logic
+  try {
+    var origSetTimeout = globalThis.setTimeout;
+    var origClearTimeout = globalThis.clearTimeout;
+    var timerMap = {};
+    var timerSeq = 0;
+    globalThis.setTimeout = function(fn, delay) {
+      var result = origSetTimeout.apply(globalThis, arguments);
+      if (flags.timer && typeof delay === 'number' && delay >= 100) {
+        try {
+          var seq = ++timerSeq;
+          var caller = '';
+          try { caller = (new Error()).stack.split('\\n')[2] || ''; caller = caller.trim().slice(0, 150); } catch(e) {}
+          timerMap[result] = seq;
+          push('setTimeout', { id: seq, delay: delay, caller: caller });
+        } catch(e) {}
+      }
+      return result;
+    };
+    globalThis.clearTimeout = function(id) {
+      if (flags.timer && id && timerMap[id]) {
+        try { push('clearTimeout', { id: timerMap[id] }); delete timerMap[id]; } catch(e) {}
+      }
+      return origClearTimeout.apply(globalThis, arguments);
+    };
+  } catch(e) {}
+
+  // 8. process.stdout.write — raw Ink output with timing
+  try {
+    var origStdoutWrite = process.stdout.write;
+    process.stdout.write = function(chunk) {
+      if (flags.stdout) {
+        try {
+          var s = typeof chunk === 'string' ? chunk : (Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk));
+          if (s.length > 0) push('stdout', { len: s.length, snap: s.slice(0, 500) });
+        } catch(e) {}
+      }
+      return origStdoutWrite.apply(process.stdout, arguments);
+    };
+  } catch(e) {}
+
+  // 9. require() — module loading / dynamic imports
+  try {
+    if (typeof require === 'function' && require.extensions) {
+      var Module = require('module');
+      var origModRequire = Module.prototype.require;
+      Module.prototype.require = function(id) {
+        if (flags.require) {
+          try { push('require', { id: String(id).slice(0, 300) }); } catch(e) {}
+        }
+        return origModRequire.apply(this, arguments);
+      };
+    }
+  } catch(e) {}
+
+  return 'ok';
+})()`;
+
+/**
+ * Runtime.evaluate expression that drains the tap buffer.
+ * Returns {entries, flags} or null if taps aren't installed.
+ */
+export const POLL_TAPS = `(function() {
+  var buf = globalThis.__tapBuffer;
+  if (!buf) return null;
+  var entries = buf.splice(0);
+  return { entries: entries, flags: globalThis.__tapFlags || {} };
+})()`;
+
+/** All tap category names. */
+export type TapCategory = "parse" | "console" | "fs" | "spawn" | "fetch" | "exit" | "timer" | "stdout" | "require";
+
+/**
+ * Build a Runtime.evaluate expression to toggle a single tap category.
+ */
+export function tapToggleExpr(category: TapCategory, enabled: boolean): string {
+  return `(function(){var f=globalThis.__tapFlags;if(f)f.${category}=${enabled};return 'ok'})()`;
+}
+
+/**
+ * Build a Runtime.evaluate expression to toggle all tap categories at once.
+ */
+export function tapToggleAllExpr(enabled: boolean): string {
+  return `(function(){var f=globalThis.__tapFlags;if(f){f.parse=${enabled};f.console=${enabled};f.fs=${enabled};f.spawn=${enabled};f.fetch=${enabled};f.exit=${enabled};f.timer=${enabled};f.stdout=${enabled};f.require=${enabled}}return 'ok'})()`;
+}
+
+/**
  * Runtime.evaluate expression that reads and drains the inspector state buffer.
  * Returns a compact object with current state + event buffer, then clears
  * the event buffer and resets transient flags for the next poll cycle.

@@ -74,6 +74,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── useInspectorState.ts             # BUN_INSPECT WebSocket: state detection, metadata, subagent tracking
   │   ├── useCommandDiscovery.ts           # Slash command discovery (binary scan + --help fallback + plugins)
   │   ├── useCliWatcher.ts                 # CLI version + capabilities
+  │   ├── useTapRecorder.ts                # Tap hook lifecycle: install, poll, batch, flush to JSONL
   │   ├── useNotifications.ts              # Desktop notifications (WinRT toast on Windows, tauri-plugin-notification on Linux)
   │   ├── useCtrlKey.ts                    # Ctrl-key held state for alternate-action highlights
   │   └── useGitStatus.ts                  # Git status polling (2s interval) with change detection

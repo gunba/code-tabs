@@ -7,6 +7,7 @@ import { buildClaudeArgs, getResumeId, canResumeSession, stripWorktreeFlags } fr
 import { dlog } from "../../lib/debugLog";
 import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, registerInspectorCallbacks, unregisterInspectorCallbacks } from "../../lib/inspectorPort";
 import { useInspectorState } from "../../hooks/useInspectorState";
+import { useTapRecorder } from "../../hooks/useTapRecorder";
 import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill } from "../../lib/ptyRegistry";
 import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader } from "../../lib/terminalRegistry";
 import { useSettingsStore } from "../../store/settings";
@@ -156,6 +157,15 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     inspectorPort,
     inspectorReconnectKey
   );
+
+  const tapCategories = useSessionStore((s) => s.tapCategories.get(session.id) ?? new Set<string>());
+  useTapRecorder({
+    sessionId: session.state !== "dead" ? session.id : null,
+    wsSend: inspector.wsSend,
+    registerExternalHandler: inspector.registerExternalHandler,
+    connected: inspector.connected,
+    categories: tapCategories,
+  });
 
   // Register inspector disconnect/reconnect callbacks for external debugger support
   useEffect(() => {

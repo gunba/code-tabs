@@ -575,7 +575,7 @@ dependencies = [
 
 [[package]]
 name = "claude-tabs"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "chrono",
  "dirs",

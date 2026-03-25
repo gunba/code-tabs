@@ -41,4 +41,7 @@ export interface IpcCommands {
   git_repo_check: (args: { workingDir: string }) => Promise<boolean>;
   git_status: (args: { workingDir: string }) => Promise<GitStatusRaw>;
   git_diff_file: (args: { workingDir: string; filePath: string; staged: boolean; untracked?: boolean }) => Promise<string>;
+  append_tap_data: (args: { sessionId: string; lines: string }) => Promise<number>;
+  open_tap_log: (args: { sessionId: string }) => Promise<void>;
+  cleanup_tap_logs: (args: { maxAgeHours: number }) => Promise<number>;
 }

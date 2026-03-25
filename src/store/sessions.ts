@@ -22,6 +22,7 @@ interface SessionsState {
   killRequest: string | null; // sessionId to kill
   hookChangeCounter: number;
   inspectorOffSessions: Set<string>;
+  tapCategories: Map<string, Set<string>>; // sessionId -> enabled tap category names
 
   // Actions
   init: () => Promise<void>;
@@ -40,6 +41,8 @@ interface SessionsState {
   clearKillRequest: () => void;
   bumpHookChange: () => void;
   setInspectorOff: (id: string, off: boolean) => void;
+  toggleTapCategory: (id: string, category: string) => void;
+  stopAllTaps: (id: string) => void;
   addSubagent: (sessionId: string, subagent: Subagent) => void;
   updateSubagent: (sessionId: string, subagentId: string, updates: Partial<Subagent>) => void;
   clearIdleSubagents: (sessionId: string) => void;
@@ -57,6 +60,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
   killRequest: null,
   hookChangeCounter: 0,
   inspectorOffSessions: new Set(),
+  tapCategories: new Map(),
 
   init: async () => {
     trace("init: start");
@@ -144,7 +148,9 @@ export const useSessionStore = create<SessionsState>((set) => ({
       commandHistory.delete(id);
       const inspectorOffSessions = new Set(s.inspectorOffSessions);
       inspectorOffSessions.delete(id);
-      return { sessions, activeTabId, subagents, commandHistory, inspectorOffSessions };
+      const tapCategories = new Map(s.tapCategories);
+      tapCategories.delete(id);
+      return { sessions, activeTabId, subagents, commandHistory, inspectorOffSessions, tapCategories };
     });
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();
@@ -250,6 +256,32 @@ export const useSessionStore = create<SessionsState>((set) => ({
         next.delete(id);
       }
       return { inspectorOffSessions: next };
+    });
+  },
+
+  toggleTapCategory: (id, category) => {
+    set((s) => {
+      const next = new Map(s.tapCategories);
+      const cats = new Set(next.get(id) || []);
+      if (cats.has(category)) {
+        cats.delete(category);
+      } else {
+        cats.add(category);
+      }
+      if (cats.size === 0) {
+        next.delete(id);
+      } else {
+        next.set(id, cats);
+      }
+      return { tapCategories: next };
+    });
+  },
+
+  stopAllTaps: (id) => {
+    set((s) => {
+      const next = new Map(s.tapCategories);
+      next.delete(id);
+      return { tapCategories: next };
     });
   },
 
