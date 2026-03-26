@@ -175,24 +175,6 @@
   background: var(--bg-surface-hover);
 }
 
-.diff-file-item.diff-file-expanded {
-  background: var(--bg-primary);
-}
-
-/* Expand chevron */
-.diff-file-chevron {
-  font-size: 8px;
-  color: var(--text-muted);
-  width: 8px;
-  flex-shrink: 0;
-  transition: transform 0.15s;
-  display: inline-block;
-}
-
-.diff-file-chevron.expanded {
-  transform: rotate(90deg);
-}
-
 /* Status badge */
 .diff-file-status {
   width: 14px;
@@ -248,151 +230,260 @@
 .diff-file-ins { color: var(--success, #5cb85c); }
 .diff-file-del { color: var(--error, #d84b4b); }
 
-/* ── Inline diff viewer ── */
+/* ── Diff Modal ── */
 
-.diff-viewer {
-  background: var(--bg-primary);
+.diff-modal {
+  width: 96vw;
+  max-width: 1900px;
+  height: 88vh;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.diff-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.diff-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.diff-modal-path {
   font-family: var(--font-mono, "SF Mono", "Cascadia Code", "Consolas", monospace);
-  font-size: 10px;
-  line-height: 1.6;
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.diff-viewer-loading {
-  padding: 8px 12px;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-style: italic;
+.diff-modal-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.diff-viewer-error {
-  padding: 8px 12px;
-  color: var(--error, #d84b4b);
-  font-size: 10px;
+.diff-modal-stats {
+  display: flex;
+  gap: 4px;
+  align-items: center;
 }
 
-.diff-viewer-table {
+.diff-modal-nav {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.diff-modal-nav:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.diff-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.diff-modal-close:hover {
+  color: var(--text-primary);
+}
+
+/* ── Modal body (scrollable) ── */
+
+.diff-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-family: var(--font-mono, "SF Mono", "Cascadia Code", "Consolas", monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+.diff-modal-body::-webkit-scrollbar { width: 6px; height: 6px; }
+.diff-modal-body::-webkit-scrollbar-track { background: transparent; }
+.diff-modal-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
+
+/* ── Side-by-side table ── */
+
+.diff-modal-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
-/* Line number gutter */
-.diff-ln {
-  width: 36px;
-  min-width: 36px;
-  padding: 0 4px;
+.diff-modal-col-ln {
+  width: 48px;
+}
+
+.diff-modal-ln {
+  width: 48px;
+  min-width: 48px;
+  padding: 0 6px;
   text-align: right;
   color: var(--text-muted);
   opacity: 0.5;
   user-select: none;
   vertical-align: top;
-  font-size: 9px;
+  font-size: 10px;
 }
 
-.diff-ln-old { border-right: 1px solid var(--border); }
-.diff-ln-new { border-right: 1px solid var(--border); }
-
-/* Content cell */
-.diff-content {
-  padding: 0 8px;
+.diff-modal-code {
+  padding: 0 10px;
   white-space: pre;
   tab-size: 4;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.diff-prefix {
-  user-select: none;
-  opacity: 0.5;
-  margin-right: 4px;
+/* Separator between left and right panes */
+.diff-modal-table td:nth-child(2) {
+  border-right: 1px solid var(--border);
 }
 
-/* Line type backgrounds */
-.diff-line-add {
-  background: color-mix(in srgb, var(--success, #5cb85c) 8%, var(--bg-primary));
-}
+/* ── Line backgrounds ── */
 
-.diff-line-add .diff-content {
-  color: var(--success, #5cb85c);
-}
-
-.diff-line-del {
+.diff-modal-del {
   background: color-mix(in srgb, var(--error, #d84b4b) 8%, var(--bg-primary));
+  color: var(--text-primary);
 }
 
-.diff-line-del .diff-content {
+.diff-modal-add {
+  background: color-mix(in srgb, var(--success, #5cb85c) 8%, var(--bg-primary));
+  color: var(--text-primary);
+}
+
+.diff-modal-context {
+  color: var(--text-primary);
+}
+
+.diff-modal-empty {
+  background: color-mix(in srgb, var(--text-muted) 3%, var(--bg-primary));
+}
+
+.diff-modal-ln-del {
+  background: color-mix(in srgb, var(--error, #d84b4b) 5%, var(--bg-primary));
+}
+
+.diff-modal-ln-add {
+  background: color-mix(in srgb, var(--success, #5cb85c) 5%, var(--bg-primary));
+}
+
+/* ── Hunk separator ── */
+
+.diff-modal-separator td {
+  padding: 0;
+  height: 1px;
+}
+
+.diff-modal-separator-line {
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Modal footer ── */
+
+.diff-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Modal messages ── */
+
+.diff-modal-message,
+.diff-modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.diff-modal-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--error);
+  font-size: 12px;
+}
+
+/* ── Banners ── */
+
+.diff-modal-banner {
+  padding: 4px 14px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.diff-modal-banner-new {
+  color: var(--success, #5cb85c);
+  background: color-mix(in srgb, var(--success, #5cb85c) 6%, var(--bg-primary));
+}
+
+.diff-modal-banner-deleted {
   color: var(--error, #d84b4b);
+  background: color-mix(in srgb, var(--error, #d84b4b) 6%, var(--bg-primary));
 }
 
-.diff-line-context .diff-content {
-  color: var(--text-muted);
-}
-
-.diff-line-hunk {
-  background: color-mix(in srgb, var(--accent-secondary) 6%, var(--bg-primary));
-}
-
-.diff-line-hunk .diff-content {
-  color: var(--accent-secondary);
-  font-style: italic;
-  font-size: 9px;
-}
-
-/* Binary file message */
-.diff-binary {
-  padding: 12px 16px;
-  color: var(--text-muted);
-  font-style: italic;
-  font-size: 11px;
-  text-align: center;
-}
-
-/* Truncated notice */
-.diff-truncated {
-  padding: 6px 12px;
+.diff-modal-truncated {
+  padding: 6px 14px;
   color: var(--warning, #b8860b);
   font-size: 10px;
   text-align: center;
   background: color-mix(in srgb, var(--warning, #b8860b) 6%, var(--bg-primary));
 }
 
-/* Show more collapse button */
-.diff-show-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 0;
-  background: color-mix(in srgb, var(--accent-secondary) 5%, var(--bg-primary));
-  color: var(--accent-secondary);
-  font-size: 10px;
-  cursor: pointer;
-  user-select: none;
-  border: none;
-  width: 100%;
-  font-family: inherit;
-}
+/* ── Syntax highlighting tokens (highlight.js) ── */
 
-.diff-show-more:hover {
-  background: color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-primary));
-}
-
-/* New/deleted file banner */
-.diff-file-banner {
-  padding: 3px 12px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.diff-file-banner-new {
-  color: var(--success, #5cb85c);
-  background: color-mix(in srgb, var(--success, #5cb85c) 6%, var(--bg-primary));
-}
-
-.diff-file-banner-deleted {
-  color: var(--error, #d84b4b);
-  background: color-mix(in srgb, var(--error, #d84b4b) 6%, var(--bg-primary));
-}
+.diff-modal-body .hljs-keyword { color: var(--accent-tertiary); }
+.diff-modal-body .hljs-string { color: var(--accent-secondary); }
+.diff-modal-body .hljs-number { color: var(--accent-tertiary); }
+.diff-modal-body .hljs-comment { color: var(--text-muted); font-style: italic; }
+.diff-modal-body .hljs-built_in { color: var(--accent); }
+.diff-modal-body .hljs-title { color: var(--accent); }
+.diff-modal-body .hljs-type { color: var(--accent-secondary); }
+.diff-modal-body .hljs-literal { color: var(--accent-tertiary); }
+.diff-modal-body .hljs-attr { color: var(--accent); }
+.diff-modal-body .hljs-params { color: var(--text-primary); }
+.diff-modal-body .hljs-meta { color: var(--text-muted); }
+.diff-modal-body .hljs-variable { color: var(--text-primary); }
+.diff-modal-body .hljs-function { color: var(--accent); }
+.diff-modal-body .hljs-selector-tag { color: var(--accent-tertiary); }
+.diff-modal-body .hljs-selector-class { color: var(--accent); }
 
 /* ── Empty state ── */
 

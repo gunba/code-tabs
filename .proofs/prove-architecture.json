@@ -15,6 +15,7 @@
     "DF-07",
     "DF-08",
     "DF-09",
+    "DF-10",
     "IN-01",
     "IN-02",
     "IN-03",
@@ -66,6 +67,7 @@
     "RC-16",
     "RC-17",
     "RC-18",
+    "RC-19",
     "RS-01",
     "RS-02",
     "RS-03",
@@ -93,6 +95,9 @@
     "SI-16",
     "SI-17",
     "SI-18",
+    "SI-19",
+    "SI-20",
+    "SI-21",
     "SS-01",
     "SS-02",
     "SS-03"
@@ -570,7 +575,11 @@
     }
   ],
   "unchecked": [
-    "PT-20"
+    "PT-20",
+    "RC-19",
+    "SI-19",
+    "SI-20",
+    "SI-21"
   ],
   "summary": {
     "pass": 88,
@@ -1054,6 +1063,26 @@
       "up": 0,
       "down": 0,
       "seen": 3
+    },
+    "DF-10": {
+      "up": 0,
+      "down": 0
+    },
+    "RC-19": {
+      "up": 0,
+      "down": 0
+    },
+    "SI-19": {
+      "up": 0,
+      "down": 0
+    },
+    "SI-20": {
+      "up": 0,
+      "down": 0
+    },
+    "SI-21": {
+      "up": 0,
+      "down": 0
     }
   },
   "metadata": {
@@ -1330,8 +1359,15 @@
       ],
       "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
+    },
+    "DF-10": {
+      "files": [
+        "src/lib/diffParser.ts:268"
+      ],
+      "verified": "2026-03-26",
+      "notes": "Added during change documentation"
     }
   },
-  "last_run": "2026-03-23T09:49:23.191714+00:00",
+  "last_run": "2026-03-26T10:49:58.248577+00:00",
   "cycle": 2
 }

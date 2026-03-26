@@ -53,6 +53,11 @@
     "DS-07",
     "DS-08",
     "DS-09",
+    "GD-01",
+    "GD-02",
+    "GD-03",
+    "GD-04",
+    "GD-05",
     "HM-01",
     "HM-02",
     "HM-03",
@@ -70,10 +75,11 @@
     "KB-05",
     "KB-06",
     "KB-07",
-    "KB-08",
     "KB-09",
     "KB-10",
     "MO-01",
+    "RC-19",
+    "SI-20",
     "SL-01",
     "SL-02",
     "SL-03",
@@ -97,6 +103,7 @@
     "SR-05",
     "SR-06",
     "SR-07",
+    "SR-08",
     "TB-01",
     "TB-02",
     "TB-03",
@@ -125,10 +132,11 @@
     "TB-26",
     "TB-27",
     "TB-28",
+    "TB-29",
+    "TB-30",
     "TR-01",
     "TR-02",
     "TR-03",
-    "TR-04",
     "TR-05",
     "TR-06",
     "TR-07",
@@ -139,7 +147,6 @@
     "TR-12",
     "TR-13",
     "TR-14",
-    "TR-15",
     "WN-01",
     "WN-02",
     "WN-03"
@@ -904,10 +911,6 @@
       "up": 0,
       "seen": 11
     },
-    "TR-04": {
-      "up": 0,
-      "seen": 11
-    },
     "TB-14": {
       "up": 0,
       "seen": 11
@@ -951,10 +954,6 @@
     "CM-03": {
       "up": 0,
       "seen": 3
-    },
-    "KB-08": {
-      "up": 0,
-      "seen": 11
     },
     "SL-16": {
       "up": 0,
@@ -1034,7 +1033,7 @@
     },
     "KB-09": {
       "up": 0,
-      "seen": 11
+      "down": 0
     },
     "CM-25": {
       "up": 0,
@@ -1312,10 +1311,6 @@
       "up": 0,
       "seen": 26
     },
-    "TR-15": {
-      "up": 1,
-      "seen": 3
-    },
     "HM-03": {
       "up": 0,
       "seen": 11
@@ -1419,6 +1414,46 @@
     "CM-22": {
       "up": 0,
       "seen": 11
+    },
+    "GD-01": {
+      "up": 0,
+      "down": 0
+    },
+    "GD-02": {
+      "up": 0,
+      "down": 0
+    },
+    "GD-03": {
+      "up": 0,
+      "down": 0
+    },
+    "GD-04": {
+      "up": 0,
+      "down": 0
+    },
+    "GD-05": {
+      "up": 0,
+      "down": 0
+    },
+    "RC-19": {
+      "up": 0,
+      "down": 0
+    },
+    "SI-20": {
+      "up": 0,
+      "down": 0
+    },
+    "SR-08": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-29": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-30": {
+      "up": 0,
+      "down": 0
     }
   },
   "metadata": {
@@ -1639,6 +1674,42 @@
       ],
       "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
+    },
+    "GD-01": {
+      "files": [
+        "src/components/DiffPanel/DiffPanel.tsx:1",
+        "src/components/DiffPanel/DiffPanel.css:1"
+      ],
+      "verified": "2026-03-26",
+      "notes": "Added during change documentation"
+    },
+    "GD-02": {
+      "files": [
+        "src/components/DiffPanel/DiffModal.tsx:1"
+      ],
+      "verified": "2026-03-26",
+      "notes": "Added during change documentation"
+    },
+    "GD-03": {
+      "files": [
+        "src/components/DiffPanel/DiffModal.tsx:36"
+      ],
+      "verified": "2026-03-26",
+      "notes": "Added during change documentation"
+    },
+    "GD-04": {
+      "files": [
+        "src/components/DiffPanel/DiffModal.tsx:100"
+      ],
+      "verified": "2026-03-26",
+      "notes": "Added during change documentation"
+    },
+    "GD-05": {
+      "files": [
+        "src/components/DiffPanel/DiffPanel.tsx:100"
+      ],
+      "verified": "2026-03-26",
+      "notes": "Added during change documentation"
     }
   },
   "unchecked": [
@@ -1711,10 +1782,10 @@
     "KB-05",
     "KB-06",
     "KB-07",
-    "KB-08",
-    "KB-09",
     "KB-10",
     "MO-01",
+    "RC-19",
+    "SI-20",
     "SL-01",
     "SL-02",
     "SL-03",
@@ -1738,6 +1809,7 @@
     "SR-05",
     "SR-06",
     "SR-07",
+    "SR-08",
     "TB-01",
     "TB-02",
     "TB-03",
@@ -1766,10 +1838,11 @@
     "TB-26",
     "TB-27",
     "TB-28",
+    "TB-29",
+    "TB-30",
     "TR-01",
     "TR-02",
     "TR-03",
-    "TR-04",
     "TR-05",
     "TR-06",
     "TR-07",
@@ -1780,11 +1853,10 @@
     "TR-12",
     "TR-13",
     "TR-14",
-    "TR-15",
     "WN-01",
     "WN-02",
     "WN-03"
   ],
   "cycle": 2,
-  "last_run": "2026-03-23T14:21:43.598047+00:00"
+  "last_run": "2026-03-26T10:49:56.139840+00:00"
 }

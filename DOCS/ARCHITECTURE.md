@@ -18,6 +18,8 @@ Technical implementation details. Code implementing a tagged entry is not dead c
   - Files: src/components/Icons/Icons.tsx:1
 - [DF-09] groupSessionsByDir() and swapWithinGroup() in paths.ts: pure functions for tab grouping by normalized workingDir (Map-based, O(n) single pass, insertion-order groups) and position swapping within group boundaries. TabGroup type exported. parseWorktreePath() detects `.claude/worktrees/<slug>` paths, worktreeAcronym() abbreviates slugs by hyphen initials.
   - Files: src/lib/paths.ts:73, src/lib/paths.ts:88, src/lib/paths.ts:22, src/lib/paths.ts:33
+- [DF-10] toSideBySide(hunks) in diffParser.ts: transforms unified DiffHunk[] into aligned SideBySideRow[] for dual-pane rendering. Context lines go to both sides. Consecutive del+add runs are paired 1:1 (excess gets null on the other side). Hunk headers become separator rows. Pure function, memoized in DiffModal via useMemo.
+  - Files: src/lib/diffParser.ts:268
 
 ## State Inspection
 

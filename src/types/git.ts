@@ -45,6 +45,12 @@ export interface FileDiff {
   truncated: boolean;
 }
 
+export interface SideBySideRow {
+  type: "paired" | "separator";
+  left: { lineNo: number; content: string; kind: "del" | "context" } | null;
+  right: { lineNo: number; content: string; kind: "add" | "context" } | null;
+}
+
 export interface GitStatusRaw {
   porcelain: string;
   numstat: string;

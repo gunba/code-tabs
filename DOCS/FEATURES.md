@@ -1,6 +1,6 @@
 # Features
 
-<!-- Codes: TB=Tab Bar, SR=Session Resume, DS=Dead Session, TR=Terminal, SL=Session Launcher, CB=Command Bar, HM=Hooks Manager, CM=Config Manager, TP=Thinking Panel, DP=Debug Panel, WN=Window, KB=Keyboard Shortcuts, MO=Modal Overlay -->
+<!-- Codes: TB=Tab Bar, SR=Session Resume, DS=Dead Session, TR=Terminal, SL=Session Launcher, CB=Command Bar, HM=Hooks Manager, CM=Config Manager, TP=Thinking Panel, DP=Debug Panel, WN=Window, KB=Keyboard Shortcuts, MO=Modal Overlay, GD=Git Diff Panel -->
 
 User-facing behaviors. Code implementing a tagged entry is not dead code.
 
@@ -231,7 +231,7 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 - [KB-05] Alt+1-9 — Jump to tab N
 - [KB-06] Ctrl+K — Command palette
 - [KB-07] Ctrl+, — Open Config Manager
-- [KB-09] Esc — Close modal / dismiss inspector (ordered: contextMenu -> palette -> debug -> config -> resume -> launcher -> inspector)
+- [KB-09] Esc — Close modal / dismiss inspector (ordered: contextMenu -> palette -> sidePanel(debug|diff) -> config -> resume -> launcher -> inspector). DiffModal intercepts Escape via stopPropagation wrapper so closing the modal does not close the sidebar.
 - [KB-10] Alt+1-9 blocked from PTY (return false in attachCustomKeyEventHandler) -- handled by App.tsx global tab-switch handler without escape code artifacts
   - Files: src/hooks/useTerminal.ts:80
 
@@ -240,3 +240,17 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 
 - [MO-01] Shared modal wrapper: fixed overlay, inset 0, z-index 100, backdrop-filter blur(4px). Blocks all keystrokes except Escape and Ctrl+comma via stopPropagation. Backdrop click calls onClose.
   - Files: src/components/ModalOverlay/ModalOverlay.tsx:1, src/components/ModalOverlay/ModalOverlay.css:1
+
+## Git Diff Panel
+
+
+- [GD-01] Side panel (400px, 280px min, 55% max) toggled via Ctrl+Shift+G. Shows staged, unstaged, and untracked files in collapsible sections with per-file insertion/deletion stats. Header shows branch name, total insertions/deletions with pulse animation on change, and file count.
+  - Files: src/components/DiffPanel/DiffPanel.tsx:1, src/components/DiffPanel/DiffPanel.css:1
+- [GD-02] Clicking a file opens a side-by-side diff modal (96vw/88vh, via ModalOverlay + createPortal). Left pane shows old content (deletions highlighted red), right pane shows new content (additions highlighted green). Context lines appear on both sides. Single scroll container (4-cell table rows) eliminates scroll sync complexity.
+  - Files: src/components/DiffPanel/DiffModal.tsx:1
+- [GD-03] Syntax highlighting in diff modal via highlight.js/lib/core with 23 registered languages (typescript, javascript, rust, python, go, java, c, cpp, csharp, ruby, swift, kotlin, xml, css, scss, json, yaml, ini, markdown, sql, bash, powershell, dockerfile). Language detected from file extension. Token colors use CSS custom properties for theme consistency. HTML escaped before highlighting (XSS safety).
+  - Files: src/components/DiffPanel/DiffModal.tsx:36
+- [GD-04] Modal file navigation: prev/next arrows in header cycle through all changed files (staged -> unstaged -> untracked, wrapping). Alt+Left/Right keyboard shortcuts. Escape closes modal without closing sidebar (stopPropagation wrapper prevents App.tsx global handler from tearing down the panel).
+  - Files: src/components/DiffPanel/DiffModal.tsx:100
+- [GD-05] Diff cache with stale-response protection: fileDiffs Map caches parsed diffs per file key (s:/u:/t: prefix). Request counter discards IPC responses from superseded fetches during fast navigation. Cache invalidated on changedPaths from 2s git status poll. Entire cache cleared on session switch.
+  - Files: src/components/DiffPanel/DiffPanel.tsx:100

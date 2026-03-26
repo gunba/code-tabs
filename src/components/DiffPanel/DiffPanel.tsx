@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import { useGitStatus } from "../../hooks/useGitStatus";
 import { parseUnifiedDiff, splitFilePath, statusLabel } from "../../lib/diffParser";
-import { DiffViewer } from "./DiffViewer";
+import { DiffModal } from "./DiffModal";
+import type { DiffModalFile } from "./DiffModal";
 import { IconClose, IconGitBranch } from "../Icons/Icons";
 import type { GitFileEntry, FileDiff } from "../../types/git";
 import "./DiffPanel.css";
@@ -23,35 +24,24 @@ function fileKey(section: SectionKey, path: string): string {
 function FileItem({
   file,
   section,
-  expandedKey,
-  onToggle,
-  diff,
-  diffLoading,
-  diffError,
+  onSelect,
   animClass,
 }: {
   file: GitFileEntry;
   section: SectionKey;
-  expandedKey: string | null;
-  onToggle: (key: string, path: string, section: SectionKey) => void;
-  diff: FileDiff | null;
-  diffLoading: boolean;
-  diffError: string | null;
+  onSelect: (file: GitFileEntry, section: SectionKey) => void;
   animClass: string | undefined;
 }) {
-  const key = fileKey(section, file.path);
-  const isExpanded = expandedKey === key;
   const { dir, name } = splitFilePath(file.path);
   const statusCls = `diff-file-status status-${file.status === "?" ? "Q" : file.status}`;
 
   return (
     <div className={animClass ?? ""}>
       <div
-        className={`diff-file-item${isExpanded ? " diff-file-expanded" : ""}`}
-        onClick={() => onToggle(key, file.path, section)}
+        className="diff-file-item"
+        onClick={() => onSelect(file, section)}
         title={`${statusLabel(file.status)}: ${file.path}`}
       >
-        <span className={`diff-file-chevron${isExpanded ? " expanded" : ""}`}>{"\u25b8"}</span>
         <span className={statusCls}>{file.status}</span>
         <span className="diff-file-path">
           {dir && <span className="diff-file-dir">{dir}</span>}
@@ -65,15 +55,6 @@ function FileItem({
           {file.deletions > 0 && <span className="diff-file-del">-{file.deletions}</span>}
         </span>
       </div>
-      {isExpanded && (
-        diffLoading ? (
-          <div className="diff-viewer-loading">Loading diff...</div>
-        ) : diffError ? (
-          <div className="diff-viewer-error">{diffError}</div>
-        ) : diff ? (
-          <DiffViewer diff={diff} />
-        ) : null
-      )}
     </div>
   );
 }
@@ -102,12 +83,11 @@ export function DiffPanel({ onClose }: DiffPanelProps) {
   const { isGitRepo, status, error, changedPaths } = useGitStatus(workingDir, true);
 
   const [collapsedSections, setCollapsedSections] = useState<Set<SectionKey>>(new Set());
-  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<DiffModalFile | null>(null);
   const [fileDiffs, setFileDiffs] = useState<Map<string, FileDiff>>(new Map());
-  const [diffLoading, setDiffLoading] = useState(false);
   const [diffError, setDiffError] = useState<string | null>(null);
 
-  // Track previous totals for stat tick animation (key-based re-mount triggers animation)
+  // Track previous totals for stat tick animation
   const prevTotalsRef = useRef<{ ins: number; del: number }>({ ins: 0, del: 0 });
   const insChanged = status !== null && status.totalInsertions !== prevTotalsRef.current.ins;
   const delChanged = status !== null && status.totalDeletions !== prevTotalsRef.current.del;
@@ -117,11 +97,25 @@ export function DiffPanel({ onClose }: DiffPanelProps) {
     }
   }, [status]);
 
-  // Use refs for values needed in handleToggleFile to avoid stale closures
-  const expandedFileRef = useRef(expandedFile);
-  expandedFileRef.current = expandedFile;
   const fileDiffsRef = useRef(fileDiffs);
   fileDiffsRef.current = fileDiffs;
+  const requestIdRef = useRef(0);
+
+  // Clear cache on session switch
+  useEffect(() => {
+    setSelectedFile(null);
+    setFileDiffs(new Map());
+  }, [workingDir]);
+
+  // Flat file list for modal navigation
+  const allFiles = useMemo((): DiffModalFile[] => {
+    if (!status) return [];
+    const files: DiffModalFile[] = [];
+    for (const f of status.staged) files.push({ key: fileKey("staged", f.path), file: f, section: "staged" });
+    for (const f of status.unstaged) files.push({ key: fileKey("unstaged", f.path), file: f, section: "unstaged" });
+    for (const f of status.untracked) files.push({ key: fileKey("untracked", f.path), file: f, section: "untracked" });
+    return files;
+  }, [status]);
 
   const toggleSection = useCallback((key: SectionKey) => {
     setCollapsedSections((prev) => {
@@ -132,44 +126,33 @@ export function DiffPanel({ onClose }: DiffPanelProps) {
     });
   }, []);
 
-  const handleToggleFile = useCallback(async (key: string, path: string, section: SectionKey) => {
-    if (expandedFileRef.current === key) {
-      setExpandedFile(null);
-      return;
-    }
-    setExpandedFile(key);
-    setDiffError(null);
-
+  const loadDiff = useCallback(async (key: string, path: string, section: SectionKey) => {
     if (fileDiffsRef.current.has(key)) return;
-
-    setDiffLoading(true);
+    const reqId = ++requestIdRef.current;
+    setDiffError(null);
     try {
-      let raw: string;
-      if (section === "untracked") {
-        // Untracked files need --no-index to show content as additions
-        raw = await invoke<string>("git_diff_file", {
-          workingDir,
-          filePath: path,
-          staged: false,
-          untracked: true,
-        });
-      } else {
-        raw = await invoke<string>("git_diff_file", {
-          workingDir,
-          filePath: path,
-          staged: section === "staged",
-        });
-      }
-      const parsed = parseUnifiedDiff(raw);
-      setFileDiffs((prev) => new Map(prev).set(key, parsed));
+      const raw = await invoke<string>("git_diff_file", {
+        workingDir,
+        filePath: path,
+        staged: section === "staged",
+        untracked: section === "untracked",
+      });
+      // Always cache — even if user navigated away, the result is valid
+      setFileDiffs((prev) => new Map(prev).set(key, parseUnifiedDiff(raw)));
     } catch (err) {
+      if (reqId !== requestIdRef.current) return; // only show error for current request
       setDiffError(String(err));
-    } finally {
-      setDiffLoading(false);
     }
   }, [workingDir]);
 
-  // Invalidate cached diffs when files change (in an effect, not during render)
+  // Trigger diff load when selected file changes or cache is invalidated
+  useEffect(() => {
+    if (!selectedFile) return;
+    if (fileDiffsRef.current.has(selectedFile.key)) return;
+    loadDiff(selectedFile.key, selectedFile.file.path, selectedFile.section);
+  }, [selectedFile, fileDiffs, loadDiff]);
+
+  // Invalidate cached diffs when files change
   useEffect(() => {
     if (changedPaths.size === 0) return;
     setFileDiffs((prev) => {
@@ -181,6 +164,18 @@ export function DiffPanel({ onClose }: DiffPanelProps) {
       return changed ? next : prev;
     });
   }, [changedPaths]);
+
+  const handleFileClick = useCallback((file: GitFileEntry, section: SectionKey) => {
+    setDiffError(null);
+    setSelectedFile({ key: fileKey(section, file.path), file, section });
+  }, []);
+
+  const handleNavigate = useCallback((modalFile: DiffModalFile) => {
+    setDiffError(null);
+    setSelectedFile(modalFile);
+  }, []);
+
+  const handleCloseModal = useCallback(() => setSelectedFile(null), []);
 
   const totalFiles = status
     ? status.staged.length + status.unstaged.length + status.untracked.length
@@ -211,11 +206,7 @@ export function DiffPanel({ onClose }: DiffPanelProps) {
                 key={fKey}
                 file={file}
                 section={section}
-                expandedKey={expandedFile}
-                onToggle={handleToggleFile}
-                diff={fileDiffs.get(fKey) ?? null}
-                diffLoading={diffLoading && expandedFile === fKey}
-                diffError={expandedFile === fKey ? diffError : null}
+                onSelect={handleFileClick}
                 animClass={animClass}
               />
             );
@@ -267,6 +258,17 @@ export function DiffPanel({ onClose }: DiffPanelProps) {
           </>
         )}
       </div>
+      {selectedFile && (
+        <DiffModal
+          file={selectedFile}
+          diff={fileDiffs.get(selectedFile.key) ?? null}
+          loading={!fileDiffs.has(selectedFile.key) && diffError === null}
+          error={diffError}
+          allFiles={allFiles}
+          onNavigate={handleNavigate}
+          onClose={handleCloseModal}
+        />
+      )}
     </div>
   );
 }

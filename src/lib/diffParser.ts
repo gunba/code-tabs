@@ -1,4 +1,4 @@
-import type { GitFileEntry, GitStatusCode, GitStatusData, DiffHunk, FileDiff } from "../types/git";
+import type { GitFileEntry, GitStatusCode, GitStatusData, DiffHunk, FileDiff, SideBySideRow } from "../types/git";
 
 // ── Git status parsing ───────────────────────────────────────────────────
 
@@ -261,4 +261,63 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function statusLabel(code: string): string {
   return STATUS_LABELS[code] ?? code;
+}
+
+// ── Side-by-side diff transformation ────────────────────────────────
+
+export function toSideBySide(hunks: DiffHunk[]): SideBySideRow[] {
+  const rows: SideBySideRow[] = [];
+
+  for (const hunk of hunks) {
+    const { lines } = hunk;
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      if (line.kind === "hunk-header") {
+        rows.push({ type: "separator", left: null, right: null });
+        i++;
+        continue;
+      }
+
+      if (line.kind === "context") {
+        rows.push({
+          type: "paired",
+          left: { lineNo: line.oldLine!, content: line.content, kind: "context" },
+          right: { lineNo: line.newLine!, content: line.content, kind: "context" },
+        });
+        i++;
+        continue;
+      }
+
+      // Collect consecutive del lines
+      const dels: typeof lines = [];
+      while (i < lines.length && lines[i].kind === "del") {
+        dels.push(lines[i]);
+        i++;
+      }
+
+      // Collect consecutive add lines following dels
+      const adds: typeof lines = [];
+      while (i < lines.length && lines[i].kind === "add") {
+        adds.push(lines[i]);
+        i++;
+      }
+
+      // Pair dels and adds; overflow gets null on the other side
+      const count = Math.max(dels.length, adds.length);
+      for (let j = 0; j < count; j++) {
+        const d = dels[j];
+        const a = adds[j];
+        rows.push({
+          type: "paired",
+          left: d ? { lineNo: d.oldLine!, content: d.content, kind: "del" } : null,
+          right: a ? { lineNo: a.newLine!, content: a.content, kind: "add" } : null,
+        });
+      }
+    }
+  }
+
+  return rows;
 }

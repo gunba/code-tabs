@@ -5,8 +5,9 @@ import {
   splitFilePath,
   detectChangedPaths,
   statusLabel,
+  toSideBySide,
 } from "../diffParser";
-import type { GitStatusData } from "../../types/git";
+import type { GitStatusData, DiffHunk } from "../../types/git";
 
 // ── parseGitStatus ───────────────────────────────────────────────
 
@@ -401,5 +402,202 @@ describe("statusLabel", () => {
 
   it("returns code for unknown", () => {
     expect(statusLabel("X")).toBe("X");
+  });
+});
+
+// ── toSideBySide ────────────────────────────────────────────────
+
+describe("toSideBySide", () => {
+  function makeHunk(lines: DiffHunk["lines"]): DiffHunk {
+    return { header: "@@ -1 +1 @@", oldStart: 1, oldCount: 1, newStart: 1, newCount: 1, lines };
+  }
+
+  it("returns empty for no hunks", () => {
+    expect(toSideBySide([])).toEqual([]);
+  });
+
+  it("converts hunk-header to separator", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "fn main()", oldLine: null, newLine: null },
+    ])]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].type).toBe("separator");
+  });
+
+  it("puts context lines on both sides", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "context", content: "hello", oldLine: 1, newLine: 1 },
+    ])]);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual({
+      type: "paired",
+      left: { lineNo: 1, content: "hello", kind: "context" },
+      right: { lineNo: 1, content: "hello", kind: "context" },
+    });
+  });
+
+  it("pairs consecutive del and add lines", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "del", content: "old", oldLine: 1, newLine: null },
+      { kind: "add", content: "new", oldLine: null, newLine: 1 },
+    ])]);
+    // separator + paired
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual({
+      type: "paired",
+      left: { lineNo: 1, content: "old", kind: "del" },
+      right: { lineNo: 1, content: "new", kind: "add" },
+    });
+  });
+
+  it("handles more dels than adds", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "del", content: "a", oldLine: 1, newLine: null },
+      { kind: "del", content: "b", oldLine: 2, newLine: null },
+      { kind: "del", content: "c", oldLine: 3, newLine: null },
+      { kind: "add", content: "x", oldLine: null, newLine: 1 },
+    ])]);
+    // separator + 3 paired rows
+    expect(rows).toHaveLength(4);
+    expect(rows[1].left?.content).toBe("a");
+    expect(rows[1].right?.content).toBe("x");
+    expect(rows[2].left?.content).toBe("b");
+    expect(rows[2].right).toBeNull();
+    expect(rows[3].left?.content).toBe("c");
+    expect(rows[3].right).toBeNull();
+  });
+
+  it("handles more adds than dels", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "del", content: "old", oldLine: 1, newLine: null },
+      { kind: "add", content: "new1", oldLine: null, newLine: 1 },
+      { kind: "add", content: "new2", oldLine: null, newLine: 2 },
+    ])]);
+    expect(rows).toHaveLength(3);
+    expect(rows[1].left?.content).toBe("old");
+    expect(rows[1].right?.content).toBe("new1");
+    expect(rows[2].left).toBeNull();
+    expect(rows[2].right?.content).toBe("new2");
+  });
+
+  it("handles adds only (no dels)", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "add", content: "line1", oldLine: null, newLine: 1 },
+      { kind: "add", content: "line2", oldLine: null, newLine: 2 },
+    ])]);
+    expect(rows).toHaveLength(3);
+    expect(rows[1].left).toBeNull();
+    expect(rows[1].right?.content).toBe("line1");
+    expect(rows[2].left).toBeNull();
+    expect(rows[2].right?.content).toBe("line2");
+  });
+
+  it("handles dels only (no adds)", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "del", content: "gone1", oldLine: 1, newLine: null },
+      { kind: "del", content: "gone2", oldLine: 2, newLine: null },
+    ])]);
+    expect(rows).toHaveLength(3);
+    expect(rows[1].left?.content).toBe("gone1");
+    expect(rows[1].right).toBeNull();
+    expect(rows[2].left?.content).toBe("gone2");
+    expect(rows[2].right).toBeNull();
+  });
+
+  it("handles mixed context, del, add sequence", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "context", content: "before", oldLine: 1, newLine: 1 },
+      { kind: "del", content: "old", oldLine: 2, newLine: null },
+      { kind: "add", content: "new", oldLine: null, newLine: 2 },
+      { kind: "context", content: "after", oldLine: 3, newLine: 3 },
+    ])]);
+    expect(rows).toHaveLength(4); // separator + context + paired + context
+    expect(rows[1].left?.kind).toBe("context");
+    expect(rows[2].left?.kind).toBe("del");
+    expect(rows[2].right?.kind).toBe("add");
+    expect(rows[3].left?.kind).toBe("context");
+  });
+
+  it("adds separator between multiple hunks", () => {
+    const hunk1 = makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "context", content: "a", oldLine: 1, newLine: 1 },
+    ]);
+    const hunk2 = makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "context", content: "b", oldLine: 10, newLine: 12 },
+    ]);
+    const rows = toSideBySide([hunk1, hunk2]);
+    // hunk1: separator + context, hunk2: separator + context
+    expect(rows).toHaveLength(4);
+    expect(rows[0].type).toBe("separator");
+    expect(rows[1].type).toBe("paired");
+    expect(rows[2].type).toBe("separator");
+    expect(rows[3].type).toBe("paired");
+  });
+
+  it("handles interleaved del/add groups separated by context", () => {
+    const rows = toSideBySide([makeHunk([
+      { kind: "hunk-header", content: "", oldLine: null, newLine: null },
+      { kind: "context", content: "before", oldLine: 1, newLine: 1 },
+      { kind: "del", content: "oldA", oldLine: 2, newLine: null },
+      { kind: "add", content: "newA", oldLine: null, newLine: 2 },
+      { kind: "context", content: "middle", oldLine: 3, newLine: 3 },
+      { kind: "del", content: "oldB1", oldLine: 4, newLine: null },
+      { kind: "del", content: "oldB2", oldLine: 5, newLine: null },
+      { kind: "add", content: "newB", oldLine: null, newLine: 4 },
+      { kind: "context", content: "after", oldLine: 6, newLine: 5 },
+    ])]);
+    // separator + before + paired(A) + middle + paired(B1) + paired(B2) + after
+    expect(rows).toHaveLength(7);
+    expect(rows[1].left?.kind).toBe("context");
+    expect(rows[2].left?.content).toBe("oldA");
+    expect(rows[2].right?.content).toBe("newA");
+    expect(rows[3].left?.kind).toBe("context");
+    expect(rows[4].left?.content).toBe("oldB1");
+    expect(rows[4].right?.content).toBe("newB");
+    expect(rows[5].left?.content).toBe("oldB2");
+    expect(rows[5].right).toBeNull();
+    expect(rows[6].left?.kind).toBe("context");
+  });
+
+  it("integration: parseUnifiedDiff output piped to toSideBySide", () => {
+    const raw = [
+      "diff --git a/f.ts b/f.ts",
+      "--- a/f.ts",
+      "+++ b/f.ts",
+      "@@ -1,5 +1,5 @@",
+      " const a = 1;",
+      "-const b = 2;",
+      "+const b = 3;",
+      "+const c = 4;",
+      " const d = 5;",
+    ].join("\n");
+    const diff = parseUnifiedDiff(raw);
+    const rows = toSideBySide(diff.hunks);
+    // separator + context(a) + paired(b→b,c) + extra add(c) + context(d)
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].type).toBe("separator"); // hunk header
+    expect(rows[1].type).toBe("paired");
+    expect(rows[1].left?.content).toBe("const a = 1;");
+    expect(rows[1].right?.content).toBe("const a = 1;");
+    // del "const b = 2;" paired with add "const b = 3;"
+    expect(rows[2].left?.content).toBe("const b = 2;");
+    expect(rows[2].left?.kind).toBe("del");
+    expect(rows[2].right?.content).toBe("const b = 3;");
+    expect(rows[2].right?.kind).toBe("add");
+    // extra add "const c = 4;" with no del pair
+    expect(rows[3].left).toBeNull();
+    expect(rows[3].right?.content).toBe("const c = 4;");
+    // context "const d = 5;"
+    expect(rows[4].left?.content).toBe("const d = 5;");
+    expect(rows[4].right?.content).toBe("const d = 5;");
   });
 });
