@@ -26,6 +26,7 @@ import { killAllActivePtys } from "./lib/ptyProcess";
 import { killPty } from "./lib/ptyRegistry";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
 import { startTestHarness } from "./lib/testHarness";
+import { dlog } from "./lib/debugLog";
 import { IconPencil, IconStop, IconClose, IconReturn, IconGear, IconArrowRight } from "./components/Icons/Icons";
 import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
 import type { Subagent } from "./types/session";
@@ -72,7 +73,6 @@ export default function App() {
   const initRef = useRef(false);
   const [pruneConfirm, setPruneConfirm] = useState<{
     sessionId: string; worktreePath: string; worktreeName: string; projectRoot: string;
-    error?: string; forcing?: boolean; sessionClosed?: boolean;
   } | null>(null);
 
   useCliWatcher();
@@ -627,41 +627,29 @@ export default function App() {
 
       {/* Worktree prune confirmation */}
       {pruneConfirm && (
-        <ModalOverlay onClose={() => { if (!pruneConfirm?.forcing) setPruneConfirm(null); }}>
+        <ModalOverlay onClose={() => setPruneConfirm(null)}>
           <div className="prune-dialog">
             <div className="prune-title">Close worktree session</div>
             <div className="prune-body">
               Prune worktree <strong>{pruneConfirm.worktreeName}</strong>?
             </div>
-            {pruneConfirm.error && (
-              <div className="prune-error">{pruneConfirm.error}</div>
-            )}
             <div className="prune-actions">
-              {pruneConfirm.sessionClosed
-                ? <button onClick={() => setPruneConfirm(null)}>Dismiss</button>
-                : <button onClick={() => {
-                    closeSession(pruneConfirm.sessionId);
-                    setPruneConfirm(null);
-                  }}>Keep worktree</button>
-              }
-              <button className="prune-actions-danger" disabled={pruneConfirm.forcing} onClick={async () => {
-                setPruneConfirm((p) => p ? { ...p, forcing: true, error: undefined } : p);
-                try {
-                  if (!pruneConfirm.sessionClosed) {
-                    await killPty(pruneConfirm.sessionId);
-                    await closeSession(pruneConfirm.sessionId);
-                    setPruneConfirm((p) => p ? { ...p, sessionClosed: true } : p);
-                  }
-                  await invoke("prune_worktree", {
-                    worktreePath: pruneConfirm.worktreePath,
-                    projectRoot: pruneConfirm.projectRoot,
-                  });
-                } catch (err) {
-                  setPruneConfirm((p) => p ? { ...p, forcing: false, error: String(err) } : p);
-                  return;
-                }
+              <button onClick={() => {
+                closeSession(pruneConfirm.sessionId);
                 setPruneConfirm(null);
-              }}>{pruneConfirm.sessionClosed ? "Retry prune" : "Prune worktree"}</button>
+              }}>Keep worktree</button>
+              <button className="prune-actions-danger" onClick={() => {
+                const { sessionId, worktreePath, projectRoot } = pruneConfirm;
+                setPruneConfirm(null);
+                void (async () => {
+                  try { await killPty(sessionId); }
+                  catch (err) { dlog("session", sessionId, `prune: killPty failed: ${err}`, "ERR"); }
+                  try { await closeSession(sessionId); }
+                  catch (err) { dlog("session", sessionId, `prune: closeSession failed: ${err}`, "ERR"); }
+                  try { await invoke("prune_worktree", { worktreePath, projectRoot }); }
+                  catch (err) { dlog("session", sessionId, `prune: git worktree remove failed: ${err}`, "ERR"); }
+                })();
+              }}>Prune worktree</button>
             </div>
           </div>
         </ModalOverlay>

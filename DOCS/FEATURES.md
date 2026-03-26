@@ -44,9 +44,9 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
   - Files: src/App.tsx:282
 - [TB-28] Purple pulse (actionNeeded) triggers for CLI selectors: plan approval, permission prompts, and checkbox inputs. Detected by scanning terminal buffer for Ink selector pattern ("> 1." + "2."), not by lastText regex.
   - Files: src/hooks/useInspectorState.ts:126
-- [TB-29] Worktree indicator: when workingDir is a `.claude/worktrees/<slug>` path, tab shows project name as title (not slug) and a hyphen-acronym badge in the meta row (e.g., "sorted-marinating-dove" → "SMD") in blue (accent-secondary). Hover the acronym for the full worktree name. Tab tooltip includes `Worktree: <full-name>`. StatusBar also shows worktree acronym after the model label.
+- [TB-29] Worktree indicator: when workingDir is a `.claude/worktrees/<slug>` path, tab shows project name as title (not slug) and a hyphen-acronym badge in the meta row (e.g., "sorted-marinating-dove" → "SMD") in purple (accent-tertiary). Hover the acronym for the full worktree name. Tab tooltip includes `Worktree: <full-name>`. StatusBar also shows worktree acronym after the model label.
   - Files: src/lib/paths.ts:18, src/App.tsx:293, src/App.tsx:304, src/components/StatusBar/StatusBar.tsx:55
-- [TB-30] Worktree prune on close: manually closing a worktree tab (Ctrl+W, X button, context menu Close) shows a confirmation dialog with "Keep worktree" and "Prune worktree" options. Pruning kills the PTY (via `killPty` registry), closes the session, then runs `git worktree remove --force`. If prune fails, error is shown with "Dismiss" and "Retry prune" buttons. Backdrop click blocked during prune. Skipped for bulk actions (Close Group, app close). Uses ModalOverlay, `killPty` from ptyRegistry, and `prune_worktree` IPC command [RC-19].
+- [TB-30] Worktree prune on close: manually closing a worktree tab (Ctrl+W, X button, context menu Close) shows a confirmation dialog with "Keep worktree" and "Prune worktree" options. Pruning closes the dialog immediately, then kills the PTY (via `killPty` registry), closes the session, and runs `git worktree remove --force` in the background. Errors are logged via `dlog` to the debug panel. Skipped for bulk actions (Close Group, app close). Uses ModalOverlay, `killPty` from ptyRegistry, and `prune_worktree` IPC command [RC-19].
   - Files: src/App.tsx:173, src/App.tsx:614, src/lib/ptyRegistry.ts:28, src-tauri/src/commands.rs:1877
 
 ## Session Resume
@@ -153,7 +153,7 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 
 ## Config Manager
 
-- [CM-01] Config modal header uses CSS grid (auto 1fr auto) instead of flexbox space-between, so tab row stays centered regardless of left (title) or right (project selector + close) content width.
+- [CM-01] Config modal header uses CSS grid (1fr auto 1fr) instead of flexbox space-between, so tab row stays centered regardless of left (title) or right (project selector + close) content width.
   - Files: src/components/ConfigManager/ConfigManager.css:16, src/components/ConfigManager/ConfigManager.tsx:66
 - [CM-02] formatScopePath() normalizes backslashes to forward slashes and abbreviates project-scope paths via abbreviatePath(). User-scope paths (~/...) pass through unchanged.
   - Files: src/lib/paths.ts:89
@@ -203,9 +203,9 @@ User-facing behaviors. Code implementing a tagged entry is not dead code.
 
 - [DP-01] Collapsible right-side panel (350px fixed, 250px min, 50% max)
 - [DP-02] Toggle via `Ctrl+Shift+D` keyboard shortcut or "Toggle Debug Log" in command palette
-- [DP-03] Captures ALL `console.log`, `console.warn`, `console.error` with `[HH:MM:SS.mmm] [LOG|WARN|ERR]` prefix
-- [DP-04] Buffer size: 500 entries (ring buffer, oldest evicted first)
-- [DP-05] Polls `globalThis.__consoleLogs` every 500ms
+- [DP-03] Reads structured `dlog()` entries from `debugLog.ts` buffer with `[HH:MM:SS.mmm] [LOG|WARN|ERR]` prefix. All app logging flows through `dlog(module, sessionId, message, level?)`.
+- [DP-04] Buffer size: 2000 entries (ring buffer, oldest evicted first)
+- [DP-05] Polls `getDebugLog()` every 500ms
 - [DP-06] Filter input for searching/filtering log entries
 - [DP-07] Auto-scrolls to bottom on new entries (pauses if user scrolls up)
 - [DP-08] Copy button copies all visible (filtered) logs to clipboard; Clear button empties buffer

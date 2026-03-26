@@ -726,16 +726,6 @@
 .prune-body strong {
   color: var(--accent-secondary);
 }
-.prune-error {
-  font-size: 11px;
-  color: var(--error, #e55);
-  background: rgba(255, 80, 80, 0.08);
-  border-radius: 4px;
-  padding: 6px 8px;
-  margin-bottom: 10px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 .prune-actions {
   display: flex;
   gap: 8px;

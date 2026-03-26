@@ -97,7 +97,8 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
   │   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper
   │   ├── DebugPanel/DebugPanel.tsx        # Structured log viewer: session/module filters, color-coded (Ctrl+Shift+D)
-  │   └── DiffPanel/DiffPanel.tsx          # Git diff side panel (Ctrl+Shift+G): file list, inline diffs
+  │   ├── DiffPanel/DiffPanel.tsx          # Git diff side panel (Ctrl+Shift+G): file list, inline diffs
+  │   └── DiffPanel/DiffViewer.tsx         # Inline diff viewer component
   ├── lib/
   │   ├── inspectorHooks.ts                # INSTALL_HOOK + POLL_STATE JS expressions for BUN_INSPECT
   │   ├── inspectorPort.ts                 # Inspector port allocation and registry
