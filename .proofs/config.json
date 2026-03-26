@@ -21,16 +21,16 @@
   ],
   "plan_agents": [
     {
-      "name": "planner",
-      "prompt_suffix": "Critique this plan. What could go wrong? Edge cases, regressions, race conditions, things missed."
+      "name": "critic-risk",
+      "prompt_suffix": "Critique this plan."
     },
     {
-      "name": "planner",
-      "prompt_suffix": "Critique this plan. What existing code, patterns, or utilities already solve part of this? What can be reused instead of written from scratch?"
+      "name": "critic-reuse",
+      "prompt_suffix": "Critique this plan."
     },
     {
-      "name": "planner",
-      "prompt_suffix": "Critique this plan. Should anything be abstracted, generalised, or consolidated? Should any existing abstractions be removed?"
+      "name": "critic-abstraction",
+      "prompt_suffix": "Critique this plan."
     }
   ],
   "review_brief_fields": [
