@@ -144,6 +144,11 @@ fn detect_claude_cli_sync() -> Result<String, String> {
             .join("Roaming")
             .join("npm")
             .join("claude.cmd"),
+        home.join("AppData")
+        	.join("Local")
+        	.join("Programs")
+        	.join("npm-global")
+        	.join("claude.cmd"),
     ];
     #[cfg(not(target_os = "windows"))]
     let candidates = [
