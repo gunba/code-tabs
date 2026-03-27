@@ -38,98 +38,100 @@
     "BV-01": {
       "up": 0,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "BV-02": {
-      "up": 0,
+      "up": 2,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "BV-03": {
-      "up": 1,
+      "up": 3,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "DR-01": {
-      "up": 1,
+      "up": 3,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "DR-02": {
       "up": 1,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "DR-03": {
       "up": 0,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "DR-04": {
-      "up": 0,
-      "down": 0,
-      "seen": 24
-    },
-    "DR-05": {
       "up": 2,
       "down": 0,
-      "seen": 24
+      "seen": 26
+    },
+    "DR-05": {
+      "up": 4,
+      "down": 0,
+      "seen": 26
     },
     "DR-06": {
-      "up": 3,
+      "up": 5,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "DR-07": {
       "up": 3,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "TH-01": {
       "up": 0,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "TH-02": {
       "up": 0,
       "down": 0,
-      "seen": 24
+      "seen": 26
     },
     "FS-01": {
       "up": 2,
-      "seen": 14
+      "seen": 16
     },
     "AR-01": {
       "up": 0,
-      "seen": 14
+      "seen": 16
     },
     "LO-01": {
       "up": 0,
-      "seen": 14
+      "seen": 16
     },
     "CD-01": {
-      "up": 0,
-      "down": 0
+      "up": 2,
+      "down": 0,
+      "seen": 2
     },
     "DC-01": {
-      "up": 0,
-      "seen": 14
+      "up": 2,
+      "seen": 16
     },
     "DC-02": {
-      "up": 0,
-      "seen": 14
+      "up": 2,
+      "seen": 16
     },
     "DC-03": {
-      "up": 0,
-      "seen": 14
+      "up": 2,
+      "seen": 16
     },
     "DC-04": {
-      "up": 0,
-      "seen": 14
+      "up": 2,
+      "seen": 16
     },
     "DR-08": {
-      "up": 0,
-      "down": 0
+      "up": 2,
+      "down": 0,
+      "seen": 2
     }
   },
   "cycle": 2,
