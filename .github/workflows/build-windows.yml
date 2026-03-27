@@ -36,7 +36,7 @@ jobs:
           if ! sccache --start-server 2>/dev/null && ! sccache rustc -vV 2>/dev/null; then
             echo "::warning::sccache backend unavailable, falling back to direct compilation"
             echo "RUSTC_WRAPPER=" >> "$GITHUB_ENV"
-            echo "SCCACHE_GHA_ENABLED=" >> "$GITHUB_ENV"
+            echo "SCCACHE_GHA_ENABLED=false" >> "$GITHUB_ENV"
           fi
 
       - name: Cache Rust
