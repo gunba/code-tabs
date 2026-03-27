@@ -419,14 +419,14 @@ export const INSTALL_TAPS = `(function() {
   globalThis.__tapFlags = flags;
 
   // Save originals BEFORE any wrapping — push() needs these to avoid recursion
-  var origDebug = console.debug;
   var origStringify = JSON.stringify;
   var origParse = JSON.parse;
+  var origStdoutWriteForTap = process.stdout.write;
 
   function push(cat, d) {
     d.ts = Date.now();
     d.cat = cat;
-    try { origDebug.call(console, '\\x00TAP' + origStringify(d)); } catch(e) {}
+    try { origStdoutWriteForTap.call(process.stdout, 'TAP' + origStringify(d) + '\\n'); } catch(e) {}
   }
 
   // 1. JSON.parse — all parsed JSON, unfiltered
