@@ -51,6 +51,6 @@ else
   for issue in "${issues[@]}"; do
     msg+="- $issue\\n"
   done
-  msg+="\\nAlso verify docs/STATUS.md is up to date and run: node scripts/e2e-test.cjs"
+  msg+="\\nAlso verify docs/STATUS.md is up to date."
   echo "{\"systemMessage\": \"$msg\"}"
 fi

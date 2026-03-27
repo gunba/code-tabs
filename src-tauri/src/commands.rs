@@ -1290,33 +1290,6 @@ pub fn save_hooks(scope: String, working_dir: String, hooks_json: String) -> Res
     Ok(())
 }
 
-/// Write test state to a separate file (test-state.json) so the test harness
-/// doesn't conflict with ui-config.json.
-/// Read test commands from the command file (test harness polls this).
-#[tauri::command]
-pub fn read_test_commands() -> Result<String, String> {
-    let data_dir = dirs::data_local_dir()
-        .ok_or("Could not determine local data directory")?
-        .join("claude-tabs");
-    let path = data_dir.join("test-commands.json");
-    if !path.exists() {
-        return Ok(String::new());
-    }
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
-}
-
-/// Write test commands (used by the harness to clear after reading).
-#[tauri::command]
-pub fn write_test_commands(json: String) -> Result<(), String> {
-    let data_dir = dirs::data_local_dir()
-        .ok_or("Could not determine local data directory")?
-        .join("claude-tabs");
-    if !data_dir.exists() {
-        std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(data_dir.join("test-commands.json"), json)
-        .map_err(|e| format!("Failed to write test commands: {}", e))
-}
 
 /// Scan JSONL conversation history for slash command usage.
 /// Walks ~/.claude/projects/*/*.jsonl, caps at 200 most recent files by mtime,
@@ -1375,18 +1348,6 @@ fn scan_command_usage_sync() -> Result<std::collections::HashMap<String, u64>, S
     }
 
     Ok(counts)
-}
-
-#[tauri::command]
-pub fn write_test_state(json: String) -> Result<(), String> {
-    let data_dir = dirs::data_local_dir()
-        .ok_or("Could not determine local data directory")?
-        .join("claude-tabs");
-    if !data_dir.exists() {
-        std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(data_dir.join("test-state.json"), json)
-        .map_err(|e| format!("Failed to write test state: {}", e))
 }
 
 // ── Active PID registry (for cleanup on app close) ────────────────

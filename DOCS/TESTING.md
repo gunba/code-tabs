@@ -57,24 +57,6 @@ INSTALL_HOOK and INSTALL_TAPS both monkey-patch `JSON.stringify`, `JSON.parse`, 
 
 5. **Don't restore timers in INSTALL_HOOK cleanup.** INSTALL_HOOK doesn't wrap timers, and `restoreGlobals()` in `cleanupGlobalHook` would clobber `vi.useFakeTimers()`.
 
-## Test Harness (E2E)
-
-`src/lib/testHarness.ts` writes app state to `%LOCALAPPDATA%/claude-tabs/test-state.json` every 2s and polls for commands from `test-commands.json`.
-
-### Reading State
-```bash
-cat "$LOCALAPPDATA/claude-tabs/test-state.json"
-```
-Contains: session count/states/metadata/colors, CLI version, slash commands, active tab, subagents, console logs.
-
-### Sending Commands
-Write JSON to `%LOCALAPPDATA%/claude-tabs/test-commands.json`.
-Available: `createSession`, `closeSession`, `reviveSession`, `setActiveTab`, `getSubagents`, `listSessions`, `sendInput`.
-
-### Extending
-- New observable state: add fields to `captureState()` in `testHarness.ts`
-- New commands: add handlers in the polling loop in `testHarness.ts`
-
 ## Manual Test Cases
 
 _Maintained by `/j` (janitor). Add cases here as features are built._

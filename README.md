@@ -38,7 +38,6 @@ Or run the portable exe directly: `src-tauri/target/release/claude-tabs.exe`.
 npm run tauri dev      # Dev mode with hot-reload
 npx tsc --noEmit       # Type-check
 npm test               # Unit tests
-node scripts/e2e-test.cjs  # Full E2E self-test (launches the app)
 ```
 
 ## Keyboard Shortcuts

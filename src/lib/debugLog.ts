@@ -15,10 +15,7 @@ const MAX_ENTRIES = 2000;
 const buffer: DebugLogEntry[] = [];
 (globalThis as Record<string, unknown>).__debugLogEntries = buffer;
 
-/**
- * Structured debug log. Pushes to the structured buffer and forwards to console
- * (which testHarness intercepts for __consoleLogs + test-state.json).
- */
+/** Structured debug log. Pushes to the structured buffer and forwards to console. */
 export function dlog(
   module: string,
   sessionId: string | null,

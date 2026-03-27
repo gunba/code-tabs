@@ -25,7 +25,6 @@ import { useUiConfigStore } from "./lib/uiConfig";
 import { killAllActivePtys } from "./lib/ptyProcess";
 import { killPty } from "./lib/ptyRegistry";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
-import { startTestHarness } from "./lib/testHarness";
 import { dlog } from "./lib/debugLog";
 import { IconPencil, IconStop, IconClose, IconReturn, IconGear } from "./components/Icons/Icons";
 import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
@@ -126,7 +125,6 @@ export default function App() {
     init();
     useUiConfigStore.getState().loadConfig();
     useSettingsStore.getState().loadPastSessions();
-    startTestHarness();
     invoke("cleanup_tap_logs", { maxAgeHours: 48 }).catch(() => {});
   }, [init]);
 

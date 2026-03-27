@@ -716,17 +716,17 @@
     {
       "tag": "DP-03",
       "status": "pass",
-      "note": "testHarness.ts:253-271 captures console.log/warn/error with [HH:MM:SS.mmm] [LOG|WARN|ERR] prefix via pushLog"
+      "note": "debugLog.ts:22-34 dlog() pushes structured entry with level, forwards to console.log/warn/error"
     },
     {
       "tag": "DP-04",
       "status": "pass",
-      "note": "testHarness.ts:242 MAX_LOG_BUFFER=500; :256 ring buffer with shift() when exceeded"
+      "note": "debugLog.ts:14-15 MAX_ENTRIES=2000; :29 ring buffer with shift()"
     },
     {
       "tag": "DP-05",
       "status": "pass",
-      "note": "DebugPanel.tsx:26-34 polls globalThis.__consoleLogs every 500ms"
+      "note": "DebugPanel.tsx:45 polls getDebugLog() from debugLog.ts every 500ms"
     },
     {
       "tag": "DP-06",

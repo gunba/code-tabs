@@ -118,7 +118,6 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── paths.ts                         # Path helpers, IS_WINDOWS detection, platform-aware normalizePath, worktree detection, tab grouping
   │   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
   │   ├── debugLog.ts                      # Structured debug logging (dlog function, session-scoped entries)
-  │   ├── testHarness.ts                   # Test bridge (writes state to JSON, accepts commands)
   │   ├── uiConfig.ts                     # Persisted UI configuration
   │   ├── perfTrace.ts                    # Performance tracing utilities
   │   └── diffParser.ts                   # Git porcelain/numstat/unified-diff parsers
