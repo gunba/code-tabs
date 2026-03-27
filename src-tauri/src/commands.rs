@@ -1654,10 +1654,10 @@ fn is_descendant_of(pid: u32, ancestor: u32, tree: &[(u32, u32)]) -> bool {
 
 // ── Kill orphan sessions (startup cleanup) ─────────────────────────
 
-/// Kill all processes holding any of the given session IDs.
-/// Unlike `kill_session_holder`, this skips ancestry checks — on startup,
-/// any process matching our persisted session IDs is an orphan from a
-/// previous app instance.
+/// Kill orphaned processes holding any of the given session IDs.
+/// Checks for other running claude-tabs instances first — processes that
+/// are descendants of another instance are skipped (they're managed, not
+/// orphaned). Only kills true orphans from crashed/force-closed instances.
 #[tauri::command]
 pub async fn kill_orphan_sessions(session_ids: Vec<String>) -> Result<u32, String> {
     tokio::task::spawn_blocking(move || kill_orphan_sessions_sync(&session_ids))
@@ -1668,6 +1668,11 @@ pub async fn kill_orphan_sessions(session_ids: Vec<String>) -> Result<u32, Strin
 #[cfg(target_os = "windows")]
 fn kill_orphan_sessions_sync(session_ids: &[String]) -> Result<u32, String> {
     use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
+        TH32CS_SNAPPROCESS,
+    };
 
     if session_ids.is_empty() {
         return Ok(0);
@@ -1688,16 +1693,87 @@ fn kill_orphan_sessions_sync(session_ids: &[String]) -> Result<u32, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let my_pid = std::process::id();
-    let mut killed = 0u32;
+    let mut matching_pids = Vec::new();
 
     for line in stdout.lines() {
         let line = line.trim();
         if let Some(pid_str) = line.strip_prefix("ProcessId=") {
             if let Ok(pid) = pid_str.trim().parse::<u32>() {
                 if pid != my_pid && pid != 0 {
-                    if kill_process_tree_sync(pid).is_ok() {
-                        killed += 1;
+                    matching_pids.push(pid);
+                }
+            }
+        }
+    }
+
+    if matching_pids.is_empty() {
+        return Ok(0);
+    }
+
+    // Find other running instances of our executable to avoid killing their sessions.
+    // Uses our own exe filename so it works for debug/release/renamed binaries.
+    let other_instances: Vec<u32> = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .and_then(|name| {
+            std::process::Command::new("wmic")
+                .args([
+                    "process", "where", &format!("Name='{}'", name),
+                    "get", "ProcessId", "/value",
+                ])
+                .creation_flags(0x08000000)
+                .output()
+                .ok()
+        })
+        .map(|out| {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.lines()
+                .filter_map(|l| l.trim().strip_prefix("ProcessId="))
+                .filter_map(|s| s.trim().parse::<u32>().ok())
+                .filter(|&pid| pid != my_pid && pid != 0)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut killed = 0u32;
+
+    if other_instances.is_empty() {
+        // No other instances — all matches are orphans (original fast path)
+        for pid in matching_pids {
+            if kill_process_tree_sync(pid).is_ok() {
+                killed += 1;
+            }
+        }
+    } else {
+        // Other instance(s) running — only kill processes NOT managed by them
+        let process_tree = unsafe {
+            let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if snap == INVALID_HANDLE_VALUE {
+                // Snapshot failed — fall back to killing nothing (safe default)
+                return Ok(0);
+            }
+            let mut entries: Vec<(u32, u32)> = Vec::new();
+            let mut entry: PROCESSENTRY32 = std::mem::zeroed();
+            entry.dwSize = std::mem::size_of::<PROCESSENTRY32>() as u32;
+            if Process32First(snap, &mut entry) != 0 {
+                loop {
+                    entries.push((entry.th32ProcessID, entry.th32ParentProcessID));
+                    if Process32Next(snap, &mut entry) == 0 {
+                        break;
                     }
+                }
+            }
+            CloseHandle(snap);
+            entries
+        };
+
+        for pid in matching_pids {
+            let managed = other_instances
+                .iter()
+                .any(|&inst| is_descendant_of(pid, inst, &process_tree));
+            if !managed {
+                if kill_process_tree_sync(pid).is_ok() {
+                    killed += 1;
                 }
             }
         }
@@ -1722,11 +1798,70 @@ fn kill_orphan_sessions_sync(session_ids: &[String]) -> Result<u32, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let my_pid = std::process::id();
-    let mut killed = 0u32;
+    let mut matching_pids = Vec::new();
 
     for line in stdout.lines() {
         if let Ok(pid) = line.trim().parse::<u32>() {
             if pid != my_pid && pid != 0 {
+                matching_pids.push(pid);
+            }
+        }
+    }
+
+    if matching_pids.is_empty() {
+        return Ok(0);
+    }
+
+    // Find other running instances of our executable to avoid killing their sessions
+    let other_instances: Vec<u32> = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .and_then(|name| {
+            std::process::Command::new("pgrep")
+                .args(["-x", &name])
+                .output()
+                .ok()
+        })
+        .map(|out| {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.lines()
+                .filter_map(|l| l.trim().parse::<u32>().ok())
+                .filter(|&pid| pid != my_pid && pid != 0)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut killed = 0u32;
+
+    if other_instances.is_empty() {
+        // No other instances — all matches are orphans (original fast path)
+        for pid in matching_pids {
+            if kill_process_tree_sync(pid).is_ok() {
+                killed += 1;
+            }
+        }
+    } else {
+        // Other instance(s) running — only kill processes NOT managed by them
+        let process_tree: Vec<(u32, u32)> = std::fs::read_dir("/proc")
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .filter_map(|e| {
+                        let pid: u32 = e.file_name().to_str()?.parse().ok()?;
+                        let stat =
+                            std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+                        let ppid: u32 = stat.split_whitespace().nth(3)?.parse().ok()?;
+                        Some((pid, ppid))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        for pid in matching_pids {
+            let managed = other_instances
+                .iter()
+                .any(|&inst| is_descendant_of(pid, inst, &process_tree));
+            if !managed {
                 if kill_process_tree_sync(pid).is_ok() {
                     killed += 1;
                 }
