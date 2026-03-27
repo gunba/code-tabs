@@ -217,6 +217,24 @@ describe("closeSession tab selection", () => {
     await useSessionStore.getState().closeSession("a");
     expect(useSessionStore.getState().activeTabId).toBeNull();
   });
+
+  it("removes session from store even when close_session IPC rejects", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const mockInvoke = invoke as ReturnType<typeof vi.fn>;
+    mockInvoke.mockImplementation((cmd: string) =>
+      cmd === "close_session" ? Promise.reject(new Error("IPC broken")) : Promise.resolve(undefined)
+    );
+    useSessionStore.setState({
+      sessions: [makeSession("a"), makeSession("b")],
+      activeTabId: "a",
+    });
+    await useSessionStore.getState().closeSession("a");
+    expect(useSessionStore.getState().sessions).toHaveLength(1);
+    expect(useSessionStore.getState().sessions[0].id).toBe("b");
+    expect(useSessionStore.getState().activeTabId).toBe("b");
+    // Restore default mock
+    mockInvoke.mockResolvedValue(undefined);
+  });
 });
 
 describe("simple state actions", () => {

@@ -135,7 +135,8 @@ export const useSessionStore = create<SessionsState>((set) => ({
   },
 
   closeSession: async (id) => {
-    await invoke("close_session", { id });
+    // Remove from UI immediately — store-first, matching setActiveTab/reorderTabs.
+    // The IPC notification is best-effort; the frontend owns persistence.
     releaseSessionColor(id);
     set((s) => {
       const closedIndex = s.sessions.findIndex((x) => x.id === id);
@@ -155,10 +156,16 @@ export const useSessionStore = create<SessionsState>((set) => ({
       inspectorOffSessions.delete(id);
       const tapCategories = new Map(s.tapCategories);
       tapCategories.delete(id);
-      return { sessions, activeTabId, subagents, commandHistory, inspectorOffSessions, tapCategories };
+      const processHealth = new Map(s.processHealth);
+      processHealth.delete(id);
+      return { sessions, activeTabId, subagents, commandHistory, inspectorOffSessions, tapCategories, processHealth };
     });
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();
+    // Notify backend (best-effort, fire-and-forget)
+    invoke("close_session", { id }).catch((err) =>
+      dlog("session", id, `close_session IPC failed: ${err}`, "WARN")
+    );
   },
 
   setActiveTab: (id) => {

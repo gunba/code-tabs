@@ -655,11 +655,10 @@ export default function App() {
               <button className="prune-actions-danger" onClick={() => {
                 const { sessionId, worktreePath, projectRoot } = pruneConfirm;
                 setPruneConfirm(null);
+                closeSession(sessionId);
                 void (async () => {
                   try { await killPty(sessionId); }
                   catch (err) { dlog("session", sessionId, `prune: killPty failed: ${err}`, "ERR"); }
-                  try { await closeSession(sessionId); }
-                  catch (err) { dlog("session", sessionId, `prune: closeSession failed: ${err}`, "ERR"); }
                   try { await invoke("prune_worktree", { worktreePath, projectRoot }); }
                   catch (err) { dlog("session", sessionId, `prune: git worktree remove failed: ${err}`, "ERR"); }
                 })();
