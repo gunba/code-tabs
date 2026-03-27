@@ -24,7 +24,10 @@ export function reduceTapEvent(state: SessionState, event: TapEvent): SessionSta
       return "thinking";
 
     case "TurnEnd":
-      if (event.stopReason === "tool_use") return "toolUse";
+      if (event.stopReason === "tool_use") {
+        // ExitPlanMode sets actionNeeded; the structural TurnEnd(tool_use) must not clobber it
+        return state === "actionNeeded" ? "actionNeeded" : "toolUse";
+      }
       if (event.stopReason === "end_turn") return "idle";
       return state;
 

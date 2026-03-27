@@ -24,6 +24,10 @@ describe("reduceTapEvent", () => {
     expect(reduceTapEvent("thinking", { kind: "TurnEnd", ts: 0, stopReason: "tool_use", outputTokens: 100 })).toBe("toolUse");
   });
 
+  it("TurnEnd tool_use preserves actionNeeded (ExitPlanMode race)", () => {
+    expect(reduceTapEvent("actionNeeded", { kind: "TurnEnd", ts: 0, stopReason: "tool_use", outputTokens: 100 })).toBe("actionNeeded");
+  });
+
   it("TurnEnd end_turn → idle", () => {
     expect(reduceTapEvent("thinking", { kind: "TurnEnd", ts: 0, stopReason: "end_turn", outputTokens: 100 })).toBe("idle");
   });
@@ -105,6 +109,23 @@ describe("reduceTapBatch", () => {
       { kind: "TurnEnd", ts: 1, stopReason: "end_turn", outputTokens: 100 },
     ];
     expect(reduceTapBatch("idle", events)).toBe("idle");
+  });
+
+  it("ExitPlanMode + TurnEnd(tool_use) batch → actionNeeded", () => {
+    const events: TapEvent[] = [
+      { kind: "ToolCallStart", ts: 0, index: 0, toolName: "ExitPlanMode", toolId: "t1" },
+      { kind: "TurnEnd", ts: 1, stopReason: "tool_use", outputTokens: 50 },
+    ];
+    expect(reduceTapBatch("thinking", events)).toBe("actionNeeded");
+  });
+
+  it("ExitPlanMode + TurnEnd + UserInterruption → interrupted (escape works)", () => {
+    const events: TapEvent[] = [
+      { kind: "ToolCallStart", ts: 0, index: 0, toolName: "ExitPlanMode", toolId: "t1" },
+      { kind: "TurnEnd", ts: 1, stopReason: "tool_use", outputTokens: 50 },
+      { kind: "UserInterruption", ts: 2, forToolUse: false },
+    ];
+    expect(reduceTapBatch("thinking", events)).toBe("interrupted");
   });
 
   it("waitingPermission wins if any event triggers it", () => {
