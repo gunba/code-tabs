@@ -41,6 +41,7 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   |---------|-------------|
   | `/r` | Review: document change → review (1 agent) in worktree |
   | `/j` | Janitor: review local changes → prove all docs → sync/audit |
+  | `/rj` | Review then janitor — `/r` followed by `/j` |
   | `/b` | Build: [commit?] → build → [release+push?] — choose steps upfront |
   | `/c` | Commit, exit worktree, merge to main |
 
