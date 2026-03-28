@@ -14,24 +14,27 @@
       "Read(//c/Users/jorda/PycharmProjects/claude_tabs/$PROJ/**)",
       "Bash(python3 -m json.tool)",
       "Bash(ls:*)",
-      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.readline\\(\\)\\); print\\(''''sessionId:'''', d.get\\(''''sessionId'''',''''NONE''''\\)\\)\")",
       "Bash(npm run:*)",
       "Bash(bash \"$LOCALAPPDATA/claude-agent-logs/bin/tag-info.sh\" stats)",
-      "Bash(bash \"$LOCALAPPDATA/claude-agent-logs/bin/tag-info.sh\" lookup TB-01)",
-      "Bash(bash \"$LOCALAPPDATA/claude-agent-logs/bin/start.sh\" 2>&1)",
-      "Bash(bash \"C:/Users/jorda/AppData/Local/claude-agent-logs/bin/tag-edit.sh\" --tag PT-14 --remove 2>&1)",
-      "Bash(fi)",
-      "Bash(bash \"$AGENT_PROOFS_BIN/merge-worktree.sh\" worktree-immutable-orbiting-ember --message \"Add /changelog command and clean up stale .claude files\")",
-      "Bash(echo \"$AGENT_PROOFS_BIN\")",
-      "Bash(bash \"$AGENT_PROOFS_BIN/merge-worktree.sh\" worktree-crispy-cuddling-lagoon --message \"Startup CLI gate: block app when Claude not installed, dynamic 3-step detection chain, cached CLI path\" 2>&1)",
+      "Bash(bash \"$AGENT_PROOFS_BIN/prove.sh\" select-all CLAUDE.md)",
       "Bash(python -c \":*)",
       "Bash(git push:*)",
-      "Bash(bash \"$AGENT_PROOFS_BIN/prove.sh\" select-all CLAUDE.md)",
       "Bash(git add:*)",
       "Bash(git commit:*)"
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | python -c \"import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))\" 2>/dev/null); echo \"$FILE\" | grep -qiE '[/\\\\]\\.claude[/\\\\]rules[/\\\\].*\\.md$' && echo '{\"decision\":\"block\",\"reason\":\"Rule files (.claude/rules/*.md) are managed by /r and /j only. Do not edit them directly.\"}' || true"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
