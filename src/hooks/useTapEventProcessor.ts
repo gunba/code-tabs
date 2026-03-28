@@ -26,6 +26,7 @@ export function useTapEventProcessor(
   const addSubagent = useSessionStore((s) => s.addSubagent);
   const updateSubagent = useSessionStore((s) => s.updateSubagent);
   const clearIdleSubagents = useSessionStore((s) => s.clearIdleSubagents);
+  const addSkillInvocation = useSessionStore((s) => s.addSkillInvocation);
   const addCommandHistory = useSessionStore((s) => s.addCommandHistory);
   const updateProcessHealth = useSessionStore((s) => s.updateProcessHealth);
 
@@ -131,7 +132,19 @@ export function useTapEventProcessor(
         }
       }
 
-      // 4. Session-level signals
+      // 4. Skill invocations
+      if (event.kind === "SkillInvocation") {
+        dlog("tap", sid, `skill invoked: ${event.skill} (success=${event.success})`, "DEBUG");
+        addSkillInvocation(sid, {
+          id: `skill-${event.ts}-${event.skill}`,
+          skill: event.skill,
+          success: event.success,
+          allowedTools: event.allowedTools,
+          timestamp: event.ts,
+        });
+      }
+
+      // 5. Session-level signals
       if (event.kind === "SessionRegistration") {
         setClaudeSessionId(event.sessionId);
       }
@@ -223,7 +236,7 @@ export function useTapEventProcessor(
       subTrackerRef.current = null;
       seenUuidsRef.current.clear();
     };
-  }, [sessionId, updateState, updateMetadata, updateConfig, addSubagent, updateSubagent, clearIdleSubagents, addCommandHistory, updateProcessHealth]);
+  }, [sessionId, updateState, updateMetadata, updateConfig, addSubagent, updateSubagent, clearIdleSubagents, addSkillInvocation, addCommandHistory, updateProcessHealth]);
 
   return { completionCount, claudeSessionId, userPrompt };
 }

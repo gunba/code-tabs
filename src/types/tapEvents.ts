@@ -381,6 +381,13 @@ export interface StatusLineUpdate extends TapEventBase {
   vimMode: string;
 }
 
+export interface SkillInvocationEvent extends TapEventBase {
+  kind: "SkillInvocation";
+  skill: string;
+  success: boolean;
+  allowedTools: string[];
+}
+
 // ── Discriminated union ──
 
 export type TapEvent =
@@ -436,4 +443,5 @@ export type TapEvent =
   | SystemPromptCapture
   | EffortLevel
   | StatusLineUpdate
-  | IdlePrompt;
+  | IdlePrompt
+  | SkillInvocationEvent;

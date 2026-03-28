@@ -170,12 +170,21 @@ export interface Subagent {
   tokenCount: number;
   currentAction: string | null;
   messages: SubagentMessage[];
+  createdAt: number;    // tap event ts when first seen (for chronological bar ordering)
   agentType?: string;
   isAsync?: boolean;
   totalToolUses?: number;
   durationMs?: number;
   model?: string;
   costUsd?: number;
+}
+
+export interface SkillInvocation {
+  id: string;            // skill-{timestamp}
+  skill: string;         // e.g. "keybindings-help"
+  success: boolean;
+  allowedTools: string[];
+  timestamp: number;
 }
 
 export interface PastSession {

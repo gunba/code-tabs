@@ -34,6 +34,7 @@ function resetStore() {
     claudePath: null,
     initialized: false,
     subagents: new Map(),
+    skillInvocations: new Map(),
     commandHistory: new Map(),
     respawnRequest: null,
     killRequest: null,
@@ -80,6 +81,7 @@ function makeSub(id: string, state: Subagent["state"] = "thinking"): Subagent {
     messages: [],
     tokenCount: 0,
     currentAction: null,
+    createdAt: 0,
   };
 }
 
@@ -308,11 +310,12 @@ describe("closeSession tab selection", () => {
 describe("closeSession cleanup", () => {
   beforeEach(resetStore);
 
-  it("removes subagents, commandHistory, tapCategories, and processHealth for closed session", async () => {
+  it("removes subagents, skillInvocations, commandHistory, tapCategories, and processHealth for closed session", async () => {
     useSessionStore.setState({
       sessions: [makeSession("s1"), makeSession("s2")],
       activeTabId: "s1",
       subagents: new Map([["s1", [makeSub("sub-1")]], ["s2", [makeSub("sub-2")]]]),
+      skillInvocations: new Map([["s1", [{ id: "skill-100", skill: "commit", success: true, allowedTools: [], timestamp: 100 }]]]),
       commandHistory: new Map([["s1", ["/review"]], ["s2", ["/build"]]]),
       tapCategories: new Map([["s1", new Set(["parse", "stringify"])], ["s2", new Set(["parse"])]]),
       processHealth: new Map([["s1", { rss: 100, heapUsed: 50, uptime: 10 }], ["s2", { rss: 200, heapUsed: 80, uptime: 20 }]]),
@@ -321,6 +324,7 @@ describe("closeSession cleanup", () => {
     const state = useSessionStore.getState();
     expect(state.subagents.has("s1")).toBe(false);
     expect(state.subagents.has("s2")).toBe(true);
+    expect(state.skillInvocations.has("s1")).toBe(false);
     expect(state.commandHistory.has("s1")).toBe(false);
     expect(state.commandHistory.has("s2")).toBe(true);
     expect(state.tapCategories.has("s1")).toBe(false);
@@ -409,5 +413,57 @@ describe("simple state actions", () => {
     useSessionStore.getState().reorderTabs(["c", "a", "b"]);
     const ids = useSessionStore.getState().sessions.map((s) => s.id);
     expect(ids).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("skillInvocation actions", () => {
+  beforeEach(resetStore);
+
+  const makeSkill = (id: string, skill = "commit", ts = 100) => ({
+    id, skill, success: true, allowedTools: ["Read"] as string[], timestamp: ts,
+  });
+
+  it("addSkillInvocation adds a skill invocation", () => {
+    useSessionStore.getState().addSkillInvocation("s1", makeSkill("skill-100"));
+    const list = useSessionStore.getState().skillInvocations.get("s1");
+    expect(list).toHaveLength(1);
+    expect(list![0].skill).toBe("commit");
+  });
+
+  it("addSkillInvocation deduplicates by id", () => {
+    useSessionStore.getState().addSkillInvocation("s1", makeSkill("skill-100"));
+    useSessionStore.getState().addSkillInvocation("s1", makeSkill("skill-100"));
+    expect(useSessionStore.getState().skillInvocations.get("s1")).toHaveLength(1);
+  });
+
+  it("addSkillInvocation prepends newest first", () => {
+    useSessionStore.getState().addSkillInvocation("s1", makeSkill("skill-100", "commit", 100));
+    useSessionStore.getState().addSkillInvocation("s1", makeSkill("skill-200", "review", 200));
+    const list = useSessionStore.getState().skillInvocations.get("s1")!;
+    expect(list[0].id).toBe("skill-200");
+    expect(list[1].id).toBe("skill-100");
+  });
+
+  it("addSkillInvocation caps at 50", () => {
+    for (let i = 0; i < 51; i++) {
+      useSessionStore.getState().addSkillInvocation("s1", makeSkill(`skill-${i}`, "commit", i));
+    }
+    expect(useSessionStore.getState().skillInvocations.get("s1")).toHaveLength(50);
+  });
+
+  it("removeSkillInvocation removes matching invocation", () => {
+    useSessionStore.getState().addSkillInvocation("s1", makeSkill("skill-100"));
+    useSessionStore.getState().addSkillInvocation("s1", makeSkill("skill-200", "review", 200));
+    useSessionStore.getState().removeSkillInvocation("s1", "skill-100");
+    const list = useSessionStore.getState().skillInvocations.get("s1")!;
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe("skill-200");
+  });
+
+  it("removeSkillInvocation is no-op for unknown id", () => {
+    useSessionStore.getState().addSkillInvocation("s1", makeSkill("skill-100"));
+    const before = useSessionStore.getState();
+    useSessionStore.getState().removeSkillInvocation("s1", "nonexistent");
+    expect(useSessionStore.getState()).toBe(before);
   });
 });

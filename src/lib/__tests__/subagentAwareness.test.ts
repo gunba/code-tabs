@@ -28,7 +28,7 @@ describe("isSubagentActive", () => {
 // ── getEffectiveState ──
 
 function makeSub(state: SessionState): Subagent {
-  return { id: "a1", parentSessionId: "s1", state, description: "", tokenCount: 0, currentAction: null, messages: [] };
+  return { id: "a1", parentSessionId: "s1", state, description: "", tokenCount: 0, currentAction: null, messages: [], createdAt: 0 };
 }
 
 describe("getEffectiveState", () => {

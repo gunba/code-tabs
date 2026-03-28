@@ -235,6 +235,11 @@ describe("reduceTapEvent", () => {
     expect(reduceTapEvent("idle", { kind: "ProcessHealth", ts: 0, rss: 100, heapUsed: 50, heapTotal: 60, uptime: 10, cpuPercent: 0 })).toBe("idle");
     expect(reduceTapEvent("thinking", { kind: "ApiTelemetry", ts: 0, model: "opus", costUSD: 0.01, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, uncachedInputTokens: 0, durationMs: 100, ttftMs: 50, queryChainId: null, queryDepth: 0, stopReason: null })).toBe("thinking");
   });
+
+  it("SkillInvocation does not change state", () => {
+    expect(reduceTapEvent("thinking", { kind: "SkillInvocation", ts: 0, skill: "commit", success: true, allowedTools: [] })).toBe("thinking");
+    expect(reduceTapEvent("idle", { kind: "SkillInvocation", ts: 0, skill: "review", success: false, allowedTools: ["Read"] })).toBe("idle");
+  });
 });
 
 describe("reduceTapBatch", () => {

@@ -428,6 +428,59 @@ describe("classifyTapEntry — permission events", () => {
     const event = classifyTapEntry(entry);
     expect(event).toEqual({ kind: "PermissionApproved", ts: 4702, toolName: "Edit" });
   });
+
+  it("classifies user message with toolUseResult → SkillInvocation", () => {
+    const entry: TapEntry = {
+      ts: 4800, cat: "stringify", len: 500,
+      snap: JSON.stringify({
+        type: "user",
+        toolUseResult: { success: true, commandName: "keybindings-help", allowedTools: ["Read"] },
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_123", content: "Launching skill: keybindings-help" }] },
+        uuid: "u1", parentUuid: "p1",
+      }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({
+      kind: "SkillInvocation", ts: 4800,
+      skill: "keybindings-help",
+      success: true,
+      allowedTools: ["Read"],
+    });
+  });
+
+  it("classifies failed skill invocation → SkillInvocation with success=false", () => {
+    const entry: TapEntry = {
+      ts: 4801, cat: "stringify", len: 500,
+      snap: JSON.stringify({
+        type: "user",
+        toolUseResult: { success: false, commandName: "commit", allowedTools: [] },
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_456", content: "Skill failed" }] },
+        uuid: "u2", parentUuid: "p2",
+      }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({
+      kind: "SkillInvocation", ts: 4801,
+      skill: "commit",
+      success: false,
+      allowedTools: [],
+    });
+  });
+
+  it("SkillInvocation takes priority over UserInterruption for skill result messages", () => {
+    // A skill result message that also contains interruption-like text should still be classified as SkillInvocation
+    const entry: TapEntry = {
+      ts: 4802, cat: "stringify", len: 500,
+      snap: JSON.stringify({
+        type: "user",
+        toolUseResult: { success: true, commandName: "review", allowedTools: ["Read", "Grep"] },
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_789", content: "[Request interrupted by user" }] },
+        uuid: "u3",
+      }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event?.kind).toBe("SkillInvocation");
+  });
 });
 
 describe("classifyTapEntry — system-prompt", () => {

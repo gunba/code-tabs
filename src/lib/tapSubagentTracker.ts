@@ -91,6 +91,7 @@ export class TapSubagentTracker {
               tokenCount: 0,
               currentAction: null,
               messages: [],
+              createdAt: event.ts,
             },
           });
         }

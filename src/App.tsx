@@ -3,10 +3,9 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags } from "./lib/claude";
+import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags, formatTokenCount } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
-import { SubagentBar } from "./components/SubagentBar/SubagentBar";
 
 import { SessionLauncher } from "./components/SessionLauncher/SessionLauncher";
 import { ResumePicker } from "./components/ResumePicker/ResumePicker";
@@ -30,9 +29,9 @@ import { killPty, getPtyHandleId } from "./lib/ptyRegistry";
 import { save as saveDialog, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
 import { dlog } from "./lib/debugLog";
-import { IconStop, IconClose, IconReturn, IconGear } from "./components/Icons/Icons";
+import { IconPencil, IconStop, IconClose, IconReturn, IconGear, IconSkill } from "./components/Icons/Icons";
 import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
-import type { Subagent, SessionState } from "./types/session";
+import type { Subagent, SkillInvocation, SessionState } from "./types/session";
 import { isSessionIdle, isSubagentActive } from "./types/session";
 import { getEffectiveState } from "./lib/claude";
 import "./App.css";
@@ -46,6 +45,8 @@ export default function App() {
   const closeSession = useSessionStore((s) => s.closeSession);
   const createSession = useSessionStore((s) => s.createSession);
   const persist = useSessionStore((s) => s.persist);
+  const updateSubagent = useSessionStore((s) => s.updateSubagent);
+  const removeSkillInvocation = useSessionStore((s) => s.removeSkillInvocation);
   const reorderTabs = useSessionStore((s) => s.reorderTabs);
   const requestKill = useSessionStore((s) => s.requestKill);
   const inspectorOffSessions = useSessionStore((s) => s.inspectorOffSessions);
@@ -88,6 +89,7 @@ export default function App() {
   // Track state transitions — flash tabs that become idle from an active state (5s, dismiss on hover)
   // Uses effective state (accounts for subagents) so flash only fires when all work is truly done.
   const subagentMap = useSessionStore((s) => s.subagents);
+  const skillInvocationMap = useSessionStore((s) => s.skillInvocations);
   useEffect(() => {
     const prev = prevStatesRef.current;
     const timers = flashTimersRef.current;
@@ -331,7 +333,22 @@ export default function App() {
       ) ?? null
     : null;
 
+  // Active session's subagents + skill invocations — unified bar items
   const activeSession = sessions.find((s) => s.id === activeTabId);
+  const allSubs = activeTabId ? (subagentMap.get(activeTabId) || []) : [];
+  const activeSubs = allSubs.filter((s) => s.state !== "dead");
+  const activeSkills = activeTabId ? (skillInvocationMap.get(activeTabId) || []) : [];
+
+  // Build unified bar items sorted by timestamp (newest first)
+  // Use stable store refs as deps (subagentMap/skillInvocationMap are new Map refs only on actual change)
+  type BarItem = { type: "subagent"; subagent: Subagent; ts: number } | { type: "skill"; skill: SkillInvocation; ts: number };
+  const barItems = useMemo<BarItem[]>(() => {
+    const items: BarItem[] = [];
+    for (const sub of activeSubs) items.push({ type: "subagent", subagent: sub, ts: sub.createdAt || 0 });
+    for (const sk of activeSkills) items.push({ type: "skill", skill: sk, ts: sk.timestamp });
+    items.sort((a, b) => b.ts - a.ts);
+    return items;
+  }, [subagentMap, skillInvocationMap, activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`app${ctrlHeld ? " ctrl-held" : ""}`}>
@@ -513,12 +530,74 @@ export default function App() {
           </button>
         </div>
 
-      {/* Subagent row — conditional, only for active session */}
-      <SubagentBar
-        sessionId={activeTabId}
-        inspectedSubagent={inspectedSubagent}
-        setInspectedSubagent={setInspectedSubagent}
-      />
+      {/* Subagent + skill bar — unified livelog, conditional */}
+      {barItems.length > 0 && (
+        <div className="subagent-bar">
+          {barItems.map((item) => {
+            if (item.type === "subagent") {
+              const sub = item.subagent;
+              const isActive = isSubagentActive(sub.state);
+              const isIdle = sub.state === "idle";
+              const isInterrupted = sub.state === "interrupted";
+              const isSelected = inspectedSubagent?.subagentId === sub.id && inspectedSubagent?.sessionId === activeTabId;
+              const lastMsg = sub.messages.length > 0
+                ? sub.messages[sub.messages.length - 1].text.slice(0, 200)
+                : null;
+              const metaParts: string[] = [];
+              if (sub.agentType) metaParts.push(sub.agentType);
+              if (sub.model) metaParts.push(sub.model.replace(/^claude-/, "").split("-")[0]);
+              if (sub.totalToolUses != null) metaParts.push(`${sub.totalToolUses} tools`);
+              if (sub.durationMs != null) metaParts.push(`${Math.round(sub.durationMs / 1000)}s`);
+              return (
+                <button
+                  key={sub.id}
+                  className={`subagent-card${isActive ? " subagent-active" : ""}${isIdle ? " subagent-idle" : ""}${isInterrupted ? " subagent-interrupted" : ""}${isSelected ? " subagent-selected" : ""}`}
+                  onClick={() => activeTabId && setInspectedSubagent({ sessionId: activeTabId, subagentId: sub.id })}
+                  title={sub.description}
+                >
+                  <span className={`tab-dot state-${sub.state}`} />
+                  <span className="subagent-label">
+                    <span className="subagent-name">{sub.description}</span>
+                    <span className="subagent-summary">
+                      {isActive && sub.currentAction ? sub.currentAction : lastMsg || ""}
+                    </span>
+                    {metaParts.length > 0 && (
+                      <span className="subagent-meta">{metaParts.join(" · ")}</span>
+                    )}
+                  </span>
+                  {sub.tokenCount > 0 && (
+                    <span className="subagent-tokens">{formatTokenCount(sub.tokenCount)}</span>
+                  )}
+                  {!isActive && (
+                    <span
+                      className="subagent-close"
+                      onClick={(e) => { e.stopPropagation(); activeTabId && updateSubagent(activeTabId, sub.id, { state: "dead" }); }}
+                      title="Dismiss"
+                    ><IconClose size={12} /></span>
+                  )}
+                </button>
+              );
+            }
+            // Skill invocation pill
+            const sk = item.skill;
+            return (
+              <span
+                key={sk.id}
+                className={`skill-pill${sk.success ? "" : " skill-failed"}`}
+                title={`/${sk.skill}${sk.allowedTools.length ? ` (${sk.allowedTools.join(", ")})` : ""}`}
+              >
+                <IconSkill size={12} className="skill-icon" />
+                <span className="skill-name">{sk.skill}</span>
+                <span
+                  className="subagent-close"
+                  onClick={() => activeTabId && removeSkillInvocation(activeTabId, sk.id)}
+                  title="Dismiss"
+                ><IconClose size={12} /></span>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* Main area: terminals */}
       <div className="app-main">

@@ -10,6 +10,7 @@ import type {
   SessionState,
   SessionMetadata,
   Subagent,
+  SkillInvocation,
 } from "../types/session";
 import { isSubagentActive } from "../types/session";
 import { useSettingsStore } from "./settings";
@@ -20,6 +21,7 @@ interface SessionsState {
   claudePath: string | null;
   initialized: boolean;
   subagents: Map<string, Subagent[]>; // sessionId -> subagents
+  skillInvocations: Map<string, SkillInvocation[]>; // sessionId -> skills (newest first)
   commandHistory: Map<string, string[]>; // sessionId -> commands (newest first)
   respawnRequest: { tabId: string; config: SessionConfig; name?: string } | null;
   killRequest: string | null; // sessionId to kill
@@ -56,6 +58,8 @@ interface SessionsState {
   addSubagent: (sessionId: string, subagent: Subagent) => void;
   updateSubagent: (sessionId: string, subagentId: string, updates: Partial<Subagent>) => void;
   clearIdleSubagents: (sessionId: string) => void;
+  addSkillInvocation: (sessionId: string, invocation: SkillInvocation) => void;
+  removeSkillInvocation: (sessionId: string, invocationId: string) => void;
   addCommandHistory: (sessionId: string, command: string) => void;
   updateProcessHealth: (id: string, data: { rss: number; heapUsed: number; uptime: number }) => void;
 }
@@ -66,6 +70,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
   claudePath: null,
   initialized: false,
   subagents: new Map(),
+  skillInvocations: new Map(),
   commandHistory: new Map(),
   respawnRequest: null,
   killRequest: null,
@@ -178,6 +183,8 @@ export const useSessionStore = create<SessionsState>((set) => ({
       }
       const subagents = new Map(s.subagents);
       subagents.delete(id);
+      const skillInvocations = new Map(s.skillInvocations);
+      skillInvocations.delete(id);
       const commandHistory = new Map(s.commandHistory);
       commandHistory.delete(id);
       const inspectorOffSessions = new Set(s.inspectorOffSessions);
@@ -190,7 +197,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
       processHealth.delete(id);
       const autoRecordOnStart = new Set(s.autoRecordOnStart);
       autoRecordOnStart.delete(id);
-      return { sessions, activeTabId, subagents, commandHistory, inspectorOffSessions, tapCategories, ptyRecording, processHealth, autoRecordOnStart };
+      return { sessions, activeTabId, subagents, skillInvocations, commandHistory, inspectorOffSessions, tapCategories, ptyRecording, processHealth, autoRecordOnStart };
     });
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();
@@ -384,6 +391,30 @@ export const useSessionStore = create<SessionsState>((set) => ({
       if (active.length === list.length) return s;
       map.set(sessionId, active);
       return { subagents: map };
+    });
+  },
+
+  addSkillInvocation: (sessionId, invocation) => {
+    set((s) => {
+      const map = new Map(s.skillInvocations);
+      const existing = map.get(sessionId) || [];
+      // Dedup by id
+      if (existing.some((si) => si.id === invocation.id)) return s;
+      const updated = [invocation, ...existing];
+      map.set(sessionId, updated.length > 50 ? updated.slice(0, 50) : updated);
+      return { skillInvocations: map };
+    });
+  },
+
+  removeSkillInvocation: (sessionId, invocationId) => {
+    set((s) => {
+      const map = new Map(s.skillInvocations);
+      const list = map.get(sessionId);
+      if (!list) return s;
+      const updated = list.filter((si) => si.id !== invocationId);
+      if (updated.length === list.length) return s;
+      map.set(sessionId, updated);
+      return { skillInvocations: map };
     });
   },
 

@@ -600,6 +600,58 @@
   margin-top: auto;
 }
 
+/* ── Skill pills (livelog alongside subagent cards) ─────────── */
+
+.skill-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: default;
+  flex-shrink: 0;
+  border-left: 2px solid var(--accent-tertiary);
+  max-width: 160px;
+  position: relative;
+  transition: background 0.15s;
+}
+
+.skill-pill:hover {
+  background: var(--bg-surface-hover);
+}
+
+.skill-pill .skill-icon {
+  color: var(--accent-tertiary);
+  flex-shrink: 0;
+}
+
+.skill-pill .skill-name {
+  font-weight: 500;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 16px;
+}
+
+.skill-pill.skill-failed .skill-icon {
+  color: var(--error);
+}
+
+.skill-pill.skill-failed {
+  border-left-color: var(--error);
+}
+
+.skill-pill .subagent-close {
+  opacity: 0;
+}
+
+.skill-pill:hover .subagent-close {
+  opacity: 0.6;
+}
+
 /* ── Main area ───────────────────────────────────────────────── */
 
 .app-main {

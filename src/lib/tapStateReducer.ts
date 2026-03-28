@@ -131,6 +131,7 @@ export function reduceTapEvent(state: SessionState, event: TapEvent): SessionSta
     case "SystemPromptCapture":
     case "EffortLevel":
     case "StatusLineUpdate":
+    case "SkillInvocation":
       return state;
   }
 }

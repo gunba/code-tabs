@@ -6,7 +6,7 @@ import type { TapEntry, TapEvent } from "../types/tapEvents";
  */
 const TOOL_ACTION_KEYS: Record<string, string> = {
   Bash: "command", Read: "file_path", Write: "file_path", Edit: "file_path",
-  Grep: "pattern", Glob: "pattern", Agent: "description",
+  Grep: "pattern", Glob: "pattern", Agent: "description", Skill: "skill",
 };
 
 function fmtToolAction(name: string, inp: Record<string, unknown>): string {
@@ -333,15 +333,21 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
 
   // ConversationMessage: has type in (user, assistant, result) + message or specific structure
   if (parsed.type === "user" || parsed.type === "assistant" || parsed.type === "result") {
+    // SkillInvocation: user message with toolUseResult (skill execution result)
+    // Must come before UserInterruption/PermissionRejected content-scanning checks
+    if (parsed.type === "user" && parsed.toolUseResult?.commandName) {
+      return {
+        kind: "SkillInvocation", ts,
+        skill: parsed.toolUseResult.commandName,
+        success: !!parsed.toolUseResult.success,
+        allowedTools: parsed.toolUseResult.allowedTools || [],
+      };
+    }
+
     // SessionResume: assistant with model "<synthetic>"
     if (parsed.type === "assistant" && parsed.message?.model === "<synthetic>") {
       return { kind: "SessionResume", ts };
     }
-
-    // SubagentSpawn: stringify of Agent tool input (description + prompt)
-    // This is a ToolInput, but if it has description+prompt and no type/message, it's an Agent spawn
-    // Actually, Agent tool inputs come as standalone stringify objects, not wrapped in type=...
-    // So this won't match here. We handle it below.
 
     // UserInterruption: user message with interruption text
     if (parsed.type === "user" && parsed.message?.content) {
