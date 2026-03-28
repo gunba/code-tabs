@@ -12,27 +12,27 @@
     "GD-01": {
       "up": 0,
       "down": 0,
-      "seen": 23
+      "seen": 18
     },
     "GD-02": {
       "up": 0,
       "down": 0,
-      "seen": 23
+      "seen": 18
     },
     "GD-03": {
       "up": 0,
       "down": 0,
-      "seen": 23
+      "seen": 18
     },
     "GD-04": {
       "up": 0,
       "down": 0,
-      "seen": 23
+      "seen": 18
     },
     "GD-05": {
       "up": 0,
       "down": 0,
-      "seen": 23
+      "seen": 18
     }
   },
   "cycle": 6,
@@ -40,64 +40,39 @@
   "metadata": {
     "GD-01": {
       "files": [
-        "src/components/DiffPanel/DiffPanel.tsx",
-        "src/components/DiffPanel/DiffPanel.css"
+        "src/components/DiffPanel/DiffPanel.tsx:1",
+        "src/components/DiffPanel/DiffPanel.css:1"
       ],
       "verified": "2026-03-26",
-      "notes": [
-        {
-          "date": "2026-03-26",
-          "text": "Added during change documentation"
-        }
-      ]
+      "notes": "Added during change documentation"
     },
     "GD-02": {
       "files": [
-        "src/components/DiffPanel/DiffModal.tsx"
+        "src/components/DiffPanel/DiffModal.tsx:1"
       ],
       "verified": "2026-03-26",
-      "notes": [
-        {
-          "date": "2026-03-26",
-          "text": "Added during change documentation"
-        }
-      ]
+      "notes": "Added during change documentation"
     },
     "GD-03": {
       "files": [
-        "src/components/DiffPanel/DiffModal.tsx"
+        "src/components/DiffPanel/DiffModal.tsx:36"
       ],
       "verified": "2026-03-26",
-      "notes": [
-        {
-          "date": "2026-03-26",
-          "text": "Added during change documentation"
-        }
-      ]
+      "notes": "Added during change documentation"
     },
     "GD-04": {
       "files": [
-        "src/components/DiffPanel/DiffModal.tsx"
+        "src/components/DiffPanel/DiffModal.tsx:100"
       ],
       "verified": "2026-03-26",
-      "notes": [
-        {
-          "date": "2026-03-26",
-          "text": "Added during change documentation"
-        }
-      ]
+      "notes": "Added during change documentation"
     },
     "GD-05": {
       "files": [
-        "src/components/DiffPanel/DiffPanel.tsx"
+        "src/components/DiffPanel/DiffPanel.tsx:100"
       ],
       "verified": "2026-03-26",
-      "notes": [
-        {
-          "date": "2026-03-26",
-          "text": "Added during change documentation"
-        }
-      ]
+      "notes": "Added during change documentation"
     }
   }
 }

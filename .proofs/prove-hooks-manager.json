@@ -16,167 +16,45 @@
   "citations": {
     "HM-01": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "HM-02": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "HM-03": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "HM-04": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "HM-05": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "HM-06": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "HM-07": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "HM-08": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "HM-09": {
-      "up": 1,
-      "seen": 34
+      "up": 0,
+      "seen": 29
     },
     "HM-10": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     }
   },
-  "cycle": 7,
-  "last_run": "2026-03-28T06:37:04.249532+00:00",
-  "metadata": {
-    "HM-01": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Three scopes confirmed in HooksPane (scope param)"
-        }
-      ]
-    },
-    "HM-07": {
-      "files": [
-        "src/components/StatusBar/StatusBar.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "hookCount sums hooks[] within MatcherGroups at line 182"
-        }
-      ]
-    },
-    "HM-08": {
-      "files": [
-        "src/components/StatusBar/StatusBar.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Sigma total tokens at line 263"
-        }
-      ]
-    },
-    "HM-09": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "HOOK_TYPES=['command','prompt','agent'] at line 20"
-        }
-      ]
-    },
-    "HM-10": {
-      "files": [
-        "src/components/StatusBar/StatusBar.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Line ref confirmed for SVG icon imports"
-        }
-      ]
-    },
-    "HM-02": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Scope separation via scopeKey at line 84 (project vs project-local distinct)"
-        }
-      ]
-    },
-    "HM-05": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Custom event option __custom__ at line 242"
-        }
-      ]
-    },
-    "HM-03": {
-      "files": [
-        "src-tauri/src/commands.rs"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "save_hooks merges into existing settings at line 1271 (reads then writes back, preserving other keys)"
-        }
-      ]
-    },
-    "HM-04": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Edit spreads original entry at HooksPane:174 (was confirmed)"
-        }
-      ]
-    },
-    "HM-06": {
-      "files": [
-        "src/components/ConfigManager/HooksPane.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "isCustomEvent check for unknown event names at line 188"
-        }
-      ]
-    }
-  }
+  "cycle": 6,
+  "last_run": "2026-03-28T02:11:10.304826+00:00"
 }

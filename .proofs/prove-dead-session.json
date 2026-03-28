@@ -15,39 +15,39 @@
   "citations": {
     "DS-01": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "DS-02": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "DS-03": {
       "up": 2,
-      "seen": 34
+      "seen": 29
     },
     "DS-04": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "DS-05": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "DS-06": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "DS-07": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "DS-08": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "DS-09": {
       "up": 0,
-      "seen": 26
+      "seen": 21
     }
   },
   "cycle": 6,
@@ -55,28 +55,18 @@
   "metadata": {
     "DS-03": {
       "files": [
-        "src/lib/claude.ts",
-        "src/components/Terminal/TerminalPanel.tsx"
+        "src/lib/claude.ts:20",
+        "src/components/Terminal/TerminalPanel.tsx:55"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "canResumeSession checks sessionId || resumeSession || nodeSummary, no JSONL check"
-        }
-      ]
+      "notes": "canResumeSession checks sessionId || resumeSession || nodeSummary, no JSONL check"
     },
     "DS-09": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx"
+        "src/components/Terminal/TerminalPanel.tsx:452"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     }
   }
 }

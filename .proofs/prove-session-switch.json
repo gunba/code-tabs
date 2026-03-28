@@ -10,17 +10,17 @@
     "SS-01": {
       "up": 2,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "SS-02": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "SS-03": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     }
   },
   "cycle": 4,
@@ -28,15 +28,10 @@
   "metadata": {
     "SS-01": {
       "files": [
-        "src/hooks/useTapEventProcessor.ts"
+        "src/hooks/useTapEventProcessor.ts:101"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "SessionRegistration event carries sessionId; setClaudeSessionId tracks changes (resume/compaction/fork)"
-        }
-      ]
+      "notes": "SessionRegistration event carries sessionId; setClaudeSessionId tracks changes (resume/compaction/fork)"
     }
   }
 }

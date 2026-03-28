@@ -17,52 +17,52 @@
     "DF-01": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DF-02": {
       "up": 0,
       "down": 0,
-      "seen": 26
+      "seen": 21
     },
     "DF-03": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DF-04": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DF-05": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DF-06": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DF-07": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DF-08": {
       "up": 0,
       "down": 0,
-      "seen": 7
+      "seen": 2
     },
     "DF-09": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DF-10": {
       "up": 0,
       "down": 0,
-      "seen": 23
+      "seen": 18
     }
   },
   "cycle": 4,
@@ -70,40 +70,25 @@
   "metadata": {
     "DF-02": {
       "files": [
-        "src-tauri/pty-patch/src/lib.rs",
-        "src/lib/ptyProcess.ts"
+        "src-tauri/pty-patch/src/lib.rs:179",
+        "src/lib/ptyProcess.ts:88"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "DF-08": {
       "files": [
-        "src/components/Icons/Icons.tsx"
+        "src/components/Icons/Icons.tsx:1"
       ],
       "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Icon count updated from 25 to 26. New icons: IconSkill and IconReset added."
-        }
-      ]
+      "notes": "Icon count updated from 25 to 26. New icons: IconSkill and IconReset added."
     },
     "DF-10": {
       "files": [
-        "src/lib/diffParser.ts"
+        "src/lib/diffParser.ts:268"
       ],
       "verified": "2026-03-26",
-      "notes": [
-        {
-          "date": "2026-03-26",
-          "text": "Added during change documentation"
-        }
-      ]
+      "notes": "Added during change documentation"
     }
   }
 }

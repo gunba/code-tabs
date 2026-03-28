@@ -24,307 +24,248 @@
     "CM-23",
     "CM-24",
     "CM-25",
-    "CM-26"
+    "CM-26",
+    "CM-27"
   ],
   "unchecked": [],
   "citations": {
     "CM-01": {
       "up": 1,
-      "seen": 34
+      "seen": 29
     },
     "CM-02": {
       "up": 2,
-      "seen": 34
+      "seen": 29
     },
     "CM-03": {
       "up": 0,
-      "seen": 26
+      "seen": 21
     },
     "CM-04": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "CM-05": {
       "up": 0,
       "down": 0,
-      "seen": 7
+      "seen": 2
     },
     "CM-06": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "CM-07": {
       "up": 0,
-      "seen": 26
+      "seen": 21
     },
     "CM-08": {
       "up": 2,
-      "seen": 34
+      "seen": 29
     },
     "CM-09": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "CM-10": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "CM-11": {
       "up": 0,
       "down": 0,
-      "seen": 7
+      "seen": 2
     },
     "CM-12": {
       "up": 0,
       "down": 0,
-      "seen": 7
+      "seen": 2
     },
     "CM-13": {
       "up": 0,
-      "seen": 26
+      "seen": 21
     },
     "CM-14": {
       "up": 2,
-      "seen": 34
+      "seen": 29
     },
     "CM-15": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "CM-16": {
       "up": 0,
-      "seen": 26
+      "seen": 21
     },
     "CM-17": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "CM-18": {
       "up": 2,
-      "seen": 34
+      "seen": 29
     },
     "CM-20": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "CM-22": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "CM-23": {
       "up": 0,
-      "seen": 26
+      "seen": 21
     },
     "CM-24": {
       "up": 1,
-      "seen": 33
+      "seen": 28
     },
     "CM-25": {
       "up": 0,
-      "seen": 33
+      "seen": 28
     },
     "CM-26": {
       "up": 0,
-      "seen": 26
+      "seen": 21
+    },
+    "CM-27": {
+      "up": 2,
+      "down": 0,
+      "seen": 2
     }
   },
-  "cycle": 6,
-  "last_run": "2026-03-28T02:11:10.304826+00:00",
+  "cycle": 7,
+  "last_run": "2026-03-28T07:30:58.121575+00:00",
   "metadata": {
     "CM-02": {
       "files": [
-        "src/lib/paths.ts"
+        "src/lib/paths.ts:123"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "formatScopePath() normalizes backslashes, user-scope passthrough, abbreviatePath for project paths confirmed"
-        }
-      ]
+      "notes": "formatScopePath() normalizes backslashes, user-scope passthrough, abbreviatePath for project paths confirmed"
     },
     "CM-03": {
       "files": [
-        "src/lib/settingsSchema.ts",
-        "src-tauri/src/commands.rs",
-        "src/store/settings.ts"
+        "src/lib/settingsSchema.ts:62",
+        "src-tauri/src/commands.rs:890",
+        "src/store/settings.ts:257"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-05": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.tsx",
-        "src/components/ConfigManager/SkillsEditor.tsx",
-        "src/components/ConfigManager/PromptsTab.tsx"
+        "src/components/ConfigManager/ConfigManager.tsx:105",
+        "src/components/ConfigManager/SkillsEditor.tsx:1",
+        "src/components/ConfigManager/PromptsTab.tsx:1"
       ],
       "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Skills tab added as ThreePaneEditor. Prompts tab uses single-pane PromptsTab. Updated from 3 to 4 ThreePaneEditor tabs."
-        }
-      ]
+      "notes": "Skills tab added as ThreePaneEditor. Prompts tab uses single-pane PromptsTab. Updated from 3 to 4 ThreePaneEditor tabs."
     },
     "CM-07": {
       "files": [
-        "src/components/ConfigManager/AgentEditor.tsx",
-        "src/components/ConfigManager/ConfigManager.css"
+        "src/components/ConfigManager/AgentEditor.tsx:6",
+        "src/components/ConfigManager/ConfigManager.css:922"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-08": {
       "files": [
-        "src-tauri/src/commands.rs",
-        "src-tauri/src/commands.rs"
+        "src-tauri/src/commands.rs:1783",
+        "src-tauri/src/commands.rs:1794"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "read_config_file/write_config_file: JSON validated before write, parent dirs auto-created"
-        }
-      ]
+      "notes": "read_config_file/write_config_file: JSON validated before write, parent dirs auto-created"
     },
     "CM-11": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.tsx",
-        "src/components/ConfigManager/ConfigManager.css"
+        "src/components/ConfigManager/ConfigManager.tsx:17",
+        "src/components/ConfigManager/ConfigManager.css:1"
       ],
       "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Updated 5 tabs to 7 tabs: Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills"
-        }
-      ]
+      "notes": "Updated 5 tabs to 7 tabs: Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills"
     },
     "CM-12": {
       "files": [
-        "src/components/ConfigManager/ThreePaneEditor.tsx",
-        "src/components/ConfigManager/ConfigManager.tsx"
+        "src/components/ConfigManager/ThreePaneEditor.tsx:1",
+        "src/components/ConfigManager/ConfigManager.tsx:124"
       ],
       "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Skills tab now also uses ThreePaneEditor. Updated description from Claude/Hooks/Agents to Claude/Hooks/Agents/Skills."
-        }
-      ]
+      "notes": "Skills tab now also uses ThreePaneEditor. Updated description from Claude/Hooks/Agents to Claude/Hooks/Agents/Skills."
     },
     "CM-13": {
       "files": [
-        "src/components/ConfigManager/SettingsPane.tsx",
-        "src/components/ConfigManager/ConfigManager.css"
+        "src/components/ConfigManager/SettingsPane.tsx:15",
+        "src/components/ConfigManager/ConfigManager.css:1056"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-14": {
       "files": [
-        "src/components/ConfigManager/MarkdownPane.tsx"
+        "src/components/ConfigManager/MarkdownPane.tsx:7"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Scope-to-fileType mapping confirmed: user=claudemd-user, project=claudemd-root, project-local=claudemd-dotclaude"
-        }
-      ]
+      "notes": "Scope-to-fileType mapping confirmed: user=claudemd-user, project=claudemd-root, project-local=claudemd-dotclaude"
     },
     "CM-16": {
       "files": [
-        "src/components/ConfigManager/PluginsPane.tsx",
-        "src/components/ConfigManager/ConfigManager.css"
+        "src/components/ConfigManager/PluginsPane.tsx:75",
+        "src/components/ConfigManager/ConfigManager.css:523"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-18": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.tsx",
-        "src/components/Icons/Icons.tsx"
+        "src/components/ConfigManager/ConfigManager.tsx:11",
+        "src/components/Icons/Icons.tsx:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "5 inline SVG icons (IconGear, IconDocument, IconHook, IconPuzzle, IconBot) used for config tabs"
-        }
-      ]
+      "notes": "5 inline SVG icons (IconGear, IconDocument, IconHook, IconPuzzle, IconBot) used for config tabs"
     },
     "CM-23": {
       "files": [
-        "src/components/ConfigManager/MarkdownPane.tsx",
-        "src/components/ConfigManager/ConfigManager.css"
+        "src/components/ConfigManager/MarkdownPane.tsx:86",
+        "src/components/ConfigManager/ConfigManager.css:1319"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-24": {
       "files": [
-        "src/components/ConfigManager/SettingsTab.tsx",
-        "src/components/ConfigManager/ConfigManager.css"
+        "src/components/ConfigManager/SettingsTab.tsx:102",
+        "src/components/ConfigManager/ConfigManager.css:1293"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-25": {
       "files": [
-        "src/components/ConfigManager/SettingsPane.tsx",
-        "src/lib/settingsSchema.ts"
+        "src/components/ConfigManager/SettingsPane.tsx:297",
+        "src/lib/settingsSchema.ts:295"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "CM-26": {
       "files": [
-        "src/components/ConfigManager/PluginsPane.tsx",
-        "src/components/ConfigManager/ConfigManager.css"
+        "src/components/ConfigManager/PluginsPane.tsx:75",
+        "src/components/ConfigManager/ConfigManager.css:523"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
+    },
+    "CM-27": {
+      "files": [
+        "src/components/ConfigManager/PromptsTab.tsx",
+        "src/store/settings.ts",
+        "src/hooks/useTapEventProcessor.ts",
+        "src/components/ConfigManager/ConfigManager.css"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Added during change documentation"
     }
   }
 }

@@ -16,172 +16,126 @@
   "citations": {
     "PH-01": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-02": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-03": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-04": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-05": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-06": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-07": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-08": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-09": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     },
     "PH-10": {
       "up": 2,
-      "seen": 24
+      "seen": 19
     }
   },
   "metadata": {
     "PH-01": {
       "files": [
-        ".proofs/config.json"
+        ".proofs/config.json:1",
+        ".proofs/runs.jsonl:1"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Tagging system confirmed via prove.sh infrastructure"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "50 prove runs recorded; config drives batch cycle"
     },
     "PH-02": {
       "files": [
-        ".claude/agents/prover.md",
-        ".claude/agents/reviewer.md",
-        ".claude/agents/tester.md",
-        ".claude/agents/simplifier.md"
+        ".claude/agents/prover.md:1",
+        ".claude/agents/reviewer.md:1",
+        ".claude/agents/tester.md:1",
+        ".claude/agents/simplifier.md:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Agents at project scope: prover, reviewer, simplifier, tester, critics -- each with distinct role"
-        }
-      ]
+      "notes": "Agents at project scope: prover, reviewer, simplifier, tester, critics -- each with distinct role"
     },
     "PH-03": {
       "files": [
-        ".proofs/prove-architecture.json"
+        ".proofs/prove-architecture.json:591"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Citations object with seen counts exists in all prove files"
-        }
-      ]
+      "notes": "Citations object with seen counts exists in all prove files"
     },
     "PH-04": {
       "files": [
-        ".proofs/prove-claude.json"
+        ".proofs/prove-claude.json:39"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "All tags (AR, BV, FS, DR, etc.) have identical seen/up tracking structure"
-        }
-      ]
+      "notes": "All tags (AR, BV, FS, DR, etc.) have identical seen/up tracking structure"
     },
     "PH-05": {
       "files": [
-        ".proofs/prove-claude.json",
-        ".proofs/prove-architecture.json"
+        ".proofs/prove-claude.json:39",
+        ".proofs/prove-architecture.json:591"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "up/seen fields exist for ratio computation; entries with 0 ups visible"
-        }
-      ]
+      "notes": "up/seen fields exist for ratio computation; entries with 0 ups visible"
     },
     "PH-06": {
       "files": [
-        ".worktree-deps",
-        ".claude/agents/prover.md"
+        ".worktree-deps:1",
+        ".claude/agents/prover.md:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Worktree isolation: setup-worktree.sh uses .worktree-deps; agents constrained by frontmatter"
-        }
-      ]
+      "notes": "Worktree isolation: setup-worktree.sh uses .worktree-deps; agents constrained by frontmatter"
     },
     "PH-07": {
       "files": [
-        "~/.claude/commands/c.md"
+        "~/.claude/commands/c.md:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "/c command: commit + exit worktree + merge to main via merge-worktree.sh"
-        }
-      ]
+      "notes": "/c command: commit + exit worktree + merge to main via merge-worktree.sh"
     },
     "PH-08": {
       "files": [
-        ".worktree-deps"
+        ".worktree-deps:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Symlinks for node_modules and Rust target dirs; copy for Cargo config. Generic format."
-        }
-      ]
+      "notes": "Symlinks for node_modules and Rust target dirs; copy for Cargo config. Generic format."
     },
     "PH-09": {
       "files": [
-        ".proofs/config.json"
+        ".proofs/config.json:58"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "select-matching used in /j janitor command"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "batch_size: 12 in config; prove.sh cycles through all entries"
     },
     "PH-10": {
       "files": [
-        ".proofs/config.json"
+        "~/.claude/commands/r.md:1",
+        ".claude/agents/prover.md:1",
+        ".proofs/config.json:1",
+        ".claude/settings.local.json:1"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Commands in ~/.claude/commands/; agents in ~/.claude/agents/; scripts in LOCALAPPDATA/bin/; hooks in settings.local.json"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "Commands, agents, scripts (bin/), hooks (settings.local.json), prove state (.proofs/) -- all separated"
     }
   },
-  "cycle": 7,
-  "last_run": "2026-03-28T06:36:52.585734+00:00"
+  "cycle": 6,
+  "last_run": "2026-03-28T07:30:55.635498+00:00"
 }

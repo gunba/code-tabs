@@ -14,36 +14,36 @@
   "citations": {
     "SR-01": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SR-02": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SR-03": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SR-04": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SR-05": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SR-06": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SR-07": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SR-08": {
       "up": 0,
       "down": 0,
-      "seen": 23
+      "seen": 18
     }
   },
   "cycle": 6,
@@ -51,16 +51,11 @@
   "metadata": {
     "SR-07": {
       "files": [
-        "src/components/ResumePicker/ResumePicker.tsx",
-        "src-tauri/src/commands.rs"
+        "src/components/ResumePicker/ResumePicker.tsx:121",
+        "src-tauri/src/commands.rs:407"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     }
   }
 }

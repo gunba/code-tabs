@@ -10,47 +10,37 @@
     "CI-01": {
       "up": 3,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "CI-02": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "CI-03": {
       "up": 0,
       "down": 0,
-      "seen": 26
+      "seen": 21
     }
   },
-  "cycle": 4,
-  "last_run": "2026-03-28T02:11:22.571051+00:00",
+  "cycle": 5,
+  "last_run": "2026-03-28T07:31:03.183062+00:00",
   "metadata": {
     "CI-01": {
       "files": [
-        "src/components/ConfigManager/ConfigManager.css"
+        "src/components/ConfigManager/ConfigManager.css:17"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "CSS grid 1fr auto 1fr for centered tab row in config header"
-        }
-      ]
+      "notes": "CSS grid 1fr auto 1fr for centered tab row in config header"
     },
     "CI-03": {
       "files": [
-        "src/lib/settingsSchema.ts",
-        "src-tauri/src/commands.rs",
-        "src/store/settings.ts"
+        "src/lib/settingsSchema.ts:62",
+        "src-tauri/src/commands.rs:890",
+        "src/store/settings.ts:257"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     }
   }
 }

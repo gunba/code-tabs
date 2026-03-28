@@ -10,17 +10,17 @@
     "BF-01": {
       "up": 0,
       "down": 0,
-      "seen": 7
+      "seen": 2
     },
     "BF-02": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "BF-03": {
       "up": 0,
       "down": 0,
-      "seen": 7
+      "seen": 2
     }
   },
   "cycle": 4,
@@ -28,16 +28,11 @@
   "metadata": {
     "BF-03": {
       "files": [
-        "src/hooks/useTerminal.ts",
-        "src/components/Terminal/TerminalPanel.tsx"
+        "src/hooks/useTerminal.ts:195",
+        "src/components/Terminal/TerminalPanel.tsx:395"
       ],
       "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Added during change documentation"
-        }
-      ]
+      "notes": "Added during change documentation"
     }
   }
 }

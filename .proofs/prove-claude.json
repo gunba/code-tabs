@@ -26,367 +26,211 @@
     "BV-01": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "BV-02": {
       "up": 2,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "BV-03": {
-      "up": 9,
-      "down": 0,
-      "seen": 34
-    },
-    "DR-01": {
       "up": 4,
       "down": 0,
-      "seen": 34
+      "seen": 29
+    },
+    "DR-01": {
+      "up": 3,
+      "down": 0,
+      "seen": 29
     },
     "DR-02": {
       "up": 1,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DR-03": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DR-04": {
-      "up": 6,
+      "up": 2,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "DR-05": {
-      "up": 10,
-      "down": 0,
-      "seen": 34
-    },
-    "DR-06": {
-      "up": 7,
-      "down": 0,
-      "seen": 34
-    },
-    "DR-07": {
       "up": 5,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
-    "TH-01": {
+    "DR-06": {
+      "up": 5,
+      "down": 0,
+      "seen": 29
+    },
+    "DR-07": {
       "up": 3,
       "down": 0,
-      "seen": 34
+      "seen": 29
+    },
+    "TH-01": {
+      "up": 1,
+      "down": 0,
+      "seen": 29
     },
     "TH-02": {
       "up": 0,
       "down": 0,
-      "seen": 34
+      "seen": 29
     },
     "FS-01": {
-      "up": 2,
+      "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 2
     },
     "AR-01": {
-      "up": 1,
-      "seen": 24
+      "up": 0,
+      "seen": 19
     },
     "LO-01": {
       "up": 0,
-      "seen": 24
+      "seen": 19
     },
     "CD-01": {
       "up": 2,
       "down": 0,
-      "seen": 10
+      "seen": 5
     },
     "DC-01": {
-      "up": 2,
-      "seen": 24
+      "up": 3,
+      "seen": 19
     },
     "DC-02": {
-      "up": 8,
-      "seen": 24
+      "up": 2,
+      "seen": 19
     },
     "DR-08": {
-      "up": 5,
+      "up": 3,
       "down": 0,
-      "seen": 10
+      "seen": 5
     }
   },
-  "cycle": 6,
-  "last_run": "2026-03-28T06:36:46.149601+00:00",
+  "cycle": 5,
+  "last_run": "2026-03-28T07:30:53.165482+00:00",
   "metadata": {
     "BV-02": {
       "files": [
-        "package.json",
-        "package.json"
+        "package.json:13",
+        "package.json:14"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "build:quick and build:debug scripts confirmed in package.json"
-        }
-      ]
+      "notes": "build:quick and build:debug scripts confirmed in package.json"
     },
     "BV-03": {
       "files": [
-        "package.json"
+        "package.json:8"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "tsc/vitest/cargo check pattern confirmed as dev workflow"
-        }
-      ]
+      "notes": "tsc/vitest/cargo check pattern confirmed as dev workflow"
     },
     "CD-01": {
       "files": [
-        "~/.claude/commands/r.md",
-        "~/.claude/commands/j.md",
-        "~/.claude/commands/b.md",
-        "~/.claude/commands/rj.md",
-        "~/.claude/commands/c.md"
+        "~/.claude/commands/r.md:1",
+        "~/.claude/commands/j.md:1",
+        "~/.claude/commands/b.md:1",
+        "~/.claude/commands/rj.md:1",
+        "~/.claude/commands/c.md:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Updated: /p removed (no p.md), /c added (commit/exit/merge). Files: r,j,b,rj,c confirmed."
-        }
-      ]
+      "notes": "Updated: /p removed (no p.md), /c added (commit/exit/merge). Files: r,j,b,rj,c confirmed."
     },
     "DC-01": {
       "files": [
-        "DOCS/ARCHITECTURE.md"
+        "DOCS/ARCHITECTURE.md:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "File exists"
-        }
-      ]
+      "notes": "File exists"
     },
     "DC-02": {
       "files": [
-        "DOCS/FEATURES.md"
+        "DOCS/FEATURES.md:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "File exists"
-        }
-      ]
+      "notes": "File exists"
     },
     "DC-03": {
       "files": [
-        "DOCS/PHILOSOPHY.md"
+        "DOCS/PHILOSOPHY.md:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "File exists"
-        }
-      ]
+      "notes": "File exists"
     },
     "DC-04": {
       "files": [
-        ".proofs/config.json",
-        ".proofs/prove-claude.json",
-        ".proofs/prove-architecture.json",
-        ".proofs/prove-features.json",
-        ".proofs/prove-philosophy.json"
+        ".proofs/config.json:1",
+        ".proofs/prove-claude.json:1",
+        ".proofs/prove-architecture.json:1",
+        ".proofs/prove-features.json:1",
+        ".proofs/prove-philosophy.json:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Prove infrastructure exists with config and per-doc proof files"
-        }
-      ]
+      "notes": "Prove infrastructure exists with config and per-doc proof files"
     },
     "DR-01": {
       "files": [
-        "src-tauri/src/commands.rs",
-        "src-tauri/src/jsonl_watcher.rs",
-        "src-tauri/src/lib.rs"
+        "src-tauri/src/lib.rs:1",
+        "src-tauri/src/commands.rs:1",
+        "src-tauri/src/jsonl_watcher.rs:35"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "generate_handler at lib.rs:134 confirmed; commands.rs and jsonl_watcher.rs confirmed"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "commands.rs and jsonl_watcher.rs both have #[tauri::command], registered via generate_handler! in lib.rs:134"
     },
     "DR-04": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx",
-        "src/components/StatusBar/StatusBar.tsx"
+        "src/components/Terminal/TerminalPanel.tsx:1",
+        "src/components/Terminal/TerminalPanel.css:1",
+        "src/components/CommandBar/CommandBar.tsx:1",
+        "src/components/CommandBar/CommandBar.css:1"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Component structure confirmed"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "All 12 component dirs follow <Name>/<Name>.tsx pattern with co-located CSS"
     },
     "DR-05": {
       "files": [
-        "src/lib/__tests__/tapClassifier.test.ts",
-        "src/lib/__tests__/tapStateReducer.test.ts",
-        "src/store/__tests__/sessions.test.ts"
+        "src/lib/__tests__/tapClassifier.test.ts:1",
+        "src/lib/__tests__/tapStateReducer.test.ts:1",
+        "src/store/__tests__/sessions.test.ts:1"
       ],
       "verified": "2026-03-27",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "23 test files found under src/lib/__tests__/ and src/store/__tests__/"
-        }
-      ]
+      "notes": "23 test files found under src/lib/__tests__/ and src/store/__tests__/"
     },
     "DR-06": {
       "files": [
-        "src-tauri/src/commands.rs"
+        "src-tauri/src/commands.rs:109",
+        "src-tauri/src/commands.rs:174",
+        "src-tauri/src/commands.rs:421",
+        "src-tauri/src/commands.rs:572"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "spawn_blocking usage confirmed (multiple call sites)"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "Extensive spawn_blocking usage across commands.rs (22+ uses) and pty-patch/lib.rs (3 uses)"
     },
     "DR-08": {
       "files": [
-        "src/lib/debugLog.ts"
+        "src/lib/debugLog.ts:22",
+        "src/hooks/useTapPipeline.ts:57",
+        "src/hooks/useInspectorConnection.ts:51"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "dlog function at line 19 confirmed"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "Updated: added tap module name. dlog used across all source files; only raw console calls are inside dlog itself, perfTrace, and test files."
     },
     "FS-01": {
       "files": [
-        "src/App.tsx",
-        "src/store/sessions.ts",
-        "src/lib/tapClassifier.ts",
-        "src/types/tapEvents.ts",
-        "src/types/contextMeter.ts",
-        "src/components/ContextMeter/ContextMeter.tsx",
-        "src/components/SubagentBar/SubagentBar.tsx",
-        "src/lib/contextMeterAccumulator.ts"
+        "src/components/ConfigManager/ConfigManager.tsx:17",
+        "src/components/ConfigManager/PromptsTab.tsx:1",
+        "src/components/ConfigManager/SkillsEditor.tsx:1"
       ],
       "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "File tree confirmed; all referenced files exist; ~45 event types confirmed (actual count: 45)"
-        }
-      ]
-    },
-    "AR-01": {
-      "files": [
-        "src/App.tsx",
-        "src-tauri/src/lib.rs",
-        "src-tauri/src/commands.rs"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Architecture: WebView2 <-> Tauri IPC <-> Rust <-> PTY confirmed"
-        }
-      ]
-    },
-    "BV-01": {
-      "files": [
-        "package.json"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "build:quick (tauri build --no-bundle), build:debug (--debug --no-bundle) confirmed in package.json"
-        }
-      ]
-    },
-    "DR-07": {
-      "files": [
-        "src-tauri/src/commands.rs"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "CREATE_NO_WINDOW (0x08000000) confirmed at multiple sites"
-        }
-      ]
-    },
-    "TH-01": {
-      "files": [
-        "src/lib/theme.ts",
-        "src/lib/theme.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "applyTheme at line 102, getXtermTheme at line 142 confirmed"
-        }
-      ]
-    },
-    "TH-02": {
-      "files": [
-        "src/lib/theme.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "CSS variable names confirmed in applyTheme body"
-        }
-      ]
-    },
-    "DR-02": {
-      "files": [
-        "src/types/session.ts",
-        "src/types/ipc.ts",
-        "src/types/tapEvents.ts",
-        "src/types/git.ts",
-        "src/types/contextMeter.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "TypeScript types in src/types/ confirmed"
-        }
-      ]
-    },
-    "DR-03": {
-      "files": [
-        "src/store/sessions.ts",
-        "src/store/settings.ts",
-        "src/hooks/useTerminal.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Zustand stores and hooks confirmed"
-        }
-      ]
+      "notes": "ConfigManager now has 7 tabs (added Prompts and Skills). Added PromptsTab.tsx and SkillsEditor.tsx to file tree. Updated PluginsPane.tsx description."
     }
   }
 }

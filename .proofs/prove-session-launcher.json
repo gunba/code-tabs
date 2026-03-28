@@ -22,67 +22,67 @@
   "citations": {
     "SL-01": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-02": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-03": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-04": {
       "up": 0,
-      "seen": 26
+      "seen": 21
     },
     "SL-05": {
       "up": 0,
-      "seen": 26
+      "seen": 21
     },
     "SL-06": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-07": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-08": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-09": {
       "up": 1,
-      "seen": 33
+      "seen": 28
     },
     "SL-10": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-11": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-12": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-13": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-14": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-15": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     },
     "SL-16": {
       "up": 0,
-      "seen": 34
+      "seen": 29
     }
   },
   "cycle": 6,
@@ -90,40 +90,25 @@
   "metadata": {
     "SL-04": {
       "files": [
-        "src/components/ResumePicker/ResumePicker.tsx"
+        "src/components/ResumePicker/ResumePicker.tsx:499"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "SL-05": {
       "files": [
-        "src/components/ResumePicker/ResumePicker.tsx",
-        "src-tauri/src/commands.rs"
+        "src/components/ResumePicker/ResumePicker.tsx:205",
+        "src-tauri/src/commands.rs:337"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     },
     "SL-07": {
       "files": [
-        "src/store/settings.ts"
+        "src/store/settings.ts:199"
       ],
       "verified": "2026-03-23",
-      "notes": [
-        {
-          "date": "2026-03-23",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
+      "notes": "Edited via tag-edit.sh"
     }
   }
 }
