@@ -1,0 +1,61 @@
+{
+  "file": ".claude/rules/session-resume.md",
+  "all_tags": [
+    "SR-01",
+    "SR-02",
+    "SR-03",
+    "SR-04",
+    "SR-05",
+    "SR-06",
+    "SR-07",
+    "SR-08"
+  ],
+  "unchecked": [],
+  "citations": {
+    "SR-01": {
+      "up": 0,
+      "seen": 27
+    },
+    "SR-02": {
+      "up": 0,
+      "seen": 27
+    },
+    "SR-03": {
+      "up": 0,
+      "seen": 27
+    },
+    "SR-04": {
+      "up": 0,
+      "seen": 27
+    },
+    "SR-05": {
+      "up": 0,
+      "seen": 27
+    },
+    "SR-06": {
+      "up": 0,
+      "seen": 27
+    },
+    "SR-07": {
+      "up": 0,
+      "seen": 27
+    },
+    "SR-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 16
+    }
+  },
+  "cycle": 6,
+  "last_run": "2026-03-28T02:11:10.304826+00:00",
+  "metadata": {
+    "SR-07": {
+      "files": [
+        "src/components/ResumePicker/ResumePicker.tsx:121",
+        "src-tauri/src/commands.rs:407"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    }
+  }
+}

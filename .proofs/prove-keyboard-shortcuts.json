@@ -1,0 +1,65 @@
+{
+  "file": ".claude/rules/keyboard-shortcuts.md",
+  "all_tags": [
+    "KB-01",
+    "KB-02",
+    "KB-03",
+    "KB-04",
+    "KB-05",
+    "KB-06",
+    "KB-07",
+    "KB-09",
+    "KB-10"
+  ],
+  "unchecked": [],
+  "citations": {
+    "KB-01": {
+      "up": 0,
+      "seen": 27
+    },
+    "KB-02": {
+      "up": 0,
+      "seen": 27
+    },
+    "KB-03": {
+      "up": 0,
+      "seen": 42
+    },
+    "KB-04": {
+      "up": 0,
+      "seen": 27
+    },
+    "KB-05": {
+      "up": 0,
+      "seen": 27
+    },
+    "KB-06": {
+      "up": 0,
+      "seen": 27
+    },
+    "KB-07": {
+      "up": 0,
+      "seen": 32
+    },
+    "KB-09": {
+      "up": 0,
+      "down": 0,
+      "seen": 16
+    },
+    "KB-10": {
+      "up": 0,
+      "seen": 27
+    }
+  },
+  "cycle": 6,
+  "last_run": "2026-03-28T02:11:10.304826+00:00",
+  "metadata": {
+    "KB-03": {
+      "files": [
+        "src/App.tsx:197"
+      ],
+      "verified": "2026-03-22",
+      "notes": "Edited via tag-edit.sh"
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "file": ".claude/rules/dead-session.md",
+  "all_tags": [
+    "DS-01",
+    "DS-02",
+    "DS-03",
+    "DS-04",
+    "DS-05",
+    "DS-06",
+    "DS-07",
+    "DS-08",
+    "DS-09"
+  ],
+  "unchecked": [],
+  "citations": {
+    "DS-01": {
+      "up": 0,
+      "seen": 27
+    },
+    "DS-02": {
+      "up": 0,
+      "seen": 27
+    },
+    "DS-03": {
+      "up": 2,
+      "seen": 27
+    },
+    "DS-04": {
+      "up": 0,
+      "seen": 27
+    },
+    "DS-05": {
+      "up": 0,
+      "seen": 27
+    },
+    "DS-06": {
+      "up": 0,
+      "seen": 27
+    },
+    "DS-07": {
+      "up": 0,
+      "seen": 27
+    },
+    "DS-08": {
+      "up": 0,
+      "seen": 27
+    },
+    "DS-09": {
+      "up": 0,
+      "seen": 19
+    }
+  },
+  "cycle": 6,
+  "last_run": "2026-03-28T02:11:10.304826+00:00",
+  "metadata": {
+    "DS-03": {
+      "files": [
+        "src/lib/claude.ts:20",
+        "src/components/Terminal/TerminalPanel.tsx:55"
+      ],
+      "verified": "2026-03-27",
+      "notes": "canResumeSession checks sessionId || resumeSession || nodeSummary, no JSONL check"
+    },
+    "DS-09": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx:452"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    }
+  }
+}

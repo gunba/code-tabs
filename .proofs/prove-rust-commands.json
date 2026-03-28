@@ -1,0 +1,189 @@
+{
+  "file": ".claude/rules/rust-commands.md",
+  "all_tags": [
+    "RC-01",
+    "RC-02",
+    "RC-03",
+    "RC-04",
+    "RC-05",
+    "RC-06",
+    "RC-07",
+    "RC-08",
+    "RC-09",
+    "RC-10",
+    "RC-11",
+    "RC-12",
+    "RC-13",
+    "RC-14",
+    "RC-15",
+    "RC-16",
+    "RC-17",
+    "RC-18",
+    "RC-19"
+  ],
+  "unchecked": [],
+  "citations": {
+    "RC-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-05": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-06": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-07": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-08": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-09": {
+      "up": 1,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-10": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-11": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-12": {
+      "up": 3,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-13": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-14": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-15": {
+      "up": 0,
+      "down": 0,
+      "seen": 19
+    },
+    "RC-16": {
+      "up": 3,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-17": {
+      "up": 1,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-18": {
+      "up": 2,
+      "down": 0,
+      "seen": 27
+    },
+    "RC-19": {
+      "up": 2,
+      "down": 0,
+      "seen": 16
+    }
+  },
+  "cycle": 4,
+  "last_run": "2026-03-28T02:11:22.571051+00:00",
+  "metadata": {
+    "RC-11": {
+      "files": [
+        "src-tauri/src/commands.rs:1370",
+        "src-tauri/src/lib.rs:176"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-12": {
+      "files": [
+        "src-tauri/src/commands.rs:1783",
+        "src-tauri/src/commands.rs:1794",
+        "src-tauri/src/commands.rs:1824"
+      ],
+      "verified": "2026-03-27",
+      "notes": "read/write_config_file + list_agents with 3-scope agent paths. Parent dirs auto-created."
+    },
+    "RC-13": {
+      "files": [
+        "src-tauri/src/commands.rs:1637",
+        "src/store/sessions.ts:90"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-14": {
+      "files": [
+        "src-tauri/src/commands.rs:1836",
+        "src/hooks/useNotifications.ts:44"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-15": {
+      "files": [
+        "src-tauri/pty-patch/src/lib.rs:348"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-16": {
+      "files": [
+        "src-tauri/src/commands.rs:624"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-17": {
+      "files": [
+        "src-tauri/src/commands.rs:407",
+        "src-tauri/src/lib.rs:137"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "RC-18": {
+      "files": [
+        "src-tauri/src/commands.rs:1879",
+        "src-tauri/src/lib.rs:167"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    }
+  }
+}

@@ -1,9 +1,30 @@
 {
   "docs": [
     "CLAUDE.md",
-    "DOCS/FEATURES.md",
-    "DOCS/ARCHITECTURE.md",
-    "DOCS/PHILOSOPHY.md"
+    ".claude/rules/tab-bar.md",
+    ".claude/rules/session-resume.md",
+    ".claude/rules/dead-session.md",
+    ".claude/rules/terminal.md",
+    ".claude/rules/session-launcher.md",
+    ".claude/rules/command-bar.md",
+    ".claude/rules/hooks-manager.md",
+    ".claude/rules/config-manager.md",
+    ".claude/rules/debug-panel.md",
+    ".claude/rules/window.md",
+    ".claude/rules/keyboard-shortcuts.md",
+    ".claude/rules/modal-overlay.md",
+    ".claude/rules/git-diff-panel.md",
+    ".claude/rules/data-flow.md",
+    ".claude/rules/state-inspection.md",
+    ".claude/rules/pty-internals.md",
+    ".claude/rules/persistence.md",
+    ".claude/rules/respawn-resume.md",
+    ".claude/rules/session-switch.md",
+    ".claude/rules/inspector.md",
+    ".claude/rules/background-buffering.md",
+    ".claude/rules/rust-commands.md",
+    ".claude/rules/config-impl.md",
+    ".claude/rules/philosophy.md"
   ],
   "review_agents": [
     {

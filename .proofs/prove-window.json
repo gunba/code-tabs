@@ -1,0 +1,25 @@
+{
+  "file": ".claude/rules/window.md",
+  "all_tags": [
+    "WN-01",
+    "WN-02",
+    "WN-03"
+  ],
+  "unchecked": [],
+  "citations": {
+    "WN-01": {
+      "up": 0,
+      "seen": 27
+    },
+    "WN-02": {
+      "up": 0,
+      "seen": 27
+    },
+    "WN-03": {
+      "up": 0,
+      "seen": 27
+    }
+  },
+  "cycle": 6,
+  "last_run": "2026-03-28T02:11:10.304826+00:00"
+}

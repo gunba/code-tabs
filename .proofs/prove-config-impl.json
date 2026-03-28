@@ -1,0 +1,46 @@
+{
+  "file": ".claude/rules/config-impl.md",
+  "all_tags": [
+    "CI-01",
+    "CI-02",
+    "CI-03"
+  ],
+  "unchecked": [],
+  "citations": {
+    "CI-01": {
+      "up": 3,
+      "down": 0,
+      "seen": 27
+    },
+    "CI-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "CI-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 19
+    }
+  },
+  "cycle": 4,
+  "last_run": "2026-03-28T02:11:22.571051+00:00",
+  "metadata": {
+    "CI-01": {
+      "files": [
+        "src/components/ConfigManager/ConfigManager.css:17"
+      ],
+      "verified": "2026-03-27",
+      "notes": "CSS grid 1fr auto 1fr for centered tab row in config header"
+    },
+    "CI-03": {
+      "files": [
+        "src/lib/settingsSchema.ts:62",
+        "src-tauri/src/commands.rs:890",
+        "src/store/settings.ts:257"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    }
+  }
+}

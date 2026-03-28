@@ -8,7 +8,7 @@ hooks:
     - matcher: "Read"
       hooks:
         - type: command
-          command: 'bash -c "INPUT=$(cat); FILE=$(echo \"$INPUT\" | python -c \"import sys,json; print(json.load(sys.stdin).get(\\\"tool_input\\\",{}).get(\\\"file_path\\\",\\\"\\\"))\" 2>/dev/null); echo \"$FILE\" | grep -qiE \"(FEATURES|ARCHITECTURE|PHILOSOPHY|CLAUDE)\\.md$\" && echo {\\\"decision\\\":\\\"block\\\",\\\"reason\\\":\\\"Do not read doc files directly. prove.sh select already gave you the entry text. Use Grep to search source code.\\\"} || true"'
+          command: 'bash -c "INPUT=$(cat); FILE=$(echo \"$INPUT\" | python -c \"import sys,json; print(json.load(sys.stdin).get(\\\"tool_input\\\",{}).get(\\\"file_path\\\",\\\"\\\"))\" 2>/dev/null); (echo \"$FILE\" | grep -qiE \"(FEATURES|ARCHITECTURE|PHILOSOPHY|CLAUDE)\\.md$\" || echo \"$FILE\" | grep -qiE \"\\.claude/rules/.*\\.md$\") && echo {\\\"decision\\\":\\\"block\\\",\\\"reason\\\":\\\"Do not read doc/rule files directly. prove.sh select already gave you the entry text. Use Grep to search source code.\\\"} || true"'
   Stop:
     - matcher: ""
       hooks:
@@ -18,9 +18,9 @@ hooks:
           command: 'bash "$AGENT_PROOFS_BIN/check-citations.sh"'
 ---
 
-Prove tagged documentation entries against the codebase. Read `.proofs/config.json` for the list of doc files to prove.
+Prove tagged documentation entries against the codebase. The prompt will specify which doc/rule files to prove. If not specified, read `.proofs/config.json` for the full `docs` list.
 
-For each doc file in the config `docs` list:
+For each doc file in the list:
 
 1. Run `bash "$AGENT_PROOFS_BIN/prove.sh" select-all <doc-file>` — outputs all tags with full entry text.
 2. For each entry:

@@ -6,7 +6,7 @@ Design principles for the agent proofs system.
 
 - [PH-01] Living documentation: every claim about the codebase is tagged, periodically proved against the source, and its accuracy recorded. Documentation that is not verified decays.
 
-- [PH-02] Agent specialization: a reviewer reads but does not write. A tester writes tests but not docs. A prover verifies docs but does not change code. Separation of concerns prevents conflicts and makes each agent's output auditable.
+- [PH-02] Agent specialization: a reviewer reads but does not write. A prover verifies docs but does not change code. Separation of concerns prevents conflicts and makes each agent's output auditable.
 
 - [PH-03] Democratised voting: every tagged entry earns citations through use. When an agent references an entry during work, the entry's `seen` count increments. When the entry is useful (confirms behavior, guides a decision), it gets upvoted. Entries never cited across many runs are candidates for removal.
 
@@ -20,6 +20,6 @@ Design principles for the agent proofs system.
 
 - [PH-08] Shared dependencies: build artifacts are shared across worktrees via symlinks/junctions. The `.worktree-deps` config is generic and project-agnostic. A Rust project shares target/. A Node project shares node_modules/. The mechanism is the same.
 
-- [PH-09] Prove cycle: every tagged entry is proved at least once per cycle. A cycle completes when all entries have been checked. Batch size is configurable (default 12). The system guarantees full coverage over time, not per run.
+- [PH-09] Prove cycle: scope-aware proving. `/j` uses `prove.sh select-matching` to prove all tags in rule files whose `paths:` frontmatter matches changed files. Global rules (no paths) always included. Full coverage tied to what actually changed.
 
 - [PH-10] Separation of concerns: commands (workflows) in `~/.claude/commands/`. Agents (roles with tool constraints) in `~/.claude/agents/`. Scripts (atomic operations with input validation) in `$LOCALAPPDATA/claude-agent-logs/bin/`. Hooks (invariant enforcement) in `.claude/settings.local.json`. Prove state (verification history) in `.proofs/`. None overlap in responsibility.

@@ -4,6 +4,18 @@
 
 Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
 
+# Workflow
+
+The user launches with `claude -w` for isolated worktrees. A SessionStart hook automatically sets up shared build dependencies. Do NOT call EnterWorktree — the user has already done this.
+
+The user will run `/r`, `/j`, `/b` when ready. Do not run these automatically.
+
+# Planning
+
+When in plan mode, after you have drafted your plan but before presenting it to the user: spawn the `plan_agents` from `.proofs/config.json`, passing your draft plan. Incorporate the feedback into the final plan, then present to the user.
+
+Do NOT use TaskOutput to poll. Wait for task-notifications.
+
 ## Architecture
 
 - [AR-01] Core data flow: React UI (WebView2) communicates with Rust backend via Tauri IPC, which manages PTY sessions to the Claude Code CLI
@@ -53,10 +65,8 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
 
 ## Doc Cross-references
 
-- [DC-01] See **DOCS/ARCHITECTURE.md** for data flow, state inspection, PTY internals, persistence, and other implementation details.
-- [DC-02] See **DOCS/FEATURES.md** for user-facing behaviors.
-- [DC-03] See **DOCS/PHILOSOPHY.md** for design principles (democratised voting, worktree isolation, prove cycles).
-- [DC-04] All tagged docs are proved. Code implementing a tagged entry is not dead code.
+- [DC-01] See **`.claude/rules/`** for path-scoped rules covering features and architecture. Each rule file has `paths:` YAML frontmatter for auto-loading by Claude Code.
+- [DC-02] All tagged rules are proved via `prove.sh`. Code implementing a tagged entry is not dead code.
 
 ## Frontend Structure
 
@@ -86,14 +96,16 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
   │   ├── StatusBar/StatusBar.tsx           # Model, subscription, region, context%, cost/TTFT, duration, hooks, subprocess
   │   ├── CommandPalette/CommandPalette.tsx # Ctrl+K search
   │   ├── SubagentInspector/SubagentInspector.tsx  # Markdown-rendered subagent conversation viewer
-  │   ├── ConfigManager/ConfigManager.tsx  # 5-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents
+  │   ├── ConfigManager/ConfigManager.tsx  # 7-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills
   │   ├── ConfigManager/ThreePaneEditor.tsx # 3-column User/Project/Local scope layout (color-coded)
   │   ├── ConfigManager/SettingsPane.tsx   # Per-scope JSON editor with syntax highlighting overlay
   │   ├── ConfigManager/MarkdownPane.tsx   # Per-scope CLAUDE.md editor with preview toggle
   │   ├── ConfigManager/HooksPane.tsx      # Per-scope hooks CRUD (absorbed from HooksManager)
-  │   ├── ConfigManager/PluginsPane.tsx    # Per-scope enabledPlugins (Record<string,boolean>) + mcpServers
+  │   ├── ConfigManager/PluginsPane.tsx    # CLI-driven plugin manager (single-pane, install/enable/disable + MCP servers)
   │   ├── ConfigManager/AgentEditor.tsx    # Per-scope agent file list + markdown editor
   │   ├── ConfigManager/SettingsTab.tsx    # Unified per-scope settings layout with schema-driven fields
+  │   ├── ConfigManager/PromptsTab.tsx     # Captured default prompt viewer + saved prompts editor
+  │   ├── ConfigManager/SkillsEditor.tsx   # Per-scope skills file list + markdown editor
   │   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
   │   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper
   │   ├── DebugPanel/DebugPanel.tsx        # Structured log viewer: session/module filters, color-coded (Ctrl+Shift+D)

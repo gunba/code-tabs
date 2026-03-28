@@ -1,5 +1,5 @@
 {
-  "file": "DOCS/PHILOSOPHY.md",
+  "file": ".claude/rules/philosophy.md",
   "all_tags": [
     "PH-01",
     "PH-02",
@@ -12,18 +12,7 @@
     "PH-09",
     "PH-10"
   ],
-  "unchecked": [
-    "PH-01",
-    "PH-02",
-    "PH-03",
-    "PH-04",
-    "PH-05",
-    "PH-06",
-    "PH-07",
-    "PH-08",
-    "PH-09",
-    "PH-10"
-  ],
+  "unchecked": [],
   "citations": {
     "PH-01": {
       "up": 2,
@@ -147,6 +136,6 @@
       "notes": "Commands, agents, scripts (bin/), hooks (settings.local.json), prove state (.proofs/) -- all separated"
     }
   },
-  "cycle": 3,
-  "last_run": "2026-03-27T13:18:39.198656+00:00"
+  "cycle": 5,
+  "last_run": "2026-03-28T04:05:30.939020+00:00"
 }

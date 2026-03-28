@@ -7,7 +7,7 @@ model: sonnet
 
 Critique the provided implementation plan across three dimensions.
 
-1. Read CLAUDE.md, DOCS/FEATURES.md, and DOCS/ARCHITECTURE.md.
+1. Read CLAUDE.md for project rules. Read `.claude/rules/` files relevant to the files the plan will modify.
 2. Explore the codebase for existing abstractions, patterns, utilities, and relevant source files.
 
 ## Abstraction

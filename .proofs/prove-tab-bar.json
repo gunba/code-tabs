@@ -1,0 +1,237 @@
+{
+  "file": ".claude/rules/tab-bar.md",
+  "all_tags": [
+    "TB-01",
+    "TB-02",
+    "TB-03",
+    "TB-04",
+    "TB-05",
+    "TB-06",
+    "TB-07",
+    "TB-08",
+    "TB-09",
+    "TB-10",
+    "TB-11",
+    "TB-12",
+    "TB-13",
+    "TB-14",
+    "TB-15",
+    "TB-16",
+    "TB-17",
+    "TB-18",
+    "TB-19",
+    "TB-20",
+    "TB-21",
+    "TB-22",
+    "TB-23",
+    "TB-24",
+    "TB-25",
+    "TB-26",
+    "TB-27",
+    "TB-28",
+    "TB-29",
+    "TB-30",
+    "TB-31"
+  ],
+  "unchecked": [],
+  "citations": {
+    "TB-01": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-02": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-03": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-04": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-05": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-06": {
+      "up": 1,
+      "down": 0,
+      "seen": 4
+    },
+    "TB-07": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-08": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-09": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-10": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-11": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-12": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-13": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-14": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-15": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-16": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-17": {
+      "up": 2,
+      "seen": 27
+    },
+    "TB-18": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-19": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-20": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-21": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-24": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-22": {
+      "up": 2,
+      "seen": 27
+    },
+    "TB-23": {
+      "up": 0,
+      "seen": 19
+    },
+    "TB-25": {
+      "up": 0,
+      "seen": 27
+    },
+    "TB-26": {
+      "up": 0,
+      "seen": 19
+    },
+    "TB-27": {
+      "up": 2,
+      "seen": 27
+    },
+    "TB-28": {
+      "up": 0,
+      "down": 0
+    },
+    "TB-29": {
+      "up": 0,
+      "down": 0,
+      "seen": 16
+    },
+    "TB-30": {
+      "up": 0,
+      "down": 0,
+      "seen": 16
+    },
+    "TB-31": {
+      "up": 3,
+      "down": 0,
+      "seen": 4
+    }
+  },
+  "cycle": 7,
+  "last_run": "2026-03-28T03:57:19.196389+00:00",
+  "metadata": {
+    "TB-17": {
+      "files": [
+        "src/App.tsx:689",
+        "src/App.tsx:736"
+      ],
+      "verified": "2026-03-27",
+      "notes": "Opens debug.bun.sh URL, disconnects WebSocket, marks inspector-off (hollow dot + status bar)"
+    },
+    "TB-24": {
+      "files": [
+        "src/lib/inspectorHooks.ts:414",
+        "src/hooks/useTapPipeline.ts:1",
+        "src-tauri/src/commands.rs:1"
+      ],
+      "verified": "2026-03-28",
+      "notes": "useTapRecorder.ts does not exist in main branch. Tap recording is managed via useTapPipeline.ts. Fixed file reference."
+    },
+    "TB-22": {
+      "files": [
+        "src/App.tsx:30",
+        "src/components/Icons/Icons.tsx:28"
+      ],
+      "verified": "2026-03-27",
+      "notes": "All tab bar icons are inline SVG components (IconPencil, IconStop, IconClose, IconReturn, IconGear)"
+    },
+    "TB-23": {
+      "files": [
+        "src/App.tsx:263",
+        "src/App.tsx:282",
+        "src/App.css:411"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "TB-26": {
+      "files": [
+        "src/App.tsx:392",
+        "src/App.tsx:402",
+        "src/App.tsx:406"
+      ],
+      "verified": "2026-03-23",
+      "notes": "Edited via tag-edit.sh"
+    },
+    "TB-27": {
+      "files": [
+        "src/App.tsx:313"
+      ],
+      "verified": "2026-03-27",
+      "notes": "gi > 0 guard prevents separator before first group, confirmed at line 313"
+    },
+    "TB-28": {
+      "files": [
+        "src/lib/tapStateReducer.ts:23",
+        "src/lib/tapStateReducer.ts:38"
+      ],
+      "verified": "2026-03-28",
+      "notes": "useInspectorState.ts no longer exists. actionNeeded is now driven by tapStateReducer event processing (ExitPlanMode tool call, PermissionPromptShown event), not terminal buffer scanning."
+    },
+    "TB-31": {
+      "files": [
+        "src/App.tsx:556",
+        "src/App.tsx:568"
+      ],
+      "verified": "2026-03-27",
+      "notes": "Subagent cards use tab-dot state-X classes, meta line with agentType/model/tools/duration, summary line"
+    }
+  }
+}

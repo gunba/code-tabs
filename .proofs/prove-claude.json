@@ -86,8 +86,8 @@
       "seen": 27
     },
     "FS-01": {
-      "up": 2,
-      "seen": 17
+      "up": 0,
+      "down": 0
     },
     "AR-01": {
       "up": 0,
@@ -124,8 +124,8 @@
       "seen": 3
     }
   },
-  "cycle": 3,
-  "last_run": "2026-03-28T01:35:46.914957+00:00",
+  "cycle": 4,
+  "last_run": "2026-03-28T02:10:49.791895+00:00",
   "metadata": {
     "BV-02": {
       "files": [
@@ -231,6 +231,15 @@
       ],
       "verified": "2026-03-27",
       "notes": "Updated: added tap module name. dlog used across all source files; only raw console calls are inside dlog itself, perfTrace, and test files."
+    },
+    "FS-01": {
+      "files": [
+        "src/components/ConfigManager/ConfigManager.tsx:17",
+        "src/components/ConfigManager/PromptsTab.tsx:1",
+        "src/components/ConfigManager/SkillsEditor.tsx:1"
+      ],
+      "verified": "2026-03-28",
+      "notes": "ConfigManager now has 7 tabs (added Prompts and Skills). Added PromptsTab.tsx and SkillsEditor.tsx to file tree. Updated PluginsPane.tsx description."
     }
   }
 }

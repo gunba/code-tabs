@@ -1,0 +1,56 @@
+{
+  "file": ".claude/rules/persistence.md",
+  "all_tags": [
+    "PS-01",
+    "PS-02",
+    "PS-03",
+    "PS-04",
+    "PS-05"
+  ],
+  "unchecked": [],
+  "citations": {
+    "PS-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "PS-02": {
+      "up": 2,
+      "down": 0,
+      "seen": 27
+    },
+    "PS-03": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "PS-04": {
+      "up": 0,
+      "down": 0,
+      "seen": 27
+    },
+    "PS-05": {
+      "up": 2,
+      "down": 0,
+      "seen": 27
+    }
+  },
+  "cycle": 4,
+  "last_run": "2026-03-28T02:11:22.571051+00:00",
+  "metadata": {
+    "PS-02": {
+      "files": [
+        "src/App.tsx:163"
+      ],
+      "verified": "2026-03-27",
+      "notes": "beforeunload calls persist() and killAllActivePtys()"
+    },
+    "PS-05": {
+      "files": [
+        "src/store/sessions.ts:96"
+      ],
+      "verified": "2026-03-27",
+      "notes": "Promise.all awaits kill_orphan_sessions and detect_claude_cli, claudePath set after both complete"
+    }
+  }
+}
