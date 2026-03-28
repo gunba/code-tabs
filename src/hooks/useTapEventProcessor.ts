@@ -4,7 +4,6 @@ import { tapEventBus } from "../lib/tapEventBus";
 import { reduceTapEvent, isCompletionEvent } from "../lib/tapStateReducer";
 import { TapMetadataAccumulator } from "../lib/tapMetadataAccumulator";
 import { TapSubagentTracker } from "../lib/tapSubagentTracker";
-import { ContextMeterAccumulator, contextMeterAccumulators } from "../lib/contextMeterAccumulator";
 import { normalizePath } from "../lib/paths";
 import { useSettingsStore } from "../store/settings";
 import { dlog } from "../lib/debugLog";
@@ -46,10 +45,8 @@ export function useTapEventProcessor(
     // Create per-session instances
     const metaAcc = new TapMetadataAccumulator();
     const subTracker = new TapSubagentTracker(sessionId);
-    const cmAcc = new ContextMeterAccumulator();
     metaAccRef.current = metaAcc;
     subTrackerRef.current = subTracker;
-    contextMeterAccumulators.set(sessionId, cmAcc);
     stateRef.current = "starting";
     setCompletionCount(0);
     setClaudeSessionId(null);
@@ -119,10 +116,7 @@ export function useTapEventProcessor(
         }
       }
 
-      // 4. Context meter accumulator
-      cmAcc.process(event);
-
-      // 5. Session-level signals
+      // 4. Session-level signals
       if (event.kind === "SessionRegistration") {
         setClaudeSessionId(event.sessionId);
       }
@@ -201,8 +195,6 @@ export function useTapEventProcessor(
       unsub();
       metaAcc.reset();
       subTracker.reset();
-      cmAcc.reset();
-      contextMeterAccumulators.delete(sessionId);
       metaAccRef.current = null;
       subTrackerRef.current = null;
     };

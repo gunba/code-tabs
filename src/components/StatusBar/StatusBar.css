@@ -41,13 +41,6 @@
   color: var(--accent);
 }
 
-.status-context {
-  color: var(--success);
-}
-
-.status-cost {
-  color: var(--warning);
-}
 
 .status-duration {
   color: var(--text-secondary);
@@ -116,9 +109,6 @@
   color: var(--accent-secondary);
 }
 
-.status-total-tokens {
-  color: var(--text-muted);
-}
 
 .status-inspector-off {
   color: var(--text-muted);

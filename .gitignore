@@ -2,7 +2,10 @@ node_modules/
 dist/
 src-tauri/target/
 src-tauri/pty-patch/target/
-.claude/worktrees/
+.claude/
+.proofs/
+.DOCS/
+logs/
 *.log
 *.local
 

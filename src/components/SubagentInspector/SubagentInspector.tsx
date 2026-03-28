@@ -2,7 +2,6 @@ import { memo, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Subagent, SubagentMessage } from "../../types/session";
 import { isSubagentActive } from "../../types/session";
-import { formatTokenCount } from "../../lib/claude";
 import "./SubagentInspector.css";
 
 interface SubagentInspectorProps {
@@ -95,7 +94,6 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
           {subagent.totalToolUses != null && ` · ${subagent.totalToolUses} tools`}
           {subagent.durationMs != null && ` · ${Math.round(subagent.durationMs / 1000)}s`}
           {subagent.messages.length > 0 && ` · ${subagent.messages.length} msgs`}
-          {" · "}{formatTokenCount(subagent.tokenCount)}
         </span>
         <button className="inspector-header-close" onClick={onClose}>×</button>
       </div>

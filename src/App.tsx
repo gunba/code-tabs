@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, effectiveModel, formatTokenCount, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags } from "./lib/claude";
+import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
 import { SubagentBar } from "./components/SubagentBar/SubagentBar";
@@ -16,8 +16,6 @@ import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { ConfigManager } from "./components/ConfigManager/ConfigManager";
 import { DebugPanel } from "./components/DebugPanel/DebugPanel";
 import { DiffPanel } from "./components/DiffPanel/DiffPanel";
-import { ContextMeter } from "./components/ContextMeter/ContextMeter";
-import type { ContextMeterTarget } from "./components/ContextMeter/ContextMeter";
 import { ModalOverlay } from "./components/ModalOverlay/ModalOverlay";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
@@ -65,7 +63,6 @@ export default function App() {
   const [showPalette, setShowPalette] = useState(false);
   const [showResumePicker, setShowResumePicker] = useState(false);
   const [inspectedSubagent, setInspectedSubagent] = useState<{ sessionId: string; subagentId: string } | null>(null);
-  const [contextMeterTarget, setContextMeterTarget] = useState<ContextMeterTarget | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; sessionId: string } | null>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -264,7 +261,6 @@ export default function App() {
       if (e.key === "Escape") {
         if (tabContextMenu) { setTabContextMenu(null); return; }
         if (showPalette) return;
-        if (contextMeterTarget) { setContextMeterTarget(null); return; }
         if (sidePanel) { setSidePanel(null); return; }
         if (showConfigManager) { setShowConfigManager(false); return; }
         if (showResumePicker) { setShowResumePicker(false); return; }
@@ -309,7 +305,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, sidePanel, inspectedSubagent, contextMeterTarget, tabContextMenu, quickLaunch]);
+  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, sidePanel, inspectedSubagent, tabContextMenu, quickLaunch]);
 
   const regularSessions = useMemo(() => sessions.filter((s) => !s.isMetaAgent), [sessions]);
   const groups = useMemo(() => groupSessionsByDir(regularSessions), [regularSessions]);
@@ -347,7 +343,6 @@ export default function App() {
               }
               const effort = session.metadata.effortLevel ?? session.config.effort;
               if (effort) metaSpans.push({ text: effort.charAt(0).toUpperCase() + effort.slice(1), color: "var(--accent)" });
-              const totalTokens = session.metadata.inputTokens + session.metadata.outputTokens;
               const subs = subagentMap.get(session.id) || [];
               const liveAgents = subs.filter((s) => isSubagentActive(s.state)).length;
               if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
@@ -526,15 +521,6 @@ export default function App() {
                       <IconClose size={12} />
                     </button>
                   </span>
-                  {session.state !== "dead" && (session.metadata.contextPercent > 0 || totalTokens > 0) && (
-                    <span
-                      className={`tab-context-badge${session.metadata.contextPercent >= 90 ? " ctx-critical" : session.metadata.contextPercent >= 75 ? " ctx-warning" : session.metadata.contextPercent >= 50 ? " ctx-moderate" : ""}`}
-                      title={`Context: ${session.metadata.contextPercent}%\nTokens: ${formatTokenCount(totalTokens)}\nClick for breakdown`}
-                      onClick={(e) => { e.stopPropagation(); setContextMeterTarget({ type: "session", sessionId: session.id }); }}
-                    >
-                      {session.metadata.contextPercent > 0 ? `${session.metadata.contextPercent}%` : formatTokenCount(totalTokens)}
-                    </span>
-                  )}
                 </div>
               );
               }),
@@ -611,19 +597,12 @@ export default function App() {
         ctrlHeld={ctrlHeld}
       />
 
-      <StatusBar onContextClick={(sid) => setContextMeterTarget({ type: "session", sessionId: sid })} />
+      <StatusBar />
 
       {showLauncher && <SessionLauncher key={launcherGeneration} />}
       {showResumePicker && <ResumePicker onClose={() => setShowResumePicker(false)} />}
       {showPalette && <CommandPalette onClose={() => setShowPalette(false)} />}
       {showConfigManager && <ConfigManager />}
-      {contextMeterTarget && (
-        <ContextMeter
-          target={contextMeterTarget}
-          onClose={() => setContextMeterTarget(null)}
-          onSwitchTarget={setContextMeterTarget}
-        />
-      )}
 
       {/* Worktree prune confirmation */}
       {pruneConfirm && (

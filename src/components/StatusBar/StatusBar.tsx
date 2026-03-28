@@ -6,7 +6,7 @@ import { effectiveModel, modelLabel, modelColor, formatTokenCount } from "../../
 import { parseWorktreePath, worktreeAcronym } from "../../lib/paths";
 import {
   IconPencil, IconLightning, IconUnlock, IconClipboard,
-  IconHalfCircle, IconDiamond, IconClock, IconBudget,
+  IconClock, IconBudget,
   IconWarning, IconHook, IconCircleFilled, IconCircleOutline,
   IconGitBranch,
 } from "../Icons/Icons";
@@ -40,7 +40,7 @@ function permissionIcon(mode: PermissionMode): { icon: React.ReactNode; tip: str
   }
 }
 
-function SessionStatus({ session, onContextClick }: { session: Session; onContextClick?: (sessionId: string) => void }) {
+function SessionStatus({ session }: { session: Session }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
   const tapEnabled = useSessionStore((s) => (s.tapCategories.get(session.id)?.size ?? 0) > 0);
@@ -83,34 +83,6 @@ function SessionStatus({ session, onContextClick }: { session: Session; onContex
           {perm.icon}
         </span>
       )}
-      <span
-        className="status-item status-context"
-        title={
-          session.metadata.contextPercent > 0
-            ? `Context: ${session.metadata.contextPercent}% · ${session.metadata.toolCount} tools · ${session.metadata.conversationLength} messages` +
-              (session.metadata.systemPromptLength > 0 ? ` · ${Math.round(session.metadata.systemPromptLength / 1000)}K system prompt` : "") +
-              (session.metadata.filesTouched?.length ? ` · ${session.metadata.filesTouched.length} files touched` : "") +
-              (session.metadata.contextBudget ? `\nBudget: ${formatTokenCount(session.metadata.contextBudget.totalContextSize)} total · ${session.metadata.contextBudget.mcpToolsCount} MCP tools (${formatTokenCount(session.metadata.contextBudget.mcpToolsTokens)}) · ${session.metadata.contextBudget.nonMcpToolsCount} built-in tools · ${formatTokenCount(session.metadata.contextBudget.projectFileCount)} project files` : "") +
-              (onContextClick ? "\nClick for detailed breakdown" : "")
-            : "Context usage"
-        }
-        onClick={onContextClick ? () => onContextClick(session.id) : undefined}
-        style={onContextClick ? { cursor: "pointer" } : undefined}
-      >
-        <span className="status-icon"><IconHalfCircle size={12} /></span>
-        {session.metadata.contextPercent > 0
-          ? `${session.metadata.contextPercent.toFixed(0)}%`
-          : "—"}
-      </span>
-      <span className="status-item status-cost" title={
-        `Total: $${session.metadata.costUsd.toFixed(4)} · Input: ${formatTokenCount(session.metadata.inputTokens)}, Output: ${formatTokenCount(session.metadata.outputTokens)}` +
-        (session.metadata.lastTurnCostUsd > 0 ? `\nLast turn: $${session.metadata.lastTurnCostUsd.toFixed(4)} · TTFT: ${session.metadata.lastTurnTtftMs}ms` : "") +
-        (session.metadata.rateLimitRemaining ? `\nRate limit: ${session.metadata.rateLimitRemaining} tokens remaining` + (session.metadata.rateLimitReset ? ` · resets ${session.metadata.rateLimitReset}` : "") : "") +
-        (session.metadata.lastRequestId ? `\nRequest: ${session.metadata.lastRequestId}` : "")
-      }>
-        <span className="status-icon"><IconDiamond size={12} /></span>
-        {formatTokenCount(session.metadata.inputTokens + session.metadata.outputTokens)} tokens
-      </span>
       <span className="status-item status-duration" title={
         `Duration: ${formatDuration(session.metadata.durationSecs)}` +
         (health ? `\nMemory: ${Math.round(health.rss / 1_000_000)}MB · Heap: ${Math.round(health.heapUsed / 1_000_000)}MB · Uptime: ${formatDuration(Math.floor(health.uptime))}` : "")
@@ -186,11 +158,7 @@ function countHookEntries(hooks: Record<string, unknown>): number {
   return count;
 }
 
-interface StatusBarProps {
-  onContextClick?: (sessionId: string) => void;
-}
-
-export function StatusBar({ onContextClick }: StatusBarProps) {
+export function StatusBar() {
   const sessions = useSessionStore((s) => s.sessions);
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const activeSession = sessions.find((s) => s.id === activeTabId);
@@ -224,14 +192,10 @@ export function StatusBar({ onContextClick }: StatusBarProps) {
   const activeSessions = aliveSessions.filter((s) =>
     !isSessionIdle(getEffectiveState(s.state, subagentMap.get(s.id) || []))
   ).length;
-  const totalTokens = aliveSessions.reduce(
-    (sum, s) => sum + s.metadata.inputTokens + s.metadata.outputTokens, 0
-  );
-
   return (
     <div className="status-bar">
       {activeSession ? (
-        <SessionStatus session={activeSession} onContextClick={onContextClick} />
+        <SessionStatus session={activeSession} />
       ) : (
         <span className="status-empty">No active session</span>
       )}
@@ -259,12 +223,6 @@ export function StatusBar({ onContextClick }: StatusBarProps) {
         >
           <IconHook size={12} /> {hookCount > 0 ? hookCount : "Hooks"}
         </button>
-        {totalTokens > 0 && aliveSessions.length > 1 && (
-          <span className="status-item status-total-tokens" title="Total tokens across all active sessions">
-            <span className="status-icon">Σ</span>
-            {formatTokenCount(totalTokens)}
-          </span>
-        )}
         {activeSessions > 0 && (
           <span className="status-item status-active" title={`${activeSessions} active`}>
             <span className="status-active-dot" />

@@ -346,47 +346,6 @@
   color: var(--text-primary);
 }
 
-.subagent-tokens {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  font-size: 9px;
-  color: var(--text-muted);
-  background: var(--bg-selection);
-  padding: 1px 4px;
-  border-radius: 3px;
-  pointer-events: none;
-  transition: opacity 0.1s;
-}
-
-.tab-context-badge {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  font-size: 9px;
-  color: var(--text-muted);
-  background: var(--bg-selection);
-  padding: 1px 4px;
-  border-radius: 3px;
-  pointer-events: auto;
-  cursor: pointer;
-  transition: opacity 0.1s, background 0.15s;
-  font-variant-numeric: tabular-nums;
-}
-
-.tab-context-badge:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.tab-context-badge.ctx-moderate { color: var(--accent-secondary); }
-.tab-context-badge.ctx-warning { color: var(--warning, #f59e0b); }
-.tab-context-badge.ctx-critical { color: var(--error, #ef4444); }
-
-.tab:hover .tab-context-badge,
-.subagent-card:hover .subagent-tokens {
-  opacity: 0;
-}
 
 .tab-add {
   display: flex;

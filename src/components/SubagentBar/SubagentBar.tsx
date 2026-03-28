@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { useSessionStore } from "../../store/sessions";
 import { isSubagentActive } from "../../types/session";
-import { formatTokenCount } from "../../lib/claude";
 import { IconClose } from "../Icons/Icons";
 import type { Subagent } from "../../types/session";
 
@@ -63,9 +62,6 @@ export const SubagentBar = memo(function SubagentBar({
                 <span className="subagent-meta">{metaParts.join(" · ")}</span>
               )}
             </span>
-            {sub.tokenCount > 0 && (
-              <span className="subagent-tokens">{formatTokenCount(sub.tokenCount)}</span>
-            )}
             {!isActive && !isDead && (
               <span
                 className="subagent-close"

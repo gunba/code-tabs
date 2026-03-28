@@ -52,7 +52,7 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   ┌──────────────────────────────────────────────────────────────┐
   │ Tab Bar  [● session1 | ● session2 | + ]                      │
   ├──────────────────────────────────────────────────────────────┤
-  │ Subagent Bar  [▐ agent-task-1  12K] [▐ agent-task-2  8K]     │
+  │ Subagent Bar  [▐ agent-task-1] [▐ agent-task-2]               │
   ├──────────────────────────────────────────────────────────────┤
   │  Terminal (xterm.js 6.0)                              │ bar │
   │  (CSS display toggle, not unmount)                    │ 28px│
@@ -60,7 +60,7 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │ Command History  [/r] [/j] [/r] ...  (per-session, newest←)  │
   │ Command Bar (slash commands)                                  │
   ├──────────────────────────────────────────────────────────────┤
-  │ StatusBar (model, worktree, context%, tokens, duration)        │
+  │ StatusBar (model, worktree, duration, hooks)                    │
   └──────────────────────────────────────────────────────────────┘
   ```
 
@@ -94,9 +94,8 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │   ├── SessionLauncher/SessionLauncher.tsx  # New/resume session modal
   │   ├── ResumePicker/ResumePicker.tsx     # Browse past sessions to resume
   │   ├── CommandBar/CommandBar.tsx         # Slash commands with usage-based sorting
-  │   ├── StatusBar/StatusBar.tsx           # Model, subscription, region, context%, cost/TTFT, duration, hooks, subprocess
+  │   ├── StatusBar/StatusBar.tsx           # Model, subscription, region, duration, hooks, subprocess
   │   ├── CommandPalette/CommandPalette.tsx # Ctrl+K search
-  │   ├── ContextMeter/ContextMeter.tsx    # Context usage breakdown modal (DPS meter, token categories)
   │   ├── SubagentBar/SubagentBar.tsx            # Memo'd subagent card row with own store subscription
   │   ├── SubagentInspector/SubagentInspector.tsx  # Markdown-rendered subagent conversation viewer
   │   ├── ConfigManager/ConfigManager.tsx  # 8-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills, Providers
@@ -119,7 +118,6 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   ├── lib/
   │   ├── inspectorHooks.ts                # INSTALL_TAPS JS expression for BUN_INSPECT (push-based, no polling)
   │   ├── tapClassifier.ts                 # Stateless: TapEntry → TapEvent | null (~45 event types)
-  │   ├── contextMeterAccumulator.ts       # Stateful: ContextBudget/token events → DPS meter breakdown
   │   ├── tapEventBus.ts                   # Per-session synchronous pub/sub for classified events
   │   ├── tapStateReducer.ts               # Pure: (SessionState, TapEvent) → SessionState
   │   ├── tapMetadataAccumulator.ts        # Stateful: events → Partial<SessionMetadata> diffs
@@ -140,7 +138,6 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   └── types/
       ├── session.ts                       # TypeScript types mirroring Rust (camelCase)
       ├── tapEvents.ts                     # Discriminated union of ~45 tap event types
-      ├── contextMeter.ts                  # Context meter types (DPSEntry, ContextBreakdown)
       ├── ipc.ts                           # Tauri IPC command signatures
       └── git.ts                           # Git status and diff types (GitStatusData, FileDiff, DiffLine)
   ```
