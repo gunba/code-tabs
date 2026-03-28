@@ -3,6 +3,7 @@
   "all_tags": [
     "BF-01",
     "BF-02",
+    "BF-03",
     "CI-01",
     "CI-02",
     "CI-03",
@@ -583,6 +584,7 @@
   "unchecked": [
     "BF-01",
     "BF-02",
+    "BF-03",
     "CI-01",
     "CI-02",
     "CI-03",
@@ -848,8 +850,7 @@
     },
     "BF-01": {
       "up": 0,
-      "down": 0,
-      "seen": 27
+      "down": 0
     },
     "BF-02": {
       "up": 0,
@@ -1225,6 +1226,10 @@
       "up": 3,
       "down": 0,
       "seen": 4
+    },
+    "BF-03": {
+      "up": 0,
+      "down": 0
     }
   },
   "metadata": {
@@ -1609,6 +1614,14 @@
       ],
       "verified": "2026-03-27",
       "notes": "Edited via tag-edit.sh"
+    },
+    "BF-03": {
+      "files": [
+        "src/hooks/useTerminal.ts:195",
+        "src/components/Terminal/TerminalPanel.tsx:395"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Added during change documentation"
     }
   },
   "last_run": "2026-03-27T13:18:38.781204+00:00",

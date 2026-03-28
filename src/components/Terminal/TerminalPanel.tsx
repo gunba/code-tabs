@@ -377,6 +377,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
   const lastPtyDimsRef = useRef<{ cols: number; rows: number } | null>(null);
   const deferredResizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  // Tracks pending onRender reveal listener — disposed on cleanup to prevent leaks
+  const occludeDisposableRef = useRef<{ dispose(): void } | null>(null);
   const handleResize = useCallback(
     (cols: number, rows: number) => {
       const last = lastPtyDimsRef.current;
@@ -397,9 +399,26 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     []
   );
 
+  // Occlude terminal during resize on visible tabs — arm one-shot onRender to reveal
+  const handleBeforeFit = useCallback(() => {
+    const container = containerRef.current;
+    const term = terminalRef.current?.termRef.current;
+    if (!container || !term || !visibleRef.current) return;
+    occludeDisposableRef.current?.dispose();
+    container.style.opacity = '0';
+    const d = term.onRender(() => {
+      d.dispose();
+      occludeDisposableRef.current = null;
+      container.style.opacity = '';
+    });
+    occludeDisposableRef.current = d;
+    dlog("terminal", null, "occlude: resize", "DEBUG");
+  }, []);
+
   const terminal = useTerminal({
     onData: handleTermData,
     onResize: handleResize,
+    onBeforeFit: handleBeforeFit,
   });
   terminalRef.current = terminal;
 
@@ -494,6 +513,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   useEffect(() => {
     const id = session.id;
     return () => {
+      occludeDisposableRef.current?.dispose();
       invoke("stop_tap_server", { sessionId: id }).catch(() => {});
       unregisterPtyWriter(id);
       unregisterPtyKill(id);
@@ -524,20 +544,25 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     }
   }, [killRequest, session.id, session.state, clearKillRequest, pty]);
 
-  // Re-fit and focus when becoming visible. useLayoutEffect fires before
-  // browser paint, preventing stale content flash. The xterm.js write callback
-  // (event-driven, no timer) reveals the terminal after buffer processing.
+  // Re-fit and focus when becoming visible. useLayoutEffect fires before browser
+  // paint. Reveal is deferred to xterm.js onRender — the event-driven signal that
+  // the renderer has painted the updated content (no timer).
   // terminal is NOT in deps because useTerminal returns a new object on every render.
   useLayoutEffect(() => {
+    // Dispose any pending reveal from a prior transition
+    occludeDisposableRef.current?.dispose();
+    occludeDisposableRef.current = null;
+
     if (!visible) return;
+
     const container = containerRef.current;
+    const term = terminal.termRef.current;
     const chunks = bgBufferRef.current;
     const hasBuffer = chunks.length > 0;
 
-    // Hide stale content before browser paints — write callback reveals
-    if (hasBuffer && container) {
-      container.style.visibility = 'hidden';
-    }
+    // Hide content — reveal only after the renderer paints the correct state.
+    // opacity:0 (not visibility:hidden) keeps WebGL renderer active.
+    if (container) container.style.opacity = '0';
 
     if (hasBuffer) {
       bgBufferRef.current = [];
@@ -546,25 +571,54 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       const merged = new Uint8Array(totalLen);
       let offset = 0;
       for (const c of chunks) { merged.set(c, offset); offset += c.length; }
-      terminal.termRef.current?.write(merged, () => {
-        if (container) container.style.visibility = '';
-        terminal.termRef.current?.scrollToBottom();
+      dlog("terminal", session.id, `flush bg buffer ${totalLen}B`, "DEBUG");
+
+      term?.write(merged, () => {
+        term.scrollToBottom();
+        // Reveal after renderer paints the new content at the correct scroll position
+        if (container) {
+          occludeDisposableRef.current?.dispose();
+          const d = term.onRender(() => {
+            d.dispose();
+            occludeDisposableRef.current = null;
+            container.style.opacity = '';
+          });
+          occludeDisposableRef.current = d;
+        }
       });
     }
+
     terminal.fit();
+
     // Send any deferred PTY resize now that the buffer has been flushed
     const deferred = deferredResizeRef.current;
     if (deferred) {
       deferredResizeRef.current = null;
       pty.handle.current?.resize(deferred.cols, deferred.rows);
     }
-    if (!hasBuffer) {
-      // Safety: clear any leftover visibility:hidden from a prior cycle
-      // (e.g., tab went visible→hidden before write callback→visible again with no buffer)
-      if (container) container.style.visibility = '';
-      terminal.termRef.current?.scrollToBottom();
+
+    if (!hasBuffer && term) {
+      term.scrollToBottom();
+      // Force render to guarantee onRender fires (fit may not change dimensions)
+      term.refresh(0, term.rows - 1);
+      if (container) {
+        const d = term.onRender(() => {
+          d.dispose();
+          occludeDisposableRef.current = null;
+          container.style.opacity = '';
+        });
+        occludeDisposableRef.current = d;
+      }
     }
+
     terminal.focus();
+
+    // Cleanup: if tab hides before reveal fires, dispose listener and reset opacity
+    return () => {
+      occludeDisposableRef.current?.dispose();
+      occludeDisposableRef.current = null;
+      if (containerRef.current) containerRef.current.style.opacity = '';
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, session.id]);
 
