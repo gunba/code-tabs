@@ -78,6 +78,9 @@ function SessionStatus({ session }: { session: Session }) {
         {session.metadata.apiRegion && (
           <span style={{ opacity: 0.6 }}>{` · ${session.metadata.apiRegion}`}</span>
         )}
+        {session.metadata.apiLatencyMs != null && (
+          <span style={{ opacity: 0.6 }}>{` · ${Math.round(session.metadata.apiLatencyMs)}ms`}</span>
+        )}
       </span>
       {wt && (
         <span className="status-item status-worktree" title={wt.worktreeName} style={{ color: "var(--accent-secondary)" }}>

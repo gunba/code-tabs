@@ -39,6 +39,8 @@ export class TapMetadataAccumulator {
   // Rate limits
   private rateLimitRemaining: string | null = null;
   private rateLimitReset: string | null = null;
+  // API latency (time-to-headers from ApiFetch)
+  private apiLatencyMs: number | null = null;
   // Dedup: skip consecutive identical ApiTelemetry (stringify can serialize the same object multiple times)
   private lastTelemetryKey = "";
   // TAP pipeline expansion
@@ -167,6 +169,7 @@ export class TapMetadataAccumulator {
         if (event.cfRay) {
           const dash = event.cfRay.lastIndexOf("-");
           if (dash > 0) this.apiRegion = event.cfRay.slice(dash + 1);
+          if (event.durationMs > 0) this.apiLatencyMs = event.durationMs; // 0 = missing/default, not a real measurement
         }
         if (event.requestId) this.lastRequestId = event.requestId;
         if (event.rateLimitRemaining) this.rateLimitRemaining = event.rateLimitRemaining;
@@ -336,6 +339,7 @@ export class TapMetadataAccumulator {
       filesTouched: [...this.filesTouched],
       rateLimitRemaining: this.rateLimitRemaining,
       rateLimitReset: this.rateLimitReset,
+      apiLatencyMs: this.apiLatencyMs,
       linesAdded: this.linesAdded,
       linesRemoved: this.linesRemoved,
       lastToolDurationMs: this.lastToolDurationMs,
@@ -387,6 +391,7 @@ export class TapMetadataAccumulator {
     this.filesTouched.clear();
     this.rateLimitRemaining = null;
     this.rateLimitReset = null;
+    this.apiLatencyMs = null;
     this.lastTelemetryKey = "";
     this.linesAdded = 0;
     this.linesRemoved = 0;

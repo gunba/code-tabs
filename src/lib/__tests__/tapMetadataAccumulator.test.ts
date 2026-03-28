@@ -151,6 +151,30 @@ describe("TapMetadataAccumulator", () => {
     expect(diff?.effortLevel).toBeNull();
   });
 
+  it("stores apiLatencyMs from ApiFetch with cfRay", () => {
+    const acc = new TapMetadataAccumulator();
+    const diff = acc.process({
+      kind: "ApiFetch", ts: 0,
+      url: "https://api.anthropic.com/v1/messages", method: "POST",
+      status: 200, bodyLen: 50000, durationMs: 245,
+      requestId: "req-1", cfRay: "abc123-IAD",
+      rateLimitRemaining: "1000", rateLimitReset: "2026-01-01T00:00:00Z",
+    });
+    expect(diff?.apiLatencyMs).toBe(245);
+  });
+
+  it("does not store apiLatencyMs from ApiFetch without cfRay", () => {
+    const acc = new TapMetadataAccumulator();
+    const diff = acc.process({
+      kind: "ApiFetch", ts: 0,
+      url: "https://other-service.example.com/api", method: "GET",
+      status: 200, bodyLen: 1000, durationMs: 50,
+      requestId: null, cfRay: null,
+      rateLimitRemaining: null, rateLimitReset: null,
+    });
+    expect(diff?.apiLatencyMs).toBeNull();
+  });
+
   it("uses contextBudget.totalContextSize as denominator when available", () => {
     const acc = new TapMetadataAccumulator();
     // Set contextBudget with totalContextSize = 100000
