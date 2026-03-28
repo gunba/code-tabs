@@ -16,9 +16,11 @@ interface CommandBarProps {
 export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProps) {
   const slashCommands = useSettingsStore((s) => s.slashCommands);
   const commandUsage = useSettingsStore((s) => s.commandUsage);
+  const expanded = useSettingsStore((s) => s.commandBarExpanded);
+  const setExpanded = useSettingsStore((s) => s.setCommandBarExpanded);
   const history = useSessionStore((s) => sessionId ? s.commandHistory.get(sessionId) : undefined) ?? [];
 
-  /** Send a slash command immediately. History recorded by line accumulator in writeToPty. */
+  /** Send a slash command immediately. History recorded via PTY input and tap events. */
   const sendCommand = useCallback(
     (command: string) => {
       if (!sessionId) return;
@@ -73,43 +75,55 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
 
   return (
     <div className="command-bar">
-      {history.length > 0 && (
-        <div className="command-history">
-          {history.map((cmd, i) => (
-            <button
-              key={`${i}-${cmd}`}
-              className="command-history-item"
-              onClick={() => sendCommand(cmd)}
-              title={`Re-send ${cmd}`}
-              type="button"
-            >
-              {cmd}
-            </button>
-          ))}
-        </div>
+      <button
+        className="command-bar-toggle"
+        onClick={() => setExpanded(!expanded)}
+        title={expanded ? "Collapse command bar" : "Expand command bar"}
+        type="button"
+      >
+        {expanded ? "\u25BE" : "\u25B8"}
+      </button>
+      {expanded && (
+        <>
+          {history.length > 0 && (
+            <div className="command-history">
+              {history.map((cmd, i) => (
+                <button
+                  key={`${i}-${cmd}`}
+                  className="command-history-item"
+                  onClick={() => sendCommand(cmd)}
+                  title={`Re-send ${cmd}`}
+                  type="button"
+                >
+                  {cmd}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="command-bar-scroll">
+            {discovering ? (
+              <span className="command-bar-discovering">Discovering commands...</span>
+            ) : (
+              sortedCommands.map((cmd) => {
+                const usageCount = commandUsage[cmd.cmd] || 0;
+                const heat = computeHeatLevel(usageCount, maxCount);
+                return (
+                  <button
+                    key={cmd.cmd}
+                    className="command-btn"
+                    style={ctrlHeld ? undefined : getHeatStyle(heat)}
+                    onClick={(e) => handleClick(cmd.cmd, e)}
+                    title={ctrlHeld ? `Ctrl+Click: Send "${cmd.cmd}"` : `Click: Type "${cmd.cmd}" into terminal\n${cmd.desc}`}
+                    type="button"
+                  >
+                    {cmd.cmd}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </>
       )}
-      <div className="command-bar-scroll">
-        {discovering ? (
-          <span className="command-bar-discovering">Discovering commands...</span>
-        ) : (
-          sortedCommands.map((cmd) => {
-            const usageCount = commandUsage[cmd.cmd] || 0;
-            const heat = computeHeatLevel(usageCount, maxCount);
-            return (
-              <button
-                key={cmd.cmd}
-                className="command-btn"
-                style={ctrlHeld ? undefined : getHeatStyle(heat)}
-                onClick={(e) => handleClick(cmd.cmd, e)}
-                title={ctrlHeld ? `Ctrl+Click: Send "${cmd.cmd}"` : `Click: Type "${cmd.cmd}" into terminal\n${cmd.desc}`}
-                type="button"
-              >
-                {cmd.cmd}
-              </button>
-            );
-          })
-        )}
-      </div>
     </div>
   );
 }

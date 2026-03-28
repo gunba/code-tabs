@@ -103,12 +103,37 @@ describe("addCommandHistory", () => {
     expect(useSessionStore.getState().commandHistory.get("s2")).toEqual(["/build"]);
   });
 
-  it("allows duplicate commands (history, not unique set)", () => {
+  it("deduplicates consecutive identical commands", () => {
     const { addCommandHistory } = useSessionStore.getState();
     addCommandHistory("s1", "/review");
     addCommandHistory("s1", "/review");
     const history = useSessionStore.getState().commandHistory.get("s1");
-    expect(history).toEqual(["/review", "/review"]);
+    expect(history).toEqual(["/review"]);
+  });
+
+  it("allows non-consecutive duplicate commands", () => {
+    const { addCommandHistory } = useSessionStore.getState();
+    addCommandHistory("s1", "/review");
+    addCommandHistory("s1", "/build");
+    addCommandHistory("s1", "/review");
+    const history = useSessionStore.getState().commandHistory.get("s1");
+    expect(history).toEqual(["/review", "/build", "/review"]);
+  });
+
+  it("normalizes commands to lowercase", () => {
+    const { addCommandHistory } = useSessionStore.getState();
+    addCommandHistory("s1", "/Review");
+    addCommandHistory("s1", "/BUILD");
+    const history = useSessionStore.getState().commandHistory.get("s1");
+    expect(history).toEqual(["/build", "/review"]);
+  });
+
+  it("deduplicates across case variations", () => {
+    const { addCommandHistory } = useSessionStore.getState();
+    addCommandHistory("s1", "/review");
+    addCommandHistory("s1", "/Review");
+    const history = useSessionStore.getState().commandHistory.get("s1");
+    expect(history).toEqual(["/review"]);
   });
 
   it("returns undefined for session with no history", () => {

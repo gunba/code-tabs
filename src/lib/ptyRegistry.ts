@@ -12,7 +12,6 @@
 
 import { LineAccumulator } from "./inputAccumulator";
 import { useSessionStore } from "../store/sessions";
-import { useSettingsStore } from "../store/settings";
 
 const ptyWriters = new Map<string, (data: string) => void>();
 const ptyKills = new Map<string, () => Promise<void>>();
@@ -43,7 +42,6 @@ export function writeToPty(sessionId: string, data: string): boolean {
       if (line.charAt(0) === "/") {
         const cmd = line.split(/\s/)[0];
         useSessionStore.getState().addCommandHistory(sessionId, cmd);
-        useSettingsStore.getState().recordCommandUsage(cmd);
       }
     }
   }

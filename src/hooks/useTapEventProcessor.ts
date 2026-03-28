@@ -5,6 +5,7 @@ import { reduceTapEvent, isCompletionEvent } from "../lib/tapStateReducer";
 import { TapMetadataAccumulator } from "../lib/tapMetadataAccumulator";
 import { TapSubagentTracker } from "../lib/tapSubagentTracker";
 import { normalizePath } from "../lib/paths";
+import { useSettingsStore } from "../store/settings";
 import { dlog } from "../lib/debugLog";
 import type { TapEvent } from "../types/tapEvents";
 import type { SessionState, PermissionMode } from "../types/session";
@@ -126,6 +127,7 @@ export function useTapEventProcessor(
 
       if (event.kind === "SlashCommand") {
         addCommandHistory(sid, event.command);
+        useSettingsStore.getState().recordCommandUsage(event.command);
       }
 
       // ProcessHealth → store (throttled to ~every 5s)

@@ -34,6 +34,25 @@
   color: var(--text-primary);
 }
 
+/* ── Command Bar Toggle ──────────────────────────────────── */
+
+.command-bar-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.command-bar-toggle:hover {
+  color: var(--accent);
+}
+
 /* ── Command Bar ──────────────────────────────────────────── */
 
 .command-bar {

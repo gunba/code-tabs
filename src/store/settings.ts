@@ -47,6 +47,7 @@ interface SettingsState {
   slashCommands: SlashCommand[];
 
   commandUsage: Record<string, number>;
+  commandBarExpanded: boolean;
   showConfigManager: string | false;
   sidePanel: "debug" | "diff" | null;
   replaceSessionId: string | null; // Session to close when launcher launches (Ctrl+Click relaunch)
@@ -70,6 +71,7 @@ interface SettingsState {
   setSlashCommands: (cmds: SlashCommand[]) => void;
   setReplaceSessionId: (id: string | null) => void;
   setShowConfigManager: (show: string | false) => void;
+  setCommandBarExpanded: (expanded: boolean) => void;
   setSidePanel: (panel: "debug" | "diff" | null) => void;
   bootstrapCommandUsage: () => Promise<void>;
   setSessionName: (id: string, name: string) => void;
@@ -96,6 +98,7 @@ export const useSettingsStore = create<SettingsState>()(
       settingsJsonSchema: null,
       slashCommands: [],
       commandUsage: {},
+      commandBarExpanded: false,
       showConfigManager: false,
       sidePanel: null,
       replaceSessionId: null,
@@ -170,14 +173,18 @@ export const useSettingsStore = create<SettingsState>()(
         })),
 
       recordCommandUsage: (command) =>
-        set((s) => ({
-          commandUsage: {
-            ...s.commandUsage,
-            [command]: (s.commandUsage[command] || 0) + 1,
-          },
-        })),
+        set((s) => {
+          const normalized = command.toLowerCase();
+          return {
+            commandUsage: {
+              ...s.commandUsage,
+              [normalized]: (s.commandUsage[normalized] || 0) + 1,
+            },
+          };
+        }),
 
       setSlashCommands: (cmds) => set({ slashCommands: cmds }),
+      setCommandBarExpanded: (expanded) => set({ commandBarExpanded: expanded }),
       setShowConfigManager: (show) => set({ showConfigManager: show }),
       setSidePanel: (panel) => set({ sidePanel: panel }),
       bootstrapCommandUsage: async () => {
@@ -285,6 +292,7 @@ export const useSettingsStore = create<SettingsState>()(
         binarySettingsSchema: state.binarySettingsSchema,
         settingsJsonSchema: state.settingsJsonSchema,
         commandUsage: state.commandUsage,
+        commandBarExpanded: state.commandBarExpanded,
         sessionNames: state.sessionNames,
         sessionConfigs: state.sessionConfigs,
       }),

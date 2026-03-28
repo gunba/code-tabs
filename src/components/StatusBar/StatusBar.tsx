@@ -232,6 +232,13 @@ export function StatusBar() {
           </button>
         )}
         <button
+          className={`status-item status-hooks-btn${sidePanel === "debug" ? " status-active-btn" : ""}`}
+          onClick={() => setSidePanel(sidePanel === "debug" ? null : "debug")}
+          title="Debug panel (Ctrl+Shift+D)"
+        >
+          Debug
+        </button>
+        <button
           className="status-item status-hooks status-hooks-btn"
           onClick={() => setShowConfigManager("hooks")}
           title={hookCount > 0 ? `${hookCount} hooks active — click to manage` : "Hooks — click to manage"}

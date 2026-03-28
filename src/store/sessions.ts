@@ -350,10 +350,14 @@ export const useSessionStore = create<SessionsState>((set) => ({
   },
 
   addCommandHistory: (sessionId, command) => {
+    const normalized = command.toLowerCase();
     set((s) => {
       const map = new Map(s.commandHistory);
       const existing = map.get(sessionId) || [];
-      const updated = [command, ...existing];
+      // Consecutive dedup: skip if most recent entry is identical
+      // (suppresses duplicates from PTY + tap dual detection)
+      if (existing[0] === normalized) return s;
+      const updated = [normalized, ...existing];
       map.set(sessionId, updated.length > 50 ? updated.slice(0, 50) : updated);
       return { commandHistory: map };
     });
