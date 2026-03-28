@@ -23,14 +23,15 @@ export const SubagentBar = memo(function SubagentBar({
   );
   const updateSubagent = useSessionStore((s) => s.updateSubagent);
 
-  const activeSubs = subs.filter((s) => s.state !== "dead");
-  if (activeSubs.length === 0) return null;
+  // Show all subs including dead (greyed out); cleared when new batch starts
+  if (subs.length === 0) return null;
 
   return (
     <div className="subagent-bar">
-      {activeSubs.map((sub) => {
+      {subs.map((sub) => {
         const isActive = isSubagentActive(sub.state);
         const isIdle = sub.state === "idle";
+        const isDead = sub.state === "dead";
         const isInterrupted = sub.state === "interrupted";
         const isSelected = inspectedSubagent?.subagentId === sub.id && inspectedSubagent?.sessionId === sessionId;
         // Reconstruct "ToolName: value" for display — only add prefix if text was actually stripped
@@ -48,7 +49,7 @@ export const SubagentBar = memo(function SubagentBar({
         return (
           <button
             key={sub.id}
-            className={`subagent-card${isActive ? " subagent-active" : ""}${isIdle ? " subagent-idle" : ""}${isInterrupted ? " subagent-interrupted" : ""}${isSelected ? " subagent-selected" : ""}`}
+            className={`subagent-card${isActive ? " subagent-active" : ""}${isIdle ? " subagent-idle" : ""}${isDead ? " subagent-dead" : ""}${isInterrupted ? " subagent-interrupted" : ""}${isSelected ? " subagent-selected" : ""}`}
             onClick={() => sessionId && setInspectedSubagent({ sessionId, subagentId: sub.id })}
             title={sub.description}
           >
@@ -65,7 +66,7 @@ export const SubagentBar = memo(function SubagentBar({
             {sub.tokenCount > 0 && (
               <span className="subagent-tokens">{formatTokenCount(sub.tokenCount)}</span>
             )}
-            {!isActive && (
+            {!isActive && !isDead && (
               <span
                 className="subagent-close"
                 onClick={(e) => { e.stopPropagation(); sessionId && updateSubagent(sessionId, sub.id, { state: "dead" }); }}
