@@ -15,4 +15,4 @@ paths:
 - [CB-05] Ctrl+Click a pill sends the command to the PTY immediately (records usage on send)
 - [CB-07] Holding Ctrl shows blue border on pills; heat gradient suppressed while Ctrl is held
 - [CB-09] Command history strip: horizontal scrollable row above command pills showing per-session command execution history (newest left). Clicking a history pill re-sends that command. Strip only visible when history exists. Per-session -- switching tabs shows different history. Cleaned up on session close.
-  - Files: src/components/CommandBar/CommandBar.tsx:81, src/store/sessions.ts:287
+  - Files: src/components/CommandBar/CommandBar.tsx, src/store/sessions.ts

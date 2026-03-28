@@ -10,14 +10,14 @@ paths:
 - [SL-01] Modal for new session or resume — Ctrl+T opens fresh (clears resume/continue flags)
 - [SL-02] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T instantly launches without showing modal; uses saved defaults if set, otherwise falls back to last-used config (including folder)
 - [SL-03] Ctrl+Shift+R opens resume picker (browse past Claude sessions); 660px modal, 520px list max-height; cards show blue top-bar + tint when Ctrl is held; resume banner uses orange accent (not blue)
-  - Files: src/components/SessionLauncher/SessionLauncher.css:404
+  - Files: src/components/SessionLauncher/SessionLauncher.css
 - [SL-04] Resume picker enriched data: each session card shows firstMessage, lastMessage (from tail scan), settings badges (model, skip-perms, permission mode, effort, agent), and file size
-  - Files: src/components/ResumePicker/ResumePicker.tsx:418
+  - Files: src/components/ResumePicker/ResumePicker.tsx
 - [SL-05] Chain merging: sessions linked by parentId (resolved via sourceToolAssistantUUID -> message UUID map in Rust) merged into a single card; latest session used for resume, names resolved from any member, suppressed plan-mode artifact messages skipped, sizes summed; stacked box-shadow when chainLength > 1; clickable chain count badge expands to show individual members for resuming older sessions
-  - Files: src/components/ResumePicker/ResumePicker.tsx:163, src-tauri/src/commands.rs:337
+  - Files: src/components/ResumePicker/ResumePicker.tsx, src-tauri/src/commands.rs
 - [SL-06] Custom names: tab renames persist in `sessionNames` map (localStorage); shown as bold primary name with directory as secondary text in resume picker
 - [SL-07] Config caching: session configs cached in sessionConfigs map (localStorage) when inspector connects (model, permissionMode, dangerouslySkipPermissions, effort, agent, maxBudget, verbose, debug, projectDir, extraFlags, systemPrompt, appendSystemPrompt, allowedTools, disallowedTools, additionalDirs, mcpConfig); used as fallback when resuming sessions not in the dead tab map
-  - Files: src/store/settings.ts:199
+  - Files: src/store/settings.ts
 - [SL-08] Config pruning: both `sessionNames` and `sessionConfigs` maps pruned to only IDs present in loaded past sessions
 - [SL-09] Config restore: SessionLauncher uses savedDefaults (explicit "Save defaults") with lastConfig fallback, clearing one-shot fields (continueSession, sessionId, runMode); resume fields preserved from lastConfig when set by configure flow
 - [SL-10] CLI command pills sorted by usage frequency (same heat gradient as Command Bar)

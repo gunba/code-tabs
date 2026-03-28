@@ -18,4 +18,4 @@ paths:
 - [HM-08] StatusBar total tokens: when >1 non-dead session exists, shows `Σ` total token count across all active sessions in the right section
 - [HM-09] Three hook types supported: `command`, `prompt`, `agent`
 - [HM-10] All status bar icons (context, tokens, clock, budget, warning, hooks, sessions, permissions, tap indicator) are inline SVG components -- no emoji. Greek sigma kept as text.
-  - Files: src/components/StatusBar/StatusBar.tsx:7
+  - Files: src/components/StatusBar/StatusBar.tsx

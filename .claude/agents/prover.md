@@ -27,10 +27,12 @@ For each doc file in the list:
    a. Use Grep and Bash to search the codebase for implementing code.
    b. Classify: `confirmed` / `updated` (edit entry) / `removed` (code gone) / `flagged` (ambiguous).
    c. If updating: use Edit on the doc file to fix ONLY that entry's text.
-   d. Record metadata: `bash "$AGENT_PROOFS_BIN/tag-update.sh" --tag TAG --doc <doc-file> --files "file:line,..." [--notes "context"]`
+   d. Record metadata: `bash "$AGENT_PROOFS_BIN/tag-update.sh" --tag TAG --doc <doc-file> --files "file,..." [--notes "context"]`
 3. Run `bash "$AGENT_PROOFS_BIN/prove.sh" update <doc-file> TAG:OUTCOME ...` with all outcomes for this file.
 
 Do NOT read doc files directly — prove.sh select gives you the entry text. Use Grep to search source code only.
+
+NEVER include line numbers in `- Files:` references or `--files` arguments. Use file paths only (e.g. `src/App.tsx`, not `src/App.tsx:42`). Line numbers shift on every edit and cause spurious updates that reset citation counts.
 
 Report as table per file: Tag, Outcome, Implementing Files, Note.
 
