@@ -21,6 +21,7 @@ export class TapSubagentTracker {
   private pendingDescs: string[] = [];
   private knownIds = new Set<string>();
   private subagentTokens = new Map<string, number>(); // agentId → accumulated tokens
+  private subagentCost = new Map<string, number>();   // agentId → accumulated costUsd
   private subagentMsgs = new Map<string, SubagentMessage[]>(); // agentId → messages
   private agentStates = new Map<string, SessionState>();
   private lastActiveAgent: string | null = null;
@@ -87,7 +88,12 @@ export class TapSubagentTracker {
           }
           if (event.toolAction) {
             const toolName = event.toolNames.length > 0 ? event.toolNames[event.toolNames.length - 1] : undefined;
-            newMsgs.push({ role: "tool", text: event.toolAction, toolName, timestamp: now });
+            // Strip tool name prefix from text — the blue toolName label renders it separately
+            let toolText = event.toolAction;
+            if (toolName && toolText.startsWith(toolName + ": ")) {
+              toolText = toolText.slice(toolName.length + 2);
+            }
+            newMsgs.push({ role: "tool", text: toolText, toolName, timestamp: now });
             // Nested Agent spawn: queue description for grandchild
             for (const tn of event.toolNames) {
               if (tn === "Agent" && event.toolAction.startsWith("Agent: ")) {
@@ -136,7 +142,10 @@ export class TapSubagentTracker {
           const prev = this.subagentTokens.get(agentId) || 0;
           const newTotal = prev + event.inputTokens + event.outputTokens;
           this.subagentTokens.set(agentId, newTotal);
-          const updates: Partial<Subagent> = { tokenCount: newTotal };
+          const prevCost = this.subagentCost.get(agentId) || 0;
+          const newCost = prevCost + event.costUSD;
+          this.subagentCost.set(agentId, newCost);
+          const updates: Partial<Subagent> = { tokenCount: newTotal, costUsd: newCost };
           if (event.model) updates.model = event.model;
           actions.push({ type: "update", subagentId: agentId, updates });
         }
@@ -236,6 +245,7 @@ export class TapSubagentTracker {
     this.pendingDescs = [];
     this.knownIds.clear();
     this.subagentTokens.clear();
+    this.subagentCost.clear();
     this.subagentMsgs.clear();
     this.agentStates.clear();
     this.lastActiveAgent = null;

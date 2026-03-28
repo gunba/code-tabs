@@ -6,6 +6,7 @@ import { useSettingsStore } from "./store/settings";
 import { dirToTabName, effectiveModel, formatTokenCount, getResumeId, modelLabel, modelColor } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
+import { SubagentBar } from "./components/SubagentBar/SubagentBar";
 
 import { SessionLauncher } from "./components/SessionLauncher/SessionLauncher";
 import { ResumePicker } from "./components/ResumePicker/ResumePicker";
@@ -15,6 +16,8 @@ import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { ConfigManager } from "./components/ConfigManager/ConfigManager";
 import { DebugPanel } from "./components/DebugPanel/DebugPanel";
 import { DiffPanel } from "./components/DiffPanel/DiffPanel";
+import { ContextMeter } from "./components/ContextMeter/ContextMeter";
+import type { ContextMeterTarget } from "./components/ContextMeter/ContextMeter";
 import { ModalOverlay } from "./components/ModalOverlay/ModalOverlay";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
@@ -42,7 +45,6 @@ export default function App() {
   const closeSession = useSessionStore((s) => s.closeSession);
   const createSession = useSessionStore((s) => s.createSession);
   const persist = useSessionStore((s) => s.persist);
-  const updateSubagent = useSessionStore((s) => s.updateSubagent);
   const reorderTabs = useSessionStore((s) => s.reorderTabs);
   const renameSession = useSessionStore((s) => s.renameSession);
   const requestKill = useSessionStore((s) => s.requestKill);
@@ -63,6 +65,7 @@ export default function App() {
   const [showPalette, setShowPalette] = useState(false);
   const [showResumePicker, setShowResumePicker] = useState(false);
   const [inspectedSubagent, setInspectedSubagent] = useState<{ sessionId: string; subagentId: string } | null>(null);
+  const [contextMeterTarget, setContextMeterTarget] = useState<ContextMeterTarget | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; sessionId: string } | null>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -250,6 +253,7 @@ export default function App() {
       if (e.key === "Escape") {
         if (tabContextMenu) { setTabContextMenu(null); return; }
         if (showPalette) return;
+        if (contextMeterTarget) { setContextMeterTarget(null); return; }
         if (sidePanel) { setSidePanel(null); return; }
         if (showConfigManager) { setShowConfigManager(false); return; }
         if (showResumePicker) { setShowResumePicker(false); return; }
@@ -292,7 +296,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, sidePanel, inspectedSubagent, tabContextMenu, quickLaunch]);
+  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, sidePanel, inspectedSubagent, contextMeterTarget, tabContextMenu, quickLaunch]);
 
   const regularSessions = useMemo(() => sessions.filter((s) => !s.isMetaAgent), [sessions]);
   const groups = useMemo(() => groupSessionsByDir(regularSessions), [regularSessions]);
@@ -302,10 +306,7 @@ export default function App() {
       ) ?? null
     : null;
 
-  // Active session's subagents — show all non-dead ones while any exist
   const activeSession = sessions.find((s) => s.id === activeTabId);
-  const allSubs = activeTabId ? (subagentMap.get(activeTabId) || []) : [];
-  const activeSubs = allSubs.filter((s) => s.state !== "dead");
 
   return (
     <div className={`app${ctrlHeld ? " ctrl-held" : ""}`}>
@@ -512,9 +513,13 @@ export default function App() {
                       <IconClose size={12} />
                     </button>
                   </span>
-                  {session.state !== "dead" && totalTokens > 0 && (
-                    <span className="tab-tokens" title={`Input: ${formatTokenCount(session.metadata.inputTokens)}\nOutput: ${formatTokenCount(session.metadata.outputTokens)}`}>
-                      {formatTokenCount(totalTokens)}
+                  {session.state !== "dead" && (session.metadata.contextPercent > 0 || totalTokens > 0) && (
+                    <span
+                      className={`tab-context-badge${session.metadata.contextPercent >= 90 ? " ctx-critical" : session.metadata.contextPercent >= 75 ? " ctx-warning" : session.metadata.contextPercent >= 50 ? " ctx-moderate" : ""}`}
+                      title={`Context: ${session.metadata.contextPercent}%\nTokens: ${formatTokenCount(totalTokens)}\nClick for breakdown`}
+                      onClick={(e) => { e.stopPropagation(); setContextMeterTarget({ type: "session", sessionId: session.id }); }}
+                    >
+                      {session.metadata.contextPercent > 0 ? `${session.metadata.contextPercent}%` : formatTokenCount(totalTokens)}
                     </span>
                   )}
                 </div>
@@ -546,54 +551,11 @@ export default function App() {
         </div>
 
       {/* Subagent row — conditional, only for active session */}
-      {activeSubs.length > 0 && (
-        <div className="subagent-bar">
-          {activeSubs.map((sub) => {
-            const isActive = isSubagentActive(sub.state);
-            const isIdle = sub.state === "idle";
-            const isInterrupted = sub.state === "interrupted";
-            const isSelected = inspectedSubagent?.subagentId === sub.id && inspectedSubagent?.sessionId === activeTabId;
-            const lastMsg = sub.messages.length > 0
-              ? sub.messages[sub.messages.length - 1].text.slice(0, 200)
-              : null;
-            // Build meta spans (mirroring tab meta)
-            const metaParts: string[] = [];
-            if (sub.agentType) metaParts.push(sub.agentType);
-            if (sub.model) metaParts.push(sub.model.replace(/^claude-/, "").split("-")[0]);
-            if (sub.totalToolUses != null) metaParts.push(`${sub.totalToolUses} tools`);
-            if (sub.durationMs != null) metaParts.push(`${Math.round(sub.durationMs / 1000)}s`);
-            return (
-              <button
-                key={sub.id}
-                className={`subagent-card${isActive ? " subagent-active" : ""}${isIdle ? " subagent-idle" : ""}${isInterrupted ? " subagent-interrupted" : ""}${isSelected ? " subagent-selected" : ""}`}
-                onClick={() => activeTabId && setInspectedSubagent({ sessionId: activeTabId, subagentId: sub.id })}
-                title={sub.description}
-              >
-                <span className={`tab-dot state-${sub.state}`} />
-                <span className="subagent-label">
-                  <span className="subagent-name">{sub.description}</span>
-                  <span className="subagent-summary">
-                    {isActive && sub.currentAction ? sub.currentAction : lastMsg || ""}
-                  </span>
-                  {metaParts.length > 0 && (
-                    <span className="subagent-meta">{metaParts.join(" · ")}</span>
-                  )}
-                </span>
-                {sub.tokenCount > 0 && (
-                  <span className="subagent-tokens">{formatTokenCount(sub.tokenCount)}</span>
-                )}
-                {!isActive && (
-                  <span
-                    className="subagent-close"
-                    onClick={(e) => { e.stopPropagation(); activeTabId && updateSubagent(activeTabId, sub.id, { state: "dead" }); }}
-                    title="Dismiss"
-                  ><IconClose size={12} /></span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <SubagentBar
+        sessionId={activeTabId}
+        inspectedSubagent={inspectedSubagent}
+        setInspectedSubagent={setInspectedSubagent}
+      />
 
       {/* Main area: terminals */}
       <div className="app-main">
@@ -636,12 +598,19 @@ export default function App() {
         ctrlHeld={ctrlHeld}
       />
 
-      <StatusBar />
+      <StatusBar onContextClick={(sid) => setContextMeterTarget({ type: "session", sessionId: sid })} />
 
       {showLauncher && <SessionLauncher key={launcherGeneration} />}
       {showResumePicker && <ResumePicker onClose={() => setShowResumePicker(false)} />}
       {showPalette && <CommandPalette onClose={() => setShowPalette(false)} />}
       {showConfigManager && <ConfigManager />}
+      {contextMeterTarget && (
+        <ContextMeter
+          target={contextMeterTarget}
+          onClose={() => setContextMeterTarget(null)}
+          onSwitchTarget={setContextMeterTarget}
+        />
+      )}
 
       {/* Worktree prune confirmation */}
       {pruneConfirm && (

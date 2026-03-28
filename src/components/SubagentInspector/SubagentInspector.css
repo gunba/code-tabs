@@ -138,7 +138,7 @@
 
 .inspector-tool-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 4px;
   user-select: none;
 }

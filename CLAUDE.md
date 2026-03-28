@@ -95,6 +95,8 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │   ├── CommandBar/CommandBar.tsx         # Slash commands with usage-based sorting
   │   ├── StatusBar/StatusBar.tsx           # Model, subscription, region, context%, cost/TTFT, duration, hooks, subprocess
   │   ├── CommandPalette/CommandPalette.tsx # Ctrl+K search
+  │   ├── ContextMeter/ContextMeter.tsx    # Context usage breakdown modal (DPS meter, token categories)
+  │   ├── SubagentBar/SubagentBar.tsx            # Memo'd subagent card row with own store subscription
   │   ├── SubagentInspector/SubagentInspector.tsx  # Markdown-rendered subagent conversation viewer
   │   ├── ConfigManager/ConfigManager.tsx  # 7-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills
   │   ├── ConfigManager/ThreePaneEditor.tsx # 3-column User/Project/Local scope layout (color-coded)
@@ -114,7 +116,8 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │       └── DiffModal.tsx                # Side-by-side diff modal (96vw/88vh): highlight.js syntax, file nav
   ├── lib/
   │   ├── inspectorHooks.ts                # INSTALL_TAPS JS expression for BUN_INSPECT (push-based, no polling)
-  │   ├── tapClassifier.ts                 # Stateless: TapEntry → TapEvent | null (~43 event types)
+  │   ├── tapClassifier.ts                 # Stateless: TapEntry → TapEvent | null (~45 event types)
+  │   ├── contextMeterAccumulator.ts       # Stateful: ContextBudget/token events → DPS meter breakdown
   │   ├── tapEventBus.ts                   # Per-session synchronous pub/sub for classified events
   │   ├── tapStateReducer.ts               # Pure: (SessionState, TapEvent) → SessionState
   │   ├── tapMetadataAccumulator.ts        # Stateful: events → Partial<SessionMetadata> diffs
@@ -134,7 +137,8 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │   └── diffParser.ts                   # Git porcelain/numstat/unified-diff parsers
   └── types/
       ├── session.ts                       # TypeScript types mirroring Rust (camelCase)
-      ├── tapEvents.ts                     # Discriminated union of ~43 tap event types
+      ├── tapEvents.ts                     # Discriminated union of ~45 tap event types
+      ├── contextMeter.ts                  # Context meter types (DPSEntry, ContextBreakdown)
       ├── ipc.ts                           # Tauri IPC command signatures
       └── git.ts                           # Git status and diff types (GitStatusData, FileDiff, DiffLine)
   ```

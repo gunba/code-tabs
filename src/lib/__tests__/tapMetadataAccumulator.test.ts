@@ -142,4 +142,28 @@ describe("TapMetadataAccumulator", () => {
     const diff = acc.process({ kind: "TurnStart", ts: 1, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0 });
     expect(diff?.effortLevel).toBeNull();
   });
+
+  it("uses contextBudget.totalContextSize as denominator when available", () => {
+    const acc = new TapMetadataAccumulator();
+    // Set contextBudget with totalContextSize = 100000
+    acc.process({
+      kind: "ContextBudget", ts: 0,
+      claudeMdSize: 2000, totalContextSize: 100000,
+      mcpToolsCount: 5, mcpToolsTokens: 3000,
+      nonMcpToolsCount: 20, nonMcpToolsTokens: 15000,
+      projectFileCount: 10,
+    });
+    // TurnStart with cacheRead = 50000 → should be 50% of 100000, not 25% of 200000
+    acc.process({
+      kind: "TurnStart", ts: 1, model: "opus",
+      inputTokens: 0, outputTokens: 0, cacheRead: 50000, cacheCreation: 0,
+    });
+    // Need an ApiTelemetry to trigger diff with the right context%
+    const diff = acc.process({
+      kind: "ApiTelemetry", ts: 2, model: "opus", costUSD: 0.01,
+      inputTokens: 100, outputTokens: 50, cachedInputTokens: 0, uncachedInputTokens: 100,
+      durationMs: 500, ttftMs: 200, queryChainId: null, queryDepth: 0, stopReason: null,
+    });
+    expect(diff?.contextPercent).toBe(50); // 50000/100000*100, not 50000/200000*100=25
+  });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Subagent, SubagentMessage } from "../../types/session";
 import { isSubagentActive } from "../../types/session";
@@ -16,7 +16,8 @@ function getToolPreview(text: string): string {
   return trimmed.length > 120 ? trimmed.slice(0, 120) + "\u2026" : trimmed;
 }
 
-function MessageBlock({ msg, defaultExpanded }: { msg: SubagentMessage; defaultExpanded: boolean }) {
+// defaultExpanded only matters on mount (useState ignores it after); compare msg only
+const MessageBlock = memo(function MessageBlock({ msg, defaultExpanded }: { msg: SubagentMessage; defaultExpanded: boolean }) {
   const [collapsed, setCollapsed] = useState(!defaultExpanded);
 
   if (msg.role === "assistant") {
@@ -46,7 +47,7 @@ function MessageBlock({ msg, defaultExpanded }: { msg: SubagentMessage; defaultE
       {!collapsed && <pre className="inspector-msg-text">{msg.text}</pre>}
     </div>
   );
-}
+}, (prev, next) => prev.msg === next.msg);
 
 export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -93,6 +94,7 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
           {subagent.model && ` · ${subagent.model.replace(/^claude-/, "").split("-")[0]}`}
           {subagent.totalToolUses != null && ` · ${subagent.totalToolUses} tools`}
           {subagent.durationMs != null && ` · ${Math.round(subagent.durationMs / 1000)}s`}
+          {subagent.messages.length > 0 && ` · ${subagent.messages.length} msgs`}
           {" · "}{formatTokenCount(subagent.tokenCount)}
         </span>
         <button className="inspector-header-close" onClick={onClose}>×</button>

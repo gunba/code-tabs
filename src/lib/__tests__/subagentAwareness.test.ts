@@ -168,3 +168,87 @@ describe("TapMetadataAccumulator queryDepth filtering", () => {
     expect(diff3!.runtimeModel).toBe("claude-opus-4-6");
   });
 });
+
+// ── Tool name prefix stripping ──
+
+describe("TapSubagentTracker tool name prefix stripping", () => {
+  it("strips known tool prefix from message text", () => {
+    const tracker = new TapSubagentTracker("s1");
+    tracker.process({ kind: "SubagentSpawn", ts: 1, description: "test", prompt: "x" } as TapEvent);
+    const actions = tracker.process({
+      kind: "ConversationMessage", ts: 2, messageType: "assistant",
+      isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
+      stopReason: "tool_use", toolNames: ["Read"], toolAction: "Read: /path/to/file",
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+    } as TapEvent);
+    const update = actions.find(a => a.type === "update" && a.updates?.messages);
+    const msgs = update!.updates!.messages!;
+    const toolMsg = msgs.find(m => m.role === "tool");
+    expect(toolMsg!.toolName).toBe("Read");
+    expect(toolMsg!.text).toBe("/path/to/file");
+  });
+
+  it("preserves text when no matching prefix", () => {
+    const tracker = new TapSubagentTracker("s1");
+    tracker.process({ kind: "SubagentSpawn", ts: 1, description: "test", prompt: "x" } as TapEvent);
+    const actions = tracker.process({
+      kind: "ConversationMessage", ts: 2, messageType: "assistant",
+      isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
+      stopReason: "tool_use", toolNames: ["CustomTool"], toolAction: "some other format",
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+    } as TapEvent);
+    const update = actions.find(a => a.type === "update" && a.updates?.messages);
+    const toolMsg = update!.updates!.messages!.find(m => m.role === "tool");
+    expect(toolMsg!.text).toBe("some other format");
+  });
+
+  it("handles bare tool name (no value after prefix)", () => {
+    const tracker = new TapSubagentTracker("s1");
+    tracker.process({ kind: "SubagentSpawn", ts: 1, description: "test", prompt: "x" } as TapEvent);
+    const actions = tracker.process({
+      kind: "ConversationMessage", ts: 2, messageType: "assistant",
+      isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
+      stopReason: "tool_use", toolNames: ["Agent"], toolAction: "Agent",
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+    } as TapEvent);
+    const update = actions.find(a => a.type === "update" && a.updates?.messages);
+    const toolMsg = update!.updates!.messages!.find(m => m.role === "tool");
+    expect(toolMsg!.toolName).toBe("Agent");
+    expect(toolMsg!.text).toBe("Agent"); // no prefix to strip, text unchanged
+  });
+});
+
+// ── Cost accumulation ──
+
+describe("TapSubagentTracker costUsd accumulation", () => {
+  it("accumulates costUsd from ApiTelemetry for subagents", () => {
+    const tracker = new TapSubagentTracker("s1");
+    tracker.process({ kind: "SubagentSpawn", ts: 1, description: "test", prompt: "x" } as TapEvent);
+    tracker.process({
+      kind: "ConversationMessage", ts: 2, messageType: "assistant",
+      isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
+      stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+    } as TapEvent);
+
+    const actions1 = tracker.process({
+      kind: "ApiTelemetry", ts: 3, model: "haiku", costUSD: 0.05,
+      inputTokens: 100, outputTokens: 50, cachedInputTokens: 0, uncachedInputTokens: 100,
+      durationMs: 200, ttftMs: 50, queryChainId: null, queryDepth: 1, stopReason: "end_turn",
+    } as TapEvent);
+    const update1 = actions1.find(a => a.type === "update" && a.updates?.costUsd != null);
+    expect(update1).toBeDefined();
+    expect(update1!.updates!.costUsd).toBe(0.05);
+    expect(update1!.updates!.tokenCount).toBe(150);
+
+    // Second telemetry event — cost should accumulate
+    const actions2 = tracker.process({
+      kind: "ApiTelemetry", ts: 4, model: "haiku", costUSD: 0.03,
+      inputTokens: 80, outputTokens: 20, cachedInputTokens: 0, uncachedInputTokens: 80,
+      durationMs: 150, ttftMs: 40, queryChainId: null, queryDepth: 1, stopReason: "end_turn",
+    } as TapEvent);
+    const update2 = actions2.find(a => a.type === "update" && a.updates?.costUsd != null);
+    expect(update2!.updates!.costUsd).toBeCloseTo(0.08);
+    expect(update2!.updates!.tokenCount).toBe(250);
+  });
+});

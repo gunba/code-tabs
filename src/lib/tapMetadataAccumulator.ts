@@ -317,8 +317,9 @@ export class TapMetadataAccumulator {
 
   /** Return metadata if changed since last call, otherwise null. */
   private diff(): Partial<SessionMetadata> | null {
+    const denominator = this.contextBudget?.totalContextSize || 200000;
     const contextPercent = this.lastCacheRead > 0
-      ? Math.min(99, Math.round((this.lastCacheRead / 200000) * 100))
+      ? Math.min(99, Math.round((this.lastCacheRead / denominator) * 100))
       : 0;
 
     const metadata: Partial<SessionMetadata> = {

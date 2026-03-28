@@ -10,17 +10,17 @@
     "SS-01": {
       "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 34
     },
     "SS-02": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 34
     },
     "SS-03": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 34
     }
   },
   "cycle": 4,

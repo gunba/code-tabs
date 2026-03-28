@@ -15,51 +15,87 @@
   "citations": {
     "KB-01": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "KB-02": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "KB-03": {
       "up": 0,
-      "seen": 45
+      "down": 0,
+      "seen": 1
     },
     "KB-04": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "KB-05": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "KB-06": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "KB-07": {
       "up": 0,
-      "seen": 35
+      "seen": 39
     },
     "KB-09": {
-      "up": 0,
+      "up": 3,
       "down": 0,
-      "seen": 19
+      "seen": 3
     },
     "KB-10": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     }
   },
-  "cycle": 6,
-  "last_run": "2026-03-28T02:11:10.304826+00:00",
+  "cycle": 8,
+  "last_run": "2026-03-28T06:37:09.501180+00:00",
   "metadata": {
     "KB-03": {
       "files": [
-        "src/App.tsx:197"
+        "src/App.tsx:233"
       ],
-      "verified": "2026-03-22",
-      "notes": "Edited via tag-edit.sh"
+      "verified": "2026-03-28",
+      "notes": "Ctrl+Shift+R at line 233 (was 197)"
+    },
+    "KB-09": {
+      "files": [
+        "src/App.tsx:253"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Escape handler ordering confirmed at line 253"
+    },
+    "KB-10": {
+      "files": [
+        "src/hooks/useTerminal.ts:80"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Line ref confirmed: Alt+digit block at useTerminal.ts:80"
+    },
+    "KB-01": {
+      "files": [
+        "src/App.tsx:209"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Ctrl+T at line 209"
+    },
+    "KB-02": {
+      "files": [
+        "src/App.tsx:223"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Ctrl+W at line 223"
+    },
+    "KB-06": {
+      "files": [
+        "src/App.tsx:228"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Ctrl+K at line 228"
     }
   }
 }

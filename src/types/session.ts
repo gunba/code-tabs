@@ -154,6 +154,7 @@ export interface Subagent {
   totalToolUses?: number;
   durationMs?: number;
   model?: string;
+  costUsd?: number;
 }
 
 export interface PastSession {

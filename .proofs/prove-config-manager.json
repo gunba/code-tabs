@@ -30,102 +30,102 @@
   "citations": {
     "CM-01": {
       "up": 1,
-      "seen": 30
+      "seen": 34
     },
     "CM-02": {
       "up": 2,
-      "seen": 30
+      "seen": 34
     },
     "CM-03": {
       "up": 0,
-      "seen": 22
+      "seen": 26
     },
     "CM-04": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "CM-05": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 7
     },
     "CM-06": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "CM-07": {
       "up": 0,
-      "seen": 22
+      "seen": 26
     },
     "CM-08": {
       "up": 2,
-      "seen": 30
+      "seen": 34
     },
     "CM-09": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "CM-10": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "CM-11": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 7
     },
     "CM-12": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 7
     },
     "CM-13": {
       "up": 0,
-      "seen": 22
+      "seen": 26
     },
     "CM-14": {
       "up": 2,
-      "seen": 30
+      "seen": 34
     },
     "CM-15": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "CM-16": {
       "up": 0,
-      "seen": 22
+      "seen": 26
     },
     "CM-17": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "CM-18": {
       "up": 2,
-      "seen": 30
+      "seen": 34
     },
     "CM-20": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "CM-22": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "CM-23": {
       "up": 0,
-      "seen": 22
+      "seen": 26
     },
     "CM-24": {
       "up": 1,
-      "seen": 29
+      "seen": 33
     },
     "CM-25": {
       "up": 0,
-      "seen": 29
+      "seen": 33
     },
     "CM-26": {
       "up": 0,
-      "seen": 22
+      "seen": 26
     }
   },
   "cycle": 6,

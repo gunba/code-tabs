@@ -1,6 +1,7 @@
 {
   "file": ".claude/rules/tab-bar.md",
   "all_tags": [
+    "RC-19",
     "TB-01",
     "TB-02",
     "TB-03",
@@ -31,143 +32,167 @@
     "TB-28",
     "TB-29",
     "TB-30",
-    "TB-31"
+    "TB-31",
+    "TB-32",
+    "TB-33"
   ],
   "unchecked": [],
   "citations": {
     "TB-01": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-02": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-03": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-04": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-05": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-06": {
       "up": 1,
       "down": 0,
-      "seen": 7
+      "seen": 11
     },
     "TB-07": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-08": {
-      "up": 2,
-      "seen": 30
+      "up": 0,
+      "down": 0,
+      "seen": 1
     },
     "TB-09": {
       "up": 0,
-      "seen": 30
+      "down": 0,
+      "seen": 1
     },
     "TB-10": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-11": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-12": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-13": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-14": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-15": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-16": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-17": {
       "up": 2,
-      "seen": 30
+      "seen": 34
     },
     "TB-18": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-19": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-20": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-21": {
       "up": 0,
-      "seen": 30
+      "seen": 34
     },
     "TB-24": {
-      "up": 0,
+      "up": 1,
       "down": 0,
-      "seen": 3
+      "seen": 1
     },
     "TB-22": {
-      "up": 2,
-      "seen": 30
+      "up": 0,
+      "down": 0,
+      "seen": 1
     },
     "TB-23": {
       "up": 0,
-      "seen": 22
+      "down": 0,
+      "seen": 1
     },
     "TB-25": {
       "up": 0,
-      "seen": 30
+      "down": 0,
+      "seen": 1
     },
     "TB-26": {
       "up": 0,
-      "seen": 22
+      "down": 0,
+      "seen": 1
     },
     "TB-27": {
-      "up": 2,
-      "seen": 30
-    },
-    "TB-28": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 1
+    },
+    "TB-28": {
+      "up": 1,
+      "down": 0,
+      "seen": 7
     },
     "TB-29": {
       "up": 0,
       "down": 0,
-      "seen": 19
+      "seen": 1
     },
     "TB-30": {
       "up": 0,
       "down": 0,
-      "seen": 19
+      "seen": 1
     },
     "TB-31": {
+      "up": 1,
+      "down": 0,
+      "seen": 1
+    },
+    "RC-19": {
+      "up": 0,
+      "down": 0,
+      "seen": 3
+    },
+    "TB-32": {
       "up": 3,
       "down": 0,
-      "seen": 7
+      "seen": 3
+    },
+    "TB-33": {
+      "up": 1,
+      "down": 0,
+      "seen": 1
     }
   },
-  "cycle": 7,
-  "last_run": "2026-03-28T03:57:19.196389+00:00",
+  "cycle": 11,
+  "last_run": "2026-03-28T06:36:58.905950+00:00",
   "metadata": {
     "TB-17": {
       "files": [
@@ -179,45 +204,45 @@
     },
     "TB-24": {
       "files": [
-        "src/lib/inspectorHooks.ts:414",
-        "src/hooks/useTapPipeline.ts:1",
-        "src-tauri/src/commands.rs:1"
+        "src/lib/inspectorHooks.ts",
+        "src/hooks/useTapPipeline.ts",
+        "src-tauri/src/commands.rs"
       ],
       "verified": "2026-03-28",
-      "notes": "useTapRecorder.ts does not exist in main branch. Tap recording is managed via useTapPipeline.ts. Fixed file reference."
+      "notes": "Category count is now 15 (not 12): parse, stringify, console, fs, spawn, fetch, exit, timer, stdout, stderr, require, bun, websocket, net, stream"
     },
     "TB-22": {
       "files": [
-        "src/App.tsx:30",
-        "src/components/Icons/Icons.tsx:28"
+        "src/App.tsx:32",
+        "src/components/Icons/Icons.tsx:1"
       ],
-      "verified": "2026-03-27",
-      "notes": "All tab bar icons are inline SVG components (IconPencil, IconStop, IconClose, IconReturn, IconGear)"
+      "verified": "2026-03-28",
+      "notes": "Icons import at App.tsx:32 (was 27)"
     },
     "TB-23": {
       "files": [
-        "src/App.tsx:263",
-        "src/App.tsx:282",
-        "src/App.css:411"
+        "src/App.tsx:302",
+        "src/App.tsx:317",
+        "src/App.css:456"
       ],
-      "verified": "2026-03-23",
-      "notes": "Edited via tag-edit.sh"
+      "verified": "2026-03-28",
+      "notes": "groupSessionsByDir at 302, separator rendering at 317, CSS at 456 (was 263/282/406)"
     },
     "TB-26": {
       "files": [
-        "src/App.tsx:392",
-        "src/App.tsx:402",
-        "src/App.tsx:406"
+        "src/App.tsx:432",
+        "src/App.tsx:443",
+        "src/App.tsx:447"
       ],
-      "verified": "2026-03-23",
-      "notes": "Edited via tag-edit.sh"
+      "verified": "2026-03-28",
+      "notes": "focusTerminal/requestAnimationFrame at lines 432/443/447 (doc said 391/401/405)"
     },
     "TB-27": {
       "files": [
-        "src/App.tsx:313"
+        "src/App.tsx:317"
       ],
-      "verified": "2026-03-27",
-      "notes": "gi > 0 guard prevents separator before first group, confirmed at line 313"
+      "verified": "2026-03-28",
+      "notes": "gi > 0 separator condition at line 317 (doc said 282)"
     },
     "TB-28": {
       "files": [
@@ -225,15 +250,79 @@
         "src/lib/tapStateReducer.ts:38"
       ],
       "verified": "2026-03-28",
-      "notes": "useInspectorState.ts no longer exists. actionNeeded is now driven by tapStateReducer event processing (ExitPlanMode tool call, PermissionPromptShown event), not terminal buffer scanning."
+      "notes": "Line refs confirmed: ExitPlanMode at 23, PermissionPromptShown at 38"
     },
     "TB-31": {
       "files": [
-        "src/App.tsx:556",
-        "src/App.tsx:568"
+        "src/components/SubagentBar/SubagentBar.tsx:16",
+        "src/App.css:567"
       ],
-      "verified": "2026-03-27",
-      "notes": "Subagent cards use tab-dot state-X classes, meta line with agentType/model/tools/duration, summary line"
+      "verified": "2026-03-28",
+      "notes": "SubagentBar memo at line 16 (was 17); subagent-bar CSS at line 567 (was 558)"
+    },
+    "TB-32": {
+      "files": [
+        "src/App.tsx:516",
+        "src/App.css:362"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Line refs confirmed"
+    },
+    "TB-09": {
+      "files": [
+        "src/App.tsx:278"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Ctrl+E handler moved to line 278 (was 239)"
+    },
+    "TB-30": {
+      "files": [
+        "src/App.tsx:190",
+        "src/App.tsx:616",
+        "src/lib/ptyRegistry.ts:28",
+        "src-tauri/src/commands.rs:2104"
+      ],
+      "verified": "2026-03-28",
+      "notes": "prune_worktree at commands.rs:2104 (doc said 1877); App.tsx prune dialog at 616 (was 614); worktree close logic at 190 (was 173)"
+    },
+    "TB-08": {
+      "files": [
+        "src/App.tsx:329",
+        "src/lib/claude.ts:61"
+      ],
+      "verified": "2026-03-28",
+      "notes": "metaSpans construction at App.tsx:329 (was 294); modelColor at claude.ts:61 (was 30)"
+    },
+    "TB-29": {
+      "files": [
+        "src/lib/paths.ts:18",
+        "src/App.tsx:329",
+        "src/App.tsx:341",
+        "src/components/StatusBar/StatusBar.tsx:54"
+      ],
+      "verified": "2026-03-28",
+      "notes": "StatusBar worktree display at 54 (was 55); App.tsx meta at 329/341 (was 293/304)"
+    },
+    "TB-01": {
+      "files": [
+        "src/App.css:1"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Confirmed: tabs 66px height in App.css"
+    },
+    "TB-04": {
+      "files": [
+        "src-tauri/tauri.conf.json:21"
+      ],
+      "verified": "2026-03-28",
+      "notes": "decorations:true, theme:Dark confirmed"
+    },
+    "TB-25": {
+      "files": [
+        "src/hooks/useNotifications.ts:97"
+      ],
+      "verified": "2026-03-28",
+      "notes": "actionNeeded notification at line 97-98 (doc said 92, minor drift)"
     }
   }
 }

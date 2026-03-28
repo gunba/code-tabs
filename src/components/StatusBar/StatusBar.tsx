@@ -40,7 +40,7 @@ function permissionIcon(mode: PermissionMode): { icon: React.ReactNode; tip: str
   }
 }
 
-function SessionStatus({ session }: { session: Session }) {
+function SessionStatus({ session, onContextClick }: { session: Session; onContextClick?: (sessionId: string) => void }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
   const tapEnabled = useSessionStore((s) => (s.tapCategories.get(session.id)?.size ?? 0) > 0);
@@ -83,14 +83,20 @@ function SessionStatus({ session }: { session: Session }) {
           {perm.icon}
         </span>
       )}
-      <span className="status-item status-context" title={
-        session.metadata.contextPercent > 0
-          ? `Context: ${session.metadata.contextPercent}% · ${session.metadata.toolCount} tools · ${session.metadata.conversationLength} messages` +
-            (session.metadata.systemPromptLength > 0 ? ` · ${Math.round(session.metadata.systemPromptLength / 1000)}K system prompt` : "") +
-            (session.metadata.filesTouched?.length ? ` · ${session.metadata.filesTouched.length} files touched` : "") +
-            (session.metadata.contextBudget ? `\nBudget: ${formatTokenCount(session.metadata.contextBudget.totalContextSize)} total · ${session.metadata.contextBudget.mcpToolsCount} MCP tools (${formatTokenCount(session.metadata.contextBudget.mcpToolsTokens)}) · ${session.metadata.contextBudget.nonMcpToolsCount} built-in tools · ${formatTokenCount(session.metadata.contextBudget.projectFileCount)} project files` : "")
-          : "Context usage"
-      }>
+      <span
+        className="status-item status-context"
+        title={
+          session.metadata.contextPercent > 0
+            ? `Context: ${session.metadata.contextPercent}% · ${session.metadata.toolCount} tools · ${session.metadata.conversationLength} messages` +
+              (session.metadata.systemPromptLength > 0 ? ` · ${Math.round(session.metadata.systemPromptLength / 1000)}K system prompt` : "") +
+              (session.metadata.filesTouched?.length ? ` · ${session.metadata.filesTouched.length} files touched` : "") +
+              (session.metadata.contextBudget ? `\nBudget: ${formatTokenCount(session.metadata.contextBudget.totalContextSize)} total · ${session.metadata.contextBudget.mcpToolsCount} MCP tools (${formatTokenCount(session.metadata.contextBudget.mcpToolsTokens)}) · ${session.metadata.contextBudget.nonMcpToolsCount} built-in tools · ${formatTokenCount(session.metadata.contextBudget.projectFileCount)} project files` : "") +
+              (onContextClick ? "\nClick for detailed breakdown" : "")
+            : "Context usage"
+        }
+        onClick={onContextClick ? () => onContextClick(session.id) : undefined}
+        style={onContextClick ? { cursor: "pointer" } : undefined}
+      >
         <span className="status-icon"><IconHalfCircle size={12} /></span>
         {session.metadata.contextPercent > 0
           ? `${session.metadata.contextPercent.toFixed(0)}%`
@@ -180,7 +186,11 @@ function countHookEntries(hooks: Record<string, unknown>): number {
   return count;
 }
 
-export function StatusBar() {
+interface StatusBarProps {
+  onContextClick?: (sessionId: string) => void;
+}
+
+export function StatusBar({ onContextClick }: StatusBarProps) {
   const sessions = useSessionStore((s) => s.sessions);
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const activeSession = sessions.find((s) => s.id === activeTabId);
@@ -221,7 +231,7 @@ export function StatusBar() {
   return (
     <div className="status-bar">
       {activeSession ? (
-        <SessionStatus session={activeSession} />
+        <SessionStatus session={activeSession} onContextClick={onContextClick} />
       ) : (
         <span className="status-empty">No active session</span>
       )}
