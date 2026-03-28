@@ -98,6 +98,7 @@ export function reduceTapEvent(state: SessionState, event: TapEvent): SessionSta
     case "WorktreeCleared":
     case "HookTelemetry":
     case "SystemPromptCapture":
+    case "EffortLevel":
       return state;
   }
 }
