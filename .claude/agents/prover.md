@@ -22,8 +22,8 @@ Prove tagged documentation entries against the codebase. Read `.proofs/config.js
 
 For each doc file in the config `docs` list:
 
-1. Run `bash "$AGENT_PROOFS_BIN/prove.sh" select <doc-file>` — outputs exactly 12 tags with full entry text. These are the ONLY tags you prove for this file.
-2. For each of the 12 entries (and ONLY these):
+1. Run `bash "$AGENT_PROOFS_BIN/prove.sh" select-all <doc-file>` — outputs all tags with full entry text.
+2. For each entry:
    a. Use Grep and Bash to search the codebase for implementing code.
    b. Classify: `confirmed` / `updated` (edit entry) / `removed` (code gone) / `flagged` (ambiguous).
    c. If updating: use Edit on the doc file to fix ONLY that entry's text.

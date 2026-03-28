@@ -27,10 +27,9 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
 - [CD-01] Global slash commands in `~/.claude/commands/`:
   | Command | What it does |
   |---------|-------------|
-  | `/r` | Review: document change → review + simplify + test (3 agents) in worktree |
-  | `/j` | Maintain: prove entries (3 provers) → sync → audit in worktree |
+  | `/r` | Review: document change → review (1 agent) in worktree |
+  | `/j` | Janitor: review local changes → prove all docs → sync/audit |
   | `/b` | Build: [commit?] → build → [release+push?] — choose steps upfront |
-  | `/rj` | Review then janitor in sequence (2 worktrees) |
   | `/c` | Commit, exit worktree, merge to main |
 
 ## Layout

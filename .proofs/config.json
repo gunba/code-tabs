@@ -8,28 +8,12 @@
   "review_agents": [
     {
       "name": "reviewer",
-      "prompt_suffix": "Review these changes."
-    },
-    {
-      "name": "simplifier",
-      "prompt_suffix": "Analyze for simplification opportunities."
-    },
-    {
-      "name": "tester",
-      "prompt_suffix": "Run tests, identify coverage gaps, suggest tests to write."
+      "prompt_suffix": "Review these changes for correctness, simplification opportunities, and test coverage."
     }
   ],
   "plan_agents": [
     {
-      "name": "critic-risk",
-      "prompt_suffix": "Critique this plan."
-    },
-    {
-      "name": "critic-reuse",
-      "prompt_suffix": "Critique this plan."
-    },
-    {
-      "name": "critic-abstraction",
+      "name": "plan-critic",
       "prompt_suffix": "Critique this plan."
     }
   ],
