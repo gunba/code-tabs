@@ -4,7 +4,7 @@ src-tauri/target/
 src-tauri/pty-patch/target/
 .claude/
 .proofs/
-.DOCS/
+DOCS/
 logs/
 *.log
 *.local

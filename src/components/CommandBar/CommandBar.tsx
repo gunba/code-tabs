@@ -74,17 +74,15 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
   const discovering = slashCommands.length === 0;
 
   return (
-    <div className="command-bar">
-      <button
-        className="command-bar-toggle"
-        onClick={() => setExpanded(!expanded)}
-        title={expanded ? "Collapse command bar" : "Expand command bar"}
-        type="button"
-      >
-        {expanded ? "\u25BE" : "\u25B8"}
-      </button>
-      {expanded && (
+    <div
+      className={`command-bar${expanded ? "" : " command-bar--collapsed"}`}
+      onClick={expanded ? undefined : () => setExpanded(true)}
+    >
+      {expanded ? (
         <>
+          <div className="command-bar-collapse" onClick={() => setExpanded(false)}>
+            <span className="command-bar-chevron">{"\u25BC"}</span>
+          </div>
           {history.length > 0 && (
             <div className="command-history">
               {history.map((cmd, i) => (
@@ -123,6 +121,8 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
             )}
           </div>
         </>
+      ) : (
+        <span className="command-bar-chevron">{"\u25B2"}</span>
       )}
     </div>
   );

@@ -34,22 +34,36 @@
   color: var(--text-primary);
 }
 
-/* ── Command Bar Toggle ──────────────────────────────────── */
+/* ── Command Bar Collapsed ───────────────────────────────── */
 
-.command-bar-toggle {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
+.command-bar--collapsed {
+  justify-content: center;
   cursor: pointer;
-  padding: 0 4px;
-  display: flex;
-  align-items: center;
-  font-size: 10px;
-  flex-shrink: 0;
+}
+
+.command-bar--collapsed:hover .command-bar-chevron {
+  color: var(--accent);
+}
+
+/* ── Command Bar Chevron ─────────────────────────────────── */
+
+.command-bar-chevron {
+  font-size: 8px;
+  color: var(--text-muted);
+  line-height: 1;
   transition: color 0.15s;
 }
 
-.command-bar-toggle:hover {
+/* ── Command Bar Collapse Handle ─────────────────────────── */
+
+.command-bar-collapse {
+  width: 100%;
+  text-align: center;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.command-bar-collapse:hover .command-bar-chevron {
   color: var(--accent);
 }
 
