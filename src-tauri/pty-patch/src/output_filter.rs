@@ -6,13 +6,21 @@
 /// **Passes through** device queries (DA1, DA2, DSR, CPR, DECRQM, Kitty keyboard)
 /// — xterm.js IS the terminal and must respond to these for ConPTY/Claude handshake.
 ///
-/// ESC[2J (erase display) passes through unconditionally — inside sync blocks it is
-/// handled by `emit_sync_block`; outside sync blocks it is needed by ConPTY for reflow
-/// and resize screen management. ESC[3J (erase scrollback) is always stripped.
+/// Tracks BSU/ESU (DEC Mode 2026) synchronized update state so that
+/// ESC[2J is only stripped outside sync blocks. Inside sync blocks,
+/// ESC[2J is safe — the terminal renders atomically, preventing
+/// viewport jumps. ESC[3J (erase scrollback) is always stripped.
 pub struct OutputFilter {
     state: FilterState,
     /// Output buffer for the current filter() call
     output: Vec<u8>,
+    /// Whether we're inside a BSU/ESU synchronized update block.
+    /// ESC[2J is allowed through inside sync blocks (atomic render).
+    in_sync_block: bool,
+    /// Number of ESC[2J sequences allowed outside sync blocks during
+    /// startup. The first 2 clear-screens are needed for the child
+    /// process to set up its UI (initial clear + possible config reload).
+    startup_clears_remaining: u8,
     /// Metrics
     osc52_stripped: u64,
     osc50_stripped: u64,
@@ -51,6 +59,8 @@ impl OutputFilter {
         Self {
             state: FilterState::Normal,
             output: Vec::with_capacity(8192),
+            in_sync_block: false,
+            startup_clears_remaining: 2,
             osc52_stripped: 0,
             osc50_stripped: 0,
             c1_bytes_stripped: 0,
@@ -130,6 +140,12 @@ impl OutputFilter {
                         if self.is_blocked_csi(&csi_buf) {
                             // clear_screen_stripped already incremented inside is_blocked_csi
                         } else {
+                            // Track BSU/ESU for sync-aware clear-screen filtering
+                            if csi_buf == b"?2026h" {
+                                self.in_sync_block = true;
+                            } else if csi_buf == b"?2026l" {
+                                self.in_sync_block = false;
+                            }
                             self.output.push(0x1B);
                             self.output.push(b'[');
                             self.output.extend_from_slice(&csi_buf);
@@ -238,13 +254,22 @@ impl OutputFilter {
 
         match final_byte {
             // CSI 3 J — erase scrollback buffer. Always stripped.
-            // (Re-added conditionally by emit_sync_block when content overflows viewport.)
-            // CSI 2 J — erase display. Passes through unconditionally:
-            //   Inside sync blocks: handled by emit_sync_block (stripped + replaced with ESC[H ESC[J).
-            //   Outside sync blocks: needed by ConPTY for reflow/resize screen management.
-            b'J' if params == b"3" => {
+            // CSI 2 J — erase entire display. Stripped only OUTSIDE
+            // BSU/ESU sync blocks (with a startup grace period).
+            b'J' if params == b"3"
+                || (params == b"2" && !self.in_sync_block
+                    && self.startup_clears_remaining == 0) =>
+            {
                 self.clear_screen_stripped += 1;
                 true
+            }
+            // ESC[2J outside sync block during startup grace — allow through
+            // but decrement the remaining count
+            b'J' if params == b"2" && !self.in_sync_block
+                && self.startup_clears_remaining > 0 =>
+            {
+                self.startup_clears_remaining -= 1;
+                false
             }
             _ => false,
         }
@@ -648,21 +673,19 @@ mod tests {
         assert_eq!(result2, b"\xC2\xA9more");
     }
 
-    // ── ESC[2J / ESC[3J filtering ──────────────────────────────────
+    // ── Sync-aware ESC[2J filtering ──────────────────────────────────
 
     #[test]
-    fn test_clear_screen_passes_through_always() {
+    fn test_clear_screen_stripped_outside_sync_block() {
         let mut f = OutputFilter::new();
-        // ESC[2J always passes through (ConPTY reflow needs it)
+        // First 2 ESC[2J outside sync blocks are allowed (startup grace)
         let r1 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r1, b"\x1b[2J");
+        assert_eq!(r1, b"\x1b[2J"); // 1st — allowed
         let r2 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r2, b"\x1b[2J");
+        assert_eq!(r2, b"\x1b[2J"); // 2nd — allowed
+        // 3rd — stripped
         let r3 = f.filter(b"before\x1b[2Jafter");
-        assert_eq!(r3, b"before\x1b[2Jafter");
-        // Multiple in one chunk
-        let r4 = f.filter(b"\x1b[2J\x1b[2J\x1b[2J");
-        assert_eq!(r4, b"\x1b[2J\x1b[2J\x1b[2J");
+        assert_eq!(r3, b"beforeafter");
     }
 
     #[test]
@@ -683,6 +706,37 @@ mod tests {
         // ESC[3J stripped inside sync block too
         let result = f.filter(b"\x1b[?2026h\x1b[3Jcontent\x1b[?2026l");
         assert_eq!(result, b"\x1b[?2026hcontent\x1b[?2026l");
+    }
+
+    #[test]
+    fn test_sync_state_across_chunks() {
+        let mut f = OutputFilter::new();
+        // BSU in chunk 1
+        let r1 = f.filter(b"\x1b[?2026h").to_vec();
+        assert_eq!(r1, b"\x1b[?2026h");
+
+        // ESC[2J in chunk 2 — should pass through (inside sync block)
+        let r2 = f.filter(b"\x1b[2J\x1b[Hcontent").to_vec();
+        assert_eq!(r2, b"\x1b[2J\x1b[Hcontent");
+
+        // ESU in chunk 3
+        let r3 = f.filter(b"\x1b[?2026l").to_vec();
+        assert_eq!(r3, b"\x1b[?2026l");
+    }
+
+    #[test]
+    fn test_sync_state_resets_after_esu() {
+        let mut f = OutputFilter::new();
+        // Exhaust startup grace period
+        f.filter(b"\x1b[2J");
+        f.filter(b"\x1b[2J");
+
+        // Complete sync block — ESC[2J passes through (inside sync)
+        f.filter(b"\x1b[?2026h\x1b[2Jcontent\x1b[?2026l");
+
+        // ESC[2J after sync block ends — should be stripped (grace exhausted)
+        let result = f.filter(b"\x1b[2Jmore");
+        assert_eq!(result, b"more");
     }
 
     #[test]
@@ -737,6 +791,39 @@ mod tests {
         let result = f.filter(input);
         assert_eq!(result, b"\x1b]2\x07");
         assert_eq!(f.metrics().titles_sanitized, 1);
+    }
+
+    // ── Startup grace period ────────────────────────────────────────
+
+    #[test]
+    fn test_startup_grace_exactly_two_clears() {
+        let mut f = OutputFilter::new();
+        // First clear — allowed (grace 2 -> 1)
+        let r1 = f.filter(b"\x1b[2J").to_vec();
+        assert_eq!(r1, b"\x1b[2J");
+        // Second clear — allowed (grace 1 -> 0)
+        let r2 = f.filter(b"\x1b[2J").to_vec();
+        assert_eq!(r2, b"\x1b[2J");
+        // Third clear — stripped (grace exhausted)
+        let r3 = f.filter(b"\x1b[2J").to_vec();
+        assert!(r3.is_empty(), "third ESC[2J should be stripped after grace exhausted");
+        // Fourth clear — also stripped
+        let r4 = f.filter(b"\x1b[2J").to_vec();
+        assert!(r4.is_empty(), "fourth ESC[2J should also be stripped");
+    }
+
+    #[test]
+    fn test_startup_grace_not_consumed_by_sync_block_clears() {
+        let mut f = OutputFilter::new();
+        // ESC[2J inside sync block should NOT consume startup grace
+        f.filter(b"\x1b[?2026h\x1b[2J\x1b[?2026l");
+        // Grace should still be 2
+        let r1 = f.filter(b"\x1b[2J").to_vec();
+        assert_eq!(r1, b"\x1b[2J"); // First grace — allowed
+        let r2 = f.filter(b"\x1b[2J").to_vec();
+        assert_eq!(r2, b"\x1b[2J"); // Second grace — allowed
+        let r3 = f.filter(b"\x1b[2J").to_vec();
+        assert!(r3.is_empty()); // Grace exhausted — stripped
     }
 
     // ── ESC at end of DCS without matching ST ───────────────────────

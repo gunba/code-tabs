@@ -15,6 +15,7 @@ import { useSessionStore } from "../store/sessions";
 
 const ptyWriters = new Map<string, (data: string) => void>();
 const ptyKills = new Map<string, () => Promise<void>>();
+const ptyHandleIds = new Map<string, number>();
 const accumulators = new Map<string, LineAccumulator>();
 
 /** Register a PTY write function for a session. */
@@ -64,4 +65,19 @@ export function unregisterPtyKill(sessionId: string): void {
 export async function killPty(sessionId: string): Promise<void> {
   const kill = ptyKills.get(sessionId);
   if (kill) await kill();
+}
+
+/** Register the PTY handle ID for a session (for recording commands). */
+export function registerPtyHandleId(sessionId: string, pid: number): void {
+  ptyHandleIds.set(sessionId, pid);
+}
+
+/** Unregister the PTY handle ID when a session is cleaned up. */
+export function unregisterPtyHandleId(sessionId: string): void {
+  ptyHandleIds.delete(sessionId);
+}
+
+/** Get the PTY handle ID for a session, or null if not registered. */
+export function getPtyHandleId(sessionId: string): number | null {
+  return ptyHandleIds.get(sessionId) ?? null;
 }

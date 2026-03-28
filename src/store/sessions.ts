@@ -26,6 +26,7 @@ interface SessionsState {
   hookChangeCounter: number;
   inspectorOffSessions: Set<string>;
   tapCategories: Map<string, Set<string>>; // sessionId -> enabled tap category names
+  ptyRecording: Map<string, string>; // sessionId -> file path
   processHealth: Map<string, { rss: number; heapUsed: number; uptime: number }>;
 
   // Actions
@@ -46,9 +47,10 @@ interface SessionsState {
   clearKillRequest: () => void;
   bumpHookChange: () => void;
   setInspectorOff: (id: string, off: boolean) => void;
-  toggleTapCategory: (id: string, category: string) => void;
   startAllTaps: (id: string) => void;
   stopAllTaps: (id: string) => void;
+  startPtyRecording: (id: string, path: string) => void;
+  stopPtyRecording: (id: string) => void;
   addSubagent: (sessionId: string, subagent: Subagent) => void;
   updateSubagent: (sessionId: string, subagentId: string, updates: Partial<Subagent>) => void;
   clearIdleSubagents: (sessionId: string) => void;
@@ -68,6 +70,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
   hookChangeCounter: 0,
   inspectorOffSessions: new Set(),
   tapCategories: new Map(),
+  ptyRecording: new Map(),
   processHealth: new Map(),
 
   init: async () => {
@@ -301,24 +304,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
     });
   },
 
-  toggleTapCategory: (id, category) => {
-    set((s) => {
-      const next = new Map(s.tapCategories);
-      const cats = new Set(next.get(id) || []);
-      if (cats.has(category)) {
-        cats.delete(category);
-      } else {
-        cats.add(category);
-      }
-      if (cats.size === 0) {
-        next.delete(id);
-      } else {
-        next.set(id, cats);
-      }
-      return { tapCategories: next };
-    });
-  },
-
   startAllTaps: (id) => {
     set((s) => {
       const next = new Map(s.tapCategories);
@@ -332,6 +317,22 @@ export const useSessionStore = create<SessionsState>((set) => ({
       const next = new Map(s.tapCategories);
       next.delete(id);
       return { tapCategories: next };
+    });
+  },
+
+  startPtyRecording: (id, path) => {
+    set((s) => {
+      const next = new Map(s.ptyRecording);
+      next.set(id, path);
+      return { ptyRecording: next };
+    });
+  },
+
+  stopPtyRecording: (id) => {
+    set((s) => {
+      const next = new Map(s.ptyRecording);
+      next.delete(id);
+      return { ptyRecording: next };
     });
   },
 

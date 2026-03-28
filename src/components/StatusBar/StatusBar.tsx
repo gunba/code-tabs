@@ -44,6 +44,7 @@ function SessionStatus({ session }: { session: Session }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
   const tapEnabled = useSessionStore((s) => (s.tapCategories.get(session.id)?.size ?? 0) > 0);
+  const isRecording = useSessionStore((s) => s.ptyRecording.has(session.id));
   const health = useSessionStore((s) => s.processHealth.get(session.id));
   const model = effectiveModel(session);
   const wt = parseWorktreePath(session.config.workingDir);
@@ -59,6 +60,11 @@ function SessionStatus({ session }: { session: Session }) {
       {tapEnabled && (
         <span className="status-item" title="Tap recording active — right-click tab to stop" style={{ color: "var(--accent)" }}>
           <IconCircleFilled size={10} /> TAP
+        </span>
+      )}
+      {isRecording && (
+        <span className="status-item" title="Terminal recording active — right-click tab to stop" style={{ color: "var(--error)" }}>
+          <IconCircleFilled size={10} /> REC
         </span>
       )}
       <span className="status-item status-model" title="Model" style={{ color: modelColor(model) }}>

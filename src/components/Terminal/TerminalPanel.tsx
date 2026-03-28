@@ -9,7 +9,7 @@ import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, 
 import { useInspectorConnection } from "../../hooks/useInspectorConnection";
 import { useTapPipeline } from "../../hooks/useTapPipeline";
 import { useTapEventProcessor } from "../../hooks/useTapEventProcessor";
-import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill, writeToPty } from "../../lib/ptyRegistry";
+import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill, registerPtyHandleId, unregisterPtyHandleId, writeToPty } from "../../lib/ptyRegistry";
 import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader } from "../../lib/terminalRegistry";
 import { useSettingsStore } from "../../store/settings";
 import { normalizePath } from "../../lib/paths";
@@ -271,6 +271,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     invoke("stop_tap_server", { sessionId: session.id }).catch(() => {});
     unregisterPtyWriter(session.id);
     unregisterPtyKill(session.id);
+    unregisterPtyHandleId(session.id);
     unregisterInspectorPort(session.id);
     useSessionStore.getState().setInspectorOff(session.id, false);
 
@@ -415,6 +416,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         const handle = await pty.spawn(claudePath, args, cwd, cols, rows, env);
         registerPtyWriter(session.id, handle.write);
         registerPtyKill(session.id, () => handle.kill());
+        registerPtyHandleId(session.id, handle.pid);
         dlog("terminal", session.id, `spawned pid=${handle.pid} port=${inspPort} tapPort=${tapPort} cols=${cols} rows=${rows}`);
         updateState(session.id, "idle");
 
@@ -469,6 +471,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       invoke("stop_tap_server", { sessionId: id }).catch(() => {});
       unregisterPtyWriter(id);
       unregisterPtyKill(id);
+      unregisterPtyHandleId(id);
       unregisterBufferReader(id);
       unregisterTailReader(id);
       unregisterInspectorPort(id);

@@ -43,6 +43,18 @@ interface SpawnOptions {
   env?: Record<string, string>;
 }
 
+// ── PTY Recording ────────────────────────────────────────────────
+
+export async function startPtyRecording(pid: number, path: string): Promise<void> {
+  await invoke("plugin:pty|start_pty_recording", { pid, path });
+}
+
+export async function stopPtyRecording(pid: number): Promise<void> {
+  await invoke("plugin:pty|stop_pty_recording", { pid });
+}
+
+// ── PTY Spawn ────────────────────────────────────────────────────
+
 export async function spawnPty(
   file: string,
   args: string[],

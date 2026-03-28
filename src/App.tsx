@@ -23,8 +23,9 @@ import { useNotifications } from "./hooks/useNotifications";
 import { useCommandDiscovery } from "./hooks/useCommandDiscovery";
 import { useCtrlKey } from "./hooks/useCtrlKey";
 import { useUiConfigStore } from "./lib/uiConfig";
-import { killAllActivePtys } from "./lib/ptyProcess";
-import { killPty } from "./lib/ptyRegistry";
+import { killAllActivePtys, startPtyRecording, stopPtyRecording } from "./lib/ptyProcess";
+import { killPty, getPtyHandleId } from "./lib/ptyRegistry";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
 import { dlog } from "./lib/debugLog";
 import { IconPencil, IconStop, IconClose, IconReturn, IconGear } from "./components/Icons/Icons";
@@ -49,9 +50,11 @@ export default function App() {
   const inspectorOffSessions = useSessionStore((s) => s.inspectorOffSessions);
   const setInspectorOff = useSessionStore((s) => s.setInspectorOff);
   const tapCategories = useSessionStore((s) => s.tapCategories);
-  const toggleTapCategory = useSessionStore((s) => s.toggleTapCategory);
   const startAllTaps = useSessionStore((s) => s.startAllTaps);
   const stopAllTaps = useSessionStore((s) => s.stopAllTaps);
+  const ptyRecording = useSessionStore((s) => s.ptyRecording);
+  const startPtyRecordingStore = useSessionStore((s) => s.startPtyRecording);
+  const stopPtyRecordingStore = useSessionStore((s) => s.stopPtyRecording);
   const showLauncher = useSettingsStore((s) => s.showLauncher);
   const launcherGeneration = useSettingsStore((s) => s.launcherGeneration);
   const setShowLauncher = useSettingsStore((s) => s.setShowLauncher);
@@ -736,29 +739,14 @@ export default function App() {
                   {(() => {
                     const cats = tapCategories.get(ctxSession.id);
                     const hasTaps = cats && cats.size > 0;
-                    const allCats: Array<{ key: string; label: string }> = [
-                      { key: "parse", label: "JSON.parse" },
-                      { key: "stringify", label: "JSON.stringify" },
-                      { key: "console", label: "console.*" },
-                      { key: "fs", label: "fs ops" },
-                      { key: "spawn", label: "child_process" },
-                      { key: "fetch", label: "fetch" },
-                      { key: "exit", label: "process.exit" },
-                      { key: "timer", label: "timers" },
-                      { key: "stdout", label: "stdout" },
-                      { key: "stderr", label: "stderr" },
-                      { key: "require", label: "require()" },
-                      { key: "bun", label: "Bun.*" },
-                    ];
-                    const allOn = cats && cats.size === allCats.length;
+                    const isRecording = ptyRecording.has(ctxSession.id);
                     return (
                       <>
-                        <div className="tab-context-menu-label">Tap Recording</div>
+                        <div className="tab-context-menu-label">Recording</div>
                         <button
                           className="tab-context-menu-item"
-                          style={{ fontWeight: 600 }}
                           onClick={() => {
-                            if (allOn) {
+                            if (hasTaps) {
                               stopAllTaps(ctxSession.id);
                             } else {
                               startAllTaps(ctxSession.id);
@@ -766,7 +754,7 @@ export default function App() {
                             setTabContextMenu(null);
                           }}
                         >
-                          {allOn ? "■ Stop All Taps" : "▶ Start All Taps"}
+                          {hasTaps ? "■ Stop Taps" : "▶ Start Taps"}
                         </button>
                         {hasTaps && (
                           <button
@@ -779,20 +767,39 @@ export default function App() {
                             Open Tap Log
                           </button>
                         )}
-                        {allCats.map(({ key, label }) => (
-                          <button
-                            key={key}
-                            className="tab-context-menu-item"
-                            style={{ fontSize: "0.85em", paddingLeft: 16 }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleTapCategory(ctxSession.id, key);
-                            }}
-                          >
-                            <span style={{ opacity: cats?.has(key) ? 1 : 0.3, marginRight: 6 }}>●</span>
-                            {label}
-                          </button>
-                        ))}
+                        <button
+                          className="tab-context-menu-item"
+                          onClick={async () => {
+                            if (isRecording) {
+                              const ptyPid = getPtyHandleId(ctxSession.id);
+                              if (ptyPid != null) {
+                                await stopPtyRecording(ptyPid).catch(() => {});
+                              }
+                              stopPtyRecordingStore(ctxSession.id);
+                              setTabContextMenu(null);
+                            } else {
+                              const ptyPid = getPtyHandleId(ctxSession.id);
+                              if (ptyPid == null) {
+                                setTabContextMenu(null);
+                                return;
+                              }
+                              const ts = new Date().toISOString().replace(/[:.]/g, "-");
+                              const path = await saveDialog({
+                                defaultPath: `pty-recording-${ctxSession.id.slice(0, 8)}-${ts}.ndjson`,
+                                filters: [{ name: "NDJSON", extensions: ["ndjson"] }],
+                              });
+                              if (!path) {
+                                setTabContextMenu(null);
+                                return;
+                              }
+                              await startPtyRecording(ptyPid, path).catch(() => {});
+                              startPtyRecordingStore(ctxSession.id, path);
+                              setTabContextMenu(null);
+                            }
+                          }}
+                        >
+                          {isRecording ? "■ Stop Terminal Recording" : "▶ Start Terminal Recording"}
+                        </button>
                       </>
                     );
                   })()}

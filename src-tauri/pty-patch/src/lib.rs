@@ -1,12 +1,13 @@
 use std::{
     collections::BTreeMap,
     ffi::OsString,
-    io::Read,
+    io::{Read, Write as IoWrite, BufWriter},
+    fs::File,
     sync::{
         atomic::{AtomicU16, AtomicU32, Ordering},
         Arc,
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use portable_pty::{native_pty_system, Child, ChildKiller, CommandBuilder, PtyPair, PtySize};
@@ -19,8 +20,58 @@ use tauri::{
 mod output_filter;
 mod sync_detector;
 
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+
 use output_filter::OutputFilter;
 use sync_detector::{SyncBlockDetector, SyncEvent};
+
+/// NDJSON PTY recorder — captures raw, filtered, and final pipeline output
+/// plus resize and input events for terminal debugging.
+struct PtyRecorder {
+    writer: BufWriter<File>,
+    start: Instant,
+}
+
+impl PtyRecorder {
+    fn new(path: &str, cols: u16, rows: u16) -> std::io::Result<Self> {
+        let file = File::create(path)?;
+        let mut writer = BufWriter::new(file);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let header = format!(
+            r#"{{"version":1,"cols":{},"rows":{},"timestamp":{}}}"#,
+            cols, rows, timestamp
+        );
+        writeln!(writer, "{}", header)?;
+        writer.flush()?;
+        Ok(Self { writer, start: Instant::now() })
+    }
+
+    fn record(&mut self, phase: &str, data: &[u8]) {
+        let t = self.start.elapsed().as_secs_f64();
+        let b64 = BASE64.encode(data);
+        let _ = writeln!(
+            self.writer,
+            r#"{{"t":{:.6},"phase":"{}","base64":"{}"}}"#,
+            t, phase, b64
+        );
+    }
+
+    fn record_resize(&mut self, cols: u16, rows: u16) {
+        let t = self.start.elapsed().as_secs_f64();
+        let _ = writeln!(
+            self.writer,
+            r#"{{"t":{:.6},"phase":"resize","cols":{},"rows":{}}}"#,
+            t, cols, rows
+        );
+    }
+
+    fn flush(&mut self) {
+        let _ = self.writer.flush();
+    }
+}
 
 /// Copy `src` into `dst`, skipping all occurrences of ESC[2J (Clear Screen).
 /// Uses SIMD-accelerated memchr::memmem for efficient scanning.
@@ -70,6 +121,7 @@ struct Session {
     output_filter: Mutex<OutputFilter>,
     sync_detector: Mutex<SyncBlockDetector>,
     rows: AtomicU16,
+    recorder: Mutex<Option<PtyRecorder>>,
 }
 
 type PtyHandler = u32;
@@ -150,6 +202,7 @@ async fn spawn<R: Runtime>(
         output_filter: Mutex::new(OutputFilter::new()),
         sync_detector: Mutex::new(SyncBlockDetector::new()),
         rows: AtomicU16::new(rows),
+        recorder: Mutex::new(None),
     });
     state.sessions.write().await.insert(handler, session);
     Ok(handler)
@@ -168,12 +221,17 @@ async fn write(
         .get(&pid)
         .ok_or("Unavaliable pid")?
         .clone();
+    let bytes = data.as_bytes();
     session
         .writer
         .lock()
         .await
-        .write_all(data.as_bytes())
+        .write_all(bytes)
         .map_err(|e| e.to_string())?;
+    // Record input if recording is active
+    if let Some(rec) = session.recorder.lock().await.as_mut() {
+        rec.record("input", bytes);
+    }
     Ok(())
 }
 
@@ -197,15 +255,19 @@ async fn read(pid: PtyHandler, state: tauri::State<'_, PluginState>) -> Result<V
         let output_rx = session.output_rx.blocking_lock();
         let mut output_filter = session.output_filter.blocking_lock();
         let mut sync_detector = session.sync_detector.blocking_lock();
+        let mut recorder = session.recorder.blocking_lock();
         let rows = session.rows.load(Ordering::Relaxed);
 
         // Block until first chunk arrives (or channel disconnects = EOF)
         let first = output_rx.recv().map_err(|_| "EOF".to_string())?;
 
+        if let Some(rec) = recorder.as_mut() { rec.record("raw", &first); }
+
         let mut result = Vec::new();
 
         // Filter for security, then detect sync blocks
         let filtered = output_filter.filter(&first);
+        if let Some(rec) = recorder.as_mut() { rec.record("filtered", filtered); }
         for event in sync_detector.process(filtered) {
             match event {
                 SyncEvent::PassThrough(data) => result.extend_from_slice(data),
@@ -226,7 +288,9 @@ async fn read(pid: PtyHandler, state: tauri::State<'_, PluginState>) -> Result<V
                 }
                 match output_rx.recv_timeout(remaining) {
                     Ok(chunk) => {
+                        if let Some(rec) = recorder.as_mut() { rec.record("raw", &chunk); }
                         let filtered = output_filter.filter(&chunk);
+                        if let Some(rec) = recorder.as_mut() { rec.record("filtered", filtered); }
                         for event in sync_detector.process(filtered) {
                             match event {
                                 SyncEvent::PassThrough(data) => {
@@ -242,6 +306,8 @@ async fn read(pid: PtyHandler, state: tauri::State<'_, PluginState>) -> Result<V
                 }
             }
         }
+
+        if let Some(rec) = recorder.as_mut() { rec.record("final", &result); }
 
         Ok(result)
     })
@@ -276,6 +342,51 @@ async fn resize(
         })
         .map_err(|e| e.to_string())?;
     session.rows.store(rows, Ordering::Relaxed);
+    // Record resize event if recording is active
+    if let Some(rec) = session.recorder.lock().await.as_mut() {
+        rec.record_resize(cols, rows);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_pty_recording(
+    pid: PtyHandler,
+    path: String,
+    state: tauri::State<'_, PluginState>,
+) -> Result<(), String> {
+    let session = state
+        .sessions
+        .read()
+        .await
+        .get(&pid)
+        .ok_or("Unavaliable pid")?
+        .clone();
+    let cols = {
+        let pair = session.pair.lock().await;
+        let size = pair.master.get_size().map_err(|e| e.to_string())?;
+        (size.cols, size.rows)
+    };
+    let recorder = PtyRecorder::new(&path, cols.0, cols.1).map_err(|e| e.to_string())?;
+    *session.recorder.lock().await = Some(recorder);
+    Ok(())
+}
+
+#[tauri::command]
+async fn stop_pty_recording(
+    pid: PtyHandler,
+    state: tauri::State<'_, PluginState>,
+) -> Result<(), String> {
+    let session = state
+        .sessions
+        .read()
+        .await
+        .get(&pid)
+        .ok_or("Unavaliable pid")?
+        .clone();
+    if let Some(mut rec) = session.recorder.lock().await.take() {
+        rec.flush();
+    }
     Ok(())
 }
 
@@ -736,7 +847,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             exitstatus,
             destroy,
             get_child_pid,
-            drain_output
+            drain_output,
+            start_pty_recording,
+            stop_pty_recording
         ])
         .setup(|app_handle, _api| {
             app_handle.manage(PluginState::default());

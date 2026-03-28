@@ -575,7 +575,7 @@ dependencies = [
 
 [[package]]
 name = "claude-tabs"
-version = "0.22.0"
+version = "0.23.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -4641,6 +4641,7 @@ dependencies = [
 name = "tauri-plugin-pty"
 version = "0.2.1"
 dependencies = [
+ "base64 0.22.1",
  "memchr",
  "portable-pty",
  "serde",
