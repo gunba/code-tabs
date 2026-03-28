@@ -67,20 +67,21 @@ export class TapMetadataAccumulator {
         const telKey = `${event.costUSD}:${event.inputTokens}:${event.outputTokens}:${event.cachedInputTokens}`;
         if (telKey === this.lastTelemetryKey) break;
         this.lastTelemetryKey = telKey;
-        this.costUsd += event.costUSD;
-        this.inputTokens += event.inputTokens + event.cachedInputTokens;
-        this.outputTokens += event.outputTokens;
-        // Duration accumulated from TurnDuration (wall-clock), not here (API-only).
-        // ApiTelemetry.durationMs is API time only; TurnDuration includes tool execution + permission waits.
-        // Fallback: if no TurnDuration ever fires, durationSecs stays 0 — acceptable.
-        this.lastTurnCostUsd = event.costUSD;
-        this.lastTurnTtftMs = event.ttftMs;
+        // Only accumulate main-agent tokens/cost (subagent tokens tracked by TapSubagentTracker)
+        if (event.queryDepth === 0) {
+          this.costUsd += event.costUSD;
+          this.inputTokens += event.inputTokens + event.cachedInputTokens;
+          this.outputTokens += event.outputTokens;
+          this.lastTurnCostUsd = event.costUSD;
+          this.lastTurnTtftMs = event.ttftMs;
+        }
         if (event.model && event.queryDepth === 0) this.runtimeModel = event.model;
         break;
       }
 
       case "TurnStart":
-        if (event.model) this.runtimeModel = event.model;
+        // Initializer-only: set model from first TurnStart, don't let subagent TurnStart overwrite
+        if (event.model && !this.runtimeModel) this.runtimeModel = event.model;
         this.lastCacheRead = event.cacheRead;
         this.hookStatus = null;
         this.activeSubprocess = null;

@@ -1,5 +1,6 @@
 import type { TapEvent } from "../types/tapEvents";
 import type { Subagent, SubagentMessage, SessionState } from "../types/session";
+import { isSubagentActive } from "../types/session";
 
 export interface SubagentAction {
   type: "add" | "update" | "clearIdle";
@@ -28,8 +29,12 @@ export class TapSubagentTracker {
     this.parentSessionId = parentSessionId;
   }
 
-  private isActive(state: SessionState | undefined): boolean {
-    return !!state && state !== "idle" && state !== "dead" && state !== "interrupted";
+  /** Check if any tracked subagents are actively working. */
+  hasActiveAgents(): boolean {
+    for (const state of this.agentStates.values()) {
+      if (isSubagentActive(state)) return true;
+    }
+    return false;
   }
 
   /** Process an event. Returns actions to apply to the store, or empty array. */
@@ -142,7 +147,7 @@ export class TapSubagentTracker {
         const targetState: SessionState = event.status === "killed" ? "dead" : "idle";
         for (const agentId of this.knownIds) {
           const currentState = this.agentStates.get(agentId);
-          if (this.isActive(currentState)) {
+          if (currentState && isSubagentActive(currentState)) {
             this.agentStates.set(agentId, targetState);
             actions.push({
               type: "update",
@@ -158,7 +163,7 @@ export class TapSubagentTracker {
         // Interrupt all active subagents
         for (const agentId of this.knownIds) {
           const currentState = this.agentStates.get(agentId);
-          if (this.isActive(currentState)) {
+          if (currentState && isSubagentActive(currentState)) {
             this.agentStates.set(agentId, "interrupted");
             actions.push({
               type: "update",
@@ -206,6 +211,18 @@ export class TapSubagentTracker {
         }
         break;
       }
+
+      case "UserInput":
+      case "SlashCommand":
+        // New user prompt → previous turn's agents are done; mark stale active agents idle
+        for (const agentId of this.knownIds) {
+          const currentState = this.agentStates.get(agentId);
+          if (currentState && isSubagentActive(currentState)) {
+            this.agentStates.set(agentId, "idle");
+            actions.push({ type: "update", subagentId: agentId, updates: { state: "idle" as SessionState } });
+          }
+        }
+        break;
 
       default:
         break;

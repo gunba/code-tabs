@@ -13,6 +13,7 @@ import {
 import { useGitStatus } from "../../hooks/useGitStatus";
 import type { Session, PermissionMode } from "../../types/session";
 import { isSessionIdle } from "../../types/session";
+import { getEffectiveState } from "../../lib/claude";
 import "./StatusBar.css";
 
 function formatDuration(secs: number): string {
@@ -204,8 +205,11 @@ export function StatusBar() {
       .catch(() => setHookCount(0));
   }, [sessions]);
 
+  const subagentMap = useSessionStore((s) => s.subagents);
   const aliveSessions = sessions.filter((s) => s.state !== "dead");
-  const activeSessions = aliveSessions.filter((s) => !isSessionIdle(s.state)).length;
+  const activeSessions = aliveSessions.filter((s) =>
+    !isSessionIdle(getEffectiveState(s.state, subagentMap.get(s.id) || []))
+  ).length;
   const totalTokens = aliveSessions.reduce(
     (sum, s) => sum + s.metadata.inputTokens + s.metadata.outputTokens, 0
   );

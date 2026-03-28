@@ -14,6 +14,11 @@ export function isSessionIdle(state: SessionState): boolean {
   return state === "idle" || state === "interrupted";
 }
 
+/** True if a subagent state indicates active work (not dead/idle/interrupted). */
+export function isSubagentActive(state: SessionState): boolean {
+  return state !== "dead" && state !== "idle" && state !== "interrupted";
+}
+
 export type PermissionMode =
   | "default"
   | "acceptEdits"

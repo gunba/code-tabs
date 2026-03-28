@@ -30,7 +30,8 @@ import { dlog } from "./lib/debugLog";
 import { IconPencil, IconStop, IconClose, IconReturn, IconGear } from "./components/Icons/Icons";
 import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
 import type { Subagent, SessionState } from "./types/session";
-import { isSessionIdle } from "./types/session";
+import { isSessionIdle, isSubagentActive } from "./types/session";
+import { getEffectiveState } from "./lib/claude";
 import "./App.css";
 
 export default function App() {
@@ -82,12 +83,16 @@ export default function App() {
   useCommandDiscovery();
 
   // Track state transitions — flash tabs that become idle from an active state (5s, dismiss on hover)
+  // Uses effective state (accounts for subagents) so flash only fires when all work is truly done.
+  const subagentMap = useSessionStore((s) => s.subagents);
   useEffect(() => {
     const prev = prevStatesRef.current;
     const timers = flashTimersRef.current;
+    const subagents = useSessionStore.getState().subagents;
     for (const s of sessions) {
+      const effState = getEffectiveState(s.state, subagents.get(s.id) || []);
       const prevState = prev.get(s.id);
-      if (prevState && !isSessionIdle(prevState as SessionState) && prevState !== "dead" && prevState !== "starting" && isSessionIdle(s.state)) {
+      if (prevState && !isSessionIdle(prevState as SessionState) && prevState !== "dead" && prevState !== "starting" && isSessionIdle(effState)) {
         // Clear existing timer before setting new one
         const existing = timers.get(s.id);
         if (existing) clearTimeout(existing);
@@ -98,7 +103,7 @@ export default function App() {
         }, 5000);
         timers.set(s.id, timer);
       }
-      prev.set(s.id, s.state);
+      prev.set(s.id, effState);
     }
     // Clean up timers for sessions that were removed (closed)
     const sessionIds = new Set(sessions.map((s) => s.id));
@@ -108,7 +113,7 @@ export default function App() {
         timers.delete(id);
       }
     }
-  }, [sessions]);
+  }, [sessions, subagentMap]);
 
   const dismissFlash = useCallback((sessionId: string) => {
     const timers = flashTimersRef.current;
@@ -292,7 +297,6 @@ export default function App() {
 
   const regularSessions = useMemo(() => sessions.filter((s) => !s.isMetaAgent), [sessions]);
   const groups = useMemo(() => groupSessionsByDir(regularSessions), [regularSessions]);
-  const subagentMap = useSessionStore((s) => s.subagents);
   const activeSubagent: Subagent | null = inspectedSubagent
     ? (subagentMap.get(inspectedSubagent.sessionId) || []).find(
         (s) => s.id === inspectedSubagent.subagentId
@@ -331,7 +335,7 @@ export default function App() {
               if (session.config.effort) metaSpans.push({ text: session.config.effort.charAt(0).toUpperCase() + session.config.effort.slice(1), color: "var(--accent)" });
               const totalTokens = session.metadata.inputTokens + session.metadata.outputTokens;
               const subs = subagentMap.get(session.id) || [];
-              const liveAgents = subs.filter((s) => s.state !== "dead" && s.state !== "idle" && s.state !== "interrupted").length;
+              const liveAgents = subs.filter((s) => isSubagentActive(s.state)).length;
               if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
               if (wt) metaSpans.push({ text: worktreeAcronym(wt.worktreeName), color: "var(--accent-tertiary)", title: wt.worktreeName });
 
@@ -404,9 +408,9 @@ export default function App() {
                     setTabContextMenu({ x: e.clientX, y: e.clientY, sessionId: session.id });
                   }}
                   onMouseEnter={() => dismissFlash(session.id)}
-                  title={ctrlHeld ? `Ctrl+Click: Relaunch ${fullName}` : `${fullName} — ${session.state}\n${session.config.workingDir}${wt ? `\nWorktree: ${wt.worktreeName}` : ""}`}
+                  title={ctrlHeld ? `Ctrl+Click: Relaunch ${fullName}` : `${fullName} — ${getEffectiveState(session.state, subs)}\n${session.config.workingDir}${wt ? `\nWorktree: ${wt.worktreeName}` : ""}`}
                 >
-                  <span className={`tab-dot state-${session.state}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
+                  <span className={`tab-dot state-${getEffectiveState(session.state, subs)}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
                   <span className="tab-label">
                     {editingTabId === session.id ? (
                       <input
@@ -545,7 +549,7 @@ export default function App() {
       {activeSubs.length > 0 && (
         <div className="subagent-bar">
           {activeSubs.map((sub) => {
-            const isActive = sub.state === "thinking" || sub.state === "toolUse" || sub.state === "starting";
+            const isActive = isSubagentActive(sub.state);
             const isIdle = sub.state === "idle";
             const isInterrupted = sub.state === "interrupted";
             const isSelected = inspectedSubagent?.subagentId === sub.id && inspectedSubagent?.sessionId === activeTabId;

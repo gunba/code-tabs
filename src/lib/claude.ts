@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Session, SessionConfig } from "../types/session";
+import type { Session, SessionConfig, SessionState, Subagent } from "../types/session";
+import { isSessionIdle, isSubagentActive } from "../types/session";
 
 // Re-export path utilities so existing imports from claude.ts keep working
 export { dirToTabName } from "./paths";
@@ -31,6 +32,12 @@ export function stripWorktreeFlags(flags: string | null): string | null {
 /** Effective model: user-configured model, falling back to runtime-detected model. */
 export function effectiveModel(session: Session): string | null {
   return session.config.model || session.metadata.runtimeModel || null;
+}
+
+/** Display-only: returns "toolUse" when session is idle but subagents are active. Not for PTY input gating. */
+export function getEffectiveState(state: SessionState, subagents: Subagent[]): SessionState {
+  if (isSessionIdle(state) && subagents.some(s => isSubagentActive(s.state))) return "toolUse";
+  return state;
 }
 
 /** Known model families: keyword → display label + CSS color. */

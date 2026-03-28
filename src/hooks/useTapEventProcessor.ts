@@ -63,13 +63,25 @@ export function useTapEventProcessor(
       const sid = sessionIdRef.current;
       if (!sid) return;
 
-      // 1. State reducer
+      // 1. State reducer — filter SSE events when subagents are active
       const prevState = stateRef.current;
       const newState = reduceTapEvent(prevState, event);
       if (newState !== prevState) {
-        dlog("inspector", sid, `state ${prevState} → ${newState}`);
-        stateRef.current = newState;
-        updateState(sid, newState);
+        // SSE events (TurnStart/TurnEnd/etc.) can't distinguish main from subagent API calls.
+        // When subagents are active, only apply state changes from reliable main-agent events.
+        // ConversationMessage (has isSidechain flag) provides equivalent state info with slight delay.
+        const isReliable = event.kind === "UserInput" || event.kind === "SlashCommand"
+          || event.kind === "PermissionPromptShown" || event.kind === "PermissionApproved"
+          || event.kind === "PermissionRejected" || event.kind === "UserInterruption"
+          || (event.kind === "ConversationMessage" && !event.isSidechain);
+
+        if (!isReliable && subTracker.hasActiveAgents()) {
+          dlog("inspector", sid, `suppressed ${prevState} → ${newState} (subagents active, event=${event.kind})`, "DEBUG");
+        } else {
+          dlog("inspector", sid, `state ${prevState} → ${newState}`);
+          stateRef.current = newState;
+          updateState(sid, newState);
+        }
       }
 
       // Completion signals for queued input dispatch
