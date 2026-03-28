@@ -137,12 +137,9 @@ export function useTapEventProcessor(
         useSettingsStore.getState().recordCommandUsage(event.command);
       }
 
-      // SystemPromptCapture → store the default prompt (only if user didn't set a custom one)
+      // SystemPromptCapture → collect all unique observed prompts
       if (event.kind === "SystemPromptCapture") {
-        const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
-        if (session && !session.config.systemPrompt) {
-          useSettingsStore.getState().setCapturedDefaultPrompt(event.text);
-        }
+        useSettingsStore.getState().addObservedPrompt(event.text, event.model);
       }
 
       // ProcessHealth → store (throttled to ~every 5s)

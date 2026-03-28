@@ -28,7 +28,7 @@ import { useSettingsStore } from "../settings";
 function resetStore() {
   useSettingsStore.setState({
     commandUsage: {},
-    capturedDefaultPrompt: null,
+    observedPrompts: [],
     savedPrompts: [],
     commandBarExpanded: false,
   });
@@ -51,21 +51,60 @@ describe("recordCommandUsage", () => {
   });
 });
 
-describe("setCapturedDefaultPrompt", () => {
+describe("addObservedPrompt", () => {
   beforeEach(resetStore);
 
-  it("sets the captured prompt", () => {
-    useSettingsStore.getState().setCapturedDefaultPrompt("You are Claude...");
-    expect(useSettingsStore.getState().capturedDefaultPrompt).toBe("You are Claude...");
+  it("adds an observed prompt with generated id, label, and timestamp", () => {
+    useSettingsStore.getState().addObservedPrompt("You are Claude, a helpful assistant.", "claude-opus-4-6");
+    const observed = useSettingsStore.getState().observedPrompts;
+    expect(observed).toHaveLength(1);
+    expect(observed[0].text).toBe("You are Claude, a helpful assistant.");
+    expect(observed[0].model).toBe("claude-opus-4-6");
+    expect(observed[0].id).toBeTruthy();
+    expect(observed[0].label).toBeTruthy();
+    expect(observed[0].firstSeenAt).toBeGreaterThan(0);
   });
 
-  it("returns same state reference when value unchanged (identity guard)", () => {
-    useSettingsStore.getState().setCapturedDefaultPrompt("You are Claude...");
+  it("deduplicates by exact text content (identity guard)", () => {
+    const store = useSettingsStore.getState();
+    store.addObservedPrompt("Same prompt", "opus");
     const stateBefore = useSettingsStore.getState();
-    useSettingsStore.getState().setCapturedDefaultPrompt("You are Claude...");
+    useSettingsStore.getState().addObservedPrompt("Same prompt", "opus");
     const stateAfter = useSettingsStore.getState();
-    // Zustand identity guard: if set() returns same state, no re-render
-    expect(stateAfter.capturedDefaultPrompt).toBe(stateBefore.capturedDefaultPrompt);
+    expect(stateAfter.observedPrompts).toHaveLength(1);
+    expect(stateAfter).toBe(stateBefore);
+  });
+
+  it("deduplicates even when model differs (text is the key)", () => {
+    useSettingsStore.getState().addObservedPrompt("Same prompt", "opus");
+    useSettingsStore.getState().addObservedPrompt("Same prompt", "sonnet");
+    expect(useSettingsStore.getState().observedPrompts).toHaveLength(1);
+  });
+
+  it("adds distinct texts as separate entries", () => {
+    useSettingsStore.getState().addObservedPrompt("Prompt A", "opus");
+    useSettingsStore.getState().addObservedPrompt("Prompt B", "sonnet");
+    expect(useSettingsStore.getState().observedPrompts).toHaveLength(2);
+  });
+
+  it("generates label truncated at 60 chars with ellipsis", () => {
+    useSettingsStore.getState().addObservedPrompt("A".repeat(80), "opus");
+    expect(useSettingsStore.getState().observedPrompts[0].label).toBe("A".repeat(60) + "...");
+  });
+
+  it("generates label without ellipsis for short text", () => {
+    useSettingsStore.getState().addObservedPrompt("Short text", "opus");
+    expect(useSettingsStore.getState().observedPrompts[0].label).toBe("Short text");
+  });
+
+  it("caps at 50 entries with FIFO eviction", () => {
+    for (let i = 0; i < 55; i++) {
+      useSettingsStore.getState().addObservedPrompt(`Prompt ${i}`, "opus");
+    }
+    const observed = useSettingsStore.getState().observedPrompts;
+    expect(observed).toHaveLength(50);
+    expect(observed[0].text).toBe("Prompt 5");
+    expect(observed[49].text).toBe("Prompt 54");
   });
 });
 

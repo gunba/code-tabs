@@ -8,13 +8,14 @@ interface PromptsTabProps {
 }
 
 export function PromptsTab({ onStatus }: PromptsTabProps) {
-  const capturedDefaultPrompt = useSettingsStore((s) => s.capturedDefaultPrompt);
   const savedPrompts = useSettingsStore((s) => s.savedPrompts);
+  const observedPrompts = useSettingsStore((s) => s.observedPrompts);
   const addSavedPrompt = useSettingsStore((s) => s.addSavedPrompt);
   const updateSavedPrompt = useSettingsStore((s) => s.updateSavedPrompt);
   const removeSavedPrompt = useSettingsStore((s) => s.removeSavedPrompt);
 
-  const [selectedId, setSelectedId] = useState<"default" | string>("default");
+  const [selectedType, setSelectedType] = useState<"saved" | "observed" | "none">("none");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editText, setEditText] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -22,117 +23,136 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
 
   // Load selected prompt into editor
   useEffect(() => {
-    if (selectedId === "default") {
-      setEditName("");
-      setEditText(capturedDefaultPrompt || "");
-      setDirty(false);
-    } else {
+    if (selectedType === "none" || !selectedId) {
+      setEditName(""); setEditText(""); setDirty(false);
+      return;
+    }
+    if (selectedType === "saved") {
       const prompt = savedPrompts.find((p) => p.id === selectedId);
       if (prompt) {
-        setEditName(prompt.name);
-        setEditText(prompt.text);
-        setDirty(false);
+        setEditName(prompt.name); setEditText(prompt.text); setDirty(false);
       } else {
-        // Prompt was deleted — fall back to default
-        setSelectedId("default");
+        setSelectedType("none"); setSelectedId(null);
+      }
+    } else {
+      const prompt = observedPrompts.find((p) => p.id === selectedId);
+      if (prompt) {
+        setEditName(""); setEditText(prompt.text); setDirty(false);
+      } else {
+        setSelectedType("none"); setSelectedId(null);
       }
     }
-  }, [selectedId, capturedDefaultPrompt, savedPrompts]);
+  }, [selectedType, selectedId, savedPrompts, observedPrompts]);
 
   const handleSave = useCallback(() => {
-    if (selectedId === "default" || !dirty) return;
+    if (selectedType !== "saved" || !selectedId || !dirty) return;
     updateSavedPrompt(selectedId, { name: editName, text: editText });
     setDirty(false);
     onStatus({ type: "success", text: "Prompt saved" });
     setTimeout(() => onStatus(null), 2000);
-  }, [selectedId, dirty, editName, editText, updateSavedPrompt, onStatus]);
+  }, [selectedType, selectedId, dirty, editName, editText, updateSavedPrompt, onStatus]);
 
   const handleAdd = useCallback(() => {
     addSavedPrompt("New Prompt", "");
     const newest = useSettingsStore.getState().savedPrompts;
     const last = newest[newest.length - 1];
-    if (last) setSelectedId(last.id);
+    if (last) { setSelectedType("saved"); setSelectedId(last.id); }
   }, [addSavedPrompt]);
 
   const handleDelete = useCallback(() => {
-    if (selectedId === "default") return;
+    if (selectedType !== "saved" || !selectedId) return;
     removeSavedPrompt(selectedId);
-    setSelectedId("default");
-  }, [selectedId, removeSavedPrompt]);
+    setSelectedType("none"); setSelectedId(null);
+  }, [selectedType, selectedId, removeSavedPrompt]);
 
   // Ctrl+S save
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s" && dirty && selectedId !== "default") {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s" && dirty && selectedType === "saved") {
         e.preventDefault();
         handleSave();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [dirty, selectedId, handleSave]);
+  }, [dirty, selectedType, handleSave]);
 
-  const isDefault = selectedId === "default";
+  const select = (type: "saved" | "observed", id: string) => {
+    setSelectedType(type); setSelectedId(id);
+  };
 
   return (
     <div className="prompts-tab">
       {/* Sidebar */}
       <div className="prompts-sidebar">
-        <div className="prompts-list">
-          <button
-            className={`prompts-list-item${isDefault ? " prompts-list-item-active" : ""}`}
-            onClick={() => setSelectedId("default")}
-          >
-            <span className="prompts-item-name">Default (captured)</span>
-            {capturedDefaultPrompt && (
-              <span className="prompts-item-size">{capturedDefaultPrompt.length.toLocaleString()} chars</span>
-            )}
-          </button>
-
-          {savedPrompts.map((p) => (
-            <button
-              key={p.id}
-              className={`prompts-list-item${selectedId === p.id ? " prompts-list-item-active" : ""}`}
-              onClick={() => setSelectedId(p.id)}
-            >
-              <span className="prompts-item-name">{p.name || "Untitled"}</span>
-              <span className="prompts-item-size">{p.text.length.toLocaleString()} chars</span>
-            </button>
-          ))}
+        {/* Top: My Prompts */}
+        <div className="prompts-section">
+          <div className="prompts-section-header">My Prompts</div>
+          <div className="prompts-section-list">
+            {savedPrompts.map((p) => (
+              <button
+                key={p.id}
+                className={`prompts-list-item${selectedType === "saved" && selectedId === p.id ? " prompts-list-item-active" : ""}`}
+                onClick={() => select("saved", p.id)}
+              >
+                <span className="prompts-item-name">{p.name || "Untitled"}</span>
+                <span className="prompts-item-size">{p.text.length.toLocaleString()} chars</span>
+              </button>
+            ))}
+          </div>
+          <button className="prompts-add-btn" onClick={handleAdd}>+ Add Prompt</button>
         </div>
 
-        <button className="prompts-add-btn" onClick={handleAdd}>
-          + Add Prompt
-        </button>
+        {/* Bottom: Observed */}
+        <div className="prompts-section prompts-section-observed">
+          <div className="prompts-section-header">
+            Observed
+            {observedPrompts.length > 0 && (
+              <span className="prompts-observed-count">{observedPrompts.length}</span>
+            )}
+          </div>
+          <div className="prompts-section-list">
+            {observedPrompts.length === 0 ? (
+              <div className="prompts-observed-empty">No prompts captured yet</div>
+            ) : (
+              observedPrompts.map((p) => (
+                <button
+                  key={p.id}
+                  className={`prompts-list-item${selectedType === "observed" && selectedId === p.id ? " prompts-list-item-active" : ""}`}
+                  onClick={() => select("observed", p.id)}
+                >
+                  <span className="prompts-item-name">{p.label}</span>
+                  <span className="prompts-item-size">{p.model} / {p.text.length.toLocaleString()}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Editor */}
       <div className="prompts-editor">
-        {isDefault ? (
+        {selectedType === "none" ? (
+          <div className="prompts-empty">
+            Select a prompt from the sidebar, or add a new one.
+          </div>
+        ) : selectedType === "observed" ? (
           <>
             <div className="prompts-editor-header">
-              <span className="prompts-editor-title">Default System Prompt</span>
+              <span className="prompts-editor-title">Observed System Prompt</span>
               <span className="prompts-editor-badge">read-only</span>
             </div>
-            {capturedDefaultPrompt ? (
-              <textarea
-                className="prompts-textarea"
-                value={capturedDefaultPrompt}
-                readOnly
-                ref={textareaRef}
-              />
-            ) : (
-              <div className="prompts-empty">
-                No prompt captured yet — start a session to capture the default system prompt.
-              </div>
-            )}
-            {capturedDefaultPrompt && (
-              <div className="prompts-editor-footer">
-                <span className="prompts-char-count">
-                  {capturedDefaultPrompt.length.toLocaleString()} characters
-                </span>
-              </div>
-            )}
+            <textarea
+              className="prompts-textarea"
+              value={editText}
+              readOnly
+              ref={textareaRef}
+            />
+            <div className="prompts-editor-footer">
+              <span className="prompts-char-count">
+                {editText.length.toLocaleString()} characters
+              </span>
+            </div>
           </>
         ) : (
           <>

@@ -8,8 +8,6 @@
     "CD-01",
     "DC-01",
     "DC-02",
-    "DC-03",
-    "DC-04",
     "DR-01",
     "DR-02",
     "DR-03",
@@ -28,104 +26,97 @@
     "BV-01": {
       "up": 0,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "BV-02": {
       "up": 2,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "BV-03": {
-      "up": 3,
+      "up": 4,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "DR-01": {
       "up": 3,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "DR-02": {
       "up": 1,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "DR-03": {
       "up": 0,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "DR-04": {
       "up": 2,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "DR-05": {
-      "up": 4,
+      "up": 5,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "DR-06": {
       "up": 5,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "DR-07": {
       "up": 3,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "TH-01": {
-      "up": 0,
+      "up": 1,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "TH-02": {
       "up": 0,
       "down": 0,
-      "seen": 27
+      "seen": 29
     },
     "FS-01": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 2
     },
     "AR-01": {
       "up": 0,
-      "seen": 17
+      "seen": 19
     },
     "LO-01": {
       "up": 0,
-      "seen": 17
+      "seen": 19
     },
     "CD-01": {
       "up": 2,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "DC-01": {
-      "up": 2,
-      "seen": 17
+      "up": 3,
+      "seen": 19
     },
     "DC-02": {
       "up": 2,
-      "seen": 17
-    },
-    "DC-03": {
-      "up": 2,
-      "seen": 17
-    },
-    "DC-04": {
-      "up": 2,
-      "seen": 17
+      "seen": 19
     },
     "DR-08": {
-      "up": 2,
+      "up": 3,
       "down": 0,
-      "seen": 3
+      "seen": 5
     }
   },
-  "cycle": 4,
-  "last_run": "2026-03-28T02:10:49.791895+00:00",
+  "cycle": 5,
+  "last_run": "2026-03-28T07:30:53.165482+00:00",
   "metadata": {
     "BV-02": {
       "files": [

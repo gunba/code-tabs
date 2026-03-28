@@ -104,7 +104,7 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │   ├── ConfigManager/PluginsPane.tsx    # CLI-driven plugin manager (single-pane, install/enable/disable + MCP servers)
   │   ├── ConfigManager/AgentEditor.tsx    # Per-scope agent file list + markdown editor
   │   ├── ConfigManager/SettingsTab.tsx    # Unified per-scope settings layout with schema-driven fields
-  │   ├── ConfigManager/PromptsTab.tsx     # Captured default prompt viewer + saved prompts editor
+  │   ├── ConfigManager/PromptsTab.tsx     # Split sidebar: My Prompts (editable) + Observed (auto-captured, read-only)
   │   ├── ConfigManager/SkillsEditor.tsx   # Per-scope skills file list + markdown editor
   │   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
   │   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper

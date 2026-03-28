@@ -37,131 +37,133 @@
   "citations": {
     "TB-01": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-02": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-03": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-04": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-05": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-06": {
       "up": 1,
       "down": 0,
-      "seen": 4
+      "seen": 6
     },
     "TB-07": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-08": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-09": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-10": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-11": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-12": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-13": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-14": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-15": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-16": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-17": {
       "up": 2,
-      "seen": 27
+      "seen": 29
     },
     "TB-18": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-19": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-20": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-21": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-24": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 2
     },
     "TB-22": {
       "up": 2,
-      "seen": 27
+      "seen": 29
     },
     "TB-23": {
       "up": 0,
-      "seen": 19
+      "seen": 21
     },
     "TB-25": {
       "up": 0,
-      "seen": 27
+      "seen": 29
     },
     "TB-26": {
       "up": 0,
-      "seen": 19
+      "seen": 21
     },
     "TB-27": {
       "up": 2,
-      "seen": 27
+      "seen": 29
     },
     "TB-28": {
       "up": 0,
-      "down": 0
+      "down": 0,
+      "seen": 2
     },
     "TB-29": {
       "up": 0,
       "down": 0,
-      "seen": 16
+      "seen": 18
     },
     "TB-30": {
       "up": 0,
       "down": 0,
-      "seen": 16
+      "seen": 18
     },
     "TB-31": {
       "up": 3,
       "down": 0,
-      "seen": 4
+      "seen": 6
     }
   },
   "cycle": 7,

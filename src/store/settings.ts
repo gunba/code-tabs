@@ -31,6 +31,14 @@ export interface SlashCommand {
   desc: string;
 }
 
+export interface ObservedPrompt {
+  id: string;
+  text: string;
+  model: string;
+  firstSeenAt: number;
+  label: string;
+}
+
 interface SettingsState {
   recentDirs: string[];
   presets: LaunchPreset[];
@@ -57,7 +65,7 @@ interface SettingsState {
   pastSessionsLoading: boolean;
   sessionNames: Record<string, string>;
   sessionConfigs: Record<string, Partial<SessionConfig>>;
-  capturedDefaultPrompt: string | null;
+  observedPrompts: ObservedPrompt[];
   savedPrompts: Array<{ id: string; name: string; text: string }>;
 
   // Actions
@@ -84,7 +92,7 @@ interface SettingsState {
   loadPastSessions: () => Promise<void>;
   loadBinarySettingsSchema: () => Promise<void>;
   loadSettingsJsonSchema: () => Promise<void>;
-  setCapturedDefaultPrompt: (text: string) => void;
+  addObservedPrompt: (text: string, model: string) => void;
   addSavedPrompt: (name: string, text: string) => void;
   updateSavedPrompt: (id: string, updates: { name?: string; text?: string }) => void;
   removeSavedPrompt: (id: string) => void;
@@ -117,7 +125,7 @@ export const useSettingsStore = create<SettingsState>()(
       pastSessionsLoading: false,
       sessionNames: {},
       sessionConfigs: {},
-      capturedDefaultPrompt: null,
+      observedPrompts: [],
       savedPrompts: [],
 
       addRecentDir: (dir) =>
@@ -293,9 +301,13 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
 
-      setCapturedDefaultPrompt: (text) => set((s) => {
-        if (s.capturedDefaultPrompt === text) return s;
-        return { capturedDefaultPrompt: text };
+      addObservedPrompt: (text, model) => set((s) => {
+        if (s.observedPrompts.some((p) => p.text === text)) return s;
+        const label = text.slice(0, 60).replace(/\n/g, " ").trim() + (text.length > 60 ? "..." : "");
+        const entry: ObservedPrompt = {
+          id: crypto.randomUUID(), text, model, firstSeenAt: Date.now(), label,
+        };
+        return { observedPrompts: [...s.observedPrompts, entry].slice(-50) };
       }),
 
       addSavedPrompt: (name, text) => set((s) => ({
@@ -332,7 +344,6 @@ export const useSettingsStore = create<SettingsState>()(
         commandBarExpanded: state.commandBarExpanded,
         sessionNames: state.sessionNames,
         sessionConfigs: state.sessionConfigs,
-        capturedDefaultPrompt: state.capturedDefaultPrompt,
         savedPrompts: state.savedPrompts,
       }),
     }
