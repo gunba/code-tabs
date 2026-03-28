@@ -29,3 +29,5 @@ paths:
   - Files: src/components/Terminal/TerminalPanel.tsx
 - [TR-14] Scroll position preservation: full-redraw sync blocks conditionally clear scrollback (ESC[3J only when content exceeds terminal height), preserving scroll position for redraws that fit the viewport. ESC[2J is replaced with ESC[H ESC[J. Frontend `flushWrites` detects scrollback clear (baseY shrinkage) and scrolls to bottom, or restores absolute viewport position if moved unexpectedly. Tab switches use `useLayoutEffect` + `visibility:hidden` for flicker-free buffer flush.
   - Files: src-tauri/pty-patch/src/lib.rs, src/hooks/useTerminal.ts, src/components/Terminal/TerminalPanel.tsx
+- [TR-15] Proxy env injection at PTY spawn: when proxyPort is set in settings store, ANTHROPIC_BASE_URL=http://127.0.0.1:{port} is added to the child env. This redirects all Claude Code API calls through the local proxy for multi-provider routing. No model override env vars — the proxy handles model rewriting internally.
+  - Files: src/components/Terminal/TerminalPanel.tsx

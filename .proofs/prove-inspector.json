@@ -22,77 +22,77 @@
     "IN-01": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "IN-02": {
       "up": 1,
       "down": 0,
-      "seen": 7
+      "seen": 9
     },
     "IN-03": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "IN-04": {
       "up": 2,
       "down": 0,
-      "seen": 7
+      "seen": 9
     },
     "IN-05": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "IN-06": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "IN-07": {
       "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "IN-08": {
       "up": 1,
       "down": 0,
-      "seen": 44
+      "seen": 46
     },
     "IN-09": {
       "up": 2,
       "down": 0,
-      "seen": 15
+      "seen": 17
     },
     "IN-10": {
       "up": 1,
       "down": 0,
-      "seen": 7
+      "seen": 9
     },
     "IN-11": {
       "up": 1,
       "down": 0,
-      "seen": 7
+      "seen": 9
     },
     "IN-12": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "IN-13": {
       "up": 3,
       "down": 0,
-      "seen": 7
+      "seen": 9
     },
     "IN-14": {
       "up": 3,
       "down": 0,
-      "seen": 7
+      "seen": 9
     },
     "IN-15": {
       "up": 3,
       "down": 0,
-      "seen": 7
+      "seen": 9
     }
   },
   "cycle": 4,

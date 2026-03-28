@@ -389,6 +389,11 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         // TAP_PORT for dedicated TCP event delivery
         const env: Record<string, string> = { BUN_INSPECT: `ws://127.0.0.1:${inspPort}/0` };
         if (tapPort) env.TAP_PORT = String(tapPort);
+        // Inject proxy URL for multi-provider routing
+        const { proxyPort } = useSettingsStore.getState();
+        if (proxyPort) {
+          env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}`;
+        }
         const handle = await pty.spawn(claudePath, args, cwd, cols, rows, env);
         registerPtyWriter(session.id, handle.write);
         registerPtyKill(session.id, () => handle.kill());

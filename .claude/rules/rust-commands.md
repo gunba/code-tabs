@@ -36,3 +36,7 @@ paths:
   - Files: src-tauri/src/commands.rs, src-tauri/src/lib.rs
 - [RC-19] prune_worktree: runs `git worktree remove --force <path>` (always forced — dialog is the confirmation). Async with spawn_blocking + CREATE_NO_WINDOW. Takes worktree_path and project_root (cwd for git). Returns error string on failure.
   - Files: src-tauri/src/commands.rs, src-tauri/src/lib.rs
+- [RC-20] API proxy module (proxy.rs): async streaming HTTP proxy for multi-provider model routing. Binds tokio::net::TcpListener on ephemeral port, spawns per-connection handlers via tokio::spawn. Reads full request body (async), extracts model from JSON, matches against ordered ModelRoute list (glob_match), rewrites model field if route specifies rewrite_model, forwards to upstream provider via shared reqwest::Client (async, 5min timeout). Streams response back chunk-by-chunk with flush per chunk for SSE compatibility. Auth: when provider has own api_key, strips x-api-key and authorization headers, replaces with provider key. Shutdown via oneshot channel. Emits proxy-route Tauri events for debug visibility.
+  - Files: src-tauri/src/proxy.rs, src-tauri/src/lib.rs
+- [RC-21] Provider/proxy types in session/types.rs: ModelProvider (id, name, base_url, api_key), ModelRoute (id, pattern, rewrite_model, provider_id), ProviderConfig (providers, routes with serde(default), default_provider_id). Route matching uses glob_match in order, first match wins. Default config: single Anthropic provider with catch-all route.
+  - Files: src-tauri/src/session/types.rs

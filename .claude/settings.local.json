@@ -20,7 +20,10 @@
       "Bash(python -c \":*)",
       "Bash(git push:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cargo check:*)",
+      "Bash(git tag:*)",
+      "Bash(bash \"$AGENT_PROOFS_BIN/log-run.sh\" --cmd b --summary \"Commit merge conflict + TS fix + v0.22.0 bump. Build passed 58s \\(53s Rust, 5s Vite\\). Binary 9.8MB. Tagged v0.22.0, pushed, GH release created. CI will build installers.\" --build-time 58)"
     ]
   },
   "hooks": {

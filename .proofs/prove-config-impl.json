@@ -3,28 +3,34 @@
   "all_tags": [
     "CI-01",
     "CI-02",
-    "CI-03"
+    "CI-03",
+    "CI-04"
   ],
   "unchecked": [],
   "citations": {
     "CI-01": {
       "up": 3,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "CI-02": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "CI-03": {
       "up": 0,
       "down": 0,
-      "seen": 22
+      "seen": 24
+    },
+    "CI-04": {
+      "up": 1,
+      "down": 0,
+      "seen": 1
     }
   },
   "cycle": 5,
-  "last_run": "2026-03-28T07:40:44.884160+00:00",
+  "last_run": "2026-03-28T12:24:40.809919+00:00",
   "metadata": {
     "CI-01": {
       "files": [
@@ -41,6 +47,23 @@
       ],
       "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
+    },
+    "CI-04": {
+      "files": [
+        "src/store/settings.ts",
+        "src/types/session.ts"
+      ],
+      "verified": "2026-03-28",
+      "notes": [
+        {
+          "date": "2026-03-28",
+          "text": "Added during change documentation"
+        },
+        {
+          "date": "2026-03-28",
+          "text": "settings.ts has providerConfig of type ProviderConfig, proxyPort transient (in state but not in partialize list). Zustand persist version 1 with migration from version 0: drops tierOverrides, converts modelPatterns to ModelRoute entries, ensures catch-all route. All confirmed."
+        }
+      ]
     }
   }
 }

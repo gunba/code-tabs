@@ -19,108 +19,120 @@
     "RC-16",
     "RC-17",
     "RC-18",
-    "RC-19"
+    "RC-19",
+    "RC-20",
+    "RC-21"
   ],
   "unchecked": [],
   "citations": {
     "RC-01": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-02": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-03": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-04": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-05": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-06": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-07": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-08": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-09": {
       "up": 1,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-10": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-11": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-12": {
       "up": 3,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-13": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-14": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-15": {
       "up": 0,
       "down": 0,
-      "seen": 22
+      "seen": 24
     },
     "RC-16": {
       "up": 3,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-17": {
       "up": 1,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-18": {
       "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "RC-19": {
       "up": 2,
       "down": 0,
-      "seen": 19
+      "seen": 21
+    },
+    "RC-20": {
+      "up": 1,
+      "down": 0,
+      "seen": 1
+    },
+    "RC-21": {
+      "up": 1,
+      "down": 0,
+      "seen": 1
     }
   },
   "cycle": 4,
-  "last_run": "2026-03-28T02:11:22.571051+00:00",
+  "last_run": "2026-03-28T12:24:44.923208+00:00",
   "metadata": {
     "RC-11": {
       "files": [
@@ -184,6 +196,39 @@
       ],
       "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
+    },
+    "RC-20": {
+      "files": [
+        "src-tauri/src/proxy.rs",
+        "src-tauri/src/lib.rs"
+      ],
+      "verified": "2026-03-28",
+      "notes": [
+        {
+          "date": "2026-03-28",
+          "text": "Added during change documentation"
+        },
+        {
+          "date": "2026-03-28",
+          "text": "proxy.rs: async streaming HTTP proxy, TcpListener on ephemeral port (bind 127.0.0.1:0), tokio::spawn per connection. Reads full request body, extracts model, matches against ordered ModelRoute list via glob_match, rewrites model if route specifies rewrite_model. Forwards via shared reqwest::Client with 5min timeout. Streams response chunk-by-chunk with flush per chunk for SSE. Auth: strips x-api-key/authorization when provider has own key, replaces with provider key. Shutdown via oneshot channel. Emits proxy-route Tauri events. Registered in lib.rs. All confirmed."
+        }
+      ]
+    },
+    "RC-21": {
+      "files": [
+        "src-tauri/src/session/types.rs"
+      ],
+      "verified": "2026-03-28",
+      "notes": [
+        {
+          "date": "2026-03-28",
+          "text": "Added during change documentation"
+        },
+        {
+          "date": "2026-03-28",
+          "text": "types.rs has ModelProvider (id, name, base_url, api_key), ModelRoute (id, pattern, rewrite_model, provider_id), ProviderConfig (providers, routes with serde(default), default_provider_id). Default config: single Anthropic provider with catch-all * route. glob_match is used in proxy.rs not types.rs. Confirmed."
+        }
+      ]
     }
   }
 }

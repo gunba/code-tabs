@@ -5,38 +5,44 @@
     "PS-02",
     "PS-03",
     "PS-04",
-    "PS-05"
+    "PS-05",
+    "PS-06"
   ],
   "unchecked": [],
   "citations": {
     "PS-01": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "PS-02": {
       "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "PS-03": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "PS-04": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "PS-05": {
       "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 32
+    },
+    "PS-06": {
+      "up": 1,
+      "down": 0,
+      "seen": 1
     }
   },
   "cycle": 4,
-  "last_run": "2026-03-28T02:11:22.571051+00:00",
+  "last_run": "2026-03-28T12:24:42.864264+00:00",
   "metadata": {
     "PS-02": {
       "files": [
@@ -51,6 +57,22 @@
       ],
       "verified": "2026-03-27",
       "notes": "Promise.all awaits kill_orphan_sessions and detect_claude_cli, claudePath set after both complete"
+    },
+    "PS-06": {
+      "files": [
+        "src/store/sessions.ts"
+      ],
+      "verified": "2026-03-28",
+      "notes": [
+        {
+          "date": "2026-03-28",
+          "text": "Added during change documentation"
+        },
+        {
+          "date": "2026-03-28",
+          "text": "sessions.ts init() calls invoke start_api_proxy with providerConfig, stores returned port via setProxyPort. Listens for proxy-route events and dlogs routing decisions. Proxy port is transient (not persisted in settings store partialize). Confirmed."
+        }
+      ]
     }
   }
 }

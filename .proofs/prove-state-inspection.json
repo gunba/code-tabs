@@ -29,112 +29,112 @@
     "SI-01": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-02": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-03": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-04": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-05": {
       "up": 1,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-06": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-07": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-08": {
       "up": 1,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-09": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-10": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-11": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-12": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-13": {
       "up": 1,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-14": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-15": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-20": {
       "up": 2,
       "down": 0,
-      "seen": 6
+      "seen": 8
     },
     "SI-16": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-17": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-19": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-21": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "SI-18": {
       "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "SI-22": {
       "up": 3,
       "down": 0,
-      "seen": 3
+      "seen": 5
     }
   },
   "cycle": 5,

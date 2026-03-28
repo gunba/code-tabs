@@ -1,6 +1,7 @@
 mod commands;
 mod jsonl_watcher;
 mod path_utils;
+mod proxy;
 mod session;
 mod tap_server;
 
@@ -10,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
 use jsonl_watcher::WatcherState;
+use proxy::ProxyState;
 use session::SessionManager;
 use tap_server::TapServerState;
 
@@ -131,6 +133,7 @@ pub fn run() {
         .manage(ActivePids(Mutex::new(HashSet::new())))
         .manage(Arc::new(Mutex::new(WatcherState::new())))
         .manage(Arc::new(Mutex::new(TapServerState::new())))
+        .manage(ProxyState::new())
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
             commands::close_session,
@@ -194,11 +197,23 @@ pub fn run() {
             commands::git_diff_file,
             tap_server::start_tap_server,
             tap_server::stop_tap_server,
+            proxy::start_api_proxy,
+            proxy::stop_api_proxy,
+            proxy::update_provider_config,
+            proxy::get_proxy_port,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Claude Tabs")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                // Stop API proxy
+                let proxy_state = app_handle.state::<ProxyState>();
+                if let Ok(mut s) = proxy_state.0.lock() {
+                    if let Some(tx) = s.shutdown_tx.take() {
+                        let _ = tx.send(());
+                    }
+                    s.port = None;
+                }
                 // Stop all TCP tap server threads
                 let tap_state = app_handle.state::<Arc<Mutex<TapServerState>>>();
                 if let Ok(mut s) = tap_state.lock() {

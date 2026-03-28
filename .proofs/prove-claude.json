@@ -26,93 +26,93 @@
     "BV-01": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "BV-02": {
       "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "BV-03": {
-      "up": 5,
+      "up": 6,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "DR-01": {
-      "up": 3,
+      "up": 4,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "DR-02": {
       "up": 1,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "DR-03": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "DR-04": {
       "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "DR-05": {
-      "up": 6,
+      "up": 7,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "DR-06": {
       "up": 5,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "DR-07": {
       "up": 3,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "TH-01": {
-      "up": 1,
+      "up": 2,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "TH-02": {
       "up": 0,
       "down": 0,
-      "seen": 30
+      "seen": 32
     },
     "FS-01": {
       "up": 0,
       "down": 0,
-      "seen": 3
+      "seen": 5
     },
     "AR-01": {
       "up": 0,
-      "seen": 20
+      "seen": 22
     },
     "LO-01": {
       "up": 0,
-      "seen": 20
+      "seen": 22
     },
     "CD-01": {
       "up": 2,
       "down": 0,
-      "seen": 6
+      "seen": 8
     },
     "DC-01": {
       "up": 2,
-      "seen": 20
+      "seen": 22
     },
     "DC-02": {
-      "up": 2,
-      "seen": 20
+      "up": 3,
+      "seen": 22
     },
     "DR-08": {
-      "up": 3,
+      "up": 4,
       "down": 0,
-      "seen": 6
+      "seen": 8
     }
   },
   "cycle": 5,

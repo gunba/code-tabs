@@ -192,3 +192,52 @@ impl From<&Session> for SessionSnapshot {
         }
     }
 }
+
+// ── Provider / Proxy types ──────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelProvider {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelRoute {
+    pub id: String,
+    pub pattern: String,
+    pub rewrite_model: Option<String>,
+    pub provider_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderConfig {
+    pub providers: Vec<ModelProvider>,
+    #[serde(default)]
+    pub routes: Vec<ModelRoute>,
+    pub default_provider_id: String,
+}
+
+impl Default for ProviderConfig {
+    fn default() -> Self {
+        Self {
+            providers: vec![ModelProvider {
+                id: "anthropic".into(),
+                name: "Anthropic".into(),
+                base_url: "https://api.anthropic.com".into(),
+                api_key: None,
+            }],
+            routes: vec![ModelRoute {
+                id: "default-catchall".into(),
+                pattern: "*".into(),
+                rewrite_model: None,
+                provider_id: "anthropic".into(),
+            }],
+            default_provider_id: "anthropic".into(),
+        }
+    }
+}

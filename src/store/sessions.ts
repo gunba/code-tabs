@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { trace, traceAsync } from "../lib/perfTrace";
 import { assignSessionColor, releaseSessionColor, findNearestLiveTab } from "../lib/claude";
 import { dlog } from "../lib/debugLog";
@@ -11,6 +12,7 @@ import type {
   Subagent,
 } from "../types/session";
 import { isSubagentActive } from "../types/session";
+import { useSettingsStore } from "./settings";
 
 interface SessionsState {
   sessions: Session[];
@@ -103,6 +105,25 @@ export const useSessionStore = create<SessionsState>((set) => ({
           ).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`); })
            .catch((e) => dlog("session", null, `orphan cleanup failed: ${e}`, "ERR"))
         : Promise.resolve(),
+      // Start API proxy for multi-provider routing
+      traceAsync("init: start_api_proxy", () => {
+        const { providerConfig } = useSettingsStore.getState();
+        return invoke<number>("start_api_proxy", { config: providerConfig })
+          .then((port) => {
+            useSettingsStore.getState().setProxyPort(port);
+            trace(`init: proxy started on port ${port}`);
+            // Listen for routing events from the proxy for debug visibility
+            listen<{ model: string; provider: string; rewrite: string | null; path: string }>(
+              "proxy-route",
+              (ev) => {
+                const { model, provider, rewrite, path } = ev.payload;
+                const rw = rewrite ? ` → ${rewrite}` : "";
+                dlog("proxy", null, `${path} ${model}${rw} → ${provider}`);
+              },
+            );
+          })
+          .catch((e) => dlog("session", null, `proxy start failed: ${e}`, "ERR"));
+      }),
     ]);
     if (claudePath) {
       set({ claudePath });

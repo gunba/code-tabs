@@ -22,8 +22,8 @@ paths:
 - [CM-08] Save via Rust `read_config_file`/`write_config_file` commands (JSON validated before write, parent dirs auto-created)
 - [CM-09] Escape closes modal; clicking overlay closes modal
 - [CM-10] Settings schema cached in localStorage (`binarySettingsSchema`) to avoid re-scanning on every startup
-- [CM-11] Wide modal (96vw, max 1900px, 88vh) with 7 tabs: Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills. All tabs render at full width. Store value controls which tab opens.
-  - Files: src/components/ConfigManager/ConfigManager.tsx:64, src/components/ConfigManager/ConfigManager.css:1
+- [CM-11] Wide modal (96vw, max 1900px, 88vh) with 8 tabs: Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills, Providers. All tabs render at full width. Store value controls which tab opens.
+  - Files: src/components/ConfigManager/ConfigManager.tsx, src/components/ConfigManager/ConfigManager.css
 - [CM-12] ThreePaneEditor: Claude/Hooks/Agents/Skills tabs use 3-column grid showing User/Project/Local scopes side by side. Color coded: User=clay, Project=blue, Local=purple (left border + tinted header). Plugins and Prompts tabs excluded (use single-pane components).
   - Files: src/components/ConfigManager/ThreePaneEditor.tsx:1, src/components/ConfigManager/ConfigManager.css:129
 - [CM-13] SettingsPane: JSON textarea with syntax highlighting overlay (pre behind transparent textarea). Both layers use position: absolute; inset: 0 inside sh-container for proper fill. Keys=clay, strings=blue, numbers/bools=purple. Scroll synced between layers. Ctrl+S to save.
@@ -49,3 +49,5 @@ paths:
   - Files: src/components/ConfigManager/SettingsPane.tsx:298, src/lib/settingsSchema.ts:295
 - [CM-26] PluginsTab: unified tile UI for installed + marketplace plugins. 3-column responsive grid (minmax 200px). Installed tiles enriched via useMemo cross-reference with available list (description, install count). Color-coded popularity: orange (--accent) 10K+, purple (--accent-tertiary) 1K+, blue (--accent-secondary) <1K. Sort select (Most popular / A-Z). Installed sorted enabled-first then alphabetical. Disabled tiles at 0.55 opacity. Scope selector retained (real CLI feature). Marketplace always visible (collapsible toggle removed).
   - Files: src/components/ConfigManager/PluginsPane.tsx, src/components/ConfigManager/ConfigManager.css
+- [CM-27] ProvidersPane: 8th tab in ConfigManager (Providers, IconLightning). Application-global config (not scoped via ThreePaneEditor). Two sections: (1) Provider cards (name, baseUrl, apiKey, default badge, add/remove/set-default), (2) Model Routes ordered table (pattern input, rewriteModel input, provider dropdown, up/down reorder, remove). Routes match top-to-bottom with glob patterns. Saves via invoke('update_provider_config'). Provider removal reassigns orphaned routes to default provider.
+  - Files: src/components/ConfigManager/ProvidersPane.tsx, src/components/ConfigManager/ProvidersPane.css, src/components/ConfigManager/ConfigManager.tsx

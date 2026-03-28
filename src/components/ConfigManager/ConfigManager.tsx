@@ -10,11 +10,12 @@ import { PluginsTab } from "./PluginsPane";
 import { AgentEditor } from "./AgentEditor";
 import { PromptsTab } from "./PromptsTab";
 import { SkillsEditor } from "./SkillsEditor";
-import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconClose } from "../Icons/Icons";
+import { ProvidersPane } from "./ProvidersPane";
+import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconLightning, IconClose } from "../Icons/Icons";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import "./ConfigManager.css";
 
-type Tab = "settings" | "claudemd" | "hooks" | "plugins" | "agents" | "prompts" | "skills";
+type Tab = "settings" | "claudemd" | "hooks" | "plugins" | "agents" | "prompts" | "skills" | "providers";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <IconGear size={11} /> },
@@ -24,6 +25,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "agents", label: "Agents", icon: <IconBot size={11} /> },
   { id: "prompts", label: "Prompts", icon: <IconDocument size={11} /> },
   { id: "skills", label: "Skills", icon: <IconSkill size={11} /> },
+  { id: "providers", label: "Providers", icon: <IconLightning size={11} /> },
 ];
 
 export function ConfigManager() {
@@ -121,6 +123,7 @@ export function ConfigManager() {
         {tab === "skills" && (
           <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} onStatus={setStatusMsg} tabId="skills" />
         )}
+        <ProvidersPane visible={tab === "providers"} onStatus={setStatusMsg} />
       </div>
 
       {/* Footer */}

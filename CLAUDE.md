@@ -99,7 +99,7 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │   ├── ContextMeter/ContextMeter.tsx    # Context usage breakdown modal (DPS meter, token categories)
   │   ├── SubagentBar/SubagentBar.tsx            # Memo'd subagent card row with own store subscription
   │   ├── SubagentInspector/SubagentInspector.tsx  # Markdown-rendered subagent conversation viewer
-  │   ├── ConfigManager/ConfigManager.tsx  # 7-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills
+  │   ├── ConfigManager/ConfigManager.tsx  # 8-tab config workspace (Ctrl+,): Settings, Claude, Hooks, Plugins, Agents, Prompts, Skills, Providers
   │   ├── ConfigManager/ThreePaneEditor.tsx # 3-column User/Project/Local scope layout (color-coded)
   │   ├── ConfigManager/SettingsPane.tsx   # Per-scope JSON editor with syntax highlighting overlay
   │   ├── ConfigManager/MarkdownPane.tsx   # Per-scope CLAUDE.md editor with preview toggle
@@ -109,6 +109,7 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │   ├── ConfigManager/SettingsTab.tsx    # Unified per-scope settings layout with schema-driven fields
   │   ├── ConfigManager/PromptsTab.tsx     # Split sidebar: My Prompts (editable) + Observed (auto-captured, read-only)
   │   ├── ConfigManager/SkillsEditor.tsx   # Per-scope skills file list + markdown editor
+  │   ├── ConfigManager/ProvidersPane.tsx  # Multi-provider config: provider cards + model routes table
   │   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
   │   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper
   │   ├── DebugPanel/DebugPanel.tsx        # Structured log viewer: session/module filters, color-coded (Ctrl+Shift+D)
@@ -146,14 +147,14 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
 
 ## Development Rules
 
-- [DR-01] Rust IPC commands in `commands.rs` and `jsonl_watcher.rs`, registered in `lib.rs` via `generate_handler!`
+- [DR-01] Rust IPC commands in `commands.rs`, `jsonl_watcher.rs`, and `proxy.rs`, registered in `lib.rs` via `generate_handler!`
 - [DR-02] TypeScript types in `src/types/` mirror Rust types with camelCase
 - [DR-03] Zustand stores in `src/store/`, hooks in `src/hooks/`
 - [DR-04] Components in `src/components/<Name>/<Name>.tsx` with co-located CSS
 - [DR-05] Add tests for any new pure-logic functions in `src/lib/` and store actions in `src/store/`
 - [DR-06] All Rust commands that spawn subprocesses MUST use `tokio::task::spawn_blocking()` to avoid blocking the WebView event loop
 - [DR-07] All Rust commands that spawn subprocesses MUST add `CREATE_NO_WINDOW` flag on Windows (`cmd.creation_flags(0x08000000)`)
-- [DR-08] Use `dlog(module, sessionId, message, level?)` from `src/lib/debugLog.ts` for all application logging. Never use raw `console.log/warn/error`. Module names: `pty`, `inspector`, `terminal`, `session`, `config`, `launcher`, `resume`, `tap`. Pass `sessionId` when in scope, `null` otherwise. Use `"DEBUG"` level for verbose tracing, `"WARN"`/`"ERR"` for problems.
+- [DR-08] Use `dlog(module, sessionId, message, level?)` from `src/lib/debugLog.ts` for all application logging. Never use raw `console.log/warn/error`. Module names: `pty`, `inspector`, `terminal`, `session`, `config`, `launcher`, `resume`, `tap`, `proxy`. Pass `sessionId` when in scope, `null` otherwise. Use `"DEBUG"` level for verbose tracing, `"WARN"`/`"ERR"` for problems.
 
 ## Theme System
 

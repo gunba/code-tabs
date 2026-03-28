@@ -13,31 +13,31 @@
   "citations": {
     "CB-01": {
       "up": 1,
-      "seen": 30
+      "seen": 32
     },
     "CB-02": {
       "up": 0,
-      "seen": 30
+      "seen": 32
     },
     "CB-03": {
       "up": 0,
-      "seen": 30
+      "seen": 32
     },
     "CB-04": {
       "up": 0,
-      "seen": 30
+      "seen": 32
     },
     "CB-05": {
       "up": 1,
-      "seen": 30
+      "seen": 32
     },
     "CB-07": {
       "up": 0,
-      "seen": 30
+      "seen": 32
     },
     "CB-09": {
       "up": 0,
-      "seen": 30
+      "seen": 32
     }
   },
   "cycle": 6,

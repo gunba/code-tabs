@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
-import type { LaunchPreset, SessionConfig, PastSession } from "../types/session";
-import { DEFAULT_SESSION_CONFIG } from "../types/session";
+import type { LaunchPreset, SessionConfig, PastSession, ProviderConfig, ModelRoute } from "../types/session";
+import { DEFAULT_SESSION_CONFIG, DEFAULT_PROVIDER_CONFIG } from "../types/session";
 import { normalizePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import { useSessionStore } from "./sessions";
@@ -67,6 +67,8 @@ interface SettingsState {
   sessionConfigs: Record<string, Partial<SessionConfig>>;
   observedPrompts: ObservedPrompt[];
   savedPrompts: Array<{ id: string; name: string; text: string }>;
+  providerConfig: ProviderConfig;
+  proxyPort: number | null;
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -96,6 +98,8 @@ interface SettingsState {
   addSavedPrompt: (name: string, text: string) => void;
   updateSavedPrompt: (id: string, updates: { name?: string; text?: string }) => void;
   removeSavedPrompt: (id: string) => void;
+  setProviderConfig: (config: ProviderConfig) => void;
+  setProxyPort: (port: number | null) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -127,6 +131,8 @@ export const useSettingsStore = create<SettingsState>()(
       sessionConfigs: {},
       observedPrompts: [],
       savedPrompts: [],
+      providerConfig: DEFAULT_PROVIDER_CONFIG,
+      proxyPort: null,
 
       addRecentDir: (dir) =>
         set((s) => {
@@ -323,10 +329,39 @@ export const useSettingsStore = create<SettingsState>()(
       removeSavedPrompt: (id) => set((s) => ({
         savedPrompts: s.savedPrompts.filter((p) => p.id !== id),
       })),
+
+      setProviderConfig: (config) => set({ providerConfig: config }),
+      setProxyPort: (port) => set({ proxyPort: port }),
     }),
     {
       name: "claude-tabs-settings",
+      version: 1,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persisted: unknown, version: number) => {
+        const state = persisted as Record<string, unknown>;
+        if (version === 0) {
+          // Drop tier overrides (replaced by model routes in proxy)
+          delete state.tierOverrides;
+          // Convert old modelPatterns on providers into routes
+          const pc = state.providerConfig as Record<string, unknown> | undefined;
+          if (pc?.providers && Array.isArray(pc.providers)) {
+            const routes: ModelRoute[] = [];
+            for (const p of pc.providers as Array<Record<string, unknown>>) {
+              if (Array.isArray(p.modelPatterns)) {
+                for (const pat of p.modelPatterns as string[]) {
+                  routes.push({ id: `m-${p.id}-${routes.length}`, pattern: pat, providerId: p.id as string });
+                }
+                delete p.modelPatterns;
+              }
+            }
+            if (routes.length === 0) {
+              routes.push({ id: "default-catchall", pattern: "*", providerId: "anthropic" });
+            }
+            pc.routes = routes;
+          }
+        }
+        return state;
+      },
       // Don't persist transient UI state
       partialize: (state) => ({
         recentDirs: state.recentDirs,
@@ -345,6 +380,7 @@ export const useSettingsStore = create<SettingsState>()(
         sessionNames: state.sessionNames,
         sessionConfigs: state.sessionConfigs,
         savedPrompts: state.savedPrompts,
+        providerConfig: state.providerConfig,
       }),
     }
   )

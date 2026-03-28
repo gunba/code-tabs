@@ -174,6 +174,45 @@ export interface ContentSearchMatch {
   snippet: string;
 }
 
+// ── Provider / Proxy types ──────────────────────────────────────────
+
+export interface ModelProvider {
+  id: string;            // unique ID (e.g., "anthropic", "glm")
+  name: string;          // display name
+  baseUrl: string;       // upstream API endpoint
+  apiKey: string | null; // API key (null = passthrough from request)
+}
+
+export interface ModelRoute {
+  id: string;            // unique ID
+  pattern: string;       // glob pattern to match model name (e.g., "claude-haiku-*")
+  rewriteModel?: string; // rewrite model name (undefined = keep original)
+  providerId: string;    // route to this provider
+}
+
+export interface ProviderConfig {
+  providers: ModelProvider[];
+  routes: ModelRoute[];
+  defaultProviderId: string;
+}
+
+export const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
+  providers: [{
+    id: "anthropic",
+    name: "Anthropic",
+    baseUrl: "https://api.anthropic.com",
+    apiKey: null,
+  }],
+  routes: [{
+    id: "default-catchall",
+    pattern: "*",
+    providerId: "anthropic",
+  }],
+  defaultProviderId: "anthropic",
+};
+
+// ── Session Config ──────────────────────────────────────────────────
+
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   workingDir: "",
   model: null,
