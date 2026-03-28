@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Subagent, SubagentMessage } from "../../types/session";
+import { isSubagentActive } from "../../types/session";
 import { formatTokenCount } from "../../lib/claude";
 import "./SubagentInspector.css";
 
@@ -74,7 +75,7 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const isActive = subagent.state !== "dead" && subagent.state !== "idle" && subagent.state !== "interrupted";
+  const isActive = isSubagentActive(subagent.state);
   const lastToolIndex = isActive
     ? subagent.messages.reduce((acc, m, idx) => m.role === "tool" ? idx : acc, -1)
     : -1;

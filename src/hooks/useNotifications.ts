@@ -9,6 +9,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { isSessionIdle } from "../types/session";
+import { getEffectiveState } from "../lib/claude";
 
 /**
  * Sends native desktop notifications when background sessions
@@ -72,8 +73,11 @@ export function useNotifications() {
       for (const session of state.sessions) {
         if (session.isMetaAgent) continue;
 
+        // Use effective state to account for active subagents
+        const subs = state.subagents.get(session.id) || [];
+        const effState = getEffectiveState(session.state, subs);
         const prev = prevStates[session.id];
-        prevStates[session.id] = session.state;
+        prevStates[session.id] = effState;
 
         // Skip the first observation (no previous state to compare)
         if (!prev) continue;
@@ -81,13 +85,13 @@ export function useNotifications() {
         if (session.id === activeTabId) continue;
         // Skip if we recently notified for this session
         if (lastNotifyRef.current[session.id] && now - lastNotifyRef.current[session.id] < COOLDOWN_MS) continue;
-        // Skip if state didn't change
-        if (prev === session.state) continue;
+        // Skip if effective state didn't change
+        if (prev === effState) continue;
 
         let title: string | null = null;
         let body: string | null = null;
 
-        if ((prev === "thinking" || prev === "toolUse") && isSessionIdle(session.state)) {
+        if ((prev === "thinking" || prev === "toolUse") && isSessionIdle(effState)) {
           title = `${session.name} — Response Complete`;
           body = session.metadata.currentAction || "Session is ready for input.";
         } else if (session.state === "actionNeeded") {
