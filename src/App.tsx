@@ -53,6 +53,7 @@ export default function App() {
   const startAllTaps = useSessionStore((s) => s.startAllTaps);
   const stopAllTaps = useSessionStore((s) => s.stopAllTaps);
   const showLauncher = useSettingsStore((s) => s.showLauncher);
+  const launcherGeneration = useSettingsStore((s) => s.launcherGeneration);
   const setShowLauncher = useSettingsStore((s) => s.setShowLauncher);
   const setLastConfig = useSettingsStore((s) => s.setLastConfig);
   const showConfigManager = useSettingsStore((s) => s.showConfigManager);
@@ -636,7 +637,7 @@ export default function App() {
 
       <StatusBar />
 
-      {showLauncher && <SessionLauncher />}
+      {showLauncher && <SessionLauncher key={launcherGeneration} />}
       {showResumePicker && <ResumePicker onClose={() => setShowResumePicker(false)} />}
       {showPalette && <CommandPalette onClose={() => setShowPalette(false)} />}
       {showConfigManager && <ConfigManager />}

@@ -37,6 +37,7 @@ interface SettingsState {
   lastConfig: SessionConfig;
   savedDefaults: SessionConfig | null;
   showLauncher: boolean;
+  launcherGeneration: number;
   themeName: string;
   notificationsEnabled: boolean;
   cliVersion: string | null;
@@ -97,6 +98,7 @@ export const useSettingsStore = create<SettingsState>()(
       lastConfig: DEFAULT_SESSION_CONFIG,
       savedDefaults: null,
       showLauncher: false,
+      launcherGeneration: 0,
       themeName: "Claude",
       notificationsEnabled: true,
       cliVersion: null,
@@ -170,7 +172,10 @@ export const useSettingsStore = create<SettingsState>()(
         },
       }),
 
-      setShowLauncher: (show) => set({ showLauncher: show }),
+      setShowLauncher: (show) => set((s) => ({
+        showLauncher: show,
+        ...(show ? { launcherGeneration: s.launcherGeneration + 1 } : {}),
+      })),
 
       setThemeName: (name) => set({ themeName: name }),
 

@@ -67,14 +67,12 @@ export function SessionLauncher() {
   const commandUsage = useSettingsStore((s) => s.commandUsage);
   const savedPrompts = useSettingsStore((s) => s.savedPrompts);
 
-  // savedDefaults (explicit "Save defaults") takes priority over lastConfig (auto-saved on launch)
-  const defaults = savedDefaults ?? lastConfig;
+  // When resuming, use session-specific settings from lastConfig (set by handleConfigure);
+  // otherwise savedDefaults (explicit "Save defaults") takes priority over lastConfig
+  const defaults = lastConfig.resumeSession ? lastConfig : (savedDefaults ?? lastConfig);
   const [config, setConfig] = useState<SessionConfig>({
     ...DEFAULT_SESSION_CONFIG,
     ...defaults,
-    // Preserve resume from lastConfig (configure flow sets this one-shot)
-    ...(lastConfig.resumeSession ? { resumeSession: lastConfig.resumeSession, workingDir: lastConfig.workingDir } : {}),
-    // Clear one-shot fields
     continueSession: false,
     sessionId: null,
     runMode: false,
