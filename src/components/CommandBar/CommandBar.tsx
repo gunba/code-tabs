@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { writeToPty } from "../../lib/ptyRegistry";
 import { useSettingsStore } from "../../store/settings";
 import { useSessionStore } from "../../store/sessions";
-import { computeHeatLevel, getHeatStyle } from "../../lib/claude";
+import { computeHeatLevel, heatClassName } from "../../lib/claude";
 import "./CommandBar.css";
 
 // ── Component ───────────────────────────────────────────────────────
@@ -104,12 +104,11 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
             ) : (
               sortedCommands.map((cmd) => {
                 const usageCount = commandUsage[cmd.cmd] || 0;
-                const heat = computeHeatLevel(usageCount, maxCount);
+                const heatClass = heatClassName(computeHeatLevel(usageCount, maxCount));
                 return (
                   <button
                     key={cmd.cmd}
-                    className="command-btn"
-                    style={ctrlHeld ? undefined : getHeatStyle(heat)}
+                    className={`command-btn${heatClass ? ` ${heatClass}` : ""}`}
                     onClick={(e) => handleClick(cmd.cmd, e)}
                     title={ctrlHeld ? `Ctrl+Click: Send "${cmd.cmd}"` : `Click: Type "${cmd.cmd}" into terminal\n${cmd.desc}`}
                     type="button"

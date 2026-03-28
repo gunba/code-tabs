@@ -5,7 +5,7 @@ import {
   modelColor,
   formatTokenCount,
   computeHeatLevel,
-  getHeatStyle,
+  heatClassName,
   SESSION_COLORS,
   assignSessionColor,
   sessionColor,
@@ -180,52 +180,21 @@ describe("computeHeatLevel", () => {
   });
 });
 
-describe("getHeatStyle", () => {
-  it("returns empty object for level 0", () => {
-    expect(getHeatStyle(0)).toEqual({});
+describe("heatClassName", () => {
+  it("returns empty string for level 0", () => {
+    expect(heatClassName(0)).toBe("");
   });
 
-  it("returns color-mix styles for level 1", () => {
-    const style = getHeatStyle(1);
-    expect(style.color).toContain("color-mix");
-    expect(style.color).toContain("30%");
+  it("returns heat-1 for level 1", () => {
+    expect(heatClassName(1)).toBe("heat-1");
   });
 
-  it("returns stronger styles for level 2", () => {
-    const style = getHeatStyle(2);
-    expect(style.color).toContain("65%");
-    expect(style.borderColor).toContain("color-mix");
+  it("returns heat-2 for level 2", () => {
+    expect(heatClassName(2)).toBe("heat-2");
   });
 
-  it("returns full accent styles for level 3", () => {
-    const style = getHeatStyle(3);
-    expect(style.color).toBe("var(--accent)");
-    expect(style.background).toBe("var(--accent-bg)");
-    expect(style.borderColor).toContain("color-mix");
-    expect(style.borderColor).toContain("60%");
-  });
-
-  it("level 0 has no color, borderColor, or background", () => {
-    const style = getHeatStyle(0);
-    expect(Object.keys(style)).toHaveLength(0);
-  });
-
-  it("level 1 has borderColor set to plain border var", () => {
-    const style = getHeatStyle(1);
-    expect(style.borderColor).toBe("var(--border)");
-    expect(style.background).toBeUndefined();
-  });
-
-  it("level 2 has no background property", () => {
-    const style = getHeatStyle(2);
-    expect(style.background).toBeUndefined();
-  });
-
-  it("level 3 is the only level with background", () => {
-    expect(getHeatStyle(0).background).toBeUndefined();
-    expect(getHeatStyle(1).background).toBeUndefined();
-    expect(getHeatStyle(2).background).toBeUndefined();
-    expect(getHeatStyle(3).background).toBe("var(--accent-bg)");
+  it("returns heat-3 for level 3", () => {
+    expect(heatClassName(3)).toBe("heat-3");
   });
 });
 

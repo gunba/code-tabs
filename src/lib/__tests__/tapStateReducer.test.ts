@@ -105,6 +105,51 @@ describe("reduceTapEvent", () => {
     })).toBe("actionNeeded");
   });
 
+  it("ConversationMessage(assistant, tool_use) preserves actionNeeded from ToolCallStart", () => {
+    // ToolCallStart(ExitPlanMode) sets actionNeeded; subsequent ConversationMessage
+    // with tool_use stop reason must not clobber it back to toolUse.
+    expect(reduceTapEvent("actionNeeded", {
+      kind: "ConversationMessage", ts: 0, messageType: "assistant",
+      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+      promptId: null, stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+    })).toBe("actionNeeded");
+  });
+
+  it("content-based plan detection: numbered list in textSnippet → actionNeeded", () => {
+    // Mirrors old terminal buffer scan for "> 1." — detects plan content
+    // from the assistant's ConversationMessage text.
+    expect(reduceTapEvent("thinking", {
+      kind: "ConversationMessage", ts: 0, messageType: "assistant",
+      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+      promptId: null, stopReason: "tool_use", toolNames: [], toolAction: null,
+      textSnippet: "Here is my plan:\n\n1. Read the file\n2. Make changes\n3. Run tests",
+      cwd: null, hasToolError: false, toolErrorText: null,
+    })).toBe("actionNeeded");
+  });
+
+  it("content-based plan detection requires both 1. and 2. patterns", () => {
+    // Single numbered item is not a plan (avoids false positives)
+    expect(reduceTapEvent("thinking", {
+      kind: "ConversationMessage", ts: 0, messageType: "assistant",
+      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+      promptId: null, stopReason: "tool_use", toolNames: [], toolAction: null,
+      textSnippet: "Step 1. Do something",
+      cwd: null, hasToolError: false, toolErrorText: null,
+    })).toBe("toolUse");
+  });
+
+  it("content-based plan detection requires tool_use stop reason", () => {
+    // end_turn with numbered list is not a plan (normal conversation)
+    expect(reduceTapEvent("thinking", {
+      kind: "ConversationMessage", ts: 0, messageType: "assistant",
+      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+      promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
+      textSnippet: "Here are the steps:\n1. First thing\n2. Second thing",
+      cwd: null, hasToolError: false, toolErrorText: null,
+    })).toBe("idle");
+  });
+
   it("informational events don't change state", () => {
     expect(reduceTapEvent("idle", { kind: "ProcessHealth", ts: 0, rss: 100, heapUsed: 50, heapTotal: 60, uptime: 10, cpuPercent: 0 })).toBe("idle");
     expect(reduceTapEvent("thinking", { kind: "ApiTelemetry", ts: 0, model: "opus", costUSD: 0.01, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, uncachedInputTokens: 0, durationMs: 100, ttftMs: 50, queryChainId: null, queryDepth: 0, stopReason: null })).toBe("thinking");

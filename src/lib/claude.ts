@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Session, SessionConfig, SessionState, Subagent } from "../types/session";
 import { isSessionIdle, isSubagentActive } from "../types/session";
@@ -151,27 +150,13 @@ export function computeHeatLevel(count: number, maxCount: number): 0 | 1 | 2 | 3
   return 3;
 }
 
-/** Inline styles for heat level — uses color-mix() for smooth gradient. */
-export function getHeatStyle(level: 0 | 1 | 2 | 3): CSSProperties {
+/** CSS class for heat level — blue (low) → purple (mid) → clay (high). */
+export function heatClassName(level: 0 | 1 | 2 | 3): string {
   switch (level) {
-    case 1:
-      return {
-        color: "color-mix(in srgb, var(--accent) 30%, var(--text-muted))",
-        borderColor: "var(--border)",
-      };
-    case 2:
-      return {
-        color: "color-mix(in srgb, var(--accent) 65%, var(--text-muted))",
-        borderColor: "color-mix(in srgb, var(--accent) 40%, var(--border))",
-      };
-    case 3:
-      return {
-        color: "var(--accent)",
-        borderColor: "color-mix(in srgb, var(--accent) 60%, var(--border))",
-        background: "var(--accent-bg)",
-      };
-    default:
-      return {};
+    case 1: return "heat-1";
+    case 2: return "heat-2";
+    case 3: return "heat-3";
+    default: return "";
   }
 }
 

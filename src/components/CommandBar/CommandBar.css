@@ -108,7 +108,32 @@
   background: var(--bg-surface-hover);
 }
 
-/* ── Ctrl-held: subtle box outline ─────────────────── */
+/* ── Heat gradient: blue (low) → purple (mid) → clay (high) ── */
+
+.command-btn.heat-1 {
+  color: color-mix(in srgb, var(--accent-secondary) 50%, var(--text-muted));
+}
+
+.command-btn.heat-2 {
+  color: color-mix(in srgb, var(--accent-tertiary) 80%, var(--text-muted));
+  border-color: color-mix(in srgb, var(--accent-tertiary) 40%, var(--border));
+}
+
+.command-btn.heat-3 {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-primary));
+}
+
+/* ── Ctrl-held: suppress heat, subtle box outline ──── */
+
+.ctrl-held .command-btn.heat-1,
+.ctrl-held .command-btn.heat-2,
+.ctrl-held .command-btn.heat-3 {
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  border-color: var(--accent-secondary);
+}
 
 .ctrl-held .command-btn {
   border-color: var(--accent-secondary);

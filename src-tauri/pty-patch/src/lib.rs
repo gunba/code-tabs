@@ -121,7 +121,7 @@ struct Session {
     output_filter: Mutex<OutputFilter>,
     sync_detector: Mutex<SyncBlockDetector>,
     rows: AtomicU16,
-    recorder: Mutex<Option<PtyRecorder>>,
+    recorder: std::sync::Mutex<Option<PtyRecorder>>,
 }
 
 type PtyHandler = u32;
@@ -202,7 +202,7 @@ async fn spawn<R: Runtime>(
         output_filter: Mutex::new(OutputFilter::new()),
         sync_detector: Mutex::new(SyncBlockDetector::new()),
         rows: AtomicU16::new(rows),
-        recorder: Mutex::new(None),
+        recorder: std::sync::Mutex::new(None),
     });
     state.sessions.write().await.insert(handler, session);
     Ok(handler)
@@ -229,7 +229,7 @@ async fn write(
         .write_all(bytes)
         .map_err(|e| e.to_string())?;
     // Record input if recording is active
-    if let Some(rec) = session.recorder.lock().await.as_mut() {
+    if let Some(rec) = session.recorder.lock().unwrap().as_mut() {
         rec.record("input", bytes);
     }
     Ok(())
@@ -255,7 +255,7 @@ async fn read(pid: PtyHandler, state: tauri::State<'_, PluginState>) -> Result<V
         let output_rx = session.output_rx.blocking_lock();
         let mut output_filter = session.output_filter.blocking_lock();
         let mut sync_detector = session.sync_detector.blocking_lock();
-        let mut recorder = session.recorder.blocking_lock();
+        let mut recorder = session.recorder.lock().unwrap();
         let rows = session.rows.load(Ordering::Relaxed);
 
         // Block until first chunk arrives (or channel disconnects = EOF)
@@ -343,7 +343,7 @@ async fn resize(
         .map_err(|e| e.to_string())?;
     session.rows.store(rows, Ordering::Relaxed);
     // Record resize event if recording is active
-    if let Some(rec) = session.recorder.lock().await.as_mut() {
+    if let Some(rec) = session.recorder.lock().unwrap().as_mut() {
         rec.record_resize(cols, rows);
     }
     Ok(())
@@ -368,7 +368,7 @@ async fn start_pty_recording(
         (size.cols, size.rows)
     };
     let recorder = PtyRecorder::new(&path, cols.0, cols.1).map_err(|e| e.to_string())?;
-    *session.recorder.lock().await = Some(recorder);
+    *session.recorder.lock().unwrap() = Some(recorder);
     Ok(())
 }
 
@@ -384,7 +384,7 @@ async fn stop_pty_recording(
         .get(&pid)
         .ok_or("Unavaliable pid")?
         .clone();
-    if let Some(mut rec) = session.recorder.lock().await.take() {
+    if let Some(mut rec) = session.recorder.lock().unwrap().take() {
         rec.flush();
     }
     Ok(())

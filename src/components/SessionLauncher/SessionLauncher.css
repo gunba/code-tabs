@@ -319,6 +319,23 @@
   color: var(--accent-secondary);
 }
 
+/* ── Heat gradient: blue (low) → purple (mid) → clay (high) ── */
+
+.launcher-cli-pill-cmd.heat-1 {
+  color: color-mix(in srgb, var(--accent-secondary) 50%, var(--text-muted));
+}
+
+.launcher-cli-pill-cmd.heat-2 {
+  color: color-mix(in srgb, var(--accent-tertiary) 80%, var(--text-muted));
+  border-color: color-mix(in srgb, var(--accent-tertiary) 40%, var(--border));
+}
+
+.launcher-cli-pill-cmd.heat-3 {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-primary));
+}
+
 .launcher-cli-utility-toggle {
   margin-top: 6px;
   opacity: 0.7;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { Terminal, type IMarker } from "@xterm/xterm";
+import { Terminal, type IBuffer } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -9,6 +9,20 @@ import { dlog } from "../lib/debugLog";
 const PROMPT_MARKER_NEW = ">\u00A0"; // > + NBSP — current Claude Code prompt
 const PROMPT_MARKER_OLD = "\u276F"; // ❯ — legacy Claude Code prompt
 const BOTTOM_TOLERANCE = 2; // Lines of slack for "at bottom" detection
+
+/** Scan buffer backward from `fromLine` for a Claude Code prompt line. */
+function findPromptLine(buf: IBuffer, fromLine: number): number {
+  const stop = Math.max(0, fromLine - 50_000);
+  for (let i = fromLine; i >= stop; i--) {
+    const line = buf.getLine(i);
+    if (!line) continue;
+    const text = line.translateToString(true);
+    if (text.includes(PROMPT_MARKER_NEW) || text.includes(PROMPT_MARKER_OLD)) {
+      return i;
+    }
+  }
+  return -1;
+}
 
 interface UseTerminalOptions {
   onData?: (data: string) => void;
@@ -23,7 +37,6 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
   const webglRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const attachedRef = useRef(false);
-  const markersRef = useRef<IMarker[]>([]);
 
   // Stable ref for onBeforeFit callback (captured once by ResizeObserver closure)
   const onBeforeFitRef = useRef<(() => void) | undefined>(undefined);
@@ -103,7 +116,6 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
       observerRef.current?.disconnect();
       webglRef.current?.dispose();
       webglRef.current = null;
-      markersRef.current = [];
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -121,14 +133,7 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
     const disposables: { dispose(): void }[] = [];
 
     if (onData) {
-      const wrappedOnData = (data: string) => {
-        if (data.includes('\r')) {
-          const marker = term.registerMarker(0);
-          if (marker) markersRef.current.push(marker);
-        }
-        onData(data);
-      };
-      disposables.push(term.onData(wrappedOnData));
+      disposables.push(term.onData(onData));
     }
     if (onResize) {
       disposables.push(term.onResize(({ cols, rows }) => onResize(cols, rows)));
@@ -298,24 +303,28 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
   const scrollToLastUserMessage = useCallback(() => {
     const term = termRef.current;
     if (!term) return;
-    // Prune disposed markers
-    markersRef.current = markersRef.current.filter(m => !m.isDisposed);
-    const markers = markersRef.current;
-    if (markers.length === 0) { term.scrollToTop(); return; }
+    // Flush pending writes so the buffer reflects latest PTY output
+    flushWrites();
     const buf = term.buffer.active;
     const atBottom = buf.viewportY >= buf.baseY - BOTTOM_TOLERANCE;
+
     if (atBottom) {
-      term.scrollToLine(Math.max(0, markers[markers.length - 1].line - 1));
-    } else {
-      for (let i = markers.length - 1; i >= 0; i--) {
-        if (markers[i].line < buf.viewportY) {
-          term.scrollToLine(Math.max(0, markers[i].line - 1));
-          return;
-        }
+      const line = findPromptLine(buf, buf.baseY + term.rows - 1);
+      if (line >= 0) {
+        term.scrollToLine(Math.max(0, line - 1));
+      } else {
+        term.scrollToTop();
       }
-      term.scrollToTop();
+    } else {
+      // Step back: find prompt above current viewport top
+      const line = findPromptLine(buf, buf.viewportY - 1);
+      if (line >= 0) {
+        term.scrollToLine(Math.max(0, line - 1));
+      } else {
+        term.scrollToTop();
+      }
     }
-  }, []);
+  }, [flushWrites]);
 
   const isAtBottom = useCallback(() => {
     const term = termRef.current;

@@ -74,7 +74,8 @@ export function useTapEventProcessor(
         const isReliable = event.kind === "UserInput" || event.kind === "SlashCommand"
           || event.kind === "PermissionPromptShown" || event.kind === "PermissionApproved"
           || event.kind === "PermissionRejected" || event.kind === "UserInterruption"
-          || (event.kind === "ConversationMessage" && !event.isSidechain);
+          || (event.kind === "ConversationMessage" && !event.isSidechain)
+          || (event.kind === "ToolCallStart" && event.toolName === "ExitPlanMode");
 
         if (!isReliable && subTracker.hasActiveAgents()) {
           dlog("inspector", sid, `suppressed ${prevState} → ${newState} (subagents active, event=${event.kind})`, "DEBUG");

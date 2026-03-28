@@ -74,6 +74,7 @@ export default function App() {
   const ctrlHeld = useCtrlKey();
   const prevStatesRef = useRef<Map<string, string>>(new Map());
   const flashTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingFlashRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const dragTabRef = useRef<string | null>(null);
   const editDoneRef = useRef(false);
   const initRef = useRef(false);
@@ -91,39 +92,57 @@ export default function App() {
   useEffect(() => {
     const prev = prevStatesRef.current;
     const timers = flashTimersRef.current;
+    const pending = pendingFlashRef.current;
     const subagents = useSessionStore.getState().subagents;
     for (const s of sessions) {
       const effState = getEffectiveState(s.state, subagents.get(s.id) || []);
       const prevState = prev.get(s.id);
       if (prevState && !isSessionIdle(prevState as SessionState) && prevState !== "dead" && prevState !== "starting" && isSessionIdle(effState)) {
-        // Clear existing timer before setting new one
-        const existing = timers.get(s.id);
-        if (existing) clearTimeout(existing);
-        setFlashingTabs((f) => new Set(f).add(s.id));
-        const timer = setTimeout(() => {
-          setFlashingTabs((f) => { const n = new Set(f); n.delete(s.id); return n; });
-          timers.delete(s.id);
-        }, 5000);
-        timers.set(s.id, timer);
+        // Active → idle: start 2s debounce before flashing
+        const existingPending = pending.get(s.id);
+        if (existingPending) clearTimeout(existingPending);
+        const sid = s.id;
+        const debounce = setTimeout(() => {
+          pending.delete(sid);
+          dlog("session", sid, "flash: idle confirmed after 2s debounce");
+          const existingFlash = timers.get(sid);
+          if (existingFlash) clearTimeout(existingFlash);
+          setFlashingTabs((f) => new Set(f).add(sid));
+          const dismiss = setTimeout(() => {
+            setFlashingTabs((f) => { const n = new Set(f); n.delete(sid); return n; });
+            timers.delete(sid);
+          }, 5000);
+          timers.set(sid, dismiss);
+        }, 2000);
+        pending.set(s.id, debounce);
+      } else if (prevState && isSessionIdle(prevState as SessionState) && !isSessionIdle(effState)) {
+        // Idle → non-idle: cancel pending flash (transient idle)
+        const existingPending = pending.get(s.id);
+        if (existingPending) {
+          clearTimeout(existingPending);
+          pending.delete(s.id);
+          dlog("session", s.id, "flash: idle cancelled (transient)", "DEBUG");
+        }
       }
       prev.set(s.id, effState);
     }
     // Clean up timers for sessions that were removed (closed)
     const sessionIds = new Set(sessions.map((s) => s.id));
-    for (const id of timers.keys()) {
+    for (const id of new Set([...pending.keys(), ...timers.keys()])) {
       if (!sessionIds.has(id)) {
-        clearTimeout(timers.get(id)!);
-        timers.delete(id);
+        if (pending.has(id)) { clearTimeout(pending.get(id)!); pending.delete(id); }
+        if (timers.has(id)) { clearTimeout(timers.get(id)!); timers.delete(id); }
       }
     }
   }, [sessions, subagentMap]);
 
   const dismissFlash = useCallback((sessionId: string) => {
+    const pending = pendingFlashRef.current;
+    const pendingTimer = pending.get(sessionId);
+    if (pendingTimer) { clearTimeout(pendingTimer); pending.delete(sessionId); }
     const timers = flashTimersRef.current;
     const timer = timers.get(sessionId);
-    if (!timer) return;
-    clearTimeout(timer);
-    timers.delete(sessionId);
+    if (timer) { clearTimeout(timer); timers.delete(sessionId); }
     setFlashingTabs((f) => { const n = new Set(f); n.delete(sessionId); return n; });
   }, []);
 
@@ -773,7 +792,7 @@ export default function App() {
                             if (isRecording) {
                               const ptyPid = getPtyHandleId(ctxSession.id);
                               if (ptyPid != null) {
-                                await stopPtyRecording(ptyPid).catch(() => {});
+                                await stopPtyRecording(ptyPid).catch((e) => dlog("pty", ctxSession.id, `Stop recording failed: ${e}`, "ERR"));
                               }
                               stopPtyRecordingStore(ctxSession.id);
                               setTabContextMenu(null);
@@ -792,7 +811,7 @@ export default function App() {
                                 setTabContextMenu(null);
                                 return;
                               }
-                              await startPtyRecording(ptyPid, path).catch(() => {});
+                              await startPtyRecording(ptyPid, path).catch((e) => dlog("pty", ctxSession.id, `Start recording failed: ${e}`, "ERR"));
                               startPtyRecordingStore(ctxSession.id, path);
                               setTabContextMenu(null);
                             }

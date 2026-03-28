@@ -2,6 +2,10 @@ import type { TapEvent } from "../types/tapEvents";
 import type { SessionState } from "../types/session";
 import { isSessionIdle } from "../types/session";
 
+/** Plan content markers: detect numbered list items "1. " and "2. " in assistant text. */
+const PLAN_ITEM_1 = /\b1\.\s/;
+const PLAN_ITEM_2 = /\b2\.\s/;
+
 /**
  * Pure state reducer: (state, event) → state.
  * Replaces deriveStateFromPoll() in useInspectorState.ts.
@@ -56,8 +60,18 @@ export function reduceTapEvent(state: SessionState, event: TapEvent): SessionSta
         return "thinking";
       }
       if (event.messageType === "assistant") {
-        // ExitPlanMode takes priority — user needs to approve the plan
+        // ExitPlanMode tool detection
         if (event.toolNames.includes("ExitPlanMode")) return "actionNeeded";
+        // Content-based plan detection: numbered list (1. + 2.) in the agent's
+        // message text with a tool_use stop reason. Mirrors the old terminal
+        // buffer scan for "> 1." but reads directly from the TAP message.
+        if (event.stopReason === "tool_use" && event.textSnippet &&
+            PLAN_ITEM_1.test(event.textSnippet) && PLAN_ITEM_2.test(event.textSnippet)) {
+          return "actionNeeded";
+        }
+        // Preserve actionNeeded set by ToolCallStart(ExitPlanMode) — the
+        // ConversationMessage arrives later and must not clobber it.
+        if (state === "actionNeeded") return "actionNeeded";
         if (event.stopReason === "tool_use") return "toolUse";
         if (event.stopReason === "end_turn") return "idle";
       }

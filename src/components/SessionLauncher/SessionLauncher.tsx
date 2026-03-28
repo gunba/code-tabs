@@ -4,7 +4,7 @@ import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { dlog } from "../../lib/debugLog";
 import type { CliOption, CliCommand } from "../../store/settings";
-import { dirToTabName, computeHeatLevel, getHeatStyle } from "../../lib/claude";
+import { dirToTabName, computeHeatLevel, heatClassName } from "../../lib/claude";
 import {
   type SessionConfig,
   type PermissionMode,
@@ -542,12 +542,11 @@ export function SessionLauncher() {
                     </button>
                   ))}
                   {sortedCliCommands.map((cmd) => {
-                    const heat = computeHeatLevel(commandUsage[cmd.name] || 0, cliCommandMaxCount);
+                    const heatClass = heatClassName(computeHeatLevel(commandUsage[cmd.name] || 0, cliCommandMaxCount));
                     return (
                       <button
                         key={cmd.name}
-                        className="launcher-cli-pill launcher-cli-pill-cmd"
-                        style={getHeatStyle(heat)}
+                        className={`launcher-cli-pill launcher-cli-pill-cmd${heatClass ? ` ${heatClass}` : ""}`}
                         onClick={() => setCommandLine((prev) => {
                           const base = buildFullCommand(config);
                           return prev.trim() === `claude ${cmd.name}` ? base : `claude ${cmd.name}`;

@@ -150,7 +150,7 @@ function UnifiedSettingsReference({
   const activeKeys = scopeKeys[activeScope];
 
   return (
-    <div className="sr-panel sr-panel-wide">
+    <div className={`sr-panel sr-panel-wide${collapsed ? '' : ' sr-panel-expanded'}`}>
       <button
         className="sr-toggle"
         onClick={onToggleCollapsed}

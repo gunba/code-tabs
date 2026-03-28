@@ -1321,10 +1321,16 @@
   flex-shrink: 0;
 }
 
+.sr-panel-wide.sr-panel-expanded {
+  flex: 0 0 40%;
+}
+
 .sr-body-wide {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 2px 10px;
+  flex: 1;
+  min-height: 0;
 }
 
 .sr-body-wide .sr-field {
