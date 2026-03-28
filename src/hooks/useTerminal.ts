@@ -13,9 +13,10 @@ const BOTTOM_TOLERANCE = 2; // Lines of slack for "at bottom" detection
 interface UseTerminalOptions {
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
+  onBeforeFit?: () => void;
 }
 
-export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
+export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOptions = {}) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const webglRef = useRef<WebglAddon | null>(null);
@@ -23,6 +24,10 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const observerRef = useRef<ResizeObserver | null>(null);
   const attachedRef = useRef(false);
   const markersRef = useRef<IMarker[]>([]);
+
+  // Stable ref for onBeforeFit callback (captured once by ResizeObserver closure)
+  const onBeforeFitRef = useRef<(() => void) | undefined>(undefined);
+  onBeforeFitRef.current = onBeforeFit;
 
   // Write batching — accumulate PTY chunks and flush via debounce.
   // ConPTY fragments ink's redraws into many small chunks; batching
@@ -187,6 +192,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       try {
         const dims = fit.proposeDimensions();
         if (!dims || dims.rows <= 1) return;
+        onBeforeFitRef.current?.();
         fit.fit();
       } catch {}
     });
