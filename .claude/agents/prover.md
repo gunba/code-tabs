@@ -22,7 +22,7 @@ Prove tagged documentation entries against the codebase. The prompt will specify
 
 For each doc file in the list:
 
-1. Run `bash "$AGENT_PROOFS_BIN/prove.sh" select-all <doc-file>` — outputs all tags with full entry text.
+1. Run `bash "$AGENT_PROOFS_BIN/prove.sh" select <doc-file>` — outputs a batch of tags with full entry text.
 2. For each entry:
    a. Use Grep and Bash to search the codebase for implementing code.
    b. Classify: `confirmed` / `updated` (edit entry) / `removed` (code gone) / `flagged` (ambiguous).
