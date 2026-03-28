@@ -135,7 +135,8 @@ export const useSessionStore = create<SessionsState>((set) => ({
   },
 
   closeSession: async (id) => {
-    await invoke("close_session", { id });
+    try { await invoke("close_session", { id }); }
+    catch (err) { dlog("session", id, `close_session IPC failed: ${err}`, "ERR"); }
     releaseSessionColor(id);
     set((s) => {
       const closedIndex = s.sessions.findIndex((x) => x.id === id);

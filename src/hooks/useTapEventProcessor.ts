@@ -77,6 +77,13 @@ export function useTapEventProcessor(
         setCompletionCount((c) => c + 1);
       }
 
+      // Read originalCwd BEFORE accumulator clears worktreeInfo
+      let worktreeExitCwd: string | null = null;
+      if (event.kind === "WorktreeCleared") {
+        const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+        worktreeExitCwd = session?.metadata?.worktreeInfo?.originalCwd || null;
+      }
+
       // 2. Metadata accumulator
       const metaDiff = metaAcc.process(event);
       if (metaDiff) {
@@ -151,6 +158,10 @@ export function useTapEventProcessor(
       // WorktreeState: authoritative worktree path from CLI
       if (event.kind === "WorktreeState" && event.worktreePath) {
         updateCwdIfChanged(event.worktreePath);
+      }
+      // WorktreeCleared: restore original working directory
+      if (event.kind === "WorktreeCleared" && worktreeExitCwd) {
+        updateCwdIfChanged(worktreeExitCwd);
       }
     };
 

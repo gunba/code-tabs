@@ -433,16 +433,21 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
     };
   }
 
-  // WorktreeState: type=worktree-state with session details
-  if (parsed.type === "worktree-state" && parsed.worktreeSession) {
-    const ws = parsed.worktreeSession;
-    return {
-      kind: "WorktreeState", ts,
-      originalCwd: ws.originalCwd || "",
-      worktreePath: ws.worktreePath || "",
-      worktreeName: ws.worktreeName || "",
-      worktreeBranch: ws.worktreeBranch || "",
-    };
+  // WorktreeState / WorktreeCleared: type=worktree-state
+  if (parsed.type === "worktree-state") {
+    if (parsed.worktreeSession) {
+      const ws = parsed.worktreeSession;
+      return {
+        kind: "WorktreeState", ts,
+        originalCwd: ws.originalCwd || "",
+        worktreePath: ws.worktreePath || "",
+        worktreeName: ws.worktreeName || "",
+        worktreeBranch: ws.worktreeBranch || "",
+      };
+    } else {
+      // ExitWorktree: worktreeSession is null — worktree was exited/removed
+      return { kind: "WorktreeCleared", ts };
+    }
   }
 
   // FileHistorySnapshot: type=file-history-snapshot

@@ -303,6 +303,45 @@ describe("classifyTapEntry — spawn", () => {
   });
 });
 
+describe("classifyTapEntry — worktree events", () => {
+  it("classifies worktree-state with session → WorktreeState", () => {
+    const entry: TapEntry = {
+      ts: 4500, cat: "stringify", len: 400,
+      snap: JSON.stringify({
+        type: "worktree-state",
+        worktreeSession: {
+          originalCwd: "C:\\Users\\test\\project",
+          worktreePath: "C:\\Users\\test\\project\\.claude\\worktrees\\my-wt",
+          worktreeName: "my-wt",
+          worktreeBranch: "worktree-my-wt",
+        },
+        sessionId: "abc-123",
+      }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({
+      kind: "WorktreeState", ts: 4500,
+      originalCwd: "C:\\Users\\test\\project",
+      worktreePath: "C:\\Users\\test\\project\\.claude\\worktrees\\my-wt",
+      worktreeName: "my-wt",
+      worktreeBranch: "worktree-my-wt",
+    });
+  });
+
+  it("classifies worktree-state with null session → WorktreeCleared", () => {
+    const entry: TapEntry = {
+      ts: 4600, cat: "stringify", len: 99,
+      snap: JSON.stringify({
+        type: "worktree-state",
+        worktreeSession: null,
+        sessionId: "abc-123",
+      }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({ kind: "WorktreeCleared", ts: 4600 });
+  });
+});
+
 describe("classifyTapEntry — unclassified categories", () => {
   it("returns null for console entries", () => {
     const entry: TapEntry = { ts: 5000, cat: "console.log", msg: "test" };

@@ -91,4 +91,25 @@ describe("TapMetadataAccumulator", () => {
     });
     expect(diff?.costUsd).toBe(0.005); // reset, not accumulated
   });
+
+  it("clears worktreeInfo on WorktreeCleared", () => {
+    const acc = new TapMetadataAccumulator();
+    // Enter worktree
+    const enterDiff = acc.process({
+      kind: "WorktreeState", ts: 0,
+      originalCwd: "C:\\project",
+      worktreePath: "C:\\project\\.claude\\worktrees\\my-wt",
+      worktreeName: "my-wt",
+      worktreeBranch: "worktree-my-wt",
+    });
+    expect(enterDiff?.worktreeInfo).toEqual({
+      originalCwd: "C:\\project",
+      worktreePath: "C:\\project\\.claude\\worktrees\\my-wt",
+      worktreeName: "my-wt",
+      worktreeBranch: "worktree-my-wt",
+    });
+    // Exit worktree
+    const exitDiff = acc.process({ kind: "WorktreeCleared", ts: 1 });
+    expect(exitDiff?.worktreeInfo).toBeNull();
+  });
 });

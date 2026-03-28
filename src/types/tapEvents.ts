@@ -322,6 +322,10 @@ export interface WorktreeState extends TapEventBase {
   worktreeBranch: string;
 }
 
+export interface WorktreeCleared extends TapEventBase {
+  kind: "WorktreeCleared";
+}
+
 export interface HookTelemetry extends TapEventBase {
   kind: "HookTelemetry";
   hookName: string;
@@ -381,4 +385,5 @@ export type TapEvent =
   | SubagentLifecycle
   | PlanModeEvent
   | WorktreeState
+  | WorktreeCleared
   | HookTelemetry;

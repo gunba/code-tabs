@@ -291,6 +291,10 @@ export class TapMetadataAccumulator {
         };
         break;
 
+      case "WorktreeCleared":
+        this.worktreeInfo = null;
+        break;
+
       default:
         return null;
     }

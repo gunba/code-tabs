@@ -656,8 +656,13 @@ export default function App() {
                 const { sessionId, worktreePath, projectRoot } = pruneConfirm;
                 setPruneConfirm(null);
                 void (async () => {
-                  try { await killPty(sessionId); }
-                  catch (err) { dlog("session", sessionId, `prune: killPty failed: ${err}`, "ERR"); }
+                  // Kill PTY with timeout — ConPTY cleanup can hang on Windows
+                  try {
+                    await Promise.race([
+                      killPty(sessionId),
+                      new Promise<void>(r => setTimeout(r, 8000)),
+                    ]);
+                  } catch (err) { dlog("session", sessionId, `prune: killPty failed: ${err}`, "ERR"); }
                   try { await closeSession(sessionId); }
                   catch (err) { dlog("session", sessionId, `prune: closeSession failed: ${err}`, "ERR"); }
                   try { await invoke("prune_worktree", { worktreePath, projectRoot }); }
