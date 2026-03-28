@@ -664,7 +664,7 @@ export default function App() {
                   try {
                     await Promise.race([
                       killPty(sessionId),
-                      new Promise<void>(r => setTimeout(r, 8000)),
+                      new Promise<void>(r => setTimeout(r, 8000)), // ConPTY kill can hang on Windows; timeout prevents UI freeze during tab close
                     ]);
                   } catch (err) { dlog("session", sessionId, `prune: killPty failed: ${err}`, "ERR"); }
                   try { await invoke("prune_worktree", { worktreePath, projectRoot }); }

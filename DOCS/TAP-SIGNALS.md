@@ -213,4 +213,4 @@ Test files in `src/lib/__tests__/`:
 | `tapEventBus.test.ts` | 7 — Subscribe/unsubscribe, dispatch, batch, clear |
 | `inspectorTaps.test.ts` | 20 — INSTALL_TAPS hook installation, category toggling, push delivery |
 
-Tests that install INSTALL_TAPS must mute the always-on flags immediately after installation (`flags.parse = false; flags.stringify = false`) to prevent vitest's own JSON operations from flooding the tap buffer. See `DOCS/TESTING.md` for the full OOM prevention protocol.
+Tests that install INSTALL_TAPS must mute the always-on flags immediately after installation (`flags.parse = false; flags.stringify = false`) to prevent vitest's own JSON operations from flooding the tap buffer.

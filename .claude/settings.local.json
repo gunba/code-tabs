@@ -27,7 +27,8 @@
       "Bash(python -c \":*)",
       "Bash(git push:*)",
       "Bash(bash \"$AGENT_PROOFS_BIN/prove.sh\" select-all CLAUDE.md)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   },
   "hooks": {

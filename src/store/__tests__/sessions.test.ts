@@ -34,6 +34,8 @@ function resetStore() {
     killRequest: null,
     hookChangeCounter: 0,
     inspectorOffSessions: new Set(),
+    tapCategories: new Map(),
+    processHealth: new Map(),
   });
 }
 
@@ -259,6 +261,43 @@ describe("closeSession tab selection", () => {
     expect(useSessionStore.getState().activeTabId).toBe("b");
     // Restore default mock
     mockInvoke.mockResolvedValue(undefined);
+  });
+});
+
+describe("closeSession cleanup", () => {
+  beforeEach(resetStore);
+
+  it("removes subagents, commandHistory, tapCategories, and processHealth for closed session", async () => {
+    useSessionStore.setState({
+      sessions: [makeSession("s1"), makeSession("s2")],
+      activeTabId: "s1",
+      subagents: new Map([["s1", [makeSub("sub-1")]], ["s2", [makeSub("sub-2")]]]),
+      commandHistory: new Map([["s1", ["/review"]], ["s2", ["/build"]]]),
+      tapCategories: new Map([["s1", new Set(["parse", "stringify"])], ["s2", new Set(["parse"])]]),
+      processHealth: new Map([["s1", { rss: 100, heapUsed: 50, uptime: 10 }], ["s2", { rss: 200, heapUsed: 80, uptime: 20 }]]),
+    });
+    await useSessionStore.getState().closeSession("s1");
+    const state = useSessionStore.getState();
+    expect(state.subagents.has("s1")).toBe(false);
+    expect(state.subagents.has("s2")).toBe(true);
+    expect(state.commandHistory.has("s1")).toBe(false);
+    expect(state.commandHistory.has("s2")).toBe(true);
+    expect(state.tapCategories.has("s1")).toBe(false);
+    expect(state.tapCategories.has("s2")).toBe(true);
+    expect(state.processHealth.has("s1")).toBe(false);
+    expect(state.processHealth.has("s2")).toBe(true);
+  });
+
+  it("removes closed session from inspectorOffSessions", async () => {
+    useSessionStore.setState({
+      sessions: [makeSession("s1"), makeSession("s2")],
+      activeTabId: "s1",
+      inspectorOffSessions: new Set(["s1", "s2"]),
+    });
+    await useSessionStore.getState().closeSession("s1");
+    const state = useSessionStore.getState();
+    expect(state.inspectorOffSessions.has("s1")).toBe(false);
+    expect(state.inspectorOffSessions.has("s2")).toBe(true);
   });
 });
 

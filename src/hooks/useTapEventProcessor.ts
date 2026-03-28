@@ -85,8 +85,8 @@ export function useTapEventProcessor(
         }
       }
 
-      // Completion signals for queued input dispatch
-      if (newState === "idle" && prevState !== "idle" && isCompletionEvent(event)) {
+      // Completion signals for queued input dispatch (only when state actually applied, not suppressed)
+      if (stateRef.current === "idle" && prevState !== "idle" && isCompletionEvent(event)) {
         setCompletionCount((c) => c + 1);
       }
 

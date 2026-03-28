@@ -342,6 +342,69 @@ describe("classifyTapEntry — worktree events", () => {
   });
 });
 
+describe("classifyTapEntry — permission events", () => {
+  it("classifies setMode array → PermissionPromptShown", () => {
+    const entry: TapEntry = {
+      ts: 4700, cat: "stringify", len: 300,
+      snap: JSON.stringify([{ type: "setMode", acceptEdits: true, destination: "tool_use" }]),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({ kind: "PermissionPromptShown", ts: 4700, toolName: null });
+  });
+
+  it("classifies telemetry shape → PermissionPromptShown with toolName", () => {
+    const entry: TapEntry = {
+      ts: 4701, cat: "stringify", len: 200,
+      snap: JSON.stringify({ toolName: "Bash", decisionReasonType: "user_prompt", sandboxEnabled: false }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({ kind: "PermissionPromptShown", ts: 4701, toolName: "Bash" });
+  });
+
+  it("classifies accept telemetry → PermissionApproved", () => {
+    const entry: TapEntry = {
+      ts: 4702, cat: "stringify", len: 200,
+      snap: JSON.stringify({ toolName: "Edit", has_instructions: false, entered_feedback_mode: false }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({ kind: "PermissionApproved", ts: 4702, toolName: "Edit" });
+  });
+});
+
+describe("classifyTapEntry — system-prompt", () => {
+  it("classifies system-prompt entry → SystemPromptCapture", () => {
+    const entry: TapEntry = {
+      ts: 4800, cat: "system-prompt",
+      text: "You are Claude, an AI assistant...",
+      model: "claude-opus-4-6",
+      msgCount: 3,
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({
+      kind: "SystemPromptCapture", ts: 4800,
+      text: "You are Claude, an AI assistant...",
+      model: "claude-opus-4-6",
+      messageCount: 3,
+    });
+  });
+});
+
+describe("classifyTapEntry — parse errors", () => {
+  it("classifies API stream error → ApiStreamError", () => {
+    const entry: TapEntry = {
+      ts: 4900, cat: "parse", len: 150,
+      snap: JSON.stringify({ type: "error", error: { type: "overloaded_error", message: "Overloaded" }, status: 529 }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({
+      kind: "ApiStreamError", ts: 4900,
+      type: "overloaded_error",
+      message: "Overloaded",
+      status: 529,
+    });
+  });
+});
+
 describe("classifyTapEntry — unclassified categories", () => {
   it("returns null for console entries", () => {
     const entry: TapEntry = { ts: 5000, cat: "console.log", msg: "test" };

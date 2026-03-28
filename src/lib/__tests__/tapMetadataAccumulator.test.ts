@@ -92,6 +92,17 @@ describe("TapMetadataAccumulator", () => {
     expect(diff?.costUsd).toBe(0.005); // reset, not accumulated
   });
 
+  it("stores capturedSystemPrompt from SystemPromptCapture", () => {
+    const acc = new TapMetadataAccumulator();
+    const diff = acc.process({
+      kind: "SystemPromptCapture", ts: 0,
+      text: "You are a helpful assistant",
+      model: "claude-opus-4-6",
+      messageCount: 3,
+    });
+    expect(diff?.capturedSystemPrompt).toBe("You are a helpful assistant");
+  });
+
   it("clears worktreeInfo on WorktreeCleared", () => {
     const acc = new TapMetadataAccumulator();
     // Enter worktree

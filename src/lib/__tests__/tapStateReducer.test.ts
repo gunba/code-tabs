@@ -8,6 +8,15 @@ describe("reduceTapEvent", () => {
     expect(reduceTapEvent("idle", event)).toBe("thinking");
   });
 
+  it("WorktreeCleared is informational — no state change", () => {
+    expect(reduceTapEvent("idle", { kind: "WorktreeCleared", ts: 0 })).toBe("idle");
+    expect(reduceTapEvent("thinking", { kind: "WorktreeCleared", ts: 0 })).toBe("thinking");
+  });
+
+  it("SystemPromptCapture is informational — no state change", () => {
+    expect(reduceTapEvent("thinking", { kind: "SystemPromptCapture", ts: 0, text: "...", model: "opus", messageCount: 1 })).toBe("thinking");
+  });
+
   it("ThinkingStart → thinking", () => {
     expect(reduceTapEvent("idle", { kind: "ThinkingStart", ts: 0, index: 0 })).toBe("thinking");
   });
