@@ -111,9 +111,7 @@ export function ConfigManager() {
         {tab === "hooks" && (
           <ThreePaneEditor component={HooksPane} projectDir={projectDir} onStatus={setStatusMsg} tabId="hooks" />
         )}
-        {tab === "plugins" && (
-          <PluginsTab projectDir={projectDir} onStatus={setStatusMsg} />
-        )}
+        <PluginsTab visible={tab === "plugins"} projectDir={projectDir} onStatus={setStatusMsg} />
         {tab === "agents" && (
           <ThreePaneEditor component={AgentEditor} projectDir={projectDir} onStatus={setStatusMsg} tabId="agents" />
         )}

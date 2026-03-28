@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { formatTokenCount } from "../../lib/claude";
 import type { StatusMessage } from "../../lib/settingsSchema";
@@ -39,6 +39,7 @@ interface PluginListResult {
 }
 
 interface PluginsTabProps {
+  visible: boolean;
   projectDir: string;
   onStatus: (msg: StatusMessage | null) => void;
 }
@@ -70,21 +71,56 @@ function formatInstallCount(n: number | undefined): string {
   return formatTokenCount(n);
 }
 
+/** Color class for install count popularity tier. */
+function installsClass(n: number | undefined): string {
+  if (!n || n <= 0) return "";
+  if (n >= 10_000) return "plugin-installs-hot";
+  if (n >= 1_000) return "plugin-installs-warm";
+  return "plugin-installs-cool";
+}
+
+type SortBy = "downloads" | "name";
+
+function sortPlugins<T extends { pluginId?: string; name?: string; id?: string; installCount?: number }>(
+  list: T[],
+  sortBy: SortBy,
+): T[] {
+  const sorted = [...list];
+  if (sortBy === "name") {
+    sorted.sort((a, b) => {
+      const an = (a.name || a.pluginId || a.id || "").toLowerCase();
+      const bn = (b.name || b.pluginId || b.id || "").toLowerCase();
+      return an.localeCompare(bn);
+    });
+  } else {
+    // downloads desc
+    sorted.sort((a, b) => (b.installCount ?? 0) - (a.installCount ?? 0));
+  }
+  return sorted;
+}
+
 // ── Component ────────────────────────────────────────────────────────────
 
-export function PluginsTab({ projectDir: _projectDir, onStatus }: PluginsTabProps) {
+export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: PluginsTabProps) {
   const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
   const [available, setAvailable] = useState<AvailablePlugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pendingOp, setPendingOp] = useState<string | null>(null); // plugin id being operated on
+  const [pendingOp, setPendingOp] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState("");
   const [installScope, setInstallScope] = useState<"user" | "project">("user");
-  const [marketplaceOpen, setMarketplaceOpen] = useState(true);
+  const [sortBy, setSortBy] = useState<SortBy>("downloads");
 
   // MCP Servers from settings.json (manual config, not CLI-managed)
   const [mcpServers, setMcpServers] = useState<Record<string, McpServer>>({});
   const [mcpDirty, setMcpDirty] = useState(false);
+
+  // Lookup map: available plugin data by pluginId (for enriching installed tiles)
+  const availableLookup = useMemo(() => {
+    const map = new Map<string, AvailablePlugin>();
+    for (const p of available) map.set(p.pluginId, p);
+    return map;
+  }, [available]);
 
   const loadPlugins = useCallback(async () => {
     try {
@@ -122,6 +158,16 @@ export function PluginsTab({ projectDir: _projectDir, onStatus }: PluginsTabProp
     loadPlugins();
     loadMcpServers();
   }, [loadPlugins, loadMcpServers]);
+
+  // Re-fetch when tab becomes visible (prevents stale data in keep-alive mount)
+  const prevVisibleRef = useRef(visible);
+  useEffect(() => {
+    if (visible && !prevVisibleRef.current) {
+      loadPlugins();
+      loadMcpServers();
+    }
+    prevVisibleRef.current = visible;
+  }, [visible, loadPlugins, loadMcpServers]);
 
   const doPluginOp = useCallback(async (
     opName: string,
@@ -192,25 +238,38 @@ export function PluginsTab({ projectDir: _projectDir, onStatus }: PluginsTabProp
     }
   }, [mcpServers, onStatus]);
 
-  // Filter marketplace plugins (exclude already-installed)
-  const installedIds = new Set(installed.map((p) => p.id));
-  const filteredAvailable = available.filter((p) => {
-    if (installedIds.has(p.pluginId)) return false;
-    if (!searchFilter) return true;
-    const q = searchFilter.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      p.pluginId.toLowerCase().includes(q) ||
-      (p.description || "").toLowerCase().includes(q)
-    );
-  });
+  // Sort installed plugins: enabled first, then alphabetical
+  const sortedInstalled = useMemo(() => {
+    const sorted = [...installed];
+    sorted.sort((a, b) => {
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+      return a.id.toLowerCase().localeCompare(b.id.toLowerCase());
+    });
+    return sorted;
+  }, [installed]);
+
+  // Filter & sort marketplace plugins (exclude already-installed)
+  const installedIds = useMemo(() => new Set(installed.map((p) => p.id)), [installed]);
+  const filteredAvailable = useMemo(() => {
+    const filtered = available.filter((p) => {
+      if (installedIds.has(p.pluginId)) return false;
+      if (!searchFilter) return true;
+      const q = searchFilter.toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.pluginId.toLowerCase().includes(q) ||
+        (p.description || "").toLowerCase().includes(q)
+      );
+    });
+    return sortPlugins(filtered, sortBy);
+  }, [available, installedIds, searchFilter, sortBy]);
 
   if (loading) {
-    return <div className="plugins-tab"><div className="pane-hint">Loading plugins...</div></div>;
+    return <div className="plugins-tab" style={{ display: visible ? undefined : "none" }}><div className="pane-hint">Loading plugins...</div></div>;
   }
 
   return (
-    <div className="plugins-tab">
+    <div className="plugins-tab" style={{ display: visible ? undefined : "none" }}>
       {/* Error banner */}
       {error && (
         <div className="plugins-error">{error}</div>
@@ -220,23 +279,36 @@ export function PluginsTab({ projectDir: _projectDir, onStatus }: PluginsTabProp
       {!error && (
         <div className="plugins-section">
           <div className="plugins-section-title">Installed Plugins</div>
-          {installed.length > 0 ? (
-            <div className="plugins-installed-list">
-              {installed.map((plugin) => {
+          {sortedInstalled.length > 0 ? (
+            <div className="plugins-grid">
+              {sortedInstalled.map((plugin) => {
                 const isPending = pendingOp === plugin.id;
+                const info = availableLookup.get(plugin.id);
+                const count = info?.installCount;
+                const cls = installsClass(count);
                 return (
-                  <div key={plugin.id} className={`plugin-card${isPending ? " plugin-card-pending" : ""}`}>
-                    <div className="plugin-card-header">
-                      <div className="plugin-card-info">
-                        <span className="plugin-card-name">{plugin.id}</span>
-                        {plugin.version && <span className="plugin-card-version">v{plugin.version}</span>}
+                  <div key={plugin.id} className={`plugin-tile${isPending ? " plugin-tile-pending" : ""}${!plugin.enabled ? " plugin-tile-disabled" : ""}`}>
+                    <div className="plugin-tile-header">
+                      <span className="plugin-tile-name">{plugin.id}</span>
+                      {count != null && count > 0 && (
+                        <span className={`plugin-tile-installs${cls ? ` ${cls}` : ""}`}>
+                          {formatInstallCount(count)}
+                        </span>
+                      )}
+                    </div>
+                    {info?.description && (
+                      <div className="plugin-tile-desc">{info.description}</div>
+                    )}
+                    <div className="plugin-tile-footer">
+                      <div className="plugin-tile-meta">
+                        {plugin.version && <span className="plugin-tile-version">v{plugin.version}</span>}
                         {plugin.scope && (
                           <span className={`plugin-scope-badge plugin-scope-${plugin.scope}`}>
                             {plugin.scope}
                           </span>
                         )}
                       </div>
-                      <div className="plugin-card-actions">
+                      <div className="plugin-tile-actions">
                         <button
                           className={`plugin-toggle-track${plugin.enabled ? " plugin-toggle-on" : ""}`}
                           onClick={() => plugin.enabled ? handleDisable(plugin.id) : handleEnable(plugin.id)}
@@ -267,71 +339,77 @@ export function PluginsTab({ projectDir: _projectDir, onStatus }: PluginsTabProp
       {/* Marketplace */}
       {!error && (
         <div className="plugins-section">
-          <button
-            className="plugins-marketplace-toggle"
-            onClick={() => setMarketplaceOpen(!marketplaceOpen)}
-          >
-            <span className="plugins-marketplace-arrow">{marketplaceOpen ? "\u25BC" : "\u25B6"}</span>
+          <div className="plugins-section-title">
             Marketplace
             {available.length > 0 && (
               <span className="plugins-marketplace-count">{available.length} available</span>
             )}
-          </button>
+          </div>
 
-          {marketplaceOpen && (
-            <>
-              <div className="plugins-marketplace-controls">
-                <input
-                  className="marketplace-search"
-                  value={searchFilter}
-                  onChange={(e) => setSearchFilter(e.target.value)}
-                  placeholder="Filter plugins..."
-                />
-                <select
-                  className="config-select"
-                  value={installScope}
-                  onChange={(e) => setInstallScope(e.target.value as "user" | "project")}
-                >
-                  <option value="user">User scope</option>
-                  <option value="project">Project scope</option>
-                </select>
-              </div>
+          <div className="plugins-marketplace-controls">
+            <input
+              className="marketplace-search"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              placeholder="Filter plugins..."
+            />
+            <select
+              className="config-select"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortBy)}
+            >
+              <option value="downloads">Most popular</option>
+              <option value="name">A-Z</option>
+            </select>
+            <select
+              className="config-select"
+              value={installScope}
+              onChange={(e) => setInstallScope(e.target.value as "user" | "project")}
+            >
+              <option value="user">User scope</option>
+              <option value="project">Project scope</option>
+            </select>
+          </div>
 
-              {filteredAvailable.length > 0 ? (
-                <div className="marketplace-grid">
-                  {filteredAvailable.map((plugin) => {
-                    const isPending = pendingOp === plugin.pluginId;
-                    return (
-                      <div key={plugin.pluginId} className={`marketplace-card${isPending ? " plugin-card-pending" : ""}`}>
-                        <div className="marketplace-card-header">
-                          <span className="marketplace-card-name">{plugin.name || plugin.pluginId}</span>
-                          {plugin.installCount != null && plugin.installCount > 0 && (
-                            <span className="marketplace-card-installs">{formatInstallCount(plugin.installCount)} installs</span>
-                          )}
-                        </div>
-                        {plugin.description && (
-                          <div className="marketplace-card-desc">{plugin.description}</div>
-                        )}
-                        <div className="marketplace-card-footer">
-                          {plugin.version && <span className="plugin-card-version">v{plugin.version}</span>}
-                          <button
-                            className="plugin-install-btn"
-                            onClick={() => handleInstall(plugin.pluginId)}
-                            disabled={!!pendingOp}
-                          >
-                            Install
-                          </button>
-                        </div>
+          {filteredAvailable.length > 0 ? (
+            <div className="plugins-grid">
+              {filteredAvailable.map((plugin) => {
+                const isPending = pendingOp === plugin.pluginId;
+                const count = plugin.installCount;
+                const cls = installsClass(count);
+                return (
+                  <div key={plugin.pluginId} className={`plugin-tile${isPending ? " plugin-tile-pending" : ""}`}>
+                    <div className="plugin-tile-header">
+                      <span className="plugin-tile-name">{plugin.name || plugin.pluginId}</span>
+                      {count != null && count > 0 && (
+                        <span className={`plugin-tile-installs${cls ? ` ${cls}` : ""}`}>
+                          {formatInstallCount(count)}
+                        </span>
+                      )}
+                    </div>
+                    {plugin.description && (
+                      <div className="plugin-tile-desc">{plugin.description}</div>
+                    )}
+                    <div className="plugin-tile-footer">
+                      <div className="plugin-tile-meta">
+                        {plugin.version && <span className="plugin-tile-version">v{plugin.version}</span>}
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="pane-hint">
-                  {searchFilter ? "No matching plugins" : "No additional plugins available"}
-                </div>
-              )}
-            </>
+                      <button
+                        className="plugin-install-btn"
+                        onClick={() => handleInstall(plugin.pluginId)}
+                        disabled={!!pendingOp}
+                      >
+                        Install
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="pane-hint">
+              {searchFilter ? "No matching plugins" : "No additional plugins available"}
+            </div>
           )}
         </div>
       )}

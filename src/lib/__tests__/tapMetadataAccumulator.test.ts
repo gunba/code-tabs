@@ -103,6 +103,14 @@ describe("TapMetadataAccumulator", () => {
     expect(diff?.capturedSystemPrompt).toBe("You are a helpful assistant");
   });
 
+  it("TurnDuration returns null (duration managed by client-side timer)", () => {
+    const acc = new TapMetadataAccumulator();
+    const diff = acc.process({
+      kind: "TurnDuration", ts: 0, durationMs: 5000, messageCount: 3,
+    });
+    expect(diff).toBeNull();
+  });
+
   it("clears worktreeInfo on WorktreeCleared", () => {
     const acc = new TapMetadataAccumulator();
     // Enter worktree

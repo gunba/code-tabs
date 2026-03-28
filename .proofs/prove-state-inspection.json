@@ -21,7 +21,8 @@
     "SI-18",
     "SI-19",
     "SI-20",
-    "SI-21"
+    "SI-21",
+    "SI-22"
   ],
   "unchecked": [],
   "citations": {
@@ -61,7 +62,7 @@
       "seen": 29
     },
     "SI-08": {
-      "up": 0,
+      "up": 1,
       "down": 0,
       "seen": 29
     },
@@ -129,10 +130,15 @@
       "up": 2,
       "down": 0,
       "seen": 29
+    },
+    "SI-22": {
+      "up": 2,
+      "down": 0,
+      "seen": 2
     }
   },
   "cycle": 5,
-  "last_run": "2026-03-28T07:31:00.665541+00:00",
+  "last_run": "2026-03-28T07:40:33.737048+00:00",
   "metadata": {
     "SI-02": {
       "files": [
@@ -236,6 +242,14 @@
       ],
       "verified": "2026-03-23",
       "notes": "Edited via tag-edit.sh"
+    },
+    "SI-22": {
+      "files": [
+        "src/components/Terminal/TerminalPanel.tsx",
+        "src/lib/tapMetadataAccumulator.ts"
+      ],
+      "verified": "2026-03-28",
+      "notes": "Added during change documentation"
     }
   }
 }

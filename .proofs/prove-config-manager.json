@@ -24,92 +24,19 @@
     "CM-23",
     "CM-24",
     "CM-25",
-    "CM-26",
-    "CM-27"
+    "CM-26"
   ],
   "unchecked": [],
   "citations": {
-    "CM-07": {
-      "up": 0,
-      "seen": 21
-    },
-    "CM-26": {
-      "up": 0,
-      "seen": 21
-    },
-    "CM-03": {
-      "up": 0,
-      "seen": 21
-    },
-    "CM-13": {
-      "up": 0,
-      "seen": 21
-    },
-    "CM-06": {
-      "up": 0,
-      "seen": 29
-    },
-    "CM-12": {
-      "up": 0,
-      "seen": 2
-    },
-    "CM-08": {
-      "up": 2,
-      "seen": 29
-    },
-    "CM-17": {
-      "up": 0,
-      "seen": 29
-    },
     "CM-01": {
       "up": 1,
       "seen": 29
     },
-    "CM-10": {
-      "up": 0,
-      "seen": 29
-    },
-    "CM-09": {
-      "up": 0,
-      "seen": 29
-    },
-    "CM-22": {
-      "up": 0,
-      "seen": 29
-    },
-    "CM-14": {
+    "CM-02": {
       "up": 2,
       "seen": 29
     },
-    "CM-24": {
-      "up": 1,
-      "seen": 28
-    },
-    "CM-20": {
-      "up": 0,
-      "seen": 29
-    },
-    "CM-15": {
-      "up": 0,
-      "seen": 29
-    },
-    "CM-27": {
-      "up": 2,
-      "seen": 2
-    },
-    "CM-11": {
-      "up": 0,
-      "seen": 2
-    },
-    "CM-16": {
-      "up": 0,
-      "seen": 21
-    },
-    "CM-05": {
-      "up": 0,
-      "seen": 2
-    },
-    "CM-23": {
+    "CM-03": {
       "up": 0,
       "seen": 21
     },
@@ -117,21 +44,92 @@
       "up": 0,
       "seen": 29
     },
-    "CM-25": {
+    "CM-05": {
       "up": 0,
-      "seen": 28
+      "down": 0,
+      "seen": 2
     },
-    "CM-02": {
+    "CM-06": {
+      "up": 0,
+      "seen": 29
+    },
+    "CM-07": {
+      "up": 0,
+      "seen": 21
+    },
+    "CM-08": {
       "up": 2,
+      "seen": 29
+    },
+    "CM-09": {
+      "up": 0,
+      "seen": 29
+    },
+    "CM-10": {
+      "up": 0,
+      "seen": 29
+    },
+    "CM-11": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
+    },
+    "CM-12": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
+    },
+    "CM-13": {
+      "up": 0,
+      "seen": 21
+    },
+    "CM-14": {
+      "up": 2,
+      "seen": 29
+    },
+    "CM-15": {
+      "up": 0,
+      "seen": 29
+    },
+    "CM-16": {
+      "up": 2,
+      "seen": 21
+    },
+    "CM-17": {
+      "up": 0,
       "seen": 29
     },
     "CM-18": {
       "up": 2,
       "seen": 29
+    },
+    "CM-20": {
+      "up": 0,
+      "seen": 29
+    },
+    "CM-22": {
+      "up": 0,
+      "seen": 29
+    },
+    "CM-23": {
+      "up": 0,
+      "seen": 21
+    },
+    "CM-24": {
+      "up": 1,
+      "seen": 28
+    },
+    "CM-25": {
+      "up": 0,
+      "seen": 28
+    },
+    "CM-26": {
+      "up": 2,
+      "seen": 21
     }
   },
   "cycle": 7,
-  "last_run": "2026-03-28T07:30:58.121575+00:00",
+  "last_run": "2026-03-28T07:40:24.364766+00:00",
   "metadata": {
     "CM-02": {
       "files": [
@@ -207,11 +205,21 @@
     },
     "CM-16": {
       "files": [
-        "src/components/ConfigManager/PluginsPane.tsx:75",
-        "src/components/ConfigManager/ConfigManager.css:523"
+        "src/components/ConfigManager/PluginsPane.tsx",
+        "src/components/ConfigManager/ConfigManager.css",
+        "src/components/ConfigManager/ConfigManager.tsx"
       ],
-      "verified": "2026-03-23",
-      "notes": "Edited via tag-edit.sh"
+      "verified": "2026-03-28",
+      "notes": [
+        {
+          "date": "2026-03-23",
+          "text": "Edited via tag-edit.sh"
+        },
+        {
+          "date": "2026-03-28",
+          "text": "Edited via tag-edit.sh"
+        }
+      ]
     },
     "CM-18": {
       "files": [
@@ -247,21 +255,20 @@
     },
     "CM-26": {
       "files": [
-        "src/components/ConfigManager/PluginsPane.tsx:75",
-        "src/components/ConfigManager/ConfigManager.css:523"
-      ],
-      "verified": "2026-03-23",
-      "notes": "Edited via tag-edit.sh"
-    },
-    "CM-27": {
-      "files": [
-        "src/components/ConfigManager/PromptsTab.tsx",
-        "src/store/settings.ts",
-        "src/hooks/useTapEventProcessor.ts",
+        "src/components/ConfigManager/PluginsPane.tsx",
         "src/components/ConfigManager/ConfigManager.css"
       ],
       "verified": "2026-03-28",
-      "notes": "Added during change documentation"
+      "notes": [
+        {
+          "date": "2026-03-23",
+          "text": "Edited via tag-edit.sh"
+        },
+        {
+          "date": "2026-03-28",
+          "text": "Edited via tag-edit.sh"
+        }
+      ]
     }
   }
 }

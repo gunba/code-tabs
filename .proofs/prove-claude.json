@@ -23,166 +23,140 @@
   ],
   "unchecked": [],
   "citations": {
+    "BV-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 29
+    },
+    "BV-02": {
+      "up": 2,
+      "down": 0,
+      "seen": 29
+    },
+    "BV-03": {
+      "up": 5,
+      "down": 0,
+      "seen": 29
+    },
+    "DR-01": {
+      "up": 3,
+      "down": 0,
+      "seen": 29
+    },
+    "DR-02": {
+      "up": 1,
+      "down": 0,
+      "seen": 29
+    },
     "DR-03": {
       "up": 0,
+      "down": 0,
       "seen": 29
+    },
+    "DR-04": {
+      "up": 2,
+      "down": 0,
+      "seen": 29
+    },
+    "DR-05": {
+      "up": 6,
+      "down": 0,
+      "seen": 29
+    },
+    "DR-06": {
+      "up": 5,
+      "down": 0,
+      "seen": 29
+    },
+    "DR-07": {
+      "up": 3,
+      "down": 0,
+      "seen": 29
+    },
+    "TH-01": {
+      "up": 1,
+      "down": 0,
+      "seen": 29
+    },
+    "TH-02": {
+      "up": 0,
+      "down": 0,
+      "seen": 29
+    },
+    "FS-01": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
     },
     "AR-01": {
       "up": 0,
       "seen": 19
     },
-    "DR-01": {
-      "up": 3,
-      "seen": 29
-    },
-    "DC-02": {
-      "up": 4,
-      "seen": 19
-    },
-    "DR-06": {
-      "up": 5,
-      "seen": 29
-    },
-    "DC-01": {
-      "up": 3,
-      "seen": 19
-    },
-    "BV-01": {
-      "up": 0,
-      "seen": 29
-    },
-    "DR-04": {
-      "up": 2,
-      "seen": 29
-    },
-    "FS-01": {
-      "up": 0,
-      "seen": 2
-    },
-    "TH-02": {
-      "up": 0,
-      "seen": 29
-    },
-    "DR-08": {
-      "up": 3,
-      "seen": 5
-    },
-    "CD-01": {
-      "up": 2,
-      "seen": 5
-    },
-    "BV-03": {
-      "up": 5,
-      "seen": 29
-    },
-    "DR-05": {
-      "up": 6,
-      "seen": 29
-    },
-    "BV-02": {
-      "up": 2,
-      "seen": 29
-    },
-    "TH-01": {
-      "up": 2,
-      "seen": 29
-    },
-    "DR-07": {
-      "up": 3,
-      "seen": 29
-    },
     "LO-01": {
       "up": 0,
       "seen": 19
     },
-    "DR-02": {
-      "up": 1,
-      "seen": 29
+    "CD-01": {
+      "up": 2,
+      "down": 0,
+      "seen": 5
+    },
+    "DC-01": {
+      "up": 2,
+      "seen": 19
+    },
+    "DC-02": {
+      "up": 2,
+      "seen": 19
+    },
+    "DR-08": {
+      "up": 3,
+      "down": 0,
+      "seen": 5
     }
   },
   "cycle": 5,
-  "last_run": "2026-03-28T07:30:53.165482+00:00",
+  "last_run": "2026-03-28T07:40:11.417433+00:00",
   "metadata": {
     "BV-02": {
       "files": [
-        "package.json"
+        "package.json:13",
+        "package.json:14"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "build:quick and build:debug scripts confirmed in package.json"
-        },
-        {
-          "date": "2026-03-28",
-          "text": "Policy rule confirmed"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "build:quick and build:debug scripts confirmed in package.json"
     },
     "BV-03": {
       "files": [
-        "package.json",
-        "src-tauri/src/lib.rs"
+        "package.json:8"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "tsc/vitest/cargo check pattern confirmed as dev workflow"
-        },
-        {
-          "date": "2026-03-28",
-          "text": "Policy rule confirmed"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "tsc/vitest/cargo check pattern confirmed as dev workflow"
     },
     "CD-01": {
       "files": [
-        ".proofs/config.json"
+        "~/.claude/commands/r.md:1",
+        "~/.claude/commands/j.md:1",
+        "~/.claude/commands/b.md:1",
+        "~/.claude/commands/rj.md:1",
+        "~/.claude/commands/c.md:1"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Updated: /p removed (no p.md), /c added (commit/exit/merge). Files: r,j,b,rj,c confirmed."
-        },
-        {
-          "date": "2026-03-28",
-          "text": "Command list confirmed: /r /j /b /c exist as slash commands"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "Updated: /p removed (no p.md), /c added (commit/exit/merge). Files: r,j,b,rj,c confirmed."
     },
     "DC-01": {
       "files": [
-        ".claude/rules"
+        "DOCS/ARCHITECTURE.md:1"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "File exists"
-        },
-        {
-          "date": "2026-03-28",
-          "text": "Rules directory exists with paths: frontmatter in multiple files"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "File exists"
     },
     "DC-02": {
       "files": [
-        ".proofs/config.json"
+        "DOCS/FEATURES.md:1"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "File exists"
-        },
-        {
-          "date": "2026-03-28",
-          "text": "All tagged rules in config.json docs list are proved via prove.sh"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "File exists"
     },
     "DC-03": {
       "files": [
@@ -204,87 +178,50 @@
     },
     "DR-01": {
       "files": [
-        "src-tauri/src/commands.rs",
-        "src-tauri/src/jsonl_watcher.rs",
-        "src-tauri/src/lib.rs"
+        "src-tauri/src/lib.rs:1",
+        "src-tauri/src/commands.rs:1",
+        "src-tauri/src/jsonl_watcher.rs:35"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "commands.rs and jsonl_watcher.rs both have #[tauri::command], registered via generate_handler! in lib.rs:134"
-        },
-        {
-          "date": "2026-03-28",
-          "text": "Confirmed: commands.rs and jsonl_watcher.rs registered in lib.rs via generate_handler!"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "commands.rs and jsonl_watcher.rs both have #[tauri::command], registered via generate_handler! in lib.rs:134"
     },
     "DR-04": {
       "files": [
-        "src/components/Terminal/TerminalPanel.tsx",
-        "src/components/CommandBar/CommandBar.tsx"
+        "src/components/Terminal/TerminalPanel.tsx:1",
+        "src/components/Terminal/TerminalPanel.css:1",
+        "src/components/CommandBar/CommandBar.tsx:1",
+        "src/components/CommandBar/CommandBar.css:1"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "All 12 component dirs follow <Name>/<Name>.tsx pattern with co-located CSS"
-        },
-        {
-          "date": "2026-03-28",
-          "text": "Components follow <Name>/<Name>.tsx pattern with co-located CSS confirmed"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "All 12 component dirs follow <Name>/<Name>.tsx pattern with co-located CSS"
     },
     "DR-05": {
       "files": [
-        "src/lib/__tests__",
-        "src/store/__tests__"
+        "src/lib/__tests__/tapClassifier.test.ts:1",
+        "src/lib/__tests__/tapStateReducer.test.ts:1",
+        "src/store/__tests__/sessions.test.ts:1"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "23 test files found under src/lib/__tests__/ and src/store/__tests__/"
-        },
-        {
-          "date": "2026-03-28",
-          "text": "Tests in src/lib/__tests__/ and src/store/__tests__/ confirmed"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "23 test files found under src/lib/__tests__/ and src/store/__tests__/"
     },
     "DR-06": {
       "files": [
-        "src-tauri/src/commands.rs"
+        "src-tauri/src/commands.rs:109",
+        "src-tauri/src/commands.rs:174",
+        "src-tauri/src/commands.rs:421",
+        "src-tauri/src/commands.rs:572"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Extensive spawn_blocking usage across commands.rs (22+ uses) and pty-patch/lib.rs (3 uses)"
-        },
-        {
-          "date": "2026-03-28",
-          "text": "spawn_blocking used 23 times in commands.rs - confirmed"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "Extensive spawn_blocking usage across commands.rs (22+ uses) and pty-patch/lib.rs (3 uses)"
     },
     "DR-08": {
       "files": [
-        "src/lib/debugLog.ts"
+        "src/lib/debugLog.ts:22",
+        "src/hooks/useTapPipeline.ts:57",
+        "src/hooks/useInspectorConnection.ts:51"
       ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-27",
-          "text": "Updated: added tap module name. dlog used across all source files; only raw console calls are inside dlog itself, perfTrace, and test files."
-        },
-        {
-          "date": "2026-03-28",
-          "text": "dlog(module, sessionId, message, level?) confirmed in debugLog.ts"
-        }
-      ]
+      "verified": "2026-03-27",
+      "notes": "Updated: added tap module name. dlog used across all source files; only raw console calls are inside dlog itself, perfTrace, and test files."
     },
     "FS-01": {
       "files": [
@@ -294,111 +231,6 @@
       ],
       "verified": "2026-03-28",
       "notes": "ConfigManager now has 7 tabs (added Prompts and Skills). Added PromptsTab.tsx and SkillsEditor.tsx to file tree. Updated PluginsPane.tsx description."
-    },
-    "AR-01": {
-      "files": [
-        "src-tauri/src/lib.rs",
-        "src/lib/ptyProcess.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Confirmed: Tauri IPC in lib.rs, PTY in ptyProcess.ts, React in App.tsx"
-        }
-      ]
-    },
-    "BV-01": {
-      "files": [
-        "package.json"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Confirmed: build:quick and build:debug in package.json scripts. tauri dev runs via npm run tauri -- dev"
-        }
-      ]
-    },
-    "DR-02": {
-      "files": [
-        "src/types/session.ts",
-        "src/types/tapEvents.ts",
-        "src/types/ipc.ts",
-        "src/types/git.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "TypeScript types in src/types/ confirmed"
-        }
-      ]
-    },
-    "DR-03": {
-      "files": [
-        "src/store/sessions.ts",
-        "src/store/settings.ts",
-        "src/hooks/useTerminal.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Stores in src/store/, hooks in src/hooks/ confirmed"
-        }
-      ]
-    },
-    "DR-07": {
-      "files": [
-        "src-tauri/src/commands.rs"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "CREATE_NO_WINDOW/0x08000000 used 11 times in commands.rs - confirmed"
-        }
-      ]
-    },
-    "LO-01": {
-      "files": [
-        "src/App.tsx",
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Layout confirmed: tab bar, subagent bar, terminal, command history, command bar, status bar in App.tsx"
-        }
-      ]
-    },
-    "TH-01": {
-      "files": [
-        "src/lib/theme.ts",
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "applyTheme() and getXtermTheme() confirmed in theme.ts; CSS vars used throughout App.css"
-        }
-      ]
-    },
-    "TH-02": {
-      "files": [
-        "src/lib/theme.ts",
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "CSS variables confirmed in App.css: --bg-primary, --bg-surface, --accent, --term-bg, --term-fg"
-        }
-      ]
     }
   }
 }

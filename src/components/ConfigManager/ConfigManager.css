@@ -551,51 +551,103 @@
   letter-spacing: 0.5px;
 }
 
-.plugins-installed-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* ── Unified plugin grid ─────────────────────────────── */
+
+.plugins-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
+  gap: 6px;
 }
 
-/* ── Plugin card (installed) ─────────────────────────── */
+/* ── Plugin tile (shared by installed + marketplace) ─── */
 
-.plugin-card {
+.plugin-tile {
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   transition: border-color 0.15s;
 }
 
-.plugin-card:hover {
+.plugin-tile:hover {
   border-color: var(--border);
 }
 
-.plugin-card-pending {
+.plugin-tile-disabled {
+  opacity: 0.55;
+}
+
+.plugin-tile-pending {
   opacity: 0.5;
   pointer-events: none;
 }
 
-.plugin-card-header {
+.plugin-tile-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.plugin-card-info {
-  display: flex;
-  align-items: center;
   gap: 6px;
 }
 
-.plugin-card-name {
-  font-size: 12px;
+.plugin-tile-name {
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-primary);
   font-family: 'Cascadia Code', 'Fira Code', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
-.plugin-card-version {
+.plugin-tile-installs {
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.plugin-installs-hot {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.plugin-installs-warm {
+  color: var(--accent-tertiary);
+  font-weight: 600;
+}
+
+.plugin-installs-cool {
+  color: var(--accent-secondary);
+}
+
+.plugin-tile-desc {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.plugin-tile-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.plugin-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.plugin-tile-version {
   font-size: 9px;
   color: var(--text-muted);
   font-family: 'Cascadia Code', 'Fira Code', monospace;
@@ -624,7 +676,7 @@
   color: var(--accent-tertiary);
 }
 
-.plugin-card-actions {
+.plugin-tile-actions {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -669,31 +721,7 @@
   cursor: not-allowed;
 }
 
-/* ── Marketplace ─────────────────────────────────────── */
-
-.plugins-marketplace-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.15s;
-}
-
-.plugins-marketplace-toggle:hover {
-  color: var(--text-secondary);
-}
-
-.plugins-marketplace-arrow {
-  font-size: 8px;
-}
+/* ── Marketplace controls ────────────────────────────── */
 
 .plugins-marketplace-count {
   font-weight: 400;
@@ -701,6 +729,7 @@
   color: var(--text-muted);
   text-transform: none;
   letter-spacing: 0;
+  margin-left: 6px;
 }
 
 .plugins-marketplace-controls {
@@ -729,62 +758,6 @@
 .marketplace-search::placeholder {
   color: var(--text-muted);
   font-style: italic;
-}
-
-.marketplace-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.marketplace-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: border-color 0.15s;
-}
-
-.marketplace-card:hover {
-  border-color: var(--border);
-}
-
-.marketplace-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.marketplace-card-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-}
-
-.marketplace-card-installs {
-  font-size: 9px;
-  color: var(--text-muted);
-}
-
-.marketplace-card-desc {
-  font-size: 10px;
-  color: var(--text-secondary);
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.marketplace-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: auto;
 }
 
 .plugin-install-btn {

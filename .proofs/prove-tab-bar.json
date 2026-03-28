@@ -1,7 +1,6 @@
 {
   "file": ".claude/rules/tab-bar.md",
   "all_tags": [
-    "RC-19",
     "TB-01",
     "TB-02",
     "TB-03",
@@ -36,11 +35,7 @@
   ],
   "unchecked": [],
   "citations": {
-    "TB-11": {
-      "up": 2,
-      "seen": 29
-    },
-    "TB-05": {
+    "TB-01": {
       "up": 0,
       "seen": 29
     },
@@ -48,107 +43,24 @@
       "up": 0,
       "seen": 29
     },
-    "TB-01": {
+    "TB-03": {
       "up": 0,
       "seen": 29
-    },
-    "TB-23": {
-      "up": 0,
-      "seen": 21
-    },
-    "TB-07": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-24": {
-      "up": 0,
-      "seen": 2
-    },
-    "TB-16": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-14": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-06": {
-      "up": 1,
-      "seen": 6
-    },
-    "TB-22": {
-      "up": 2,
-      "seen": 29
-    },
-    "TB-25": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-28": {
-      "up": 0,
-      "seen": 2
-    },
-    "TB-27": {
-      "up": 2,
-      "seen": 29
-    },
-    "TB-19": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-15": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-29": {
-      "up": 0,
-      "seen": 18
-    },
-    "RC-19": {
-      "up": 0,
-      "seen": 1
-    },
-    "TB-31": {
-      "up": 3,
-      "seen": 6
-    },
-    "TB-10": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-09": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-17": {
-      "up": 2,
-      "seen": 29
-    },
-    "TB-30": {
-      "up": 0,
-      "seen": 18
-    },
-    "TB-26": {
-      "up": 0,
-      "seen": 21
     },
     "TB-04": {
       "up": 0,
       "seen": 29
     },
-    "TB-03": {
+    "TB-05": {
       "up": 0,
       "seen": 29
     },
-    "TB-12": {
-      "up": 0,
-      "seen": 29
+    "TB-06": {
+      "up": 1,
+      "down": 0,
+      "seen": 6
     },
-    "TB-20": {
-      "up": 0,
-      "seen": 29
-    },
-    "TB-13": {
+    "TB-07": {
       "up": 0,
       "seen": 29
     },
@@ -156,16 +68,105 @@
       "up": 0,
       "seen": 29
     },
-    "TB-21": {
+    "TB-09": {
       "up": 0,
+      "seen": 29
+    },
+    "TB-10": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-11": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-12": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-13": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-14": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-15": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-16": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-17": {
+      "up": 2,
       "seen": 29
     },
     "TB-18": {
       "up": 0,
       "seen": 29
+    },
+    "TB-19": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-20": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-21": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-24": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
+    },
+    "TB-22": {
+      "up": 2,
+      "seen": 29
+    },
+    "TB-23": {
+      "up": 0,
+      "seen": 21
+    },
+    "TB-25": {
+      "up": 0,
+      "seen": 29
+    },
+    "TB-26": {
+      "up": 0,
+      "seen": 21
+    },
+    "TB-27": {
+      "up": 2,
+      "seen": 29
+    },
+    "TB-28": {
+      "up": 0,
+      "down": 0,
+      "seen": 2
+    },
+    "TB-29": {
+      "up": 0,
+      "down": 0,
+      "seen": 18
+    },
+    "TB-30": {
+      "up": 0,
+      "down": 0,
+      "seen": 18
+    },
+    "TB-31": {
+      "up": 3,
+      "down": 0,
+      "seen": 6
     }
   },
-  "cycle": 8,
+  "cycle": 7,
   "last_run": "2026-03-28T03:57:19.196389+00:00",
   "metadata": {
     "TB-17": {
@@ -233,155 +234,6 @@
       ],
       "verified": "2026-03-27",
       "notes": "Subagent cards use tab-dot state-X classes, meta line with agentType/model/tools/duration, summary line"
-    },
-    "TB-11": {
-      "files": [
-        "src/App.tsx",
-        "src/components/Terminal/TerminalPanel.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Edited via tag-edit.sh"
-        }
-      ]
-    },
-    "TB-01": {
-      "files": [
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "66px tab height with box-sizing: border-box confirmed in App.css"
-        }
-      ]
-    },
-    "TB-02": {
-      "files": [
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Button sizing confirmed in App.css"
-        }
-      ]
-    },
-    "TB-03": {
-      "files": [
-        "src/App.tsx",
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Three buttons with distinct colors confirmed in App.tsx and App.css"
-        }
-      ]
-    },
-    "TB-04": {
-      "files": [
-        "src-tauri/tauri.conf.json"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "decorations:true + theme:Dark confirmed in tauri.conf.json"
-        }
-      ]
-    },
-    "TB-05": {
-      "files": [
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "No webkit-app-region found anywhere in src/ - confirmed"
-        }
-      ]
-    },
-    "TB-06": {
-      "files": [
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "State dot colors confirmed in App.css: state-idle=green, state-thinking=clay pulse, etc."
-        }
-      ]
-    },
-    "TB-07": {
-      "files": [
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "dot-pulse animation confirmed in App.css"
-        }
-      ]
-    },
-    "TB-08": {
-      "files": [
-        "src/App.tsx",
-        "src/lib/claude.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Files annotation line numbers updated: meta spans built at App.tsx:324, model colors at claude.ts:44 (was :294 and :30)"
-        }
-      ]
-    },
-    "TB-09": {
-      "files": [
-        "src/App.tsx"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Ctrl+E rename confirmed at App.tsx:274 (doc says :239 - stale line number)"
-        }
-      ]
-    },
-    "TB-10": {
-      "files": [
-        "src/App.tsx",
-        "src/App.css"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Flash animation for 5s on idle transition confirmed - flashingTabs state in App.tsx"
-        }
-      ]
-    },
-    "TB-12": {
-      "files": [
-        "src/App.tsx",
-        "src/hooks/useCtrlKey.ts"
-      ],
-      "verified": "2026-03-28",
-      "notes": [
-        {
-          "date": "2026-03-28",
-          "text": "Ctrl+Click relaunch confirmed via ctrlHeld state and click handler in App.tsx"
-        }
-      ]
     }
   }
 }
