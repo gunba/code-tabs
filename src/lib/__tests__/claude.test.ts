@@ -122,7 +122,7 @@ describe("formatTokenCount", () => {
   });
 });
 
-describe("computeHeatLevel", () => {
+describe("computeHeatLevel (WoW rarity: 0-4)", () => {
   it("returns 0 for zero count", () => {
     expect(computeHeatLevel(0, 10)).toBe(0);
   });
@@ -131,52 +131,63 @@ describe("computeHeatLevel", () => {
     expect(computeHeatLevel(5, 0)).toBe(0);
   });
 
-  it("returns 1 for low usage (<25%)", () => {
-    expect(computeHeatLevel(2, 10)).toBe(1);
+  it("returns 1 (Uncommon) for <20%", () => {
     expect(computeHeatLevel(1, 10)).toBe(1);
   });
 
-  it("returns 2 for mid usage (25%-69%)", () => {
-    expect(computeHeatLevel(3, 10)).toBe(2);
-    expect(computeHeatLevel(5, 10)).toBe(2);
-    expect(computeHeatLevel(6, 10)).toBe(2);
+  it("returns 2 (Rare) for 20%-49%", () => {
+    expect(computeHeatLevel(2, 10)).toBe(2);
+    expect(computeHeatLevel(4, 10)).toBe(2);
   });
 
-  it("returns 3 for high usage (>=70%)", () => {
+  it("returns 3 (Epic) for 50%-79%", () => {
+    expect(computeHeatLevel(5, 10)).toBe(3);
     expect(computeHeatLevel(7, 10)).toBe(3);
-    expect(computeHeatLevel(10, 10)).toBe(3);
   });
 
-  it("returns 3 when count equals maxCount", () => {
-    expect(computeHeatLevel(1, 1)).toBe(3);
+  it("returns 4 (Legendary) for >=80%", () => {
+    expect(computeHeatLevel(8, 10)).toBe(4);
+    expect(computeHeatLevel(10, 10)).toBe(4);
+  });
+
+  it("returns 4 when count equals maxCount", () => {
+    expect(computeHeatLevel(1, 1)).toBe(4);
   });
 
   it("returns 0 for negative count", () => {
     expect(computeHeatLevel(-1, 10)).toBe(0);
   });
 
-  it("boundary: exactly 25% returns 2", () => {
-    expect(computeHeatLevel(25, 100)).toBe(2);
-  });
-
-  it("boundary: exactly 70% returns 3", () => {
-    expect(computeHeatLevel(70, 100)).toBe(3);
-  });
-
   it("returns 0 for negative maxCount", () => {
     expect(computeHeatLevel(5, -1)).toBe(0);
   });
 
-  it("returns 3 when count exceeds maxCount", () => {
-    expect(computeHeatLevel(15, 10)).toBe(3);
+  it("returns 4 when count exceeds maxCount", () => {
+    expect(computeHeatLevel(15, 10)).toBe(4);
   });
 
-  it("boundary: just below 25% returns 1", () => {
-    expect(computeHeatLevel(24, 100)).toBe(1);
+  it("boundary: exactly 20% returns 2", () => {
+    expect(computeHeatLevel(20, 100)).toBe(2);
   });
 
-  it("boundary: just below 70% returns 2", () => {
-    expect(computeHeatLevel(69, 100)).toBe(2);
+  it("boundary: just below 20% returns 1", () => {
+    expect(computeHeatLevel(19, 100)).toBe(1);
+  });
+
+  it("boundary: exactly 50% returns 3", () => {
+    expect(computeHeatLevel(50, 100)).toBe(3);
+  });
+
+  it("boundary: just below 50% returns 2", () => {
+    expect(computeHeatLevel(49, 100)).toBe(2);
+  });
+
+  it("boundary: exactly 80% returns 4", () => {
+    expect(computeHeatLevel(80, 100)).toBe(4);
+  });
+
+  it("boundary: just below 80% returns 3", () => {
+    expect(computeHeatLevel(79, 100)).toBe(3);
   });
 });
 
@@ -185,16 +196,20 @@ describe("heatClassName", () => {
     expect(heatClassName(0)).toBe("");
   });
 
-  it("returns heat-1 for level 1", () => {
+  it("returns heat-1 for level 1 (Uncommon)", () => {
     expect(heatClassName(1)).toBe("heat-1");
   });
 
-  it("returns heat-2 for level 2", () => {
+  it("returns heat-2 for level 2 (Rare)", () => {
     expect(heatClassName(2)).toBe("heat-2");
   });
 
-  it("returns heat-3 for level 3", () => {
+  it("returns heat-3 for level 3 (Epic)", () => {
     expect(heatClassName(3)).toBe("heat-3");
+  });
+
+  it("returns heat-4 for level 4 (Legendary)", () => {
+    expect(heatClassName(4)).toBe("heat-4");
   });
 });
 

@@ -141,21 +141,23 @@ export function forceSessionColor(sessionId: string, colorIndex: number): void {
   colorAssignments.set(sessionId, colorIndex % SESSION_COLORS.length);
 }
 
-/** Compute heat level (0–3) for command frequency visualization. */
-export function computeHeatLevel(count: number, maxCount: number): 0 | 1 | 2 | 3 {
+/** Compute heat level (0–4) for command frequency visualization (WoW rarity). */
+export function computeHeatLevel(count: number, maxCount: number): 0 | 1 | 2 | 3 | 4 {
   if (count <= 0 || maxCount <= 0) return 0;
   const ratio = count / maxCount;
-  if (ratio < 0.25) return 1;
-  if (ratio < 0.70) return 2;
-  return 3;
+  if (ratio < 0.20) return 1;
+  if (ratio < 0.50) return 2;
+  if (ratio < 0.80) return 3;
+  return 4;
 }
 
-/** CSS class for heat level — blue (low) → purple (mid) → clay (high). */
-export function heatClassName(level: 0 | 1 | 2 | 3): string {
+/** CSS class for heat level — green → blue → purple → orange (WoW rarity). */
+export function heatClassName(level: 0 | 1 | 2 | 3 | 4): string {
   switch (level) {
     case 1: return "heat-1";
     case 2: return "heat-2";
     case 3: return "heat-3";
+    case 4: return "heat-4";
     default: return "";
   }
 }
