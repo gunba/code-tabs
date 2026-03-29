@@ -304,6 +304,16 @@ export function IconTerminal(props: IconProps) {
   );
 }
 
+/** Magnifying glass — search */
+export function IconSearch(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="7" cy="7" r="4" />
+      <line x1="10" y1="10" x2="14" y2="14" />
+    </Icon>
+  );
+}
+
 /** Counterclockwise circular arrow — reset */
 export function IconReset(props: IconProps) {
   return (

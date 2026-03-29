@@ -3,6 +3,7 @@ import { Terminal, type IBuffer } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { SearchAddon } from "@xterm/addon-search";
 import { getXtermTheme } from "../lib/theme";
 import { dlog } from "../lib/debugLog";
 
@@ -34,6 +35,7 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const webglRef = useRef<WebglAddon | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
   const webglRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const attachedRef = useRef(false);
@@ -65,6 +67,9 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon());
+    const search = new SearchAddon();
+    term.loadAddon(search);
+    searchAddonRef.current = search;
 
     // Custom key handlers: Ctrl+C copy, Ctrl+V paste
     term.attachCustomKeyEventHandler((ev) => {
@@ -112,6 +117,7 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
       observerRef.current?.disconnect();
       webglRef.current?.dispose();
       webglRef.current = null;
+      searchAddonRef.current = null;
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -296,6 +302,10 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
     termRef.current?.scrollToTop();
   }, []);
 
+  const scrollToLine = useCallback((line: number) => {
+    termRef.current?.scrollToLine(line);
+  }, []);
+
   const scrollToLastUserMessage = useCallback(() => {
     const term = termRef.current;
     if (!term) return;
@@ -426,6 +436,7 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
     focus,
     scrollToBottom,
     scrollToTop,
+    scrollToLine,
     scrollToLastUserMessage,
     isAtBottom,
     isAtTop,
@@ -435,5 +446,6 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
     getBufferTail,
     getCurrentInput,
     termRef,
+    searchAddonRef,
   };
 }

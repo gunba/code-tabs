@@ -16,6 +16,7 @@ import { CommandPalette } from "./components/CommandPalette/CommandPalette";
 import { ConfigManager } from "./components/ConfigManager/ConfigManager";
 import { DebugPanel } from "./components/DebugPanel/DebugPanel";
 import { DiffPanel } from "./components/DiffPanel/DiffPanel";
+import { SearchPanel } from "./components/SearchPanel/SearchPanel";
 import { ModalOverlay } from "./components/ModalOverlay/ModalOverlay";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
@@ -274,6 +275,11 @@ export default function App() {
       if (e.ctrlKey && e.shiftKey && e.key === "G") {
         e.preventDefault();
         setSidePanel(sidePanel === "diff" ? null : "diff");
+      }
+
+      if (e.ctrlKey && e.shiftKey && e.key === "F") {
+        e.preventDefault();
+        setSidePanel(sidePanel === "search" ? null : "search");
       }
 
       if (e.key === "Escape") {
@@ -543,6 +549,9 @@ export default function App() {
         )}
         {sidePanel === "diff" && (
           <DiffPanel onClose={() => setSidePanel(null)} />
+        )}
+        {sidePanel === "search" && (
+          <SearchPanel onClose={() => setSidePanel(null)} />
         )}
       </div>
 

@@ -10,8 +10,9 @@ import { useInspectorConnection } from "../../hooks/useInspectorConnection";
 import { useTapPipeline } from "../../hooks/useTapPipeline";
 import { useTapEventProcessor } from "../../hooks/useTapEventProcessor";
 import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill, registerPtyHandleId, unregisterPtyHandleId, writeToPty } from "../../lib/ptyRegistry";
-import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader } from "../../lib/terminalRegistry";
+import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader, registerSearchAddon, unregisterSearchAddon, registerScrollToLine, unregisterScrollToLine } from "../../lib/terminalRegistry";
 import { useSettingsStore } from "../../store/settings";
+import { IconSearch } from "../Icons/Icons";
 import { normalizePath } from "../../lib/paths";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
 import { isSessionIdle } from "../../types/session";
@@ -456,12 +457,16 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     return () => clearTimeout(timer);
   }, [visible, session.state, claudePath]);
 
-  // Register terminal buffer readers for transcript export and selector detection
+  // Register terminal buffer readers, search addon, and scroll function
   useEffect(() => {
     registerBufferReader(session.id, terminal.getBufferText);
     registerTailReader(session.id, terminal.getBufferTail);
+    registerScrollToLine(session.id, terminal.scrollToLine);
+    if (terminal.searchAddonRef.current) {
+      registerSearchAddon(session.id, terminal.searchAddonRef.current);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id, terminal.getBufferText, terminal.getBufferTail]);
+  }, [session.id, terminal.getBufferText, terminal.getBufferTail, terminal.scrollToLine]);
 
   // Cleanup PTY and registries on unmount
   useEffect(() => {
@@ -474,6 +479,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       unregisterPtyHandleId(id);
       unregisterBufferReader(id);
       unregisterTailReader(id);
+      unregisterSearchAddon(id);
+      unregisterScrollToLine(id);
       unregisterInspectorPort(id);
       unregisterInspectorCallbacks(id);
       pty.cleanup();
@@ -758,6 +765,17 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
                 <path d="M11 3v5a2 2 0 0 1-2 2H4" />
                 <polyline points="6 8 4 10 6 12" />
               </svg>
+            </button>
+            <button
+              className="bar-btn"
+              onClick={() => {
+                const store = useSettingsStore.getState();
+                store.setSidePanel(store.sidePanel === "search" ? null : "search");
+              }}
+              title="Search all terminals (Ctrl+Shift+F)"
+              aria-label="Search all terminals"
+            >
+              <IconSearch size={14} />
             </button>
             <button
               className="bar-btn"
