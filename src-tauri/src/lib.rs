@@ -193,6 +193,7 @@ pub fn run() {
             commands::plugin_uninstall,
             commands::plugin_enable,
             commands::plugin_disable,
+            commands::resolve_api_host,
             commands::git_repo_check,
             commands::git_status,
             commands::git_diff_file,

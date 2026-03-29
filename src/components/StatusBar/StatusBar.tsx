@@ -46,6 +46,7 @@ function SessionStatus({ session }: { session: Session }) {
   const tapEnabled = useSessionStore((s) => (s.tapCategories.get(session.id)?.size ?? 0) > 0);
   const isRecording = useSessionStore((s) => s.ptyRecording.has(session.id));
   const health = useSessionStore((s) => s.processHealth.get(session.id));
+  const apiIp = useSettingsStore((s) => s.apiIp);
   const model = effectiveModel(session);
   const wt = parseWorktreePath(session.config.workingDir);
   const effort = session.metadata.effortLevel ?? session.config.effort;
@@ -67,7 +68,13 @@ function SessionStatus({ session }: { session: Session }) {
           <IconCircleFilled size={10} /> REC
         </span>
       )}
-      <span className="status-item status-model" title="Model" style={{ color: modelColor(model) }}>
+      <span className="status-item status-model" title={
+        (session.metadata.apiRegion || session.metadata.apiLatencyMs > 0)
+          ? `Cloudflare POP: ${session.metadata.apiRegion || "—"}` +
+            (apiIp ? ` · IP: ${apiIp}` : "") +
+            (session.metadata.apiLatencyMs > 0 ? ` · Latency: ${Math.round(session.metadata.apiLatencyMs)}ms (time to headers)` : "")
+          : "Model"
+      } style={{ color: modelColor(model) }}>
         {modelLabel(model)}
         {effort && (
           <span style={{ opacity: 0.6 }}>{` · ${effort.charAt(0).toUpperCase() + effort.slice(1)} effort`}</span>
@@ -78,7 +85,10 @@ function SessionStatus({ session }: { session: Session }) {
         {session.metadata.apiRegion && (
           <span style={{ opacity: 0.6 }}>{` · ${session.metadata.apiRegion}`}</span>
         )}
-        {session.metadata.apiLatencyMs != null && (
+        {apiIp && session.metadata.apiRegion && (
+          <span style={{ opacity: 0.5 }}>{` (${apiIp})`}</span>
+        )}
+        {session.metadata.apiLatencyMs > 0 && (
           <span style={{ opacity: 0.6 }}>{` · ${Math.round(session.metadata.apiLatencyMs)}ms`}</span>
         )}
       </span>

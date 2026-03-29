@@ -163,7 +163,7 @@ describe("TapMetadataAccumulator", () => {
     expect(diff?.apiLatencyMs).toBe(245);
   });
 
-  it("does not store apiLatencyMs from ApiFetch without cfRay", () => {
+  it("stores apiLatencyMs from ApiFetch without cfRay too", () => {
     const acc = new TapMetadataAccumulator();
     const diff = acc.process({
       kind: "ApiFetch", ts: 0,
@@ -172,7 +172,7 @@ describe("TapMetadataAccumulator", () => {
       requestId: null, cfRay: null,
       rateLimitRemaining: null, rateLimitReset: null,
     });
-    expect(diff?.apiLatencyMs).toBeNull();
+    expect(diff?.apiLatencyMs).toBe(50);
   });
 
   it("uses contextBudget.totalContextSize as denominator when available", () => {

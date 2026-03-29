@@ -70,6 +70,7 @@ interface SettingsState {
   providerConfig: ProviderConfig;
   proxyPort: number | null;
   terminalFont: string;
+  apiIp: string | null;
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -102,6 +103,7 @@ interface SettingsState {
   setProviderConfig: (config: ProviderConfig) => void;
   setProxyPort: (port: number | null) => void;
   setTerminalFont: (font: string) => void;
+  setApiIp: (ip: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -136,6 +138,7 @@ export const useSettingsStore = create<SettingsState>()(
       providerConfig: DEFAULT_PROVIDER_CONFIG,
       proxyPort: null,
       terminalFont: "default",
+      apiIp: null,
 
       addRecentDir: (dir) =>
         set((s) => {
@@ -336,6 +339,7 @@ export const useSettingsStore = create<SettingsState>()(
       setProviderConfig: (config) => set({ providerConfig: config }),
       setProxyPort: (port) => set({ proxyPort: port }),
       setTerminalFont: (font) => set({ terminalFont: font }),
+      setApiIp: (ip) => set({ apiIp: ip }),
     }),
     {
       name: "claude-tabs-settings",

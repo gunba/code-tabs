@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/sessions";
 import { tapEventBus } from "../lib/tapEventBus";
 import { reduceTapEvent, isCompletionEvent } from "../lib/tapStateReducer";
@@ -37,6 +38,7 @@ export function useTapEventProcessor(
   const metaAccRef = useRef<TapMetadataAccumulator | null>(null);
   const subTrackerRef = useRef<TapSubagentTracker | null>(null);
   const healthCountRef = useRef(0);
+  const apiIpResolvedRef = useRef(false);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
@@ -190,6 +192,14 @@ export function useTapEventProcessor(
       // WorktreeCleared: restore original working directory
       if (event.kind === "WorktreeCleared" && worktreeExitCwd) {
         updateCwdIfChanged(worktreeExitCwd);
+      }
+
+      // Resolve API IP on first fetch (skip if already resolved by any session)
+      if (event.kind === "ApiFetch" && !apiIpResolvedRef.current && !useSettingsStore.getState().apiIp) {
+        apiIpResolvedRef.current = true;
+        invoke("resolve_api_host")
+          .then((ip) => useSettingsStore.getState().setApiIp(ip as string))
+          .catch((err: unknown) => dlog("session", sid, `API IP resolve failed: ${err}`, "WARN"));
       }
     };
 

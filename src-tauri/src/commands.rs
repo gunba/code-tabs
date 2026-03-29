@@ -2031,6 +2031,29 @@ pub fn shell_open(path: String) -> Result<(), String> {
     open::that_detached(&path).map_err(|e| format!("shell_open failed for {path}: {e}"))
 }
 
+// ── API host resolution ──────────────────────────────────────────
+
+/// Resolve api.anthropic.com to its IP address (Cloudflare edge).
+/// Hardcoded hostname — no user-supplied input. 5s timeout.
+#[tauri::command]
+pub async fn resolve_api_host() -> Result<String, String> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::task::spawn_blocking(|| {
+            use std::net::ToSocketAddrs;
+            "api.anthropic.com:443"
+                .to_socket_addrs()
+                .map_err(|e| e.to_string())?
+                .next()
+                .map(|a| a.ip().to_string())
+                .ok_or_else(|| "No addresses found".to_string())
+        }),
+    )
+    .await
+    .map_err(|_| "DNS lookup timed out".to_string())?
+    .map_err(|e| e.to_string())?
+}
+
 // ── Tap logging (inspector hook data capture) ─────────────────────
 
 /// Get the taps subdirectory inside the data dir, creating if needed.

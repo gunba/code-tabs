@@ -46,4 +46,5 @@ export interface IpcCommands {
   cleanup_tap_logs: (args: { maxAgeHours: number }) => Promise<number>;
   list_agents: (args: { scope: string; workingDir: string }) => Promise<Array<{ name: string; path: string }>>;
   list_skills: (args: { scope: string; workingDir: string }) => Promise<Array<{ name: string; path: string }>>;
+  resolve_api_host: () => Promise<string>;
 }

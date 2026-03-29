@@ -78,7 +78,7 @@ export interface SessionMetadata {
   filesTouched: string[];
   rateLimitRemaining: string | null;
   rateLimitReset: string | null;
-  apiLatencyMs: number | null;
+  apiLatencyMs: number;
   // TAP pipeline expansion
   linesAdded: number;
   linesRemoved: number;
