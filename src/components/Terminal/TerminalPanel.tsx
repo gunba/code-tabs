@@ -541,7 +541,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
     // Hide content — reveal only after the renderer paints the correct state.
     // opacity:0 (not visibility:hidden) keeps WebGL renderer active.
-    if (container) container.style.opacity = '0';
+    // Skip on initial mount (term not yet created by useEffect) — nothing to hide.
+    if (container && term) container.style.opacity = '0';
 
     if (hasBuffer) {
       bgBufferRef.current = [];
@@ -773,6 +774,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   return (
     <div
       className="terminal-panel"
+      style={{ display: visible ? "flex" : "none" }}
     >
       {loading && visible && (
         <div className="terminal-loading">
