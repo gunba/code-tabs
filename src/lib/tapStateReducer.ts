@@ -2,10 +2,6 @@ import type { TapEvent } from "../types/tapEvents";
 import type { SessionState } from "../types/session";
 import { isSessionIdle } from "../types/session";
 
-/** Plan content markers: detect numbered list items "1. " and "2. " in assistant text. */
-const PLAN_ITEM_1 = /\b1\.\s/;
-const PLAN_ITEM_2 = /\b2\.\s/;
-
 /**
  * Pure state reducer: (state, event) → state.
  * Replaces deriveStateFromPoll() in useInspectorState.ts.
@@ -80,15 +76,11 @@ export function reduceTapEvent(state: SessionState, event: TapEvent): SessionSta
         return "thinking";
       }
       if (event.messageType === "assistant" && !event.isSidechain) {
-        // ExitPlanMode takes priority — user needs to approve the plan
-        if (event.toolNames.includes("ExitPlanMode")) return "actionNeeded";
-        // Content-based plan detection: numbered list (1. + 2.) in the agent's
-        // message text with a tool_use stop reason. Mirrors the old terminal
-        // buffer scan for "> 1." but reads directly from the TAP message.
-        if (event.stopReason === "tool_use" && event.textSnippet &&
-            PLAN_ITEM_1.test(event.textSnippet) && PLAN_ITEM_2.test(event.textSnippet)) {
-          return "actionNeeded";
-        }
+        // Plan detection is handled solely by ToolCallStart(ExitPlanMode), which fires
+        // during the SSE stream before UserInput can arrive. ConversationMessage fires
+        // from the stringify hook (async, after JSONL/hook dispatch) and can arrive
+        // after UserInput has already cleared actionNeeded — re-setting it here would
+        // trap the state until the next user input.
         if (event.stopReason === "tool_use") return "toolUse";
         if (event.stopReason === "end_turn") return "idle";
       }

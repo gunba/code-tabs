@@ -97,8 +97,11 @@ describe("reduceTapEvent", () => {
     }))).toBe("toolUse");
   });
 
-  it("ConversationMessage with ExitPlanMode → actionNeeded", () => {
-    expect(reduceTapEvent("thinking", convMsg({ toolNames: ["ExitPlanMode"] }))).toBe("actionNeeded");
+  it("ConversationMessage with ExitPlanMode → no longer sets actionNeeded (plan detection moved to ToolCallStart)", () => {
+    // ConversationMessage arrives async from stringify hook and can race with UserInput.
+    // Plan detection now relies solely on ToolCallStart(ExitPlanMode) which fires during SSE.
+    // stopReason is null → falls through to state passthrough.
+    expect(reduceTapEvent("thinking", convMsg({ toolNames: ["ExitPlanMode"] }))).toBe("thinking");
   });
 
   it("ConversationMessage user → thinking", () => {
@@ -189,16 +192,17 @@ describe("reduceTapEvent", () => {
     expect(reduceTapEvent("actionNeeded", { kind: "ApiTelemetry", ts: 0, model: "opus", costUSD: 0.01, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, uncachedInputTokens: 0, durationMs: 100, ttftMs: 50, queryChainId: null, queryDepth: 0, stopReason: null })).toBe("actionNeeded");
   });
 
-  it("content-based plan detection: numbered list in textSnippet → actionNeeded", () => {
-    // Mirrors old terminal buffer scan for "> 1." — detects plan content
-    // from the assistant's ConversationMessage text.
+  it("content-based plan detection removed: numbered list in textSnippet → toolUse (not actionNeeded)", () => {
+    // Content-based detection was removed because ConversationMessage fires async and
+    // can arrive after UserInput, re-setting actionNeeded while the agent is already working.
+    // tool_use stop reason → toolUse (normal path).
     expect(reduceTapEvent("thinking", {
       kind: "ConversationMessage", ts: 0, messageType: "assistant",
       isSidechain: false, agentId: null, uuid: null, parentUuid: null,
       promptId: null, stopReason: "tool_use", toolNames: [], toolAction: null,
       textSnippet: "Here is my plan:\n\n1. Read the file\n2. Make changes\n3. Run tests",
       cwd: null, hasToolError: false, toolErrorText: null,
-    })).toBe("actionNeeded");
+    })).toBe("toolUse");
   });
 
   it("content-based plan detection requires both 1. and 2. patterns", () => {

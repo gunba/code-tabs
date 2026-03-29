@@ -89,7 +89,6 @@ export function useTapEventProcessor(
           || event.kind === "PermissionPromptShown" || event.kind === "PermissionApproved"
           || event.kind === "PermissionRejected" || event.kind === "UserInterruption"
           || (event.kind === "ConversationMessage" && !event.isSidechain)
-          || (event.kind === "ToolCallStart" && event.toolName === "ExitPlanMode")
           || event.kind === "IdlePrompt";
 
         if (!isReliable && subTracker.hasActiveAgents()) {
