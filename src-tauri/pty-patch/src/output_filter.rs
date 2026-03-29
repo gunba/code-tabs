@@ -19,10 +19,6 @@ pub struct OutputFilter {
     /// Whether we're inside a BSU/ESU synchronized update block.
     /// ESC[2J inside sync blocks is replaced with ESC[3J+ESC[H+ESC[J.
     in_sync_block: bool,
-    /// Number of ESC[2J sequences allowed outside sync blocks during
-    /// startup. The first 2 clear-screens are needed for the child
-    /// process to set up its UI (initial clear + possible config reload).
-    startup_clears_remaining: u8,
     /// Metrics
     osc52_stripped: u64,
     osc50_stripped: u64,
@@ -63,7 +59,6 @@ impl OutputFilter {
             state: FilterState::Normal,
             output: Vec::with_capacity(8192),
             in_sync_block: false,
-            startup_clears_remaining: 2,
             osc52_stripped: 0,
             osc50_stripped: 0,
             c1_bytes_stripped: 0,
@@ -274,19 +269,13 @@ impl OutputFilter {
                 self.output.extend_from_slice(b"\x1b[3J\x1b[H\x1b[J");
                 true
             }
-            // CSI 2 J outside sync block — stripped after startup grace.
-            b'J' if params == b"2" && !self.in_sync_block
-                && self.startup_clears_remaining == 0 =>
-            {
-                self.clear_screen_stripped += 1;
-                true
-            }
-            // ESC[2J outside sync block during startup grace — allow through
-            // but decrement the remaining count
-            b'J' if params == b"2" && !self.in_sync_block
-                && self.startup_clears_remaining > 0 =>
-            {
-                self.startup_clears_remaining -= 1;
+            // CSI 2 J outside sync block — pass through unconditionally.
+            // Stripping ESC[2J causes a permanent divergence between ConPTY's
+            // output tracking and xterm.js: ConPTY records "screen cleared"
+            // but xterm.js still has old content. From that point on, ConPTY
+            // never sends space updates for cells it believes are already
+            // blank, so old text persists where spaces should be.
+            b'J' if params == b"2" && !self.in_sync_block => {
                 false
             }
             _ => false,
@@ -458,16 +447,10 @@ mod tests {
     #[test]
     fn test_cursor_movement_passes_through() {
         let mut f = OutputFilter::new();
-        // CUP passes through unchanged
+        // CUP, CUU, CUD, CUF, CUB all pass through unchanged
         assert_eq!(f.filter(b"\x1b[10;20H"), b"\x1b[10;20H");
-        // CUU, CUD, CUF, CUB pass through unchanged
         assert_eq!(f.filter(b"\x1b[5A"), b"\x1b[5A");
         assert_eq!(f.filter(b"\x1b[3B"), b"\x1b[3B");
-        // CUP inside sync block — no CSI K appended
-        assert_eq!(
-            f.filter(b"\x1b[?2026h\x1b[5;10H\x1b[?2026l"),
-            b"\x1b[?2026h\x1b[5;10H\x1b[?2026l"
-        );
     }
 
     #[test]
@@ -770,16 +753,19 @@ mod tests {
     // ── Sync-aware ESC[2J filtering ──────────────────────────────────
 
     #[test]
-    fn test_clear_screen_stripped_outside_sync_block() {
+    fn test_clear_screen_passes_outside_sync_block() {
         let mut f = OutputFilter::new();
-        // First 2 ESC[2J outside sync blocks are allowed (startup grace)
+        // ESC[2J outside sync blocks always passes through — stripping it
+        // would desync ConPTY's output tracking from xterm.js, causing
+        // cells ConPTY thinks are spaces to retain old text.
         let r1 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r1, b"\x1b[2J"); // 1st — allowed
+        assert_eq!(r1, b"\x1b[2J");
         let r2 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r2, b"\x1b[2J"); // 2nd — allowed
-        // 3rd — stripped
-        let r3 = f.filter(b"before\x1b[2Jafter");
-        assert_eq!(r3, b"beforeafter");
+        assert_eq!(r2, b"\x1b[2J");
+        let r3 = f.filter(b"\x1b[2J").to_vec();
+        assert_eq!(r3, b"\x1b[2J");
+        let r4 = f.filter(b"before\x1b[2Jafter").to_vec();
+        assert_eq!(r4, b"before\x1b[2Jafter");
     }
 
     #[test]
@@ -824,17 +810,13 @@ mod tests {
     #[test]
     fn test_sync_state_resets_after_esu() {
         let mut f = OutputFilter::new();
-        // Exhaust startup grace period
-        f.filter(b"\x1b[2J");
-        f.filter(b"\x1b[2J");
-
         // Complete sync block — ESC[2J replaced inside sync
         let result = f.filter(b"\x1b[?2026h\x1b[2Jcontent\x1b[?2026l").to_vec();
         assert_eq!(result, b"\x1b[?2026h\x1b[3J\x1b[H\x1b[Jcontent\x1b[?2026l");
 
-        // ESC[2J after sync block ends — should be stripped (grace exhausted)
-        let result = f.filter(b"\x1b[2Jmore");
-        assert_eq!(result, b"more");
+        // ESC[2J after sync block ends — passes through (not replaced)
+        let result = f.filter(b"\x1b[2Jmore").to_vec();
+        assert_eq!(result, b"\x1b[2Jmore");
     }
 
     #[test]
@@ -896,32 +878,12 @@ mod tests {
     #[test]
     fn test_startup_grace_exactly_two_clears() {
         let mut f = OutputFilter::new();
-        // First clear — allowed (grace 2 -> 1)
-        let r1 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r1, b"\x1b[2J");
-        // Second clear — allowed (grace 1 -> 0)
-        let r2 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r2, b"\x1b[2J");
-        // Third clear — stripped (grace exhausted)
-        let r3 = f.filter(b"\x1b[2J").to_vec();
-        assert!(r3.is_empty(), "third ESC[2J should be stripped after grace exhausted");
-        // Fourth clear — also stripped
-        let r4 = f.filter(b"\x1b[2J").to_vec();
-        assert!(r4.is_empty(), "fourth ESC[2J should also be stripped");
-    }
-
-    #[test]
-    fn test_startup_grace_not_consumed_by_sync_block_clears() {
-        let mut f = OutputFilter::new();
-        // ESC[2J inside sync block should NOT consume startup grace
-        f.filter(b"\x1b[?2026h\x1b[2J\x1b[?2026l");
-        // Grace should still be 2
-        let r1 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r1, b"\x1b[2J"); // First grace — allowed
-        let r2 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r2, b"\x1b[2J"); // Second grace — allowed
-        let r3 = f.filter(b"\x1b[2J").to_vec();
-        assert!(r3.is_empty()); // Grace exhausted — stripped
+        // All ESC[2J outside sync blocks pass through unconditionally —
+        // stripping would desync ConPTY's output tracking from xterm.js
+        for _ in 0..5 {
+            let r = f.filter(b"\x1b[2J").to_vec();
+            assert_eq!(r, b"\x1b[2J");
+        }
     }
 
     // ── ESC at end of DCS without matching ST ───────────────────────
