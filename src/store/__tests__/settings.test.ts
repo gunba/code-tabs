@@ -150,7 +150,7 @@ describe("loadKnownEnvVars", () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it("sets knownEnvVars from invoke result", async () => {
