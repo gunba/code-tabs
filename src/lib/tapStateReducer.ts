@@ -14,11 +14,6 @@ export function reduceTapEvent(state: SessionState, event: TapEvent): SessionSta
       case "UserInput":
       case "SlashCommand":
         return "thinking";          // user approved/interacted
-      case "ConversationMessage":
-        // Plan approval fires ConversationMessage(user) via stringify hook, not UserInput.
-        // Must be in this guard (not just the outer switch) because the guard returns early.
-        if (event.messageType === "user" && !event.isSidechain) return "thinking";
-        return "actionNeeded";
       case "UserInterruption":
         return "interrupted";       // user hit escape
       case "PermissionPromptShown":

@@ -76,7 +76,6 @@ interface SettingsState {
   savedPrompts: Array<{ id: string; name: string; text: string }>;
   providerConfig: ProviderConfig;
   proxyPort: number | null;
-  terminalFont: string;
   apiIp: string | null;
   systemPromptRules: SystemPromptRule[];
 
@@ -111,7 +110,6 @@ interface SettingsState {
   removeSavedPrompt: (id: string) => void;
   setProviderConfig: (config: ProviderConfig) => void;
   setProxyPort: (port: number | null) => void;
-  setTerminalFont: (font: string) => void;
   setApiIp: (ip: string) => void;
   addSystemPromptRule: () => void;
   updateSystemPromptRule: (id: string, updates: Partial<Omit<SystemPromptRule, "id">>) => void;
@@ -151,7 +149,6 @@ export const useSettingsStore = create<SettingsState>()(
       savedPrompts: [],
       providerConfig: DEFAULT_PROVIDER_CONFIG,
       proxyPort: null,
-      terminalFont: "default",
       apiIp: null,
       systemPromptRules: [],
 
@@ -362,7 +359,6 @@ export const useSettingsStore = create<SettingsState>()(
 
       setProviderConfig: (config) => set({ providerConfig: config }),
       setProxyPort: (port) => set({ proxyPort: port }),
-      setTerminalFont: (font) => set({ terminalFont: font }),
       setApiIp: (ip) => set({ apiIp: ip }),
 
       addSystemPromptRule: () => set((s) => ({
@@ -453,7 +449,6 @@ export const useSettingsStore = create<SettingsState>()(
         sessionConfigs: state.sessionConfigs,
         savedPrompts: state.savedPrompts,
         providerConfig: state.providerConfig,
-        terminalFont: state.terminalFont,
         systemPromptRules: state.systemPromptRules,
       }),
     }

@@ -186,21 +186,6 @@ describe("loadKnownEnvVars", () => {
   });
 });
 
-describe("setTerminalFont", () => {
-  beforeEach(resetStore);
-
-  it("updates terminalFont state", () => {
-    useSettingsStore.getState().setTerminalFont("pragmasevka");
-    expect(useSettingsStore.getState().terminalFont).toBe("pragmasevka");
-  });
-
-  it("resets to default", () => {
-    useSettingsStore.getState().setTerminalFont("pragmasevka");
-    useSettingsStore.getState().setTerminalFont("default");
-    expect(useSettingsStore.getState().terminalFont).toBe("default");
-  });
-});
-
 describe("systemPromptRules CRUD", () => {
   beforeEach(resetStore);
 
