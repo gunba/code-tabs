@@ -140,6 +140,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // compaction/plan transitions, causing spurious clears that wipe the conversation.
     if (prev && prev !== tapProcessor.claudeSessionId && !resumeLoadingRef.current) {
       bgBufferRef.current = [];
+      terminal.clearPending();
       terminal.clear();
     }
     if (tapProcessor.claudeSessionId !== session.config.sessionId) {
@@ -306,6 +307,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // [PT-11] Clear stale buffers before terminal reset
     bgBufferRef.current = [];
     deferredResizeRef.current = null;
+    terminal.clearPending();
     terminalRef.current?.write("\x1bc");  // RIS: full terminal reset
     terminal.fit();
     terminalRef.current?.write("\x1b[90m[Resuming...]\x1b[0m\r\n");

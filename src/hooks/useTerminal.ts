@@ -41,6 +41,15 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const observerRef = useRef<ResizeObserver | null>(null);
   const attachedRef = useRef(false);
 
+  // Write batching — accumulate PTY chunks and flush via debounce.
+  // ConPTY fragments Ink's redraws into many small chunks; batching
+  // coalesces them so DEC 2026 sync blocks (BSU+content+ESU) arrive
+  // in a single term.write() call. Without this, ConPTY splits BSU and
+  // content into separate pipe reads, breaking synchronized rendering.
+  const writeBatchRef = useRef<Uint8Array[]>([]);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceStartRef = useRef(0);
+
   // Create terminal instance once on hook mount
   useEffect(() => {
     const term = new Terminal({
@@ -100,6 +109,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     fitRef.current = fit;
 
     return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       if (webglRetryTimerRef.current) clearTimeout(webglRetryTimerRef.current);
       observerRef.current?.disconnect();
       webglRef.current?.dispose();
@@ -197,9 +207,61 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     termRef.current?.write(data);
   }, []);
 
-  const writeBytes = useCallback((data: Uint8Array) => {
-    termRef.current?.write(data);
+  // Flush all accumulated write chunks to xterm.js as a single write.
+  // Coalescing ensures DEC 2026 sync blocks (BSU+content+ESU) that arrive
+  // in separate ConPTY pipe reads are written atomically to xterm.js.
+  const flushWrites = useCallback(() => {
+    const term = termRef.current;
+    if (!term) return;
+
+    const chunks = writeBatchRef.current;
+    writeBatchRef.current = [];
+    debounceStartRef.current = 0;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    if (chunks.length === 0) return;
+
+    let merged: Uint8Array;
+    if (chunks.length === 1) {
+      merged = chunks[0];
+    } else {
+      let totalLen = 0;
+      for (const c of chunks) totalLen += c.length;
+      merged = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const c of chunks) {
+        merged.set(c, offset);
+        offset += c.length;
+      }
+    }
+
+    term.write(merged);
   }, []);
+
+  // Debounced write: accumulates ConPTY chunks and flushes after 4ms of
+  // quiet or 50ms max latency. Coalesces BSU+content+ESU into single writes
+  // so xterm.js 6's native DEC 2026 sync rendering works correctly.
+  const writeBytes = useCallback((data: Uint8Array) => {
+    const term = termRef.current;
+    if (!term) return;
+
+    writeBatchRef.current.push(data);
+
+    if (debounceStartRef.current === 0) {
+      debounceStartRef.current = performance.now();
+    }
+
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
+    if (performance.now() - debounceStartRef.current >= 50) {
+      flushWrites();
+    } else {
+      debounceTimerRef.current = setTimeout(flushWrites, 4);
+    }
+  }, [flushWrites]);
 
   const clear = useCallback(() => {
     termRef.current?.clear();
@@ -328,9 +390,17 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     return "";
   }, []);
 
-  // No-op: this branch has no write batching, so there is nothing to discard.
-  // Called during respawn to prevent stale PTY data from being flushed after \x1bc.
-  const clearPending = useCallback(() => {}, []);
+  // Discard any pending write-batch chunks and cancel debounce timer.
+  // Called during respawn to prevent stale PTY data from being flushed
+  // after the terminal reset (\x1bc).
+  const clearPending = useCallback(() => {
+    writeBatchRef.current = [];
+    debounceStartRef.current = 0;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  }, []);
 
   return {
     attach,
