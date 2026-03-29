@@ -1,11 +1,16 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
-import type { LaunchPreset, SessionConfig, PastSession, ProviderConfig, ModelRoute } from "../types/session";
+import type { LaunchPreset, SessionConfig, PastSession, ProviderConfig, ModelRoute, SystemPromptRule } from "../types/session";
 import { DEFAULT_SESSION_CONFIG, DEFAULT_PROVIDER_CONFIG } from "../types/session";
 import { normalizePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import { useSessionStore } from "./sessions";
+
+function syncRulesToProxy() {
+  const rules = useSettingsStore.getState().systemPromptRules;
+  invoke("update_system_prompt_rules", { rules }).catch(() => {});
+}
 
 export interface CliOption {
   flag: string;        // e.g. "--model"
@@ -71,6 +76,7 @@ interface SettingsState {
   proxyPort: number | null;
   terminalFont: string;
   apiIp: string | null;
+  systemPromptRules: SystemPromptRule[];
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -104,6 +110,10 @@ interface SettingsState {
   setProxyPort: (port: number | null) => void;
   setTerminalFont: (font: string) => void;
   setApiIp: (ip: string) => void;
+  addSystemPromptRule: () => void;
+  updateSystemPromptRule: (id: string, updates: Partial<Omit<SystemPromptRule, "id">>) => void;
+  removeSystemPromptRule: (id: string) => void;
+  reorderSystemPromptRules: (id: string, direction: -1 | 1) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -139,6 +149,7 @@ export const useSettingsStore = create<SettingsState>()(
       proxyPort: null,
       terminalFont: "default",
       apiIp: null,
+      systemPromptRules: [],
 
       addRecentDir: (dir) =>
         set((s) => {
@@ -340,6 +351,46 @@ export const useSettingsStore = create<SettingsState>()(
       setProxyPort: (port) => set({ proxyPort: port }),
       setTerminalFont: (font) => set({ terminalFont: font }),
       setApiIp: (ip) => set({ apiIp: ip }),
+
+      addSystemPromptRule: () => set((s) => ({
+        systemPromptRules: [...s.systemPromptRules, {
+          id: crypto.randomUUID(),
+          name: "New Rule",
+          pattern: "",
+          replacement: "",
+          flags: "g",
+          enabled: true,
+        }],
+      })),
+
+      updateSystemPromptRule: (id, updates) => {
+        set((s) => ({
+          systemPromptRules: s.systemPromptRules.map((r) =>
+            r.id === id ? { ...r, ...updates } : r
+          ),
+        }));
+        syncRulesToProxy();
+      },
+
+      removeSystemPromptRule: (id) => {
+        set((s) => ({
+          systemPromptRules: s.systemPromptRules.filter((r) => r.id !== id),
+        }));
+        syncRulesToProxy();
+      },
+
+      reorderSystemPromptRules: (id, direction) => {
+        set((s) => {
+          const idx = s.systemPromptRules.findIndex((r) => r.id === id);
+          if (idx < 0) return s;
+          const target = idx + direction;
+          if (target < 0 || target >= s.systemPromptRules.length) return s;
+          const arr = [...s.systemPromptRules];
+          [arr[idx], arr[target]] = [arr[target], arr[idx]];
+          return { systemPromptRules: arr };
+        });
+        syncRulesToProxy();
+      },
     }),
     {
       name: "claude-tabs-settings",
@@ -390,6 +441,7 @@ export const useSettingsStore = create<SettingsState>()(
         savedPrompts: state.savedPrompts,
         providerConfig: state.providerConfig,
         terminalFont: state.terminalFont,
+        systemPromptRules: state.systemPromptRules,
       }),
     }
   )

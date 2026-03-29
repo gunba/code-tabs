@@ -204,6 +204,7 @@ pub fn run() {
             proxy::stop_api_proxy,
             proxy::update_provider_config,
             proxy::get_proxy_port,
+            proxy::update_system_prompt_rules,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Claude Tabs")

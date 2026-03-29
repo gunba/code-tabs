@@ -7,12 +7,13 @@ use tokio::sync::oneshot;
 
 use tauri::{Emitter, State};
 
-use crate::session::types::{ModelProvider, ModelRoute, ProviderConfig};
+use crate::session::types::{ModelProvider, ModelRoute, ProviderConfig, SystemPromptRule};
 
 // ── Proxy state ──────────────────────────────────────────────────────
 
 pub struct ProxyInner {
     pub config: ProviderConfig,
+    pub rules: Vec<SystemPromptRule>,
     pub port: Option<u16>,
     pub shutdown_tx: Option<oneshot::Sender<()>>,
     pub clients: HashMap<String, reqwest::Client>,
@@ -25,6 +26,7 @@ impl ProxyState {
     pub fn new() -> Self {
         Self(Arc::new(Mutex::new(ProxyInner {
             config: ProviderConfig::default(),
+            rules: Vec::new(),
             port: None,
             shutdown_tx: None,
             clients: HashMap::new(),
@@ -101,13 +103,13 @@ pub async fn start_api_proxy(
                 result = listener.accept() => {
                     match result {
                         Ok((stream, _)) => {
-                            let (config, clients, default_client) = match state.lock() {
-                                Ok(s) => (s.config.clone(), s.clients.clone(), s.default_client.clone()),
+                            let (config, clients, default_client, rules) = match state.lock() {
+                                Ok(s) => (s.config.clone(), s.clients.clone(), s.default_client.clone(), s.rules.clone()),
                                 Err(_) => continue,
                             };
                             let a = app.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = handle_connection(stream, config, clients, default_client, a).await {
+                                if let Err(e) = handle_connection(stream, config, clients, default_client, rules, a).await {
                                     log::debug!("proxy connection error: {e}");
                                 }
                             });
@@ -157,6 +159,29 @@ pub fn get_proxy_port(proxy_state: State<'_, ProxyState>) -> Result<Option<u16>,
     Ok(s.port)
 }
 
+#[tauri::command]
+pub fn update_system_prompt_rules(
+    rules: Vec<SystemPromptRule>,
+    proxy_state: State<'_, ProxyState>,
+) -> Result<(), String> {
+    // Validate all enabled rule patterns at config time
+    for rule in &rules {
+        if rule.enabled && !rule.pattern.is_empty() {
+            let inline_flags: String = rule.flags.chars().filter(|c| *c != 'g').collect();
+            let pattern = if inline_flags.is_empty() {
+                rule.pattern.clone()
+            } else {
+                format!("(?{}){}", inline_flags, rule.pattern)
+            };
+            let _ = regex::Regex::new(&pattern)
+                .map_err(|e| format!("Invalid regex '{}': {}", rule.pattern, e))?;
+        }
+    }
+    let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
+    s.rules = rules;
+    Ok(())
+}
+
 // ── Connection handler ───────────────────────────────────────────────
 
 async fn handle_connection(
@@ -164,6 +189,7 @@ async fn handle_connection(
     config: ProviderConfig,
     clients: HashMap<String, reqwest::Client>,
     default_client: reqwest::Client,
+    rules: Vec<SystemPromptRule>,
     app: tauri::AppHandle,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Read full request
@@ -211,10 +237,13 @@ async fn handle_connection(
     let (route, provider) = route_request(model.as_deref(), &config);
 
     let rewrite = route.and_then(|r| r.rewrite_model.as_deref());
-    let final_body = match rewrite {
+    let mut final_body = match rewrite {
         Some(new_model) => rewrite_model_in_body(&body, new_model),
         None => body.to_vec(),
     };
+    if !rules.is_empty() {
+        final_body = rewrite_system_prompt_in_body(&final_body, &rules);
+    }
 
     // Emit routing event for debug panel visibility
     let _ = app.emit("proxy-route", serde_json::json!({
@@ -337,6 +366,61 @@ fn rewrite_model_in_body(body: &[u8], new_model: &str) -> Vec<u8> {
     } else {
         body.to_vec()
     }
+}
+
+fn rewrite_system_prompt_in_body(body: &[u8], rules: &[SystemPromptRule]) -> Vec<u8> {
+    let enabled: Vec<&SystemPromptRule> = rules.iter().filter(|r| r.enabled && !r.pattern.is_empty()).collect();
+    if enabled.is_empty() {
+        return body.to_vec();
+    }
+    let mut json = match serde_json::from_slice::<serde_json::Value>(body) {
+        Ok(j) => j,
+        Err(_) => return body.to_vec(),
+    };
+    let system = match json.get_mut("system") {
+        Some(s) => s,
+        None => return serde_json::to_vec(&json).unwrap_or_else(|_| body.to_vec()),
+    };
+    apply_rules_to_system_value(system, &enabled);
+    serde_json::to_vec(&json).unwrap_or_else(|_| body.to_vec())
+}
+
+fn apply_rules_to_system_value(system: &mut serde_json::Value, rules: &[&SystemPromptRule]) {
+    match system {
+        serde_json::Value::String(s) => {
+            *s = apply_rules_to_text(s, rules);
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                if let Some(obj) = item.as_object_mut() {
+                    if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
+                        if let Some(text_val) = obj.get_mut("text") {
+                            if let serde_json::Value::String(ref mut s) = text_val {
+                                *s = apply_rules_to_text(s, rules);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn apply_rules_to_text(text: &str, rules: &[&SystemPromptRule]) -> String {
+    let mut result = text.to_string();
+    for rule in rules {
+        let inline_flags: String = rule.flags.chars().filter(|c| *c != 'g').collect();
+        let pattern = if inline_flags.is_empty() {
+            rule.pattern.clone()
+        } else {
+            format!("(?{}){}", inline_flags, rule.pattern)
+        };
+        if let Ok(re) = regex::Regex::new(&pattern) {
+            result = re.replace_all(&result, &rule.replacement).into_owned();
+        }
+    }
+    result
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -661,5 +745,112 @@ mod tests {
         };
         let result = build_client_map(&config);
         assert!(result.is_err(), "invalid proxy URL should return Err");
+    }
+
+    // ── System prompt rewrite tests ──────────────────────────────────────
+
+    fn make_rule(name: &str, pattern: &str, replacement: &str, flags: &str, enabled: bool) -> SystemPromptRule {
+        SystemPromptRule {
+            id: format!("rule-{}", name),
+            name: name.to_string(),
+            pattern: pattern.to_string(),
+            replacement: replacement.to_string(),
+            flags: flags.to_string(),
+            enabled,
+        }
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_string() {
+        let body = r#"{"model":"claude-opus-4-6","system":"You are Claude, a helpful assistant.","messages":[]}"#;
+        let rules = vec![make_rule("rename", "Claude", "Assistant", "g", true)];
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &rules);
+        let json: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(json["system"], "You are Assistant, a helpful assistant.");
+        assert_eq!(json["model"], "claude-opus-4-6");
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_array() {
+        let body = r#"{"model":"test","system":[{"type":"text","text":"You are Claude."},{"type":"text","text":"Be helpful."}],"messages":[]}"#;
+        let rules = vec![make_rule("rename", "Claude", "Assistant", "g", true)];
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &rules);
+        let json: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let sys = json["system"].as_array().unwrap();
+        assert_eq!(sys[0]["text"], "You are Assistant.");
+        assert_eq!(sys[1]["text"], "Be helpful.");
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_multiple_rules() {
+        let body = r#"{"system":"Hello world","messages":[]}"#;
+        let rules = vec![
+            make_rule("r1", "Hello", "Hi", "g", true),
+            make_rule("r2", "world", "earth", "g", true),
+        ];
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &rules);
+        let json: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(json["system"], "Hi earth");
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_disabled_rule_skipped() {
+        let body = r#"{"system":"Hello Claude","messages":[]}"#;
+        let rules = vec![make_rule("off", "Claude", "Assistant", "g", false)];
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &rules);
+        let json: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(json["system"], "Hello Claude");
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_empty_rules() {
+        let body = r#"{"system":"Hello","messages":[]}"#;
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &[]);
+        assert_eq!(result, body.as_bytes());
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_no_system_field() {
+        let body = r#"{"model":"test","messages":[]}"#;
+        let rules = vec![make_rule("r", "x", "y", "g", true)];
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &rules);
+        let json: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert!(json.get("system").is_none());
+        assert_eq!(json["model"], "test");
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_invalid_json() {
+        let body = b"not json";
+        let rules = vec![make_rule("r", "x", "y", "g", true)];
+        let result = rewrite_system_prompt_in_body(body, &rules);
+        assert_eq!(result, body);
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_case_insensitive() {
+        let body = r#"{"system":"CLAUDE claude Claude","messages":[]}"#;
+        let rules = vec![make_rule("ci", "claude", "Assistant", "gi", true)];
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &rules);
+        let json: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(json["system"], "Assistant Assistant Assistant");
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_capture_groups() {
+        let body = r#"{"system":"Use (tools) wisely","messages":[]}"#;
+        let rules = vec![make_rule("cg", r#"\((\w+)\)"#, "[$1]", "g", true)];
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &rules);
+        let json: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(json["system"], "Use [tools] wisely");
+    }
+
+    #[test]
+    fn test_rewrite_system_prompt_empty_pattern_skipped() {
+        let body = r#"{"system":"Hello","messages":[]}"#;
+        let rules = vec![make_rule("empty", "", "x", "g", true)];
+        let result = rewrite_system_prompt_in_body(body.as_bytes(), &rules);
+        let json: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        assert_eq!(json["system"], "Hello");
     }
 }

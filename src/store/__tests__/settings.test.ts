@@ -31,6 +31,7 @@ function resetStore() {
     observedPrompts: [],
     savedPrompts: [],
     commandBarExpanded: false,
+    systemPromptRules: [],
   });
 }
 
@@ -155,5 +156,68 @@ describe("setTerminalFont", () => {
     useSettingsStore.getState().setTerminalFont("pragmasevka");
     useSettingsStore.getState().setTerminalFont("default");
     expect(useSettingsStore.getState().terminalFont).toBe("default");
+  });
+});
+
+describe("systemPromptRules CRUD", () => {
+  beforeEach(resetStore);
+
+  it("addSystemPromptRule appends a rule with defaults", () => {
+    useSettingsStore.getState().addSystemPromptRule();
+    const rules = useSettingsStore.getState().systemPromptRules;
+    expect(rules).toHaveLength(1);
+    expect(rules[0].name).toBe("New Rule");
+    expect(rules[0].pattern).toBe("");
+    expect(rules[0].replacement).toBe("");
+    expect(rules[0].flags).toBe("g");
+    expect(rules[0].enabled).toBe(true);
+    expect(rules[0].id).toBeTruthy();
+  });
+
+  it("updateSystemPromptRule modifies matching rule", () => {
+    useSettingsStore.getState().addSystemPromptRule();
+    const id = useSettingsStore.getState().systemPromptRules[0].id;
+    useSettingsStore.getState().updateSystemPromptRule(id, { pattern: "Claude", replacement: "Assistant" });
+    const rule = useSettingsStore.getState().systemPromptRules[0];
+    expect(rule.pattern).toBe("Claude");
+    expect(rule.replacement).toBe("Assistant");
+    expect(rule.name).toBe("New Rule"); // unchanged
+  });
+
+  it("removeSystemPromptRule removes by ID", () => {
+    useSettingsStore.getState().addSystemPromptRule();
+    const id = useSettingsStore.getState().systemPromptRules[0].id;
+    useSettingsStore.getState().removeSystemPromptRule(id);
+    expect(useSettingsStore.getState().systemPromptRules).toHaveLength(0);
+  });
+
+  it("removeSystemPromptRule is a no-op for unknown ID", () => {
+    useSettingsStore.getState().addSystemPromptRule();
+    useSettingsStore.getState().removeSystemPromptRule("nonexistent");
+    expect(useSettingsStore.getState().systemPromptRules).toHaveLength(1);
+  });
+
+  it("reorderSystemPromptRules swaps adjacent rules", () => {
+    useSettingsStore.getState().addSystemPromptRule();
+    useSettingsStore.getState().addSystemPromptRule();
+    const rules = useSettingsStore.getState().systemPromptRules;
+    const firstId = rules[0].id;
+    const secondId = rules[1].id;
+    // Move second rule up (direction = -1)
+    useSettingsStore.getState().reorderSystemPromptRules(secondId, -1);
+    const reordered = useSettingsStore.getState().systemPromptRules;
+    expect(reordered[0].id).toBe(secondId);
+    expect(reordered[1].id).toBe(firstId);
+  });
+
+  it("reorderSystemPromptRules is a no-op at boundaries", () => {
+    useSettingsStore.getState().addSystemPromptRule();
+    const id = useSettingsStore.getState().systemPromptRules[0].id;
+    // Move first rule up (impossible)
+    useSettingsStore.getState().reorderSystemPromptRules(id, -1);
+    expect(useSettingsStore.getState().systemPromptRules[0].id).toBe(id);
+    // Move first (and only) rule down (impossible)
+    useSettingsStore.getState().reorderSystemPromptRules(id, 1);
+    expect(useSettingsStore.getState().systemPromptRules[0].id).toBe(id);
   });
 });

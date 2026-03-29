@@ -242,6 +242,15 @@ export const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
   defaultProviderId: "anthropic",
 };
 
+export interface SystemPromptRule {
+  id: string;
+  name: string;
+  pattern: string;
+  replacement: string;
+  flags: string;
+  enabled: boolean;
+}
+
 // ── Session Config ──────────────────────────────────────────────────
 
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {

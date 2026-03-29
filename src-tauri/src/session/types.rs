@@ -215,6 +215,22 @@ pub struct ModelRoute {
     pub provider_id: String,
 }
 
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemPromptRule {
+    pub id: String,
+    pub name: String,
+    pub pattern: String,
+    pub replacement: String,
+    pub flags: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
