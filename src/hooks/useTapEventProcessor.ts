@@ -5,6 +5,7 @@ import { reduceTapEvent, isCompletionEvent } from "../lib/tapStateReducer";
 import { TapMetadataAccumulator } from "../lib/tapMetadataAccumulator";
 import { TapSubagentTracker } from "../lib/tapSubagentTracker";
 import { normalizePath } from "../lib/paths";
+import { getResumeId } from "../lib/claude";
 import { useSettingsStore } from "../store/settings";
 import { dlog } from "../lib/debugLog";
 import type { TapEvent } from "../types/tapEvents";
@@ -126,6 +127,7 @@ export function useTapEventProcessor(
         const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
         if (session && event.title !== session.name) {
           useSessionStore.getState().renameSession(sid, event.title);
+          useSettingsStore.getState().setSessionName(getResumeId(session), event.title);
         }
       }
 

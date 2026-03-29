@@ -89,6 +89,7 @@ interface SettingsState {
   setSidePanel: (panel: "debug" | "diff" | "search" | null) => void;
   bootstrapCommandUsage: () => Promise<void>;
   triggerCommandRefresh: () => void;
+  setSessionName: (id: string, name: string) => void;
   cacheSessionConfig: (id: string, config: SessionConfig) => void;
   loadPastSessions: () => Promise<void>;
   loadBinarySettingsSchema: () => Promise<void>;
@@ -233,6 +234,10 @@ export const useSettingsStore = create<SettingsState>()(
       triggerCommandRefresh: () =>
         set((s) => ({ commandRefreshTrigger: s.commandRefreshTrigger + 1 })),
       setReplaceSessionId: (id) => set({ replaceSessionId: id }),
+      setSessionName: (id, name) =>
+        set((s) => ({
+          sessionNames: { ...s.sessionNames, [id]: name },
+        })),
       cacheSessionConfig: (id, config) =>
         set((s) => {
           const partial: Partial<SessionConfig> = {
