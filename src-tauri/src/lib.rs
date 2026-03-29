@@ -186,6 +186,7 @@ pub fn run() {
             commands::append_tap_data,
             commands::open_tap_log,
             commands::cleanup_tap_logs,
+            commands::get_recordings_dir,
             commands::prune_worktree,
             commands::plugin_list,
             commands::plugin_install,

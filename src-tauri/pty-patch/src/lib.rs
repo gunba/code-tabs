@@ -32,6 +32,12 @@ struct PtyRecorder {
 
 impl PtyRecorder {
     fn new(path: &str, cols: u16, rows: u16) -> std::io::Result<Self> {
+        // Create parent directory if needed (for auto-generated recording paths)
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
         let timestamp = SystemTime::now()

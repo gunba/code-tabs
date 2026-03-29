@@ -2099,6 +2099,19 @@ pub fn cleanup_tap_logs(max_age_hours: u64) -> Result<u32, String> {
     Ok(removed)
 }
 
+// ── Recordings (auto-started terminal recordings) ────────────────────
+
+/// Get the recordings subdirectory inside the data dir, creating if needed.
+#[tauri::command]
+pub fn get_recordings_dir() -> Result<String, String> {
+    let dir = get_data_dir()?.join("recordings");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create recordings dir: {}", e))?;
+    }
+    Ok(dir.to_string_lossy().to_string())
+}
+
 /// Remove a git worktree directory.
 #[tauri::command]
 pub async fn prune_worktree(worktree_path: String, project_root: String) -> Result<(), String> {

@@ -84,6 +84,8 @@ export function SessionLauncher() {
   const [defaultsSaved, setDefaultsSaved] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState<string>("");
   const [promptMode, setPromptMode] = useState<"replace" | "append">("replace");
+  const [autoTap, setAutoTap] = useState(false);
+  const [autoRecord, setAutoRecord] = useState(false);
 
   // Unified command line: editable string that starts from config selections.
   // User can edit freely; reset button regenerates from current dropdowns.
@@ -232,12 +234,15 @@ export function SessionLauncher() {
         await closeSession(replaceId);
         useSettingsStore.getState().setReplaceSessionId(null);
       }
-      await createSession(name, finalConfig);
+      const session = await createSession(name, finalConfig);
+      // Auto-start recording flags (consumed by TerminalPanel on spawn/connect)
+      if (autoTap) useSessionStore.getState().startAllTaps(session.id);
+      if (autoRecord) useSessionStore.getState().setAutoRecordOnStart(session.id);
       setShowLauncher(false);
     } catch (err) {
       dlog("launcher", null, `create session failed: ${err}`, "ERR");
     }
-  }, [launchConfig, isNonSessionCommand, commandTokens, createSession, closeSession, setShowLauncher, addRecentDir, setLastConfig]);
+  }, [launchConfig, isNonSessionCommand, commandTokens, createSession, closeSession, setShowLauncher, addRecentDir, setLastConfig, autoTap, autoRecord]);
 
   const handleBrowse = useCallback(async () => {
     const selected = await open({
@@ -432,26 +437,6 @@ export function SessionLauncher() {
             </select>
           </label>
 
-          <button
-            className={`launcher-toggle-pill${config.projectDir ? " launcher-toggle-pill-on launcher-toggle-sandbox" : ""}`}
-            onClick={() => updateConfig("projectDir", !config.projectDir)}
-            aria-pressed={config.projectDir}
-            title="Restrict Claude to the working directory (--project-dir)"
-            type="button"
-          >
-            Sandbox
-          </button>
-
-          <button
-            className={`launcher-toggle-pill${config.dangerouslySkipPermissions ? " launcher-toggle-pill-on launcher-toggle-skip" : ""}`}
-            onClick={() => updateConfig("dangerouslySkipPermissions", !config.dangerouslySkipPermissions)}
-            aria-pressed={config.dangerouslySkipPermissions}
-            title="Skip all permission prompts (--dangerously-skip-permissions)"
-            type="button"
-          >
-            Skip
-          </button>
-
           {savedPrompts.length > 0 && (
             <span className="launcher-prompt-group">
               <select
@@ -481,18 +466,58 @@ export function SessionLauncher() {
 
         </div>
 
-        {/* CLI Options header (always shown) with save defaults on the right */}
+        {/* CLI Options header (always shown) with toggle pills and save defaults */}
         <div className="launcher-section">
           <div className="launcher-cli-header">
-            {!isNonSessionCommand && (filteredCliOptions.length > 0 || (cliCapabilities.commands || []).length > 0) ? (
+            <div className="launcher-cli-header-left">
+              {!isNonSessionCommand && (filteredCliOptions.length > 0 || (cliCapabilities.commands || []).length > 0) ? (
+                <button
+                  className="launcher-cli-toggle"
+                  onClick={() => setShowCliOptions((v) => !v)}
+                  type="button"
+                >
+                  {showCliOptions ? "\u25BE" : "\u25B8"} CLI Options
+                </button>
+              ) : <span />}
               <button
-                className="launcher-cli-toggle"
-                onClick={() => setShowCliOptions((v) => !v)}
+                className={`launcher-toggle-pill${config.projectDir ? " launcher-toggle-pill-on launcher-toggle-sandbox" : ""}`}
+                onClick={() => updateConfig("projectDir", !config.projectDir)}
+                aria-pressed={config.projectDir}
+                title="Restrict Claude to the working directory (--project-dir)"
                 type="button"
               >
-                {showCliOptions ? "\u25BE" : "\u25B8"} CLI Options
+                Sandbox
               </button>
-            ) : <span />}
+              <button
+                className={`launcher-toggle-pill${config.dangerouslySkipPermissions ? " launcher-toggle-pill-on launcher-toggle-skip" : ""}`}
+                onClick={() => updateConfig("dangerouslySkipPermissions", !config.dangerouslySkipPermissions)}
+                aria-pressed={config.dangerouslySkipPermissions}
+                title="Skip all permission prompts (--dangerously-skip-permissions)"
+                type="button"
+              >
+                Skip
+              </button>
+              <button
+                className={`launcher-toggle-pill${autoTap ? " launcher-toggle-pill-on launcher-toggle-tap" : ""}`}
+                onClick={() => setAutoTap((v) => !v)}
+                aria-pressed={autoTap}
+                title="Auto-start TAP recording on connect"
+                type="button"
+                disabled={isNonSessionCommand}
+              >
+                TAP
+              </button>
+              <button
+                className={`launcher-toggle-pill${autoRecord ? " launcher-toggle-pill-on launcher-toggle-rec" : ""}`}
+                onClick={() => setAutoRecord((v) => !v)}
+                aria-pressed={autoRecord}
+                title="Auto-start terminal recording from first byte"
+                type="button"
+                disabled={isNonSessionCommand}
+              >
+                REC
+              </button>
+            </div>
             <button
               className={`launcher-save-defaults${defaultsSaved ? " launcher-save-defaults-saved" : ""}`}
               onClick={() => { setSavedDefaults(launchConfig); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}

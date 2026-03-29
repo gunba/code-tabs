@@ -28,6 +28,7 @@ interface SessionsState {
   tapCategories: Map<string, Set<string>>; // sessionId -> enabled tap category names
   ptyRecording: Map<string, string>; // sessionId -> file path
   processHealth: Map<string, { rss: number; heapUsed: number; uptime: number }>;
+  autoRecordOnStart: Set<string>; // session IDs pending auto-start PTY recording
 
   // Actions
   init: () => Promise<void>;
@@ -50,6 +51,8 @@ interface SessionsState {
   stopAllTaps: (id: string) => void;
   startPtyRecording: (id: string, path: string) => void;
   stopPtyRecording: (id: string) => void;
+  setAutoRecordOnStart: (id: string) => void;
+  clearAutoRecordOnStart: (id: string) => void;
   addSubagent: (sessionId: string, subagent: Subagent) => void;
   updateSubagent: (sessionId: string, subagentId: string, updates: Partial<Subagent>) => void;
   clearIdleSubagents: (sessionId: string) => void;
@@ -71,6 +74,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
   tapCategories: new Map(),
   ptyRecording: new Map(),
   processHealth: new Map(),
+  autoRecordOnStart: new Set(),
 
   init: async () => {
     trace("init: start");
@@ -180,9 +184,13 @@ export const useSessionStore = create<SessionsState>((set) => ({
       inspectorOffSessions.delete(id);
       const tapCategories = new Map(s.tapCategories);
       tapCategories.delete(id);
+      const ptyRecording = new Map(s.ptyRecording);
+      ptyRecording.delete(id);
       const processHealth = new Map(s.processHealth);
       processHealth.delete(id);
-      return { sessions, activeTabId, subagents, commandHistory, inspectorOffSessions, tapCategories, processHealth };
+      const autoRecordOnStart = new Set(s.autoRecordOnStart);
+      autoRecordOnStart.delete(id);
+      return { sessions, activeTabId, subagents, commandHistory, inspectorOffSessions, tapCategories, ptyRecording, processHealth, autoRecordOnStart };
     });
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();
@@ -324,6 +332,22 @@ export const useSessionStore = create<SessionsState>((set) => ({
       const next = new Map(s.ptyRecording);
       next.delete(id);
       return { ptyRecording: next };
+    });
+  },
+
+  setAutoRecordOnStart: (id) => {
+    set((s) => {
+      const next = new Set(s.autoRecordOnStart);
+      next.add(id);
+      return { autoRecordOnStart: next };
+    });
+  },
+
+  clearAutoRecordOnStart: (id) => {
+    set((s) => {
+      const next = new Set(s.autoRecordOnStart);
+      next.delete(id);
+      return { autoRecordOnStart: next };
     });
   },
 

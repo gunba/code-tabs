@@ -12,6 +12,7 @@ import { useTapEventProcessor } from "../../hooks/useTapEventProcessor";
 import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill, registerPtyHandleId, unregisterPtyHandleId, writeToPty } from "../../lib/ptyRegistry";
 import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader, registerSearchAddon, unregisterSearchAddon, registerScrollToLine, unregisterScrollToLine } from "../../lib/terminalRegistry";
 import { useSettingsStore } from "../../store/settings";
+import { startPtyRecording } from "../../lib/ptyProcess";
 import { IconSearch } from "../Icons/Icons";
 import { normalizePath } from "../../lib/paths";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
@@ -421,7 +422,22 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         dlog("terminal", session.id, `spawned pid=${handle.pid} port=${inspPort} tapPort=${tapPort} cols=${cols} rows=${rows}`);
         updateState(session.id, "idle");
 
-        // Post-spawn dimension verification — catches cases where font metrics
+        // Auto-start PTY recording if flagged by launcher
+        const store = useSessionStore.getState();
+        if (store.autoRecordOnStart.has(session.id)) {
+          store.clearAutoRecordOnStart(session.id);
+          try {
+            const recDir = await invoke<string>("get_recordings_dir");
+            const recPath = recDir + "/" + session.id + ".ndjson";
+            await startPtyRecording(handle.pid, recPath);
+            store.startPtyRecording(session.id, recPath);
+            dlog("terminal", session.id, `auto-recording started: ${recPath}`);
+          } catch (e) {
+            dlog("terminal", session.id, `auto-recording failed: ${e}`, "ERR");
+          }
+        }
+
+        // Post-spawn dimension verification
         // or WebGL renderer weren't ready during the initial fit.
         requestAnimationFrame(() => {
           terminal.fit();
