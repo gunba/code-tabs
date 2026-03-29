@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { useTerminal } from "../../hooks/useTerminal";
+import { useTerminal, TERMINAL_FONTS, resolveFont } from "../../hooks/useTerminal";
 import { usePty } from "../../hooks/usePty";
 import { useSessionStore } from "../../store/sessions";
 import { buildClaudeArgs, getResumeId, canResumeSession, stripWorktreeFlags, findNearestLiveTab } from "../../lib/claude";
@@ -81,6 +82,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [respawnCounter, setRespawnCounter] = useState(0);
   const [inspectorReconnectKey, setInspectorReconnectKey] = useState(0);
+  const [termContextMenu, setTermContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Inspector port: allocated async in doSpawn via OS probe (check_port_available IPC).
   // State triggers re-render so useInspectorConnection receives the port after allocation.
@@ -728,6 +730,38 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     };
   }, [visible, terminal.scrollToTop, terminal.scrollToBottom, terminal.scrollToLastUserMessage]);
 
+  // Reactive font update — applies to all terminals when setting changes
+  const terminalFont = useSettingsStore((s) => s.terminalFont);
+  useEffect(() => {
+    const term = terminalRef.current?.termRef.current;
+    if (term) term.options.fontFamily = resolveFont(terminalFont);
+  }, [terminalFont]);
+
+  // Suppress native context menu and show custom menu instead
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !visible) return;
+    const handler = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setTermContextMenu({ x: e.clientX, y: e.clientY });
+    };
+    el.addEventListener("contextmenu", handler, true);
+    return () => el.removeEventListener("contextmenu", handler, true);
+  }, [visible]);
+
+  // Close context menu on Escape
+  useEffect(() => {
+    if (!termContextMenu) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setTermContextMenu(null);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [termContextMenu]);
 
   return (
     <div
@@ -840,6 +874,61 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
             </div>
           </div>
         </div>
+      )}
+      {termContextMenu && createPortal(
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 199 }}
+          onClick={() => setTermContextMenu(null)}
+          onContextMenu={(e) => { e.preventDefault(); setTermContextMenu(null); }}
+        >
+          <div
+            className="tab-context-menu"
+            style={{
+              left: Math.min(termContextMenu.x, window.innerWidth - 188),
+              top: Math.min(termContextMenu.y, window.innerHeight - 200),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {terminal.termRef.current?.hasSelection() && (
+              <button
+                className="tab-context-menu-item"
+                onClick={() => {
+                  const sel = terminal.termRef.current?.getSelection();
+                  if (sel) navigator.clipboard.writeText(sel);
+                  setTermContextMenu(null);
+                }}
+              >
+                Copy
+              </button>
+            )}
+            <button
+              className="tab-context-menu-item"
+              onClick={() => {
+                navigator.clipboard.readText().then((text) => {
+                  if (text) terminal.termRef.current?.paste(text);
+                }).catch(() => {});
+                setTermContextMenu(null);
+              }}
+            >
+              Paste
+            </button>
+            <div className="tab-context-menu-divider" />
+            <div className="tab-context-menu-label">Font</div>
+            {TERMINAL_FONTS.map((f) => (
+              <button
+                key={f.id}
+                className={`tab-context-menu-item${terminalFont === f.id ? " terminal-context-menu-font-active" : ""}`}
+                onClick={() => {
+                  useSettingsStore.getState().setTerminalFont(f.id);
+                  setTermContextMenu(null);
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

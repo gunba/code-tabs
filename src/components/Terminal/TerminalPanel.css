@@ -187,3 +187,13 @@
   font-size: 10px;
   color: var(--text-muted);
 }
+
+/* ── Terminal context menu: active font indicator ──────────────────── */
+
+.terminal-context-menu-font-active {
+  color: var(--accent);
+}
+
+.terminal-context-menu-font-active::before {
+  content: "\2713 ";
+}

@@ -79,7 +79,7 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   ├── store/sessions.ts                    # Zustand: sessions, active tab, subagents, command history, autoRecordOnStart
   ├── store/settings.ts                    # Zustand: preferences, CLI info (persisted to localStorage)
   ├── hooks/
-  │   ├── useTerminal.ts                   # xterm.js lifecycle, write batching, fixed 1M scrollback
+  │   ├── useTerminal.ts                   # xterm.js lifecycle, write batching, fixed 1M scrollback, font selection
   │   ├── usePty.ts                        # PTY spawn wrapper (uses lib/ptyProcess)
   │   ├── useInspectorConnection.ts        # BUN_INSPECT WebSocket lifecycle (connect, retry, disconnect)
   │   ├── useTapPipeline.ts                # Tap event receiver: TCP tap-entry events → classify → dispatch → disk

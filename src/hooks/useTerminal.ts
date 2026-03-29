@@ -6,10 +6,27 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
 import { getXtermTheme } from "../lib/theme";
 import { dlog } from "../lib/debugLog";
+import { useSettingsStore } from "../store/settings";
 
 const PROMPT_MARKER_NEW = ">\u00A0"; // > + NBSP — current Claude Code prompt
 const PROMPT_MARKER_OLD = "\u276F"; // ❯ — legacy Claude Code prompt
 const BOTTOM_TOLERANCE = 2; // Lines of slack for "at bottom" detection
+
+export interface TerminalFont {
+  id: string;
+  label: string;
+  family: string;
+}
+
+export const TERMINAL_FONTS: TerminalFont[] = [
+  // Must match --font-mono in index.html (TH-03)
+  { id: "default", label: "Default", family: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace" },
+  { id: "pragmasevka", label: "Pragmasevka", family: "'Pragmasevka', 'Cascadia Code', 'Fira Code', monospace" },
+];
+
+export function resolveFont(id: string): string {
+  return TERMINAL_FONTS.find(f => f.id === id)?.family ?? TERMINAL_FONTS[0].family;
+}
 
 /** Scan buffer backward from `fromLine` for a Claude Code prompt line. */
 function findPromptLine(buf: IBuffer, fromLine: number): number {
@@ -58,7 +75,7 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace",
+      fontFamily: resolveFont(useSettingsStore.getState().terminalFont),
       theme: getXtermTheme(),
       allowProposedApi: true,
       scrollback: 1_000_000,
