@@ -12,6 +12,7 @@ import { PromptsTab } from "./PromptsTab";
 import { SkillsEditor } from "./SkillsEditor";
 import { ProvidersPane } from "./ProvidersPane";
 import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconLightning, IconClose } from "../Icons/Icons";
+import { parseWorktreePath } from "../../lib/paths";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import "./ConfigManager.css";
 
@@ -45,22 +46,29 @@ export function ConfigManager() {
     }
   }, [showConfigManager]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Unique project dirs from sessions
+  // Unique project dirs from sessions — resolve worktrees to their project root
   const projectDirs = useMemo(() => Array.from(
     new Set(
       sessions
         .filter((s) => !s.isMetaAgent && s.config.workingDir)
-        .map((s) => s.config.workingDir)
+        .map((s) => {
+          const wt = parseWorktreePath(s.config.workingDir);
+          return wt ? wt.projectRoot : s.config.workingDir;
+        })
     )
   ), [sessions]);
 
-  // Default to active session's working dir
+  // Default to active session's working dir (resolve worktrees to project root)
   useEffect(() => {
     if (!projectDir) {
       const activeSession = sessions.find((s) => s.id === activeTabId);
-      const activeDir = activeSession?.config.workingDir;
-      if (activeDir) setProjectDir(activeDir);
-      else if (projectDirs.length > 0) setProjectDir(projectDirs[0]);
+      const rawDir = activeSession?.config.workingDir;
+      if (rawDir) {
+        const wt = parseWorktreePath(rawDir);
+        setProjectDir(wt ? wt.projectRoot : rawDir);
+      } else if (projectDirs.length > 0) {
+        setProjectDir(projectDirs[0]);
+      }
     }
   }, [projectDir, activeTabId, sessions, projectDirs]);
 
