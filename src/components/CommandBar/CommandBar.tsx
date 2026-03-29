@@ -3,7 +3,6 @@ import { writeToPty } from "../../lib/ptyRegistry";
 import { useSettingsStore } from "../../store/settings";
 import { useSessionStore } from "../../store/sessions";
 import { computeHeatLevel, heatClassName } from "../../lib/claude";
-import { IconSkill, IconClose } from "../Icons/Icons";
 import "./CommandBar.css";
 
 // ── Component ───────────────────────────────────────────────────────
@@ -14,6 +13,10 @@ interface CommandBarProps {
   ctrlHeld: boolean;
 }
 
+type MergedEntry =
+  | { kind: "command"; label: string; key: string; ts: number }
+  | { kind: "skill"; label: string; key: string; ts: number; success: boolean };
+
 export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProps) {
   const slashCommands = useSettingsStore((s) => s.slashCommands);
   const commandUsage = useSettingsStore((s) => s.commandUsage);
@@ -21,7 +24,6 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
   const setExpanded = useSettingsStore((s) => s.setCommandBarExpanded);
   const history = useSessionStore((s) => sessionId ? s.commandHistory.get(sessionId) : undefined) ?? [];
   const skillInvocations = useSessionStore((s) => sessionId ? s.skillInvocations.get(sessionId) : undefined) ?? [];
-  const removeSkillInvocation = useSessionStore((s) => s.removeSkillInvocation);
 
   /** Send a slash command immediately. History recorded via PTY input and tap events. */
   const sendCommand = useCallback(
@@ -71,6 +73,27 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
     [sessionId, sendCommand, typeCommand]
   );
 
+  // Merge command history and skill invocations into a single time-ordered strip
+  const merged = useMemo<MergedEntry[]>(() => {
+    const entries: MergedEntry[] = [
+      ...history.map((h) => ({
+        kind: "command" as const,
+        label: h.cmd,
+        key: `cmd-${h.ts}-${h.cmd}`,
+        ts: h.ts,
+      })),
+      ...skillInvocations.map((sk) => ({
+        kind: "skill" as const,
+        label: `/${sk.skill}`,
+        key: sk.id,
+        ts: sk.timestamp,
+        success: sk.success,
+      })),
+    ];
+    entries.sort((a, b) => b.ts - a.ts);
+    return entries;
+  }, [history, skillInvocations]);
+
   // Don't render if there's no active session
   if (!sessionId || sessionState === "dead") return null;
 
@@ -78,26 +101,6 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
 
   return (
     <div className="command-bar">
-      {/* Skill invocation pills — results from /skill runs */}
-      {skillInvocations.length > 0 && (
-        <div className="skill-pills-row">
-          {skillInvocations.map((sk) => (
-            <span
-              key={sk.id}
-              className={`skill-pill${sk.success ? "" : " skill-failed"}`}
-              title={`/${sk.skill}${sk.allowedTools.length ? ` (${sk.allowedTools.join(", ")})` : ""}`}
-            >
-              <IconSkill size={12} className="skill-icon" />
-              <span className="skill-name">{sk.skill}</span>
-              <span
-                className="subagent-close"
-                onClick={() => sessionId && removeSkillInvocation(sessionId, sk.id)}
-                title="Dismiss"
-              ><IconClose size={12} /></span>
-            </span>
-          ))}
-        </div>
-      )}
       {/* Toggle: chevron to expand/collapse slash commands */}
       <div className="command-bar-collapse" onClick={() => setExpanded(!expanded)}>
         <span className="command-bar-chevron">{expanded ? "\u25BC" : "\u25B3"}</span>
@@ -126,18 +129,18 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
           )}
         </div>
       )}
-      {/* Command history: below the expander with a separator */}
-      {history.length > 0 && (
+      {/* Unified history strip: commands + skill invocations interleaved by time */}
+      {merged.length > 0 && (
         <div className="command-history">
-          {history.map((cmd, i) => (
+          {merged.map((entry) => (
             <button
-              key={`${i}-${cmd}`}
-              className="command-history-item"
-              onClick={() => sendCommand(cmd)}
-              title={`Re-send ${cmd}`}
+              key={entry.key}
+              className={`command-history-item${entry.kind === "skill" ? ` skill-history-item${!entry.success ? " skill-failed" : ""}` : ""}`}
+              onClick={() => sendCommand(entry.label)}
+              title={`Re-send ${entry.label}`}
               type="button"
             >
-              {cmd}
+              {entry.label}
             </button>
           ))}
         </div>

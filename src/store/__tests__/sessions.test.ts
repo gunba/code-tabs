@@ -89,60 +89,66 @@ describe("addCommandHistory", () => {
   beforeEach(resetStore);
 
   it("adds first command for a session", () => {
-    useSessionStore.getState().addCommandHistory("s1", "/review");
+    useSessionStore.getState().addCommandHistory("s1", "/review", 1000);
     const history = useSessionStore.getState().commandHistory.get("s1");
-    expect(history).toEqual(["/review"]);
+    expect(history?.map((e) => e.cmd)).toEqual(["/review"]);
   });
 
   it("prepends newer commands (newest first)", () => {
     const { addCommandHistory } = useSessionStore.getState();
-    addCommandHistory("s1", "/review");
-    addCommandHistory("s1", "/build");
-    addCommandHistory("s1", "/test");
+    addCommandHistory("s1", "/review", 1000);
+    addCommandHistory("s1", "/build", 2000);
+    addCommandHistory("s1", "/test", 3000);
     const history = useSessionStore.getState().commandHistory.get("s1");
-    expect(history).toEqual(["/test", "/build", "/review"]);
+    expect(history?.map((e) => e.cmd)).toEqual(["/test", "/build", "/review"]);
   });
 
   it("keeps separate histories per session", () => {
     const { addCommandHistory } = useSessionStore.getState();
-    addCommandHistory("s1", "/review");
-    addCommandHistory("s2", "/build");
-    addCommandHistory("s1", "/test");
-    expect(useSessionStore.getState().commandHistory.get("s1")).toEqual(["/test", "/review"]);
-    expect(useSessionStore.getState().commandHistory.get("s2")).toEqual(["/build"]);
+    addCommandHistory("s1", "/review", 1000);
+    addCommandHistory("s2", "/build", 2000);
+    addCommandHistory("s1", "/test", 3000);
+    expect(useSessionStore.getState().commandHistory.get("s1")?.map((e) => e.cmd)).toEqual(["/test", "/review"]);
+    expect(useSessionStore.getState().commandHistory.get("s2")?.map((e) => e.cmd)).toEqual(["/build"]);
   });
 
   it("deduplicates consecutive identical commands", () => {
     const { addCommandHistory } = useSessionStore.getState();
-    addCommandHistory("s1", "/review");
-    addCommandHistory("s1", "/review");
+    addCommandHistory("s1", "/review", 1000);
+    addCommandHistory("s1", "/review", 2000);
     const history = useSessionStore.getState().commandHistory.get("s1");
-    expect(history).toEqual(["/review"]);
+    expect(history?.map((e) => e.cmd)).toEqual(["/review"]);
   });
 
   it("allows non-consecutive duplicate commands", () => {
     const { addCommandHistory } = useSessionStore.getState();
-    addCommandHistory("s1", "/review");
-    addCommandHistory("s1", "/build");
-    addCommandHistory("s1", "/review");
+    addCommandHistory("s1", "/review", 1000);
+    addCommandHistory("s1", "/build", 2000);
+    addCommandHistory("s1", "/review", 3000);
     const history = useSessionStore.getState().commandHistory.get("s1");
-    expect(history).toEqual(["/review", "/build", "/review"]);
+    expect(history?.map((e) => e.cmd)).toEqual(["/review", "/build", "/review"]);
   });
 
   it("normalizes commands to lowercase", () => {
     const { addCommandHistory } = useSessionStore.getState();
-    addCommandHistory("s1", "/Review");
-    addCommandHistory("s1", "/BUILD");
+    addCommandHistory("s1", "/Review", 1000);
+    addCommandHistory("s1", "/BUILD", 2000);
     const history = useSessionStore.getState().commandHistory.get("s1");
-    expect(history).toEqual(["/build", "/review"]);
+    expect(history?.map((e) => e.cmd)).toEqual(["/build", "/review"]);
   });
 
   it("deduplicates across case variations", () => {
     const { addCommandHistory } = useSessionStore.getState();
-    addCommandHistory("s1", "/review");
-    addCommandHistory("s1", "/Review");
+    addCommandHistory("s1", "/review", 1000);
+    addCommandHistory("s1", "/Review", 2000);
     const history = useSessionStore.getState().commandHistory.get("s1");
-    expect(history).toEqual(["/review"]);
+    expect(history?.map((e) => e.cmd)).toEqual(["/review"]);
+  });
+
+  it("stores timestamps on entries", () => {
+    useSessionStore.getState().addCommandHistory("s1", "/review", 9999);
+    const entry = useSessionStore.getState().commandHistory.get("s1")?.[0];
+    expect(entry?.ts).toBe(9999);
   });
 
   it("returns undefined for session with no history", () => {
@@ -152,7 +158,7 @@ describe("addCommandHistory", () => {
 
   it("does not mutate the previous Map reference (immutable update)", () => {
     const mapBefore = useSessionStore.getState().commandHistory;
-    useSessionStore.getState().addCommandHistory("s1", "/review");
+    useSessionStore.getState().addCommandHistory("s1", "/review", 1000);
     const mapAfter = useSessionStore.getState().commandHistory;
     expect(mapBefore).not.toBe(mapAfter);
   });
@@ -316,7 +322,7 @@ describe("closeSession cleanup", () => {
       activeTabId: "s1",
       subagents: new Map([["s1", [makeSub("sub-1")]], ["s2", [makeSub("sub-2")]]]),
       skillInvocations: new Map([["s1", [{ id: "skill-100", skill: "commit", success: true, allowedTools: [], timestamp: 100 }]]]),
-      commandHistory: new Map([["s1", ["/review"]], ["s2", ["/build"]]]),
+      commandHistory: new Map([["s1", [{ cmd: "/review", ts: 1000 }]], ["s2", [{ cmd: "/build", ts: 2000 }]]]),
       tapCategories: new Map([["s1", new Set(["parse", "stringify"])], ["s2", new Set(["parse"])]]),
       processHealth: new Map([["s1", { rss: 100, heapUsed: 50, uptime: 10 }], ["s2", { rss: 200, heapUsed: 80, uptime: 20 }]]),
     });

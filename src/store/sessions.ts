@@ -11,6 +11,7 @@ import type {
   SessionMetadata,
   Subagent,
   SkillInvocation,
+  CommandHistoryEntry,
 } from "../types/session";
 import { isSubagentActive } from "../types/session";
 import { useSettingsStore } from "./settings";
@@ -22,7 +23,7 @@ interface SessionsState {
   initialized: boolean;
   subagents: Map<string, Subagent[]>; // sessionId -> subagents
   skillInvocations: Map<string, SkillInvocation[]>; // sessionId -> skills (newest first)
-  commandHistory: Map<string, string[]>; // sessionId -> commands (newest first)
+  commandHistory: Map<string, CommandHistoryEntry[]>; // sessionId -> commands (newest first)
   respawnRequest: { tabId: string; config: SessionConfig; name?: string } | null;
   killRequest: string | null; // sessionId to kill
   hookChangeCounter: number;
@@ -60,7 +61,7 @@ interface SessionsState {
   clearIdleSubagents: (sessionId: string) => void;
   addSkillInvocation: (sessionId: string, invocation: SkillInvocation) => void;
   removeSkillInvocation: (sessionId: string, invocationId: string) => void;
-  addCommandHistory: (sessionId: string, command: string) => void;
+  addCommandHistory: (sessionId: string, command: string, ts: number) => void;
   updateProcessHealth: (id: string, data: { rss: number; heapUsed: number; uptime: number }) => void;
 }
 
@@ -423,15 +424,15 @@ export const useSessionStore = create<SessionsState>((set) => ({
     });
   },
 
-  addCommandHistory: (sessionId, command) => {
+  addCommandHistory: (sessionId, command, ts) => {
     const normalized = command.toLowerCase();
     set((s) => {
       const map = new Map(s.commandHistory);
       const existing = map.get(sessionId) || [];
       // Consecutive dedup: skip if most recent entry is identical
       // (suppresses duplicates from PTY + tap dual detection)
-      if (existing[0] === normalized) return s;
-      const updated = [normalized, ...existing];
+      if (existing[0]?.cmd === normalized) return s;
+      const updated = [{ cmd: normalized, ts }, ...existing];
       map.set(sessionId, updated.length > 50 ? updated.slice(0, 50) : updated);
       return { commandHistory: map };
     });

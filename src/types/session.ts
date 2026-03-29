@@ -187,6 +187,11 @@ export interface SkillInvocation {
   timestamp: number;
 }
 
+export interface CommandHistoryEntry {
+  cmd: string;    // normalized lowercase command (e.g. "/context")
+  ts: number;     // tap event timestamp for chronological ordering
+}
+
 export interface PastSession {
   id: string;
   path: string;

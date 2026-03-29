@@ -42,7 +42,7 @@ export function writeToPty(sessionId: string, data: string): boolean {
     for (const line of lines) {
       if (line.charAt(0) === "/") {
         const cmd = line.split(/\s/)[0];
-        useSessionStore.getState().addCommandHistory(sessionId, cmd);
+        useSessionStore.getState().addCommandHistory(sessionId, cmd, Date.now());
       }
     }
   }

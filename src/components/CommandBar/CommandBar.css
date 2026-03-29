@@ -36,6 +36,21 @@
   color: var(--text-primary);
 }
 
+.command-history-item.skill-history-item {
+  border-color: color-mix(in srgb, var(--accent-tertiary) 40%, var(--border-subtle));
+  color: color-mix(in srgb, var(--accent-tertiary) 70%, var(--text-muted));
+}
+
+.command-history-item.skill-history-item:hover {
+  border-color: var(--accent-tertiary);
+  color: var(--text-primary);
+}
+
+.command-history-item.skill-history-item.skill-failed {
+  border-color: color-mix(in srgb, var(--color-error) 40%, var(--border-subtle));
+  color: color-mix(in srgb, var(--color-error) 70%, var(--text-muted));
+}
+
 /* ── Command Bar Chevron ─────────────────────────────────── */
 
 .command-bar-chevron {

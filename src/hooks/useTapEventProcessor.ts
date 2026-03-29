@@ -161,7 +161,7 @@ export function useTapEventProcessor(
       }
 
       if (event.kind === "SlashCommand") {
-        addCommandHistory(sid, event.command);
+        addCommandHistory(sid, event.command, event.ts);
         useSettingsStore.getState().recordCommandUsage(event.command);
       }
 
