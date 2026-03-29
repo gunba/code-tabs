@@ -20,7 +20,7 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
   const expanded = useSettingsStore((s) => s.commandBarExpanded);
   const setExpanded = useSettingsStore((s) => s.setCommandBarExpanded);
   const history = useSessionStore((s) => sessionId ? s.commandHistory.get(sessionId) : undefined) ?? [];
-  const skillInvocations = useSessionStore((s) => sessionId ? (s.skillInvocations.get(sessionId) ?? []) : []);
+  const skillInvocations = useSessionStore((s) => sessionId ? s.skillInvocations.get(sessionId) : undefined) ?? [];
   const removeSkillInvocation = useSessionStore((s) => s.removeSkillInvocation);
 
   /** Send a slash command immediately. History recorded via PTY input and tap events. */
