@@ -26,21 +26,33 @@ export function useGitStatus(
 
   // Check if directory is a git repo (once per workingDir change)
   useEffect(() => {
-    setIsGitRepo(false);
-    setStatus(null);
+    // Reset animation/error state immediately, but keep isGitRepo and status
+    // visible during the transition so the button doesn't blink while waiting
+    // for the async git_repo_check to complete.
     setError(null);
     setChangedPaths(new Set());
     prevStatusRef.current = null;
 
-    if (!workingDir || !enabled) return;
+    if (!workingDir || !enabled) {
+      setIsGitRepo(false);
+      setStatus(null);
+      return;
+    }
 
     let cancelled = false;
     (async () => {
       try {
         const result = await invoke<boolean>("git_repo_check", { workingDir });
-        if (!cancelled) setIsGitRepo(result);
-      } catch {
-        if (!cancelled) setIsGitRepo(false);
+        if (!cancelled) {
+          setIsGitRepo(result);
+          if (!result) setStatus(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setIsGitRepo(false);
+          setStatus(null);
+          setError(String(err));
+        }
       }
     })();
 

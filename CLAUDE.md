@@ -1,6 +1,6 @@
 # Claude Tabs
 
-<!-- Codes: AR=Architecture, BV=Build & Validate, CD=Commands, LO=Layout, DC=Doc Cross-references, FS=Frontend Structure, DR=Development Rules, TH=Theme System, SI=State Inspection -->
+<!-- Codes: AR=Architecture, BV=Build & Validate, CD=Commands, LO=Layout, DC=Doc Cross-references, FS=Frontend Structure, DR=Development Rules, TH=Theme System, SI=State Inspection, GS=Git Integration -->
 
 Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
 
@@ -163,3 +163,9 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
 - [TH-02] Key variables: `--bg-primary`, `--bg-surface`, `--accent` (clay), `--accent-secondary` (blue), `--accent-tertiary` (purple), `--term-bg`, `--term-fg`
 - [TH-03] Font system: --font-ui (Inter variable + system fallback) and --font-mono (Cascadia Code + Fira Code + JetBrains Mono) defined in index.html :root block. Inter woff2 bundled in src/assets/fonts/ with @font-face (font-display: swap). All CSS files use var(--font-mono) and var(--font-ui) — no hardcoded font-family strings.
   - Files: index.html
+
+# Git Integration
+
+
+- [GS-01] useGitStatus keeps isGitRepo and status visible during workingDir transitions (tab switches) — only resets them when workingDir is null/empty, git_repo_check returns false, or the check throws. This prevents the Changes button in StatusBar from blinking off during the async git_repo_check round-trip (~100ms).
+  - Files: src/hooks/useGitStatus.ts
