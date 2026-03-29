@@ -243,10 +243,6 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
 
     if (chunks.length === 0) return;
 
-    const prevViewportY = term.buffer.active.viewportY;
-    const prevBaseY = term.buffer.active.baseY;
-    const wasAtBottom = prevViewportY >= prevBaseY - BOTTOM_TOLERANCE;
-
     // Merge chunks into a single buffer
     let merged: Uint8Array;
     if (chunks.length === 1) {
@@ -262,22 +258,7 @@ export function useTerminal({ onData, onResize, onBeforeFit }: UseTerminalOption
       }
     }
 
-    term.write(merged, () => {
-      if (wasAtBottom) {
-        term.scrollToBottom();
-      } else {
-        const newViewportY = term.buffer.active.viewportY;
-        const newBaseY = term.buffer.active.baseY;
-        if (newBaseY < prevBaseY) {
-          // Scrollback was cleared (ESC[3J — content exceeded viewport).
-          // The content the user was reading is gone — show latest output.
-          term.scrollToBottom();
-        } else if (newViewportY !== prevViewportY) {
-          // Viewport moved unexpectedly — restore absolute position
-          term.scrollToLine(Math.min(prevViewportY, newBaseY));
-        }
-      }
-    });
+    term.write(merged);
   }, []);
 
   // Debounced write: accumulates ConPTY chunks and flushes after 4ms of
