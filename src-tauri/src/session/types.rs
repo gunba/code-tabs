@@ -202,6 +202,8 @@ pub struct ModelProvider {
     pub name: String,
     pub base_url: String,
     pub api_key: Option<String>,
+    #[serde(default)]
+    pub socks5_proxy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,6 +232,7 @@ impl Default for ProviderConfig {
                 name: "Anthropic".into(),
                 base_url: "https://api.anthropic.com".into(),
                 api_key: None,
+                socks5_proxy: None,
             }],
             routes: vec![ModelRoute {
                 id: "default-catchall".into(),

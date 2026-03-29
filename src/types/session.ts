@@ -181,6 +181,7 @@ export interface ModelProvider {
   name: string;          // display name
   baseUrl: string;       // upstream API endpoint
   apiKey: string | null; // API key (null = passthrough from request)
+  socks5Proxy?: string | null; // SOCKS5 proxy URL (e.g., "socks5h://user:pass@host:port")
 }
 
 export interface ModelRoute {
