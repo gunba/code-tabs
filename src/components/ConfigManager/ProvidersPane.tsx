@@ -205,6 +205,15 @@ function ProviderCard({ provider, isDefault, isOnly, onUpdate, onRemove, onSetDe
             placeholder={provider.apiKey ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : "Passthrough (uses CLI key)"}
           />
         </label>
+        <label className="providers-field">
+          <span>SOCKS5</span>
+          <input
+            type="text"
+            value={provider.socks5Proxy ?? ""}
+            onChange={(e) => onUpdate({ socks5Proxy: e.target.value || null })}
+            placeholder="socks5h://user:pass@host:port"
+          />
+        </label>
       </div>
     </div>
   );

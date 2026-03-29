@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -14,7 +15,8 @@ pub struct ProxyInner {
     pub config: ProviderConfig,
     pub port: Option<u16>,
     pub shutdown_tx: Option<oneshot::Sender<()>>,
-    pub client: Option<reqwest::Client>,
+    pub clients: HashMap<String, reqwest::Client>,
+    pub default_client: reqwest::Client,
 }
 
 pub struct ProxyState(pub Arc<Mutex<ProxyInner>>);
@@ -25,9 +27,42 @@ impl ProxyState {
             config: ProviderConfig::default(),
             port: None,
             shutdown_tx: None,
-            client: None,
+            clients: HashMap::new(),
+            default_client: build_plain_client(),
         })))
     }
+}
+
+// ── Client builders ──────────────────────────────────────────────────
+
+fn build_plain_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .expect("plain reqwest client must build")
+}
+
+fn build_client_for_provider(provider: &ModelProvider) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300));
+
+    if let Some(ref proxy_url) = provider.socks5_proxy {
+        let proxy = reqwest::Proxy::all(proxy_url)
+            .map_err(|e| format!("Invalid SOCKS5 proxy for '{}': {e}", provider.name))?;
+        builder = builder.proxy(proxy);
+    }
+
+    builder.build().map_err(|e| format!("Client build failed for '{}': {e}", provider.name))
+}
+
+fn build_client_map(config: &ProviderConfig) -> Result<HashMap<String, reqwest::Client>, String> {
+    let mut clients = HashMap::new();
+    for provider in &config.providers {
+        if provider.socks5_proxy.is_some() {
+            clients.insert(provider.id.clone(), build_client_for_provider(provider)?);
+        }
+    }
+    Ok(clients)
 }
 
 // ── Commands ─────────────────────────────────────────────────────────
@@ -45,10 +80,8 @@ pub async fn start_api_proxy(
         .map_err(|e| format!("Proxy bind failed: {e}"))?;
     let port = listener.local_addr().map_err(|e| format!("{e}"))?.port();
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(300))
-        .build()
-        .map_err(|e| format!("Client build failed: {e}"))?;
+    let clients = build_client_map(&config)?;
+    let default_client = build_plain_client();
 
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
 
@@ -57,7 +90,8 @@ pub async fn start_api_proxy(
         s.config = config;
         s.port = Some(port);
         s.shutdown_tx = Some(shutdown_tx);
-        s.client = Some(client.clone());
+        s.clients = clients;
+        s.default_client = default_client.clone();
     }
 
     let state = inner.clone();
@@ -67,14 +101,13 @@ pub async fn start_api_proxy(
                 result = listener.accept() => {
                     match result {
                         Ok((stream, _)) => {
-                            let config = match state.lock() {
-                                Ok(s) => s.config.clone(),
+                            let (config, clients, default_client) = match state.lock() {
+                                Ok(s) => (s.config.clone(), s.clients.clone(), s.default_client.clone()),
                                 Err(_) => continue,
                             };
-                            let c = client.clone();
                             let a = app.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = handle_connection(stream, config, c, a).await {
+                                if let Err(e) = handle_connection(stream, config, clients, default_client, a).await {
                                     log::debug!("proxy connection error: {e}");
                                 }
                             });
@@ -102,7 +135,7 @@ pub fn stop_api_proxy(proxy_state: State<'_, ProxyState>) -> Result<(), String> 
         let _ = tx.send(());
     }
     s.port = None;
-    s.client = None;
+    s.clients.clear();
     Ok(())
 }
 
@@ -111,8 +144,10 @@ pub fn update_provider_config(
     config: ProviderConfig,
     proxy_state: State<'_, ProxyState>,
 ) -> Result<(), String> {
+    let clients = build_client_map(&config)?;
     let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
     s.config = config;
+    s.clients = clients;
     Ok(())
 }
 
@@ -127,7 +162,8 @@ pub fn get_proxy_port(proxy_state: State<'_, ProxyState>) -> Result<Option<u16>,
 async fn handle_connection(
     mut stream: tokio::net::TcpStream,
     config: ProviderConfig,
-    client: reqwest::Client,
+    clients: HashMap<String, reqwest::Client>,
+    default_client: reqwest::Client,
     app: tauri::AppHandle,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Read full request
@@ -192,6 +228,7 @@ async fn handle_connection(
     let url = format!("{}{}", provider.base_url.trim_end_matches('/'), path);
 
     // Build upstream request
+    let client = clients.get(&provider.id).unwrap_or(&default_client);
     let http_method = reqwest::Method::from_bytes(method.as_bytes())
         .unwrap_or(reqwest::Method::POST);
     let mut req = client.request(http_method, &url);
@@ -285,6 +322,7 @@ static FALLBACK_PROVIDER: ModelProvider = ModelProvider {
     name: String::new(),
     base_url: String::new(),
     api_key: None,
+    socks5_proxy: None,
 };
 
 fn rewrite_model_in_body(body: &[u8], new_model: &str) -> Vec<u8> {
@@ -385,12 +423,14 @@ mod tests {
                     name: "GLM".into(),
                     base_url: "https://api.z.ai/api/anthropic".into(),
                     api_key: Some("k".into()),
+                    socks5_proxy: None,
                 },
                 ModelProvider {
                     id: "anthropic".into(),
                     name: "Anthropic".into(),
                     base_url: "https://api.anthropic.com".into(),
                     api_key: None,
+                    socks5_proxy: None,
                 },
             ],
             routes: vec![
@@ -424,12 +464,14 @@ mod tests {
                     name: "GLM".into(),
                     base_url: "https://api.z.ai/api/anthropic".into(),
                     api_key: Some("k".into()),
+                    socks5_proxy: None,
                 },
                 ModelProvider {
                     id: "anthropic".into(),
                     name: "Anthropic".into(),
                     base_url: "https://api.anthropic.com".into(),
                     api_key: None,
+                    socks5_proxy: None,
                 },
             ],
             routes: vec![
@@ -473,12 +515,14 @@ mod tests {
                     name: "A".into(),
                     base_url: "http://a".into(),
                     api_key: None,
+                    socks5_proxy: None,
                 },
                 ModelProvider {
                     id: "b".into(),
                     name: "B".into(),
                     base_url: "http://b".into(),
                     api_key: None,
+                    socks5_proxy: None,
                 },
             ],
             routes: vec![
@@ -510,6 +554,7 @@ mod tests {
                 name: "Anthropic".into(),
                 base_url: "https://api.anthropic.com".into(),
                 api_key: None,
+                socks5_proxy: None,
             }],
             routes: vec![ModelRoute {
                 id: "r1".into(),
@@ -562,5 +607,59 @@ mod tests {
             extract_content_length("POST /v1/messages HTTP/1.1\r\nContent-Length: 42\r\n"),
             Some(42)
         );
+    }
+
+    // ── SOCKS5 client builder tests ──────────────────────────────────
+
+    #[test]
+    fn test_build_client_map_no_proxy() {
+        let config = ProviderConfig::default();
+        let clients = build_client_map(&config).unwrap();
+        assert!(clients.is_empty(), "no providers have socks5_proxy, map should be empty");
+    }
+
+    #[test]
+    fn test_build_client_map_with_proxy() {
+        let config = ProviderConfig {
+            providers: vec![
+                ModelProvider {
+                    id: "proxied".into(),
+                    name: "Proxied".into(),
+                    base_url: "https://api.example.com".into(),
+                    api_key: None,
+                    socks5_proxy: Some("socks5h://user:pass@127.0.0.1:1080".into()),
+                },
+                ModelProvider {
+                    id: "direct".into(),
+                    name: "Direct".into(),
+                    base_url: "https://api.anthropic.com".into(),
+                    api_key: None,
+                    socks5_proxy: None,
+                },
+            ],
+            routes: vec![],
+            default_provider_id: "direct".into(),
+        };
+        let clients = build_client_map(&config).unwrap();
+        assert_eq!(clients.len(), 1, "only proxied provider should be in map");
+        assert!(clients.contains_key("proxied"), "proxied provider should have a client");
+        assert!(!clients.contains_key("direct"), "direct provider should not be in map");
+    }
+
+    #[test]
+    fn test_build_client_map_invalid_proxy_url() {
+        let config = ProviderConfig {
+            providers: vec![ModelProvider {
+                id: "bad".into(),
+                name: "Bad".into(),
+                base_url: "https://api.example.com".into(),
+                api_key: None,
+                socks5_proxy: Some("not a valid url!!!".into()),
+            }],
+            routes: vec![],
+            default_provider_id: "bad".into(),
+        };
+        let result = build_client_map(&config);
+        assert!(result.is_err(), "invalid proxy URL should return Err");
     }
 }
