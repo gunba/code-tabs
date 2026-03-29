@@ -31,7 +31,11 @@ export function parseRecording(ndjsonText: string): ParsedRecording {
 
   const events: RecordingEvent[] = [];
   for (let i = 1; i < lines.length; i++) {
-    events.push(JSON.parse(lines[i]));
+    try {
+      events.push(JSON.parse(lines[i]));
+    } catch {
+      // Skip malformed lines
+    }
   }
 
   const duration = events.length > 0 ? events[events.length - 1].t : 0;

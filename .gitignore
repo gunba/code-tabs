@@ -4,6 +4,7 @@ src-tauri/target/
 src-tauri/pty-patch/target/
 .claude/
 .proofs/
+plans/
 DOCS/
 logs/
 *.log

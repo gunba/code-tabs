@@ -123,7 +123,8 @@
 
 .ctrl-held .command-btn.heat-1,
 .ctrl-held .command-btn.heat-2,
-.ctrl-held .command-btn.heat-3 {
+.ctrl-held .command-btn.heat-3,
+.ctrl-held .command-btn.heat-4 {
   color: var(--text-muted);
   background: var(--bg-primary);
   border-color: var(--accent-secondary);

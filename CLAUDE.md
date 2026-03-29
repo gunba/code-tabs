@@ -76,7 +76,7 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   src/
   ├── main.tsx                             # React entry point, theme init
   ├── App.tsx                              # Root: tab bar, subagent bar, terminals
-  ├── store/sessions.ts                    # Zustand: sessions, active tab, subagents, command history
+  ├── store/sessions.ts                    # Zustand: sessions, active tab, subagents, command history, autoRecordOnStart
   ├── store/settings.ts                    # Zustand: preferences, CLI info (persisted to localStorage)
   ├── hooks/
   │   ├── useTerminal.ts                   # xterm.js lifecycle, write batching, fixed 1M scrollback
@@ -112,6 +112,8 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │   ├── Icons/Icons.tsx                  # SVG icon components (shared Icon base, currentColor)
   │   ├── ModalOverlay/ModalOverlay.tsx    # Shared modal wrapper
   │   ├── DebugPanel/DebugPanel.tsx        # Structured log viewer: session/module filters, color-coded (Ctrl+Shift+D)
+  │   ├── SearchPanel/SearchPanel.tsx     # Cross-session terminal search (Ctrl+Shift+F)
+  │   ├── ReplayViewer/ReplayViewer.tsx   # Terminal recording NDJSON playback modal
   │   └── DiffPanel/
   │       ├── DiffPanel.tsx                # Git diff side panel (Ctrl+Shift+G): file list, modal trigger
   │       └── DiffModal.tsx                # Side-by-side diff modal (84vw/78vh): highlight.js syntax, file nav
@@ -128,7 +130,9 @@ Do NOT use TaskOutput to poll. Wait for task-notifications.
   │   ├── ptyProcess.ts                    # Direct PTY wrapper + active PID cleanup registry
   │   ├── inputAccumulator.ts              # PTY input line accumulator for slash-command detection
   │   ├── ptyRegistry.ts                   # Global PTY writer + kill registry + slash-command detection via LineAccumulator
-  │   ├── terminalRegistry.ts             # Terminal buffer reader registry
+  │   ├── terminalRegistry.ts             # Terminal buffer reader, SearchAddon, and scrollToLine registry
+  │   ├── searchBuffers.ts                # Cross-session text search (line-by-line, regex, capped results)
+  │   ├── replayParser.ts                 # NDJSON terminal recording parser (header + timed events)
   │   ├── paths.ts                         # Path helpers, IS_WINDOWS detection, platform-aware normalizePath, worktree detection, tab grouping
   │   ├── settingsSchema.ts               # CLI settings.json schema discovery + parsing
   │   ├── debugLog.ts                      # Structured debug logging (dlog function, session-scoped entries)

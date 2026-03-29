@@ -14,14 +14,14 @@ interface ReplayViewerProps {
   onClose: () => void;
 }
 
-type Phase = "final" | "raw";
+type Phase = "filtered" | "raw";
 
 export function ReplayViewer({ filePath, onClose }: ReplayViewerProps) {
   const [recording, setRecording] = useState<ParsedRecording | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [phase, setPhase] = useState<Phase>("final");
+  const [phase, setPhase] = useState<Phase>("filtered");
   const [currentTime, setCurrentTime] = useState(0);
 
   const eventIndexRef = useRef(0);
@@ -245,11 +245,11 @@ export function ReplayViewer({ filePath, onClose }: ReplayViewerProps) {
 
             <div className="replay-phase-group">
               <button
-                className={`replay-phase${phase === "final" ? " active" : ""}`}
-                onClick={() => handlePhaseChange("final")}
+                className={`replay-phase${phase === "filtered" ? " active" : ""}`}
+                onClick={() => handlePhaseChange("filtered")}
                 title="Processed output (what the user saw)"
               >
-                Final
+                Filtered
               </button>
               <button
                 className={`replay-phase${phase === "raw" ? " active" : ""}`}
