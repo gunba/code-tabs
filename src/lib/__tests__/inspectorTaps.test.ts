@@ -414,3 +414,62 @@ describe("INSTALL_TAPS timer hook", () => {
     expect(entries.length).toBe(0);
   });
 });
+
+describe("INSTALL_TAPS status-line capture", () => {
+  beforeEach(async () => {
+    cleanupTapHooks();
+    setupMockTcpTransport();
+    await installTaps();
+    muteTapDefaults();
+  });
+  afterEach(cleanupTapHooks);
+
+  it("captures status-line payload via dedicated category", async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).stringify = true;
+    mockTapWrites = [];
+    JSON.stringify({
+      hook_event_name: "Status",
+      session_id: "abc123",
+      cwd: "/test",
+      model: { id: "claude-opus-4-6[1m]", display_name: "Opus 4.6" },
+      version: "2.1.80",
+      cost: { total_cost_usd: 0.05, total_duration_ms: 30000, total_api_duration_ms: 1500, total_lines_added: 50, total_lines_removed: 5 },
+      context_window: { total_input_tokens: 10000, total_output_tokens: 2000, context_window_size: 1000000, current_usage: { input_tokens: 500, output_tokens: 100, cache_creation_input_tokens: 200, cache_read_input_tokens: 300 }, used_percentage: 2, remaining_percentage: 98 },
+      rate_limits: { five_hour: { used_percentage: 30, resets_at: 12345 }, seven_day: { used_percentage: 10, resets_at: 67890 } },
+      vim: { mode: "NORMAL" },
+      output_style: { name: "default" },
+    });
+    await new Promise<void>((r) => queueMicrotask(r));
+    const entries = collectTapEntries();
+    const statusEntries = entries.filter((e) => e.cat === "status-line");
+    expect(statusEntries.length).toBe(1);
+    expect(statusEntries[0].sessionId).toBe("abc123");
+    expect(statusEntries[0].cliVersion).toBe("2.1.80");
+    expect(statusEntries[0].fiveHourUsedPercent).toBe(30);
+    expect(statusEntries[0].sevenDayResetsAt).toBe(67890);
+    expect(statusEntries[0].modelId).toBe("claude-opus-4-6[1m]");
+    expect(statusEntries[0].modelDisplayName).toBe("Opus 4.6");
+    expect(statusEntries[0].outputStyle).toBe("default");
+    // Also verify the generic stringify entry fires (dual push)
+    const stringifyEntries = entries.filter((e) => e.cat === "stringify");
+    expect(stringifyEntries.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("handles string model (not object) in status payload", async () => {
+    const g = globalThis as unknown as Record<string, unknown>;
+    (g.__tapFlags as Record<string, boolean>).stringify = true;
+    mockTapWrites = [];
+    JSON.stringify({
+      hook_event_name: "Status",
+      session_id: "def456",
+      model: "claude-sonnet-4-6",
+    });
+    await new Promise<void>((r) => queueMicrotask(r));
+    const entries = collectTapEntries();
+    const statusEntries = entries.filter((e) => e.cat === "status-line");
+    expect(statusEntries.length).toBe(1);
+    expect(statusEntries[0].modelId).toBe("claude-sonnet-4-6");
+    expect(statusEntries[0].modelDisplayName).toBe("");
+  });
+});

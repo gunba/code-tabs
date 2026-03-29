@@ -531,6 +531,45 @@ export const INSTALL_TAPS = `(function() {
               push('system-prompt', { text: sysText, model: value.model, msgCount: value.messages.length });
             }
           }
+          // Detect status line payload — push full data bypassing 2000-char snap truncation
+          if (value && value.hook_event_name === 'Status') {
+            var m = value.model || {};
+            var c = value.cost || {};
+            var cw = value.context_window || {};
+            var cu = cw.current_usage || {};
+            var rl = value.rate_limits || {};
+            var f5 = rl.five_hour || {};
+            var f7 = rl.seven_day || {};
+            var vm = value.vim || {};
+            push('status-line', {
+              sessionId: value.session_id || '',
+              cwd: value.cwd || '',
+              modelId: typeof m === 'object' ? (m.id || '') : (m || ''),
+              modelDisplayName: typeof m === 'object' ? (m.display_name || '') : '',
+              cliVersion: value.version || '',
+              outputStyle: (value.output_style && value.output_style.name) || '',
+              totalCostUsd: c.total_cost_usd || 0,
+              totalDurationMs: c.total_duration_ms || 0,
+              totalApiDurationMs: c.total_api_duration_ms || 0,
+              totalLinesAdded: c.total_lines_added || 0,
+              totalLinesRemoved: c.total_lines_removed || 0,
+              totalInputTokens: cw.total_input_tokens || 0,
+              totalOutputTokens: cw.total_output_tokens || 0,
+              contextWindowSize: cw.context_window_size || 0,
+              currentInputTokens: cu.input_tokens || 0,
+              currentOutputTokens: cu.output_tokens || 0,
+              cacheCreationInputTokens: cu.cache_creation_input_tokens || 0,
+              cacheReadInputTokens: cu.cache_read_input_tokens || 0,
+              contextUsedPercent: cw.used_percentage || 0,
+              contextRemainingPercent: cw.remaining_percentage || 0,
+              exceeds200kTokens: !!value.exceeds_200k_tokens,
+              fiveHourUsedPercent: f5.used_percentage || 0,
+              fiveHourResetsAt: f5.resets_at || 0,
+              sevenDayUsedPercent: f7.used_percentage || 0,
+              sevenDayResetsAt: f7.resets_at || 0,
+              vimMode: vm.mode || '',
+            });
+          }
           push('stringify', { len: result.length, snap: result.slice(0, 2000) });
         }
       } catch(e) {}

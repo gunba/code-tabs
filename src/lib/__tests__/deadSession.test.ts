@@ -43,7 +43,7 @@ const DEFAULT_METADATA: SessionMetadata = {
   runtimeModel: null,
   apiRegion: null, lastRequestId: null, subscriptionType: null, hookStatus: null,
   lastTurnCostUsd: 0, lastTurnTtftMs: 0, systemPromptLength: 0, toolCount: 0, conversationLength: 0,
-  activeSubprocess: null, filesTouched: [], rateLimitRemaining: null, rateLimitReset: null, apiLatencyMs: null, linesAdded: 0, linesRemoved: 0, lastToolDurationMs: null, lastToolResultSize: null, lastToolError: null, apiRetryCount: 0, apiErrorStatus: null, apiRetryInfo: null, stallDurationMs: 0, stallCount: 0, contextBudget: null, hookTelemetry: null, planOutcome: null, effortLevel: null, worktreeInfo: null, capturedSystemPrompt: null,
+  activeSubprocess: null, filesTouched: [], rateLimitRemaining: null, rateLimitReset: null, apiLatencyMs: null, linesAdded: 0, linesRemoved: 0, lastToolDurationMs: null, lastToolResultSize: null, lastToolError: null, apiRetryCount: 0, apiErrorStatus: null, apiRetryInfo: null, stallDurationMs: 0, stallCount: 0, contextBudget: null, hookTelemetry: null, planOutcome: null, effortLevel: null, worktreeInfo: null, capturedSystemPrompt: null, statusLine: null,
 };
 
 function mockSession(overrides: Partial<Session> = {}): Session {

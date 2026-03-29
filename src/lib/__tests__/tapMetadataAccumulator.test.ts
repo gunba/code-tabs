@@ -198,4 +198,97 @@ describe("TapMetadataAccumulator", () => {
     });
     expect(diff?.contextPercent).toBe(50); // 50000/100000*100, not 50000/200000*100=25
   });
+
+  it("accumulates statusLine from StatusLineUpdate event", () => {
+    const acc = new TapMetadataAccumulator();
+    const diff = acc.process({
+      kind: "StatusLineUpdate", ts: 0,
+      sessionId: "abc123", cwd: "/tmp", modelId: "opus", modelDisplayName: "Opus",
+      cliVersion: "2.1.80", outputStyle: "default",
+      totalCostUsd: 0.05, totalDurationMs: 60000, totalApiDurationMs: 3000,
+      totalLinesAdded: 100, totalLinesRemoved: 10,
+      totalInputTokens: 50000, totalOutputTokens: 10000,
+      contextWindowSize: 1000000,
+      currentInputTokens: 8000, currentOutputTokens: 1000,
+      cacheCreationInputTokens: 4000, cacheReadInputTokens: 2000,
+      contextUsedPercent: 5, contextRemainingPercent: 95,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 42, fiveHourResetsAt: 1774020000,
+      sevenDayUsedPercent: 15, sevenDayResetsAt: 1774540000,
+      vimMode: "NORMAL",
+    });
+    expect(diff?.statusLine).not.toBeNull();
+    expect(diff?.statusLine?.cliVersion).toBe("2.1.80");
+    expect(diff?.statusLine?.fiveHourUsedPercent).toBe(42);
+    expect(diff?.statusLine?.contextWindowSize).toBe(1000000);
+    expect(diff?.statusLine?.sevenDayUsedPercent).toBe(15);
+    expect(diff?.statusLine?.vimMode).toBe("NORMAL");
+    expect(diff?.statusLine?.cacheCreationInputTokens).toBe(4000);
+    expect(diff?.statusLine?.cacheReadInputTokens).toBe(2000);
+  });
+
+  it("updates statusLine on subsequent StatusLineUpdate", () => {
+    const acc = new TapMetadataAccumulator();
+    acc.process({
+      kind: "StatusLineUpdate", ts: 0,
+      sessionId: "", cwd: "", modelId: "", modelDisplayName: "",
+      cliVersion: "2.1.79", outputStyle: "",
+      totalCostUsd: 0, totalDurationMs: 0, totalApiDurationMs: 0,
+      totalLinesAdded: 0, totalLinesRemoved: 0,
+      totalInputTokens: 0, totalOutputTokens: 0,
+      contextWindowSize: 0,
+      currentInputTokens: 0, currentOutputTokens: 0,
+      cacheCreationInputTokens: 0, cacheReadInputTokens: 0,
+      contextUsedPercent: 0, contextRemainingPercent: 0,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 10, fiveHourResetsAt: 0,
+      sevenDayUsedPercent: 5, sevenDayResetsAt: 0,
+      vimMode: "",
+    });
+    const diff = acc.process({
+      kind: "StatusLineUpdate", ts: 1,
+      sessionId: "", cwd: "", modelId: "", modelDisplayName: "",
+      cliVersion: "2.1.80", outputStyle: "",
+      totalCostUsd: 0, totalDurationMs: 0, totalApiDurationMs: 0,
+      totalLinesAdded: 0, totalLinesRemoved: 0,
+      totalInputTokens: 0, totalOutputTokens: 0,
+      contextWindowSize: 0,
+      currentInputTokens: 0, currentOutputTokens: 0,
+      cacheCreationInputTokens: 0, cacheReadInputTokens: 0,
+      contextUsedPercent: 0, contextRemainingPercent: 0,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 50, fiveHourResetsAt: 0,
+      sevenDayUsedPercent: 20, sevenDayResetsAt: 0,
+      vimMode: "INSERT",
+    });
+    expect(diff?.statusLine?.cliVersion).toBe("2.1.80");
+    expect(diff?.statusLine?.fiveHourUsedPercent).toBe(50);
+    expect(diff?.statusLine?.vimMode).toBe("INSERT");
+  });
+
+  it("resets statusLine on reset()", () => {
+    const acc = new TapMetadataAccumulator();
+    acc.process({
+      kind: "StatusLineUpdate", ts: 0,
+      sessionId: "", cwd: "", modelId: "", modelDisplayName: "",
+      cliVersion: "2.1.80", outputStyle: "",
+      totalCostUsd: 0, totalDurationMs: 0, totalApiDurationMs: 0,
+      totalLinesAdded: 0, totalLinesRemoved: 0,
+      totalInputTokens: 0, totalOutputTokens: 0,
+      contextWindowSize: 0,
+      currentInputTokens: 0, currentOutputTokens: 0,
+      cacheCreationInputTokens: 0, cacheReadInputTokens: 0,
+      contextUsedPercent: 0, contextRemainingPercent: 0,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 0, fiveHourResetsAt: 0,
+      sevenDayUsedPercent: 0, sevenDayResetsAt: 0,
+      vimMode: "",
+    });
+    acc.reset();
+    // After reset, next diff should have statusLine: null
+    const diff = acc.process({
+      kind: "TurnStart", ts: 1, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0,
+    });
+    expect(diff?.statusLine).toBeNull();
+  });
 });

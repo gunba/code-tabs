@@ -115,6 +115,27 @@ export interface SessionMetadata {
     worktreeName: string;
     worktreeBranch: string;
   } | null;
+  statusLine: {
+    cliVersion: string;
+    outputStyle: string;
+    totalDurationMs: number;
+    totalApiDurationMs: number;
+    totalLinesAdded: number;
+    totalLinesRemoved: number;
+    contextWindowSize: number;
+    contextUsedPercent: number;
+    contextRemainingPercent: number;
+    exceeds200kTokens: boolean;
+    currentInputTokens: number;
+    currentOutputTokens: number;
+    cacheCreationInputTokens: number;
+    cacheReadInputTokens: number;
+    fiveHourUsedPercent: number;
+    fiveHourResetsAt: number;
+    sevenDayUsedPercent: number;
+    sevenDayResetsAt: number;
+    vimMode: string;
+  } | null;
 }
 
 export interface Session {

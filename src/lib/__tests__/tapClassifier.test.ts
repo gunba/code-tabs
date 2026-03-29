@@ -463,3 +463,100 @@ describe("classifyTapEntry — unclassified categories", () => {
     expect(classifyTapEntry(entry)).toBeNull();
   });
 });
+
+describe("classifyTapEntry — status-line", () => {
+  it("classifies status-line entry → StatusLineUpdate", () => {
+    const entry: TapEntry = {
+      ts: 6000, cat: "status-line",
+      sessionId: "abc123",
+      cwd: "/current/working/directory",
+      modelId: "claude-opus-4-6[1m]",
+      modelDisplayName: "Opus 4.6 (1M context)",
+      cliVersion: "2.1.80",
+      outputStyle: "default",
+      totalCostUsd: 0.01234,
+      totalDurationMs: 45000,
+      totalApiDurationMs: 2300,
+      totalLinesAdded: 156,
+      totalLinesRemoved: 23,
+      totalInputTokens: 50113,
+      totalOutputTokens: 10462,
+      contextWindowSize: 1000000,
+      currentInputTokens: 8500,
+      currentOutputTokens: 1200,
+      cacheCreationInputTokens: 5000,
+      cacheReadInputTokens: 2000,
+      contextUsedPercent: 8,
+      contextRemainingPercent: 92,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 42,
+      fiveHourResetsAt: 1774020000,
+      sevenDayUsedPercent: 15,
+      sevenDayResetsAt: 1774540000,
+      vimMode: "NORMAL",
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({
+      kind: "StatusLineUpdate", ts: 6000,
+      sessionId: "abc123",
+      cwd: "/current/working/directory",
+      modelId: "claude-opus-4-6[1m]",
+      modelDisplayName: "Opus 4.6 (1M context)",
+      cliVersion: "2.1.80",
+      outputStyle: "default",
+      totalCostUsd: 0.01234,
+      totalDurationMs: 45000,
+      totalApiDurationMs: 2300,
+      totalLinesAdded: 156,
+      totalLinesRemoved: 23,
+      totalInputTokens: 50113,
+      totalOutputTokens: 10462,
+      contextWindowSize: 1000000,
+      currentInputTokens: 8500,
+      currentOutputTokens: 1200,
+      cacheCreationInputTokens: 5000,
+      cacheReadInputTokens: 2000,
+      contextUsedPercent: 8,
+      contextRemainingPercent: 92,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 42,
+      fiveHourResetsAt: 1774020000,
+      sevenDayUsedPercent: 15,
+      sevenDayResetsAt: 1774540000,
+      vimMode: "NORMAL",
+    });
+  });
+
+  it("handles missing fields with defaults", () => {
+    const entry: TapEntry = { ts: 6001, cat: "status-line" };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({
+      kind: "StatusLineUpdate", ts: 6001,
+      sessionId: "", cwd: "", modelId: "", modelDisplayName: "",
+      cliVersion: "", outputStyle: "",
+      totalCostUsd: 0, totalDurationMs: 0, totalApiDurationMs: 0,
+      totalLinesAdded: 0, totalLinesRemoved: 0,
+      totalInputTokens: 0, totalOutputTokens: 0,
+      contextWindowSize: 0,
+      currentInputTokens: 0, currentOutputTokens: 0,
+      cacheCreationInputTokens: 0, cacheReadInputTokens: 0,
+      contextUsedPercent: 0, contextRemainingPercent: 0,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 0, fiveHourResetsAt: 0,
+      sevenDayUsedPercent: 0, sevenDayResetsAt: 0,
+      vimMode: "",
+    });
+  });
+
+  it("passes through exceeds200kTokens: true", () => {
+    const entry: TapEntry = {
+      ts: 6002, cat: "status-line",
+      exceeds200kTokens: true,
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).not.toBeNull();
+    if (event?.kind === "StatusLineUpdate") {
+      expect(event.exceeds200kTokens).toBe(true);
+    }
+  });
+});

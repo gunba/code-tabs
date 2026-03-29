@@ -60,6 +60,7 @@ export class TapMetadataAccumulator {
   private effortLevel: string | null = null;
   private capturedSystemPrompt: string | null = null;
   private worktreeInfo: SessionMetadata["worktreeInfo"] = null;
+  private statusLine: SessionMetadata["statusLine"] = null;
 
   /** Process an event and return a metadata diff, or null if unchanged. */
   process(event: TapEvent): Partial<SessionMetadata> | null {
@@ -302,6 +303,30 @@ export class TapMetadataAccumulator {
         }
         break;
 
+      case "StatusLineUpdate":
+        this.statusLine = {
+          cliVersion: event.cliVersion,
+          outputStyle: event.outputStyle,
+          totalDurationMs: event.totalDurationMs,
+          totalApiDurationMs: event.totalApiDurationMs,
+          totalLinesAdded: event.totalLinesAdded,
+          totalLinesRemoved: event.totalLinesRemoved,
+          contextWindowSize: event.contextWindowSize,
+          contextUsedPercent: event.contextUsedPercent,
+          contextRemainingPercent: event.contextRemainingPercent,
+          exceeds200kTokens: event.exceeds200kTokens,
+          currentInputTokens: event.currentInputTokens,
+          currentOutputTokens: event.currentOutputTokens,
+          cacheCreationInputTokens: event.cacheCreationInputTokens,
+          cacheReadInputTokens: event.cacheReadInputTokens,
+          fiveHourUsedPercent: event.fiveHourUsedPercent,
+          fiveHourResetsAt: event.fiveHourResetsAt,
+          sevenDayUsedPercent: event.sevenDayUsedPercent,
+          sevenDayResetsAt: event.sevenDayResetsAt,
+          vimMode: event.vimMode,
+        };
+        break;
+
       default:
         return null;
     }
@@ -356,6 +381,7 @@ export class TapMetadataAccumulator {
       effortLevel: this.effortLevel,
       capturedSystemPrompt: this.capturedSystemPrompt,
       worktreeInfo: this.worktreeInfo,
+      statusLine: this.statusLine,
       ...(this.nodeSummary ? { nodeSummary: this.nodeSummary } : {}),
     };
 
@@ -409,5 +435,6 @@ export class TapMetadataAccumulator {
     this.effortLevel = null;
     this.capturedSystemPrompt = null;
     this.worktreeInfo = null;
+    this.statusLine = null;
   }
 }

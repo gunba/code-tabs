@@ -573,6 +573,38 @@ function classifySpawn(ts: number, entry: TapEntry): TapEvent {
   };
 }
 
+function classifyStatusLine(ts: number, entry: TapEntry): TapEvent {
+  return {
+    kind: "StatusLineUpdate", ts,
+    sessionId: String(entry.sessionId || ""),
+    cwd: String(entry.cwd || ""),
+    modelId: String(entry.modelId || ""),
+    modelDisplayName: String(entry.modelDisplayName || ""),
+    cliVersion: String(entry.cliVersion || ""),
+    outputStyle: String(entry.outputStyle || ""),
+    totalCostUsd: typeof entry.totalCostUsd === "number" ? entry.totalCostUsd : 0,
+    totalDurationMs: typeof entry.totalDurationMs === "number" ? entry.totalDurationMs : 0,
+    totalApiDurationMs: typeof entry.totalApiDurationMs === "number" ? entry.totalApiDurationMs : 0,
+    totalLinesAdded: typeof entry.totalLinesAdded === "number" ? entry.totalLinesAdded : 0,
+    totalLinesRemoved: typeof entry.totalLinesRemoved === "number" ? entry.totalLinesRemoved : 0,
+    totalInputTokens: typeof entry.totalInputTokens === "number" ? entry.totalInputTokens : 0,
+    totalOutputTokens: typeof entry.totalOutputTokens === "number" ? entry.totalOutputTokens : 0,
+    contextWindowSize: typeof entry.contextWindowSize === "number" ? entry.contextWindowSize : 0,
+    currentInputTokens: typeof entry.currentInputTokens === "number" ? entry.currentInputTokens : 0,
+    currentOutputTokens: typeof entry.currentOutputTokens === "number" ? entry.currentOutputTokens : 0,
+    cacheCreationInputTokens: typeof entry.cacheCreationInputTokens === "number" ? entry.cacheCreationInputTokens : 0,
+    cacheReadInputTokens: typeof entry.cacheReadInputTokens === "number" ? entry.cacheReadInputTokens : 0,
+    contextUsedPercent: typeof entry.contextUsedPercent === "number" ? entry.contextUsedPercent : 0,
+    contextRemainingPercent: typeof entry.contextRemainingPercent === "number" ? entry.contextRemainingPercent : 0,
+    exceeds200kTokens: !!entry.exceeds200kTokens,
+    fiveHourUsedPercent: typeof entry.fiveHourUsedPercent === "number" ? entry.fiveHourUsedPercent : 0,
+    fiveHourResetsAt: typeof entry.fiveHourResetsAt === "number" ? entry.fiveHourResetsAt : 0,
+    sevenDayUsedPercent: typeof entry.sevenDayUsedPercent === "number" ? entry.sevenDayUsedPercent : 0,
+    sevenDayResetsAt: typeof entry.sevenDayResetsAt === "number" ? entry.sevenDayResetsAt : 0,
+    vimMode: String(entry.vimMode || ""),
+  };
+}
+
 /**
  * Classify a raw TapEntry into a typed TapEvent.
  * Returns null for noise, deltas, and unrecognized entries.
@@ -610,6 +642,11 @@ export function classifyTapEntry(entry: TapEntry): TapEvent | null {
     // Spawn: direct mapping (both child_process and Bun.spawn)
     if (cat === "spawn" || cat === "bun.spawn") {
       return classifySpawn(ts, entry);
+    }
+
+    // Status line: full status payload from CLI statusLine command
+    if (cat === "status-line") {
+      return classifyStatusLine(ts, entry);
     }
 
     // System prompt: full text capture (bypasses 2000-char snap truncation)

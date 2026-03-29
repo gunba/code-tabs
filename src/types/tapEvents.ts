@@ -347,6 +347,36 @@ export interface EffortLevel extends TapEventBase {
   level: string;
 }
 
+export interface StatusLineUpdate extends TapEventBase {
+  kind: "StatusLineUpdate";
+  sessionId: string;
+  cwd: string;
+  modelId: string;
+  modelDisplayName: string;
+  cliVersion: string;
+  outputStyle: string;
+  totalCostUsd: number;
+  totalDurationMs: number;
+  totalApiDurationMs: number;
+  totalLinesAdded: number;
+  totalLinesRemoved: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  contextWindowSize: number;
+  currentInputTokens: number;
+  currentOutputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  contextUsedPercent: number;
+  contextRemainingPercent: number;
+  exceeds200kTokens: boolean;
+  fiveHourUsedPercent: number;
+  fiveHourResetsAt: number;
+  sevenDayUsedPercent: number;
+  sevenDayResetsAt: number;
+  vimMode: string;
+}
+
 // ── Discriminated union ──
 
 export type TapEvent =
@@ -400,4 +430,5 @@ export type TapEvent =
   | WorktreeCleared
   | HookTelemetry
   | SystemPromptCapture
-  | EffortLevel;
+  | EffortLevel
+  | StatusLineUpdate;

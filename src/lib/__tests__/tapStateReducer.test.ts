@@ -266,4 +266,23 @@ describe("isCompletionEvent", () => {
   it("ThinkingStart is not completion", () => {
     expect(isCompletionEvent({ kind: "ThinkingStart", ts: 0, index: 0 })).toBe(false);
   });
+
+  it("StatusLineUpdate is informational — no state change", () => {
+    expect(reduceTapEvent("thinking", {
+      kind: "StatusLineUpdate", ts: 0,
+      sessionId: "", cwd: "", modelId: "", modelDisplayName: "",
+      cliVersion: "", outputStyle: "",
+      totalCostUsd: 0, totalDurationMs: 0, totalApiDurationMs: 0,
+      totalLinesAdded: 0, totalLinesRemoved: 0,
+      totalInputTokens: 0, totalOutputTokens: 0,
+      contextWindowSize: 0,
+      currentInputTokens: 0, currentOutputTokens: 0,
+      cacheCreationInputTokens: 0, cacheReadInputTokens: 0,
+      contextUsedPercent: 0, contextRemainingPercent: 0,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 0, fiveHourResetsAt: 0,
+      sevenDayUsedPercent: 0, sevenDayResetsAt: 0,
+      vimMode: "",
+    })).toBe("thinking");
+  });
 });
