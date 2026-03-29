@@ -39,6 +39,7 @@ export function useTapEventProcessor(
   const subTrackerRef = useRef<TapSubagentTracker | null>(null);
   const healthCountRef = useRef(0);
   const apiIpResolvedRef = useRef(false);
+  const seenUuidsRef = useRef(new Set<string>());
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
@@ -66,6 +67,15 @@ export function useTapEventProcessor(
     const handleEvent = (event: TapEvent) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
+
+      // Dedup ConversationMessage by uuid — CLI re-serializes conversation for JSONL
+      // persistence and hook dispatch, which fires duplicate events through the tap pipeline.
+      // The _sealed mechanism only operates in INSTALL_HOOK (unused), not INSTALL_TAPS.
+      if (event.kind === "ConversationMessage" && event.uuid) {
+        if (seenUuidsRef.current.has(event.uuid)) return;
+        seenUuidsRef.current.add(event.uuid);
+        if (seenUuidsRef.current.size > 500) seenUuidsRef.current.clear();
+      }
 
       // 1. State reducer — filter SSE events when subagents are active
       const prevState = stateRef.current;
@@ -211,6 +221,7 @@ export function useTapEventProcessor(
       subTracker.reset();
       metaAccRef.current = null;
       subTrackerRef.current = null;
+      seenUuidsRef.current.clear();
     };
   }, [sessionId, updateState, updateMetadata, updateConfig, addSubagent, updateSubagent, clearIdleSubagents, addCommandHistory, updateProcessHealth]);
 

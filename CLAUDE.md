@@ -1,6 +1,6 @@
 # Claude Tabs
 
-<!-- Codes: AR=Architecture, BV=Build & Validate, CD=Commands, LO=Layout, DC=Doc Cross-references, FS=Frontend Structure, DR=Development Rules, TH=Theme System -->
+<!-- Codes: AR=Architecture, BV=Build & Validate, CD=Commands, LO=Layout, DC=Doc Cross-references, FS=Frontend Structure, DR=Development Rules, TH=Theme System, SI=State Inspection -->
 
 Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
 

@@ -66,6 +66,11 @@ export class TapSubagentTracker {
 
         const agentId = event.agentId;
 
+        // Don't re-activate agents already marked idle/dead by SubagentNotification,
+        // SubagentLifecycle, or UserInterruption. Late sidechain messages arriving after
+        // completion should not flip hasActiveAgents() back to true.
+        if (this.knownIds.has(agentId) && !isSubagentActive(this.agentStates.get(agentId) ?? "dead")) break;
+
         // First message from a new subagent → create it
         if (!this.knownIds.has(agentId)) {
           this.knownIds.add(agentId);

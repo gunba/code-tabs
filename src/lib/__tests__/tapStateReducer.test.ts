@@ -2,6 +2,17 @@ import { describe, it, expect } from "vitest";
 import { reduceTapEvent, reduceTapBatch, isCompletionEvent } from "../tapStateReducer";
 import type { TapEvent } from "../../types/tapEvents";
 
+/** Helper to build a ConversationMessage event with defaults. */
+function convMsg(overrides: Partial<Extract<TapEvent, { kind: "ConversationMessage" }>>): TapEvent {
+  return {
+    kind: "ConversationMessage", ts: 0, messageType: "assistant",
+    isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+    promptId: null, stopReason: null, toolNames: [], toolAction: null,
+    textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+    ...overrides,
+  };
+}
+
 describe("reduceTapEvent", () => {
   it("TurnStart → thinking", () => {
     const event: TapEvent = { kind: "TurnStart", ts: 0, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0 };
@@ -37,8 +48,9 @@ describe("reduceTapEvent", () => {
     expect(reduceTapEvent("actionNeeded", { kind: "TurnEnd", ts: 0, stopReason: "tool_use", outputTokens: 100 })).toBe("actionNeeded");
   });
 
-  it("TurnEnd end_turn → idle", () => {
-    expect(reduceTapEvent("thinking", { kind: "TurnEnd", ts: 0, stopReason: "end_turn", outputTokens: 100 })).toBe("idle");
+  it("TurnEnd end_turn does NOT transition to idle (SSE has no agentId)", () => {
+    expect(reduceTapEvent("thinking", { kind: "TurnEnd", ts: 0, stopReason: "end_turn", outputTokens: 100 })).toBe("thinking");
+    expect(reduceTapEvent("toolUse", { kind: "TurnEnd", ts: 0, stopReason: "end_turn", outputTokens: 100 })).toBe("toolUse");
   });
 
   it("PermissionPromptShown → waitingPermission", () => {
@@ -70,39 +82,48 @@ describe("reduceTapEvent", () => {
   });
 
   it("ConversationMessage result → no state change (dead path removed)", () => {
-    expect(reduceTapEvent("toolUse", {
-      kind: "ConversationMessage", ts: 0, messageType: "result",
-      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
-      promptId: null, stopReason: null, toolNames: [], toolAction: null,
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
-    })).toBe("toolUse");
+    expect(reduceTapEvent("toolUse", convMsg({ messageType: "result" }))).toBe("toolUse");
   });
 
-  it("ConversationMessage assistant end_turn → idle", () => {
-    expect(reduceTapEvent("thinking", {
-      kind: "ConversationMessage", ts: 0, messageType: "assistant",
-      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
-      promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
-      textSnippet: "done", cwd: null, hasToolError: false, toolErrorText: null,
-    })).toBe("idle");
+  // ── ConversationMessage: main agent (isSidechain=false) ──
+
+  it("ConversationMessage assistant end_turn → idle (main agent)", () => {
+    expect(reduceTapEvent("thinking", convMsg({ stopReason: "end_turn" }))).toBe("idle");
   });
 
-  it("ConversationMessage assistant tool_use → toolUse", () => {
-    expect(reduceTapEvent("thinking", {
-      kind: "ConversationMessage", ts: 0, messageType: "assistant",
-      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
-      promptId: null, stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
-    })).toBe("toolUse");
+  it("ConversationMessage assistant tool_use → toolUse (main agent)", () => {
+    expect(reduceTapEvent("thinking", convMsg({
+      stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
+    }))).toBe("toolUse");
   });
 
   it("ConversationMessage with ExitPlanMode → actionNeeded", () => {
-    expect(reduceTapEvent("thinking", {
-      kind: "ConversationMessage", ts: 0, messageType: "assistant",
-      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
-      promptId: null, stopReason: null, toolNames: ["ExitPlanMode"], toolAction: null,
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
-    })).toBe("actionNeeded");
+    expect(reduceTapEvent("thinking", convMsg({ toolNames: ["ExitPlanMode"] }))).toBe("actionNeeded");
+  });
+
+  it("ConversationMessage user → thinking", () => {
+    expect(reduceTapEvent("idle", convMsg({ messageType: "user" }))).toBe("thinking");
+  });
+
+  // ── ConversationMessage: sidechain (isSidechain=true) — no state change ──
+
+  it("ConversationMessage sidechain assistant end_turn → no state change", () => {
+    expect(reduceTapEvent("actionNeeded", convMsg({ isSidechain: true, agentId: "a1", stopReason: "end_turn" }))).toBe("actionNeeded");
+    expect(reduceTapEvent("thinking", convMsg({ isSidechain: true, agentId: "a1", stopReason: "end_turn" }))).toBe("thinking");
+    expect(reduceTapEvent("toolUse", convMsg({ isSidechain: true, agentId: "a1", stopReason: "end_turn" }))).toBe("toolUse");
+  });
+
+  it("ConversationMessage sidechain assistant tool_use → no state change", () => {
+    expect(reduceTapEvent("actionNeeded", convMsg({ isSidechain: true, agentId: "a1", stopReason: "tool_use", toolNames: ["Read"] }))).toBe("actionNeeded");
+  });
+
+  it("ConversationMessage sidechain assistant with ExitPlanMode → no state change", () => {
+    // Subagents cannot call ExitPlanMode, but even if they did, it should not affect parent state
+    expect(reduceTapEvent("thinking", convMsg({ isSidechain: true, agentId: "a1", toolNames: ["ExitPlanMode"] }))).toBe("thinking");
+  });
+
+  it("ConversationMessage sidechain user → no state change", () => {
+    expect(reduceTapEvent("toolUse", convMsg({ messageType: "user", isSidechain: true, agentId: "a1" }))).toBe("toolUse");
   });
 
   it("ConversationMessage(assistant, tool_use) preserves actionNeeded from ToolCallStart", () => {
@@ -220,7 +241,7 @@ describe("reduceTapBatch", () => {
   it("folds events in order", () => {
     const events: TapEvent[] = [
       { kind: "TurnStart", ts: 0, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0 },
-      { kind: "TurnEnd", ts: 1, stopReason: "end_turn", outputTokens: 100 },
+      convMsg({ stopReason: "end_turn" }),
     ];
     expect(reduceTapBatch("idle", events)).toBe("idle");
   });
@@ -262,8 +283,16 @@ describe("reduceTapBatch", () => {
 });
 
 describe("isCompletionEvent", () => {
-  it("TurnEnd end_turn is completion", () => {
-    expect(isCompletionEvent({ kind: "TurnEnd", ts: 0, stopReason: "end_turn", outputTokens: 100 })).toBe(true);
+  it("ConversationMessage assistant end_turn !sidechain is completion", () => {
+    expect(isCompletionEvent(convMsg({ stopReason: "end_turn" }))).toBe(true);
+  });
+
+  it("ConversationMessage sidechain end_turn is NOT completion", () => {
+    expect(isCompletionEvent(convMsg({ isSidechain: true, agentId: "a1", stopReason: "end_turn" }))).toBe(false);
+  });
+
+  it("TurnEnd end_turn is NOT completion (SSE lacks agentId)", () => {
+    expect(isCompletionEvent({ kind: "TurnEnd", ts: 0, stopReason: "end_turn", outputTokens: 100 })).toBe(false);
   });
 
   it("TurnEnd tool_use is not completion", () => {
@@ -271,12 +300,7 @@ describe("isCompletionEvent", () => {
   });
 
   it("ConversationMessage result is not completion (dead path removed)", () => {
-    expect(isCompletionEvent({
-      kind: "ConversationMessage", ts: 0, messageType: "result",
-      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
-      promptId: null, stopReason: null, toolNames: [], toolAction: null,
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
-    })).toBe(false);
+    expect(isCompletionEvent(convMsg({ messageType: "result" }))).toBe(false);
   });
 
   it("ThinkingStart is not completion", () => {
