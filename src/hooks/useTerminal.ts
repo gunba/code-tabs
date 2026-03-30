@@ -50,6 +50,13 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debounceStartRef = useRef(0);
 
+  // baseY accumulation safety valve — tracks consecutive +1 baseY
+  // increases without a reset. When the Rust filter's ESC[2J replacement
+  // fires, ESC[3J resets baseY (decrease). But if ConPTY doesn't send
+  // ESC[2J (partial updates), baseY can accumulate from sync block
+  // overflow. After 3 consecutive +1 increases, clear scrollback.
+  const baseYDriftRef = useRef(0);
+
   // Create terminal instance once on hook mount
   useEffect(() => {
     const term = new Terminal({
@@ -238,7 +245,26 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       }
     }
 
+    const buf = term.buffer.active;
+    const baseYBefore = buf.baseY;
+
     term.write(merged);
+
+    const baseYAfter = buf.baseY;
+
+    if (baseYAfter < baseYBefore) {
+      // ESC[3J from filter's ED 2 replacement cleared scrollback — reset drift counter
+      baseYDriftRef.current = 0;
+    } else if (baseYAfter > baseYBefore) {
+      baseYDriftRef.current += baseYAfter - baseYBefore;
+      // Safety valve: if baseY has drifted 3+ lines without a reset from the
+      // filter's ESC[3J, ConPTY is sending partial updates that overflow the
+      // viewport. Clear accumulated scrollback to prevent distortion.
+      if (baseYDriftRef.current >= 3) {
+        term.write("\x1b[3J");
+        baseYDriftRef.current = 0;
+      }
+    }
   }, []);
 
   // Debounced write: accumulates ConPTY chunks and flushes after 4ms of

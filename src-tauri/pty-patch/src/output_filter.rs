@@ -7,10 +7,10 @@
 /// — xterm.js IS the terminal and must respond to these for ConPTY/Claude handshake.
 ///
 /// Tracks BSU/ESU (DEC Mode 2026) synchronized update state.
-/// ESC[2J inside sync blocks (full redraws) is replaced with
-/// ESC[3J + ESC[H + ESC[J to clear scrollback before the redraw,
-/// preventing duplicate content from accumulating in scrollback.
-/// ESC[2J outside sync blocks is stripped after a startup grace period.
+/// ESC[2J is always replaced with ESC[3J + ESC[H + ESC[J. This fixes
+/// the ConPTY/xterm.js cursor-home mismatch (ConPTY moves cursor to
+/// home on ED 2, xterm.js does not) and clears scrollback to prevent
+/// duplicate content accumulation.
 /// ESC[3J (erase scrollback) from the application is always stripped.
 pub struct OutputFilter {
     state: FilterState,
@@ -259,24 +259,24 @@ impl OutputFilter {
                 self.clear_screen_stripped += 1;
                 true
             }
-            // CSI 2 J inside sync block — full-redraw clear screen.
-            // Replace with ESC[3J (clear scrollback) + ESC[H (cursor home) +
-            // ESC[J (clear display from cursor). This prevents scrollback
-            // duplication: ESC[2J doesn't clear scrollback, so full-redraw
-            // content overflows into scrollback alongside the old copy.
-            // ESC[3J is written directly to output (bypasses input stripping).
-            b'J' if params == b"2" && self.in_sync_block => {
+            // CSI 2 J — clear screen. Always replaced, inside or outside
+            // sync blocks. Two issues fixed:
+            //
+            // 1. Cursor-home mismatch: ConPTY on Windows moves cursor to
+            //    home on ESC[2J, but xterm.js does NOT. Without ESC[H],
+            //    content written after ESC[2J lands at the wrong position
+            //    (bottom instead of top), causing overlap and catastrophic
+            //    baseY accumulation.
+            //
+            // 2. Scrollback duplication: ESC[2J doesn't clear scrollback
+            //    in xterm.js, so full-redraw content overflows into
+            //    scrollback alongside the old copy.
+            //
+            // Replacement: ESC[3J (clear scrollback, bypasses input
+            // stripping) + ESC[H (cursor home) + ESC[J (clear display).
+            b'J' if params == b"2" => {
                 self.output.extend_from_slice(b"\x1b[3J\x1b[H\x1b[J");
                 true
-            }
-            // CSI 2 J outside sync block — pass through unconditionally.
-            // Stripping ESC[2J causes a permanent divergence between ConPTY's
-            // output tracking and xterm.js: ConPTY records "screen cleared"
-            // but xterm.js still has old content. From that point on, ConPTY
-            // never sends space updates for cells it believes are already
-            // blank, so old text persists where spaces should be.
-            b'J' if params == b"2" && !self.in_sync_block => {
-                false
             }
             _ => false,
         }
@@ -753,19 +753,16 @@ mod tests {
     // ── Sync-aware ESC[2J filtering ──────────────────────────────────
 
     #[test]
-    fn test_clear_screen_passes_outside_sync_block() {
+    fn test_clear_screen_replaced_outside_sync_block() {
         let mut f = OutputFilter::new();
-        // ESC[2J outside sync blocks always passes through — stripping it
-        // would desync ConPTY's output tracking from xterm.js, causing
-        // cells ConPTY thinks are spaces to retain old text.
+        // ESC[2J is always replaced with ESC[3J+ESC[H+ESC[J to fix
+        // ConPTY/xterm.js cursor-home mismatch and scrollback duplication.
         let r1 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r1, b"\x1b[2J");
+        assert_eq!(r1, b"\x1b[3J\x1b[H\x1b[J");
         let r2 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r2, b"\x1b[2J");
-        let r3 = f.filter(b"\x1b[2J").to_vec();
-        assert_eq!(r3, b"\x1b[2J");
-        let r4 = f.filter(b"before\x1b[2Jafter").to_vec();
-        assert_eq!(r4, b"before\x1b[2Jafter");
+        assert_eq!(r2, b"\x1b[3J\x1b[H\x1b[J");
+        let r3 = f.filter(b"before\x1b[2Jafter").to_vec();
+        assert_eq!(r3, b"before\x1b[3J\x1b[H\x1b[Jafter");
     }
 
     #[test]
@@ -814,9 +811,9 @@ mod tests {
         let result = f.filter(b"\x1b[?2026h\x1b[2Jcontent\x1b[?2026l").to_vec();
         assert_eq!(result, b"\x1b[?2026h\x1b[3J\x1b[H\x1b[Jcontent\x1b[?2026l");
 
-        // ESC[2J after sync block ends — passes through (not replaced)
+        // ESC[2J after sync block ends — also replaced (universal fix)
         let result = f.filter(b"\x1b[2Jmore").to_vec();
-        assert_eq!(result, b"\x1b[2Jmore");
+        assert_eq!(result, b"\x1b[3J\x1b[H\x1b[Jmore");
     }
 
     #[test]
@@ -873,16 +870,15 @@ mod tests {
         assert_eq!(f.metrics().titles_sanitized, 1);
     }
 
-    // ── Startup grace period ────────────────────────────────────────
+    // ── ESC[2J universal replacement ───────────────────────────────
 
     #[test]
-    fn test_startup_grace_exactly_two_clears() {
+    fn test_clear_screen_always_replaced() {
         let mut f = OutputFilter::new();
-        // All ESC[2J outside sync blocks pass through unconditionally —
-        // stripping would desync ConPTY's output tracking from xterm.js
+        // ESC[2J is always replaced regardless of sync state
         for _ in 0..5 {
             let r = f.filter(b"\x1b[2J").to_vec();
-            assert_eq!(r, b"\x1b[2J");
+            assert_eq!(r, b"\x1b[3J\x1b[H\x1b[J");
         }
     }
 

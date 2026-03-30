@@ -105,26 +105,13 @@ export function useTapEventProcessor(
       // eviction could forget UUIDs, letting stale re-serialized messages race with
       // state transitions and swallow the ConversationMessage(user) that clears it.
 
-      // 1. State reducer — filter SSE events when subagents are active
+      // 1. State reducer
       const prevState = stateRef.current;
       const newState = reduceTapEvent(prevState, event);
       if (newState !== prevState) {
-        // SSE events (TurnStart/TurnEnd/etc.) can't distinguish main from subagent API calls.
-        // When subagents are active, only apply state changes from reliable main-agent events.
-        // ConversationMessage (has isSidechain flag) provides equivalent state info with slight delay.
-        const isReliable = event.kind === "UserInput" || event.kind === "SlashCommand"
-          || event.kind === "PermissionPromptShown" || event.kind === "PermissionApproved"
-          || event.kind === "PermissionRejected" || event.kind === "UserInterruption"
-          || (event.kind === "ConversationMessage" && !event.isSidechain)
-          || event.kind === "IdlePrompt";
-
-        if (!isReliable && subTracker.hasActiveAgents()) {
-          dlog("inspector", sid, `suppressed ${prevState} → ${newState} (subagents active, event=${event.kind})`, "DEBUG");
-        } else {
-          dlog("inspector", sid, `state ${prevState} → ${newState} (${event.kind})`);
-          stateRef.current = newState;
-          updateState(sid, newState);
-        }
+        dlog("inspector", sid, `state ${prevState} → ${newState} (${event.kind})`);
+        stateRef.current = newState;
+        updateState(sid, newState);
       } else {
         dlog("inspector", sid, `state ${prevState} unchanged by ${event.kind}`, "DEBUG");
       }
