@@ -579,6 +579,7 @@ version = "0.29.0"
 dependencies = [
  "chrono",
  "dirs",
+ "flate2",
  "glob-match",
  "libc",
  "log",

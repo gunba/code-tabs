@@ -421,6 +421,19 @@ async fn handle_connection(
     Ok(())
 }
 
+/// Decompress gzip bytes to a UTF-8 string, falling back to lossy conversion.
+fn decompress_if_gzip(bytes: &[u8]) -> String {
+    if bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
+        use std::io::Read;
+        let mut decoder = flate2::read::GzDecoder::new(bytes);
+        let mut decompressed = Vec::new();
+        if decoder.read_to_end(&mut decompressed).is_ok() {
+            return String::from_utf8_lossy(&decompressed).into_owned();
+        }
+    }
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
 fn write_traffic_entry(
     proxy_state: &Arc<Mutex<ProxyInner>>,
     session_id: &Option<String>,
@@ -441,7 +454,7 @@ fn write_traffic_entry(
     };
     let dur_ms = req_start.elapsed().as_millis() as u64;
     let req_str = req_body.as_ref().map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
-    let resp_str = String::from_utf8_lossy(resp_bytes);
+    let resp_str = decompress_if_gzip(resp_bytes);
     let req_len = req_body.as_ref().map(|b| b.len()).unwrap_or(0);
 
     let line = serde_json::json!({
