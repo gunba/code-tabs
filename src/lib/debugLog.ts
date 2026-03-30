@@ -11,7 +11,6 @@ export interface DebugLogEntry {
   message: string;
 }
 
-const MAX_ENTRIES = 2000;
 const buffer: DebugLogEntry[] = [];
 (globalThis as Record<string, unknown>).__debugLogEntries = buffer;
 
@@ -23,7 +22,6 @@ export function dlog(
   level: LogLevel = "LOG",
 ): void {
   buffer.push({ ts: Date.now(), level, module, sessionId, message });
-  if (buffer.length > MAX_ENTRIES) buffer.shift();
 
   const fmt = `[${module}] ${message}`;
   if (level === "WARN") console.warn(fmt);
