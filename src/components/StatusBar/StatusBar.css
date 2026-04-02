@@ -1,7 +1,7 @@
 .status-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   background: var(--bg-surface);
   border-top: 1px solid var(--border);
   height: 24px;
@@ -10,6 +10,7 @@
   color: var(--text-secondary);
   user-select: none;
   flex-shrink: 0;
+  gap: 0;
 }
 
 .status-bar-content {
@@ -17,6 +18,8 @@
   align-items: center;
   gap: 8px;
   overflow: hidden;
+  flex: 1;
+  min-width: 0;
 }
 
 .status-item {
@@ -27,7 +30,6 @@
 }
 
 .status-icon {
-  font-size: 11px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -41,7 +43,6 @@
   color: var(--accent);
 }
 
-
 .status-duration {
   color: var(--text-secondary);
 }
@@ -53,7 +54,6 @@
 .status-dangerous {
   color: var(--error);
   font-weight: 600;
-  font-size: 10px;
 }
 
 .status-active {
@@ -77,8 +77,16 @@
 .status-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-shrink: 0;
+}
+
+.status-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .status-empty {
@@ -109,7 +117,6 @@
   color: var(--accent-secondary);
 }
 
-
 .status-inspector-off {
   color: var(--text-muted);
 }
@@ -120,17 +127,13 @@
 }
 
 .status-dynamic {
-  flex: 1;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--accent-secondary);
-  font-size: 0.85em;
 }
 
 .status-lines {
   font-family: var(--font-mono);
-  font-size: 10px;
   gap: 4px;
 }
 
@@ -156,9 +159,3 @@
   50% { opacity: 0.3; }
 }
 
-.status-branch {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
