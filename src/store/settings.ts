@@ -36,6 +36,7 @@ export interface CliCapabilities {
 export interface SlashCommand {
   cmd: string;
   desc: string;
+  compactFirst?: boolean;
 }
 
 export interface ObservedPrompt {

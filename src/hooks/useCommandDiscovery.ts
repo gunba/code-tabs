@@ -60,6 +60,13 @@ async function discover() {
 
   // Merge all sources — binary scan has best descriptions, --help is fallback
   const merged = mergeCommands(toSlash(builtins), toSlash(helpCmds), toSlash(plugins));
+
+  // Commands that should auto-compact before running (frees context for agents)
+  const COMPACT_FIRST_CMDS = new Set(["/r", "/j", "/rj"]);
+  for (const cmd of merged) {
+    if (COMPACT_FIRST_CMDS.has(cmd.cmd)) cmd.compactFirst = true;
+  }
+
   useSettingsStore.getState().setSlashCommands(merged);
 
   // Scan command usage from JSONL history (refreshed each launch)

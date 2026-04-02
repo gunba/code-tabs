@@ -3,6 +3,7 @@ import { writeToPty } from "../../lib/ptyRegistry";
 import { useSettingsStore } from "../../store/settings";
 import { useSessionStore } from "../../store/sessions";
 import { computeHeatLevel, heatClassName } from "../../lib/claude";
+import { dlog } from "../../lib/debugLog";
 import "./CommandBar.css";
 
 // ── Component ───────────────────────────────────────────────────────
@@ -27,8 +28,12 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
 
   /** Send a slash command immediately. History recorded via PTY input and tap events. */
   const sendCommand = useCallback(
-    (command: string) => {
+    (command: string, compactFirst?: boolean) => {
       if (!sessionId) return;
+      if (compactFirst) {
+        dlog("session", sessionId, `auto-compact before ${command}`);
+        writeToPty(sessionId, "/compact\r");
+      }
       writeToPty(sessionId, command + "\r");
     },
     [sessionId]
@@ -58,13 +63,18 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
     return Math.max(...sortedCommands.map((c) => commandUsage[c.cmd] || 0), 0);
   }, [sortedCommands, commandUsage]);
 
+  const compactFirstSet = useMemo(
+    () => new Set(slashCommands.filter((c) => c.compactFirst).map((c) => c.cmd)),
+    [slashCommands]
+  );
+
   const handleClick = useCallback(
-    (command: string, e: React.MouseEvent) => {
+    (command: string, e: React.MouseEvent, compactFirst?: boolean) => {
       if (!sessionId) return;
 
       if (e.ctrlKey) {
-        // Ctrl+Click: send immediately (type + Enter)
-        sendCommand(command);
+        // Ctrl+Click: send immediately (type + Enter), with optional auto-compact
+        sendCommand(command, compactFirst);
       } else {
         // Normal click: type into terminal without sending
         typeCommand(command);
@@ -118,8 +128,8 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
                 <button
                   key={cmd.cmd}
                   className={`command-btn${heatClass ? ` ${heatClass}` : ""}`}
-                  onClick={(e) => handleClick(cmd.cmd, e)}
-                  title={ctrlHeld ? `Ctrl+Click: Send "${cmd.cmd}"` : `Click: Type "${cmd.cmd}" into terminal\n${cmd.desc}`}
+                  onClick={(e) => handleClick(cmd.cmd, e, cmd.compactFirst)}
+                  title={ctrlHeld ? `Ctrl+Click: Send "${cmd.cmd}"${cmd.compactFirst ? " (auto-compact)" : ""}` : `Click: Type "${cmd.cmd}" into terminal\n${cmd.desc}`}
                   type="button"
                 >
                   {cmd.cmd}
@@ -136,8 +146,8 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
             <button
               key={entry.key}
               className={`command-history-item${entry.kind === "skill" ? ` skill-history-item${!entry.success ? " skill-failed" : ""}` : ""}`}
-              onClick={() => sendCommand(entry.label)}
-              title={`Re-send ${entry.label}`}
+              onClick={() => sendCommand(entry.label, compactFirstSet.has(entry.label))}
+              title={`Re-send ${entry.label}${compactFirstSet.has(entry.label) ? " (auto-compact)" : ""}`}
               type="button"
             >
               {entry.label}
