@@ -43,7 +43,7 @@
   background: var(--term-bg, var(--bg-primary));
 }
 
-/* Hide xterm.js native scrollbar — scroll handled via button bar (PT-08) */
+/* [PT-08] Hide xterm.js native scrollbar — overflow-y:scroll with hidden scrollbar */
 .terminal-container .xterm-viewport {
   overflow-y: scroll !important;
   scrollbar-width: none;
@@ -62,7 +62,7 @@
   overflow: hidden;
 }
 
-/* ── Vertical button bar ───────────────────────────────────────────── */
+/* [TR-07] Vertical button bar (28px right-side column) */
 
 .terminal-button-bar {
   display: flex;

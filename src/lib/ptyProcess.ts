@@ -1,10 +1,8 @@
-/**
- * Direct PTY wrapper — calls Tauri IPC commands for PTY lifecycle.
- */
+// [PT-01] Direct PTY wrapper — calls Tauri IPC commands for PTY lifecycle.
 import { invoke } from "@tauri-apps/api/core";
 import { dlog } from "./debugLog";
 
-// ── Active PID registry for cleanup on app close ──────────────────
+// [PT-07] Active PID registry for cleanup on app close
 
 const activePids = new Set<number>();
 
@@ -74,6 +72,7 @@ export async function spawnPty(
   let exitCallback: ((info: { exitCode: number }) => void) | null = null;
   let exitFired = false;
 
+  // [PT-04] exitFired guard ensures exactly one exitCallback fires
   const fireExit = (code: number) => {
     if (osPid) unregisterActivePid(osPid);
     if (exitFired) return;
@@ -108,7 +107,7 @@ export async function spawnPty(
   };
   readLoop();
 
-  // Parallel exit waiter — catches Ctrl+C exits where ConPTY pipe stays open.
+  // [PT-10] Parallel exit waiter — catches Ctrl+C exits where ConPTY pipe stays open.
   // exitstatus calls child.wait() on the Rust side (WaitForSingleObject), which
   // reliably returns when the child exits regardless of ConPTY pipe state.
   void invoke<number>("pty_exitstatus", { pid })
@@ -169,7 +168,7 @@ export async function spawnPty(
         }
       }
 
-      // 5. Drain remaining output from the channel
+      // [PT-18] Drain remaining output from the channel
       try {
         await invoke("pty_drain_output", { pid });
       } catch {

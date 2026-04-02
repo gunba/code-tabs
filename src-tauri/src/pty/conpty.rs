@@ -360,7 +360,7 @@ pub fn spawn(
     let writer = PipeWriter(unsafe { std::fs::File::from_raw_handle(pty_input_write.0 as *mut _) });
     std::mem::forget(pty_input_write); // File now owns the handle
 
-    // 9. Spawn background reader thread
+    // [PT-15] Background reader thread: OS thread reads ConPTY pipe (8 KiB) into sync_channel(64)
     let reader = PipeReader(unsafe { std::fs::File::from_raw_handle(pty_output_read.0 as *mut _) });
     std::mem::forget(pty_output_read); // File now owns the handle
 

@@ -203,7 +203,7 @@ pub fn spawn(
     // 4. Create writer (shares master fd -- NOT owned, UnixPty owns it)
     let writer = FdWriter(master);
 
-    // 5. Spawn background reader thread (also shares master fd)
+    // [PT-15] Background reader thread: OS thread reads PTY fd (8 KiB) into sync_channel(64)
     let reader_fd = master;
     let (output_tx, output_rx) = mpsc::sync_channel::<Vec<u8>>(64);
     std::thread::spawn(move || {

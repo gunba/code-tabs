@@ -1,7 +1,4 @@
-/**
- * Global registry mapping session IDs to terminal buffer extraction functions,
- * highlight functions, and scroll callbacks.
- */
+// [TR-16] Terminal buffer reader, SearchAddon, and scrollToLine registry
 
 import type { Terminal } from "@xterm/xterm";
 
