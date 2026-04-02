@@ -1,4 +1,5 @@
 import type { TapEntry, TapEvent } from "../types/tapEvents";
+import type { SystemPromptBlock } from "../types/session";
 
 /**
  * Shared helper: format tool_use name + input into a human-readable action string.
@@ -670,13 +671,21 @@ export function classifyTapEntry(entry: TapEntry): TapEvent | null {
       return classifyStatusLine(ts, entry);
     }
 
-    // System prompt: full text capture (bypasses 2000-char snap truncation)
+    // [IN-19] System prompt capture: classifies system-prompt category into SystemPromptCapture
     if (cat === "system-prompt" && typeof entry.text === "string") {
+      const blocks = Array.isArray(entry.blocks)
+        ? (entry.blocks as Array<{ text: string; cc?: { type: string } }>).map((b) => {
+            const block: SystemPromptBlock = { text: b.text };
+            if (b.cc) block.cacheControl = b.cc;
+            return block;
+          })
+        : undefined;
       return {
         kind: "SystemPromptCapture", ts,
         text: entry.text as string,
         model: String(entry.model || ""),
         messageCount: typeof entry.msgCount === "number" ? (entry.msgCount as number) : 0,
+        blocks,
       };
     }
 

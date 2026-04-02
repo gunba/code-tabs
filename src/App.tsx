@@ -17,6 +17,7 @@ import { DebugPanel } from "./components/DebugPanel/DebugPanel";
 import { DiffPanel } from "./components/DiffPanel/DiffPanel";
 import { SearchPanel } from "./components/SearchPanel/SearchPanel";
 import { ModalOverlay } from "./components/ModalOverlay/ModalOverlay";
+import { ContextViewer } from "./components/ContextViewer/ContextViewer";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
 import { useNotifications } from "./hooks/useNotifications";
@@ -61,6 +62,7 @@ export default function App() {
   const setSidePanel = useSettingsStore((s) => s.setSidePanel);
   const [showPalette, setShowPalette] = useState(false);
   const [showResumePicker, setShowResumePicker] = useState(false);
+  const [showContextViewer, setShowContextViewer] = useState(false);
   const [inspectedSubagent, setInspectedSubagent] = useState<{ sessionId: string; subagentId: string } | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; sessionId: string } | null>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
@@ -285,11 +287,12 @@ export default function App() {
         setSidePanel(sidePanel === "search" ? null : "search");
       }
 
-      // [KB-09] Escape dismissal chain: contextMenu -> palette -> sidePanel -> config -> resume -> launcher -> inspector
+      // [KB-09] Escape dismissal chain: contextMenu -> palette -> sidePanel -> contextViewer -> config -> resume -> launcher -> inspector
       if (e.key === "Escape") {
         if (tabContextMenu) { setTabContextMenu(null); return; }
         if (showPalette) return;
         if (sidePanel) { setSidePanel(null); return; }
+        if (showContextViewer) { setShowContextViewer(false); return; }
         if (showConfigManager) { setShowConfigManager(false); return; }
         if (showResumePicker) { setShowResumePicker(false); return; }
         if (showLauncher) { setShowLauncher(false); return; }
@@ -325,7 +328,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, sidePanel, inspectedSubagent, tabContextMenu, quickLaunch]);
+  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showContextViewer, sidePanel, inspectedSubagent, tabContextMenu, quickLaunch]);
 
   const regularSessions = useMemo(() => sessions.filter((s) => !s.isMetaAgent), [sessions]);
   const groups = useMemo(() => groupSessionsByDir(regularSessions), [regularSessions]);
@@ -632,12 +635,18 @@ export default function App() {
         ctrlHeld={ctrlHeld}
       />
 
-      <StatusBar />
+      <StatusBar onOpenContextViewer={() => setShowContextViewer(true)} />
 
       {showLauncher && <SessionLauncher key={launcherGeneration} />}
       {showResumePicker && <ResumePicker onClose={() => setShowResumePicker(false)} />}
       {showPalette && <CommandPalette onClose={() => setShowPalette(false)} />}
       {showConfigManager && <ConfigManager />}
+      {showContextViewer && activeSession && (
+        <ContextViewer
+          metadata={activeSession.metadata}
+          onClose={() => setShowContextViewer(false)}
+        />
+      )}
 
       {/* Worktree prune confirmation */}
       {pruneConfirm && (

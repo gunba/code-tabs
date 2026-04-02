@@ -120,6 +120,7 @@ export interface SessionMetadata {
   planOutcome: string | null;
   effortLevel: string | null;
   capturedSystemPrompt: string | null;
+  capturedSystemBlocks?: SystemPromptBlock[] | null;
   worktreeInfo: {
     originalCwd: string;
     worktreePath: string;
@@ -257,6 +258,11 @@ export const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
   }],
   defaultProviderId: "anthropic",
 };
+
+export interface SystemPromptBlock {
+  text: string;
+  cacheControl?: { type: string };
+}
 
 export interface SystemPromptRule {
   id: string;

@@ -521,18 +521,25 @@ export const INSTALL_TAPS = `(function() {
     if (flags.stringify) {
       try {
         if (typeof result === 'string') {
-          // Detect API request body — extract full system prompt (bypasses 2000-char snap truncation)
+          // [IN-19] Detect API request body — extract full system prompt (bypasses 2000-char snap truncation)
           if (value && value.model && Array.isArray(value.messages) && !value.costUSD && value.system) {
             var sysText = '';
+            var sysBlocks = [];
             if (Array.isArray(value.system)) {
               for (var si = 0; si < value.system.length; si++) {
-                sysText += (value.system[si].text || '');
+                var blk = value.system[si];
+                var bt = blk.text || '';
+                var bo = { text: bt };
+                if (blk.cache_control) bo.cc = blk.cache_control;
+                sysBlocks.push(bo);
+                sysText += bt;
               }
             } else if (typeof value.system === 'string') {
               sysText = value.system;
+              sysBlocks.push({ text: sysText });
             }
             if (sysText.length > 0) {
-              push('system-prompt', { text: sysText, model: value.model, msgCount: value.messages.length });
+              push('system-prompt', { text: sysText, model: value.model, msgCount: value.messages.length, blocks: sysBlocks });
             }
           }
           // Detect status line payload — push full data bypassing 2000-char snap truncation

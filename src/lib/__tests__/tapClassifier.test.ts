@@ -497,6 +497,31 @@ describe("classifyTapEntry — system-prompt", () => {
       text: "You are Claude, an AI assistant...",
       model: "claude-opus-4-6",
       messageCount: 3,
+      blocks: undefined,
+    });
+  });
+
+  it("forwards blocks with cacheControl from system-prompt entry", () => {
+    const entry: TapEntry = {
+      ts: 4801, cat: "system-prompt",
+      text: "Block 1Block 2",
+      model: "claude-opus-4-6",
+      msgCount: 2,
+      blocks: [
+        { text: "Block 1", cc: { type: "ephemeral" } },
+        { text: "Block 2" },
+      ],
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({
+      kind: "SystemPromptCapture", ts: 4801,
+      text: "Block 1Block 2",
+      model: "claude-opus-4-6",
+      messageCount: 2,
+      blocks: [
+        { text: "Block 1", cacheControl: { type: "ephemeral" } },
+        { text: "Block 2" },
+      ],
     });
   });
 });

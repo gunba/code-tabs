@@ -1,6 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSettingsStore } from "../../store/settings";
 import { IconClose } from "../Icons/Icons";
+import { diffLines, applyRulesToText, generateRulesFromDiff } from "../../lib/promptDiff";
+import type { DiffLine } from "../../lib/promptDiff";
+import type { SystemPromptRule } from "../../types/session";
 import type { StatusMessage } from "../../lib/settingsSchema";
 
 interface PromptsTabProps {
@@ -15,6 +18,65 @@ function validatePattern(pattern: string, flags: string): string | null {
   } catch (e) {
     return e instanceof Error ? e.message : "Invalid regex";
   }
+}
+
+/** Render a unified diff with colored lines. */
+function DiffPreview({ diff }: { diff: DiffLine[] }) {
+  const hasChanges = diff.some((l) => l.type !== "same");
+  if (!hasChanges) {
+    return <div className="prompts-diff-empty">No rules affect this prompt</div>;
+  }
+  return (
+    <div className="prompts-diff-view">
+      {diff.map((line, i) => (
+        <div key={i} className={`prompts-diff-line prompts-diff-${line.type}`}>
+          <span className="prompts-diff-marker">
+            {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
+          </span>
+          <span className="prompts-diff-text">{line.text || "\u00A0"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Preview generated rules before committing. */
+function RulePreview({
+  rules,
+  onConfirm,
+  onCancel,
+}: {
+  rules: SystemPromptRule[];
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="prompts-rule-preview">
+      <div className="prompts-rule-preview-header">
+        {rules.length} rule{rules.length !== 1 ? "s" : ""} will be generated (disabled by default):
+      </div>
+      <div className="prompts-rule-preview-list">
+        {rules.map((r) => (
+          <div key={r.id} className="prompts-rule-preview-item">
+            <div className="prompts-rule-preview-name">{r.name}</div>
+            <div className="prompts-rule-preview-detail">
+              <span className="prompts-diff-del" style={{ padding: "0 4px" }}>{r.pattern.slice(0, 60)}</span>
+              {r.replacement && (
+                <>
+                  {" → "}
+                  <span className="prompts-diff-add" style={{ padding: "0 4px" }}>{r.replacement.slice(0, 60)}</span>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="prompts-rule-preview-actions">
+        <button className="prompts-save-btn" onClick={onConfirm}>Add Rules</button>
+        <button className="prompts-delete-btn" onClick={onCancel} style={{ padding: "4px 8px" }}>Cancel</button>
+      </div>
+    </div>
+  );
 }
 
 export function PromptsTab({ onStatus }: PromptsTabProps) {
@@ -44,11 +106,16 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
   const [editEnabled, setEditEnabled] = useState(true);
   const [ruleDirty, setRuleDirty] = useState(false);
 
+  // Observed prompt edit state (for rule generation)
+  const [observedEditText, setObservedEditText] = useState("");
+  const [pendingRules, setPendingRules] = useState<SystemPromptRule[] | null>(null);
+
   // Load selected prompt into editor
   useEffect(() => {
     if (selectedType === "none" || !selectedId) {
       setEditName(""); setEditText(""); setDirty(false);
       setEditPattern(""); setEditReplacement(""); setEditFlags("g"); setEditEnabled(true); setRuleDirty(false);
+      setObservedEditText(""); setPendingRules(null);
       return;
     }
     if (selectedType === "saved") {
@@ -62,6 +129,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
       const prompt = observedPrompts.find((p) => p.id === selectedId);
       if (prompt) {
         setEditName(""); setEditText(prompt.text); setDirty(false);
+        setObservedEditText(prompt.text); setPendingRules(null);
       } else {
         setSelectedType("none"); setSelectedId(null);
       }
@@ -76,6 +144,18 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
       }
     }
   }, [selectedType, selectedId, savedPrompts, observedPrompts, systemPromptRules]);
+
+  // Compute diff preview for observed prompts (shows effect of current rules)
+  const observedDiff = useMemo((): DiffLine[] | null => {
+    if (selectedType !== "observed" || !editText) return null;
+    const enabledRules = systemPromptRules.filter((r) => r.enabled && r.pattern);
+    if (enabledRules.length === 0) return null;
+    const transformed = applyRulesToText(editText, enabledRules);
+    return diffLines(editText, transformed);
+  }, [selectedType, editText, systemPromptRules]);
+
+  // Check if observed edit differs from original
+  const observedEdited = selectedType === "observed" && observedEditText !== editText;
 
   const handleSave = useCallback(() => {
     if (selectedType !== "saved" || !selectedId || !dirty) return;
@@ -95,6 +175,40 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
     onStatus({ type: "success", text: "Rule saved" });
     setTimeout(() => onStatus(null), 2000);
   }, [selectedType, selectedId, ruleDirty, editName, editPattern, editReplacement, editFlags, editEnabled, updateSystemPromptRule, onStatus]);
+
+  const handleGenerateRules = useCallback(() => {
+    if (selectedType !== "observed" || !observedEdited) return;
+    const generated = generateRulesFromDiff(editText, observedEditText, systemPromptRules);
+    if (generated.length === 0) {
+      onStatus({ type: "error", text: "No rules could be generated from these changes" });
+      setTimeout(() => onStatus(null), 3000);
+      return;
+    }
+    setPendingRules(generated);
+  }, [selectedType, observedEdited, editText, observedEditText, systemPromptRules, onStatus]);
+
+  const handleConfirmRules = useCallback(() => {
+    if (!pendingRules) return;
+    const store = useSettingsStore.getState();
+    for (const rule of pendingRules) {
+      store.addSystemPromptRule();
+      const newest = useSettingsStore.getState().systemPromptRules;
+      const last = newest[newest.length - 1];
+      if (last) {
+        store.updateSystemPromptRule(last.id, {
+          name: rule.name,
+          pattern: rule.pattern,
+          replacement: rule.replacement,
+          flags: rule.flags,
+          enabled: false,
+        });
+      }
+    }
+    setPendingRules(null);
+    setObservedEditText(editText); // Reset edit state
+    onStatus({ type: "success", text: `${pendingRules.length} rule${pendingRules.length !== 1 ? "s" : ""} added (disabled)` });
+    setTimeout(() => onStatus(null), 3000);
+  }, [pendingRules, editText, onStatus]);
 
   const handleAdd = useCallback(() => {
     addSavedPrompt("New Prompt", "");
@@ -229,18 +343,53 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
           <>
             <div className="prompts-editor-header">
               <span className="prompts-editor-title">Observed System Prompt</span>
-              <span className="prompts-editor-badge">read-only</span>
+              <span className="prompts-editor-badge">test case</span>
             </div>
-            <textarea
-              className="prompts-textarea"
-              value={editText}
-              readOnly
-              ref={textareaRef}
-            />
+
+            {/* Diff preview: shows what current rules would do */}
+            <div className="prompts-observed-split">
+              <div className="prompts-diff-section">
+                <div className="prompts-diff-header">Rule Effect Preview</div>
+                {observedDiff ? (
+                  <DiffPreview diff={observedDiff} />
+                ) : (
+                  <div className="prompts-diff-empty">No enabled rules to preview</div>
+                )}
+              </div>
+
+              {/* Edit area for generating new rules */}
+              <div className="prompts-edit-section">
+                <div className="prompts-diff-header">
+                  Edit to Generate Rules
+                  {observedEdited && !pendingRules && (
+                    <button className="prompts-save-btn" onClick={handleGenerateRules}>
+                      Generate Rules
+                    </button>
+                  )}
+                </div>
+                {pendingRules ? (
+                  <RulePreview
+                    rules={pendingRules}
+                    onConfirm={handleConfirmRules}
+                    onCancel={() => setPendingRules(null)}
+                  />
+                ) : (
+                  <textarea
+                    className="prompts-textarea"
+                    value={observedEditText}
+                    onChange={(e) => setObservedEditText(e.target.value)}
+                    ref={textareaRef}
+                    spellCheck={false}
+                  />
+                )}
+              </div>
+            </div>
+
             <div className="prompts-editor-footer">
               <span className="prompts-char-count">
                 {editText.length.toLocaleString()} characters
               </span>
+              {observedEdited && <span className="prompts-unsaved">edited</span>}
             </div>
           </>
         ) : selectedType === "rules" ? (

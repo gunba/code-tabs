@@ -1897,3 +1897,142 @@
   background: var(--bg-primary);
   color: var(--text-primary);
 }
+
+/* ── Observed prompt split layout ─────────────────────── */
+
+.prompts-observed-split {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 1px;
+  background: var(--border-subtle);
+}
+
+.prompts-diff-section,
+.prompts-edit-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+}
+
+.prompts-diff-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.prompts-diff-view {
+  flex: 1;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 4px 0;
+}
+
+.prompts-diff-view::-webkit-scrollbar { width: 5px; }
+.prompts-diff-view::-webkit-scrollbar-track { background: transparent; }
+.prompts-diff-view::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
+
+.prompts-diff-line {
+  display: flex;
+  padding: 0 8px;
+  min-height: 16px;
+}
+
+.prompts-diff-marker {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.prompts-diff-text {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.prompts-diff-same {
+  color: var(--text-secondary);
+}
+
+.prompts-diff-del {
+  background: rgba(255, 80, 80, 0.12);
+  color: var(--error);
+}
+
+.prompts-diff-add {
+  background: rgba(80, 200, 80, 0.12);
+  color: var(--success);
+}
+
+.prompts-diff-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* ── Rule preview ─────────────────────────────────────── */
+
+.prompts-rule-preview {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.prompts-rule-preview-header {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.prompts-rule-preview-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prompts-rule-preview-item {
+  background: var(--bg-primary);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
+.prompts-rule-preview-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.prompts-rule-preview-detail {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.prompts-rule-preview-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}

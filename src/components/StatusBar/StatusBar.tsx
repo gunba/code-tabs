@@ -260,7 +260,11 @@ function countHookEntries(hooks: Record<string, unknown>): number {
   return count;
 }
 
-export function StatusBar() {
+interface StatusBarProps {
+  onOpenContextViewer?: () => void;
+}
+
+export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const sessions = useSessionStore((s) => s.sessions);
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const activeSession = sessions.find((s) => s.id === activeTabId);
@@ -333,6 +337,15 @@ export function StatusBar() {
             title="Git changes (Ctrl+Shift+G)"
           >
             <IconGitBranch size={12} /> Changes
+          </button>
+        )}
+        {activeSession?.metadata.capturedSystemPrompt && onOpenContextViewer && (
+          <button
+            className="status-item status-hooks-btn"
+            onClick={onOpenContextViewer}
+            title="View system prompt context"
+          >
+            Context
           </button>
         )}
         <button

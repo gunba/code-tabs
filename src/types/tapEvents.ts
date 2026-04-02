@@ -1,3 +1,5 @@
+import type { SystemPromptBlock } from "./session";
+
 // ── Tap Entry (raw from hooked process) ──
 
 export interface TapEntry {
@@ -347,6 +349,7 @@ export interface SystemPromptCapture extends TapEventBase {
   text: string;
   model: string;
   messageCount: number;
+  blocks?: SystemPromptBlock[];
 }
 
 export interface IdlePrompt extends TapEventBase {

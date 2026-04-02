@@ -1,5 +1,5 @@
 import type { TapEvent } from "../types/tapEvents";
-import type { SessionMetadata } from "../types/session";
+import type { SessionMetadata, SystemPromptBlock } from "../types/session";
 
 /**
  * Infer context window size from model identifier.
@@ -75,6 +75,8 @@ export class TapMetadataAccumulator {
   private planOutcome: string | null = null;
   private effortLevel: string | null = null;
   private capturedSystemPrompt: string | null = null;
+  private capturedSystemBlocks: SystemPromptBlock[] | null = null;
+  private blocksChanged = false;
   private worktreeInfo: SessionMetadata["worktreeInfo"] = null;
   private statusLine: SessionMetadata["statusLine"] = null;
 
@@ -323,9 +325,13 @@ export class TapMetadataAccumulator {
         this.worktreeInfo = null;
         break;
 
-      case "SystemPromptCapture":
+      case "SystemPromptCapture": // [IN-19] stores capturedSystemPrompt + capturedSystemBlocks
         if (event.text !== this.capturedSystemPrompt) {
           this.capturedSystemPrompt = event.text;
+        }
+        if (event.blocks) {
+          this.capturedSystemBlocks = event.blocks;
+          this.blocksChanged = true;
         }
         break;
 
@@ -431,7 +437,14 @@ export class TapMetadataAccumulator {
     };
 
     const fp = JSON.stringify(metadata);
-    if (fp === this.lastFingerprint) return null;
+    // Include blocks in the returned metadata but NOT in the fingerprint
+    // to avoid serializing large prompt text on every event
+    if (this.capturedSystemBlocks) {
+      metadata.capturedSystemBlocks = this.capturedSystemBlocks;
+    }
+    const blocksJustChanged = this.blocksChanged;
+    this.blocksChanged = false;
+    if (fp === this.lastFingerprint && !blocksJustChanged) return null;
     this.lastFingerprint = fp;
     return metadata;
   }
@@ -481,6 +494,8 @@ export class TapMetadataAccumulator {
     this.planOutcome = null;
     this.effortLevel = null;
     this.capturedSystemPrompt = null;
+    this.capturedSystemBlocks = null;
+    this.blocksChanged = false;
     this.worktreeInfo = null;
     this.statusLine = null;
   }
