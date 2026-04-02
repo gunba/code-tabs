@@ -119,7 +119,7 @@ pub async fn pty_write(
     Ok(())
 }
 
-/// Read filtered output from a PTY session.
+/// [PT-16] Read filtered output from a PTY session.
 ///
 /// Pipeline: ConPTY/PTY pipe -> background reader thread -> channel ->
 /// OutputFilter (scrollback fix + security) -> IPC response (raw binary).
@@ -256,7 +256,7 @@ pub async fn pty_get_child_pid(
     Ok(Some(session.process_id))
 }
 
-/// Drain remaining output from the channel before destroying a session.
+/// [PT-18] Drain remaining output from the channel before destroying a session.
 /// Prevents the background reader thread from blocking on a full channel
 /// after the child process exits.
 #[tauri::command]

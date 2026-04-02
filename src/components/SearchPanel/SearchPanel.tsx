@@ -23,6 +23,7 @@ const RESULT_LIMIT = 500;
 const DEBOUNCE_MS = 250;
 const CONTEXT_TRUNCATE = 200;
 
+// [TR-16] Cross-session terminal search panel (Ctrl+Shift+F)
 export function SearchPanel({ onClose }: SearchPanelProps) {
   const [query, setQuery] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(false);

@@ -75,7 +75,7 @@ export const useUiConfigStore = create<UiConfigState>((set) => ({
 
 // ── Deep merge utility ───────────────────────────────────────────────
 
-function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+export function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
   const result = { ...target };
   for (const key of Object.keys(source)) {
     if (

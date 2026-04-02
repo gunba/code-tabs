@@ -535,6 +535,7 @@ export default function App() {
               if (sub.model) metaParts.push(sub.model.replace(/^claude-/, "").split("-")[0]);
               if (sub.totalToolUses != null) metaParts.push(`${sub.totalToolUses} tools`);
               if (sub.durationMs != null) metaParts.push(`${Math.round(sub.durationMs / 1000)}s`);
+              // [TR-11] Subagent card with selected highlight when inspector is open
               return (
                 <button
                   key={sub.id}

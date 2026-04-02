@@ -1,3 +1,4 @@
+// [TR-16] Cross-session text search (line-by-line, regex, capped results)
 export interface SearchMatch {
   sessionId: string;
   lineIndex: number;    // 0-based buffer line

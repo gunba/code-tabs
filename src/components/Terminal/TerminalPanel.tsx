@@ -135,7 +135,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     }
     const prev = prevClaudeSessionIdRef.current;
     prevClaudeSessionIdRef.current = tapProcessor.claudeSessionId;
-    // Clear terminal when session ID changes (context clear, plan approval, compaction).
+    // [TR-13] Clear terminal when session ID changes (context clear, plan approval, compaction).
     // Skip during resume loading: JSONL replay surfaces stale session IDs from old
     // compaction/plan transitions, causing spurious clears that wipe the conversation.
     if (prev && prev !== tapProcessor.claudeSessionId && !resumeLoadingRef.current) {
@@ -190,8 +190,9 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // handlePtyData needs terminal, terminal needs handleTermData, which needs pty,
   // and pty needs handlePtyData. We use terminalRef to avoid forward-referencing.
   const terminalRef = useRef<ReturnType<typeof useTerminal> | null>(null);
-  // Buffer PTY data for background tabs — skip terminal writes when not visible,
-  // flush in one write when the tab becomes visible. Saves O(N) rendering cost.
+  // [BF-01] Buffer PTY data for background tabs — skip terminal writes when not visible,
+  // flush in one write when the tab becomes visible. Saves O(1) rendering cost while hidden.
+  // [BF-02] visibleRef tracks tab visibility for buffering decisions
   const visibleRef = useRef(visible);
   const bgBufferRef = useRef<Uint8Array[]>([]);
   visibleRef.current = visible;
@@ -325,7 +326,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     updateConfig(session.id, newConfig);
     if (name) renameSession(session.id, name);
 
-    // 4. Visual feedback + loading spinner for resumed sessions
     // [PT-11] Clear stale buffers before terminal reset
     bgBufferRef.current = [];
     deferredResizeRef.current = null;
@@ -364,15 +364,15 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const deferredResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   // Tracks pending onRender reveal listener — disposed on cleanup to prevent leaks
   const revealDisposableRef = useRef<{ dispose(): void } | null>(null);
+  // [PT-13] Same-dimension gate — skip redundant pty.resize() calls
+  // [BF-03] Resize occlusion — defer PTY resize when hidden (would trigger ConPTY
+  // repaint with no visible terminal) or when bgBuffer has pending data (terminal
+  // hasn't caught up yet, repaint would duplicate content into scrollback).
   const handleResize = useCallback(
     (cols: number, rows: number) => {
       const last = lastPtyDimsRef.current;
       if (last && last.cols === cols && last.rows === rows) return;
       lastPtyDimsRef.current = { cols, rows };
-      // Defer the PTY resize when: (a) tab is hidden — resize would trigger a
-      // ConPTY repaint with no visible terminal to render into, or (b) bgBuffer
-      // has pending data — terminal hasn't caught up yet and the repaint would
-      // duplicate content into scrollback.
       if (!visibleRef.current || bgBufferRef.current.length > 0) {
         deferredResizeRef.current = { cols, rows };
         return;
@@ -425,15 +425,16 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           dlog("terminal", session.id, `tap server failed: ${err}`, "WARN");
         }
 
+        // [PT-12] Pre-spawn fit + post-spawn rAF dimension verification
         const args = await buildClaudeArgs(session.config);
-        terminal.fit(); // Force fit before reading dimensions
+        terminal.fit();
         const { cols, rows } = terminal.getDimensions();
         const cwd = normalizePath(session.config.workingDir);
         // Pass BUN_INSPECT env for inspector-based hook injection,
         // TAP_PORT for dedicated TCP event delivery
         const env: Record<string, string> = { BUN_INSPECT: `ws://127.0.0.1:${inspPort}/0` };
         if (tapPort) env.TAP_PORT = String(tapPort);
-        // Inject proxy URL for multi-provider routing
+        // [TR-15] Inject proxy URL for multi-provider routing
         const { proxyPort } = useSettingsStore.getState();
         if (proxyPort) {
           env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}`;
@@ -530,9 +531,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     }
   }, [killRequest, session.id, session.state, clearKillRequest, pty]);
 
-  // Re-fit and focus when becoming visible. useLayoutEffect fires before browser
-  // paint. Reveal is deferred to a write callback / rAF — signal that the
-  // renderer has painted the updated content (no timer).
+  // [BF-01] Flush bgBuffer on tab focus, reveal after renderer paints
+  // [TR-10] fit() deferred on tab switch via useLayoutEffect
   // terminal is NOT in deps because useTerminal returns a new object on every render.
   useLayoutEffect(() => {
     // Dispose any pending reveal from a prior transition
@@ -575,7 +575,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
     terminal.fit();
 
-    // Send any deferred PTY resize now that the buffer has been flushed
+    // [PT-20] Send deferred PTY resize now that the buffer has been flushed
     const deferred = deferredResizeRef.current;
     if (deferred) {
       deferredResizeRef.current = null;
@@ -708,7 +708,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const showDeadOverlay = session.state === "dead" && visible;
   const showButtonBar = visible && session.state !== "dead";
 
-  // Ctrl+mouse shortcuts (capture phase — fires before xterm.js stopPropagation)
+  // [TR-09] Ctrl+wheel snaps to top/bottom, [TR-08] Ctrl+middle-click scrolls to last user message
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !visible) return;
@@ -735,6 +735,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     };
   }, [visible, terminal.scrollToTop, terminal.scrollToBottom, terminal.scrollToLastUserMessage]);
 
+  // [TR-05] Hidden tabs use CSS display:none — never unmount/remount xterm.js
   return (
     <div
       className="terminal-panel"
@@ -748,8 +749,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       )}
       <div className="terminal-inner">
         <div className="terminal-container" ref={setContainer} />
+        {/* [TR-07] Vertical button bar (28px) with scroll, queue, search buttons */}
         {showButtonBar && (
           <div className="terminal-button-bar">
+            {/* [TR-01] Scroll-to-top button, visible when not at top */}
             <button
               className="bar-btn"
               style={{ visibility: showScrollTopBtn ? "visible" : "hidden" }}
@@ -799,6 +802,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
             >
               <IconSearch size={14} />
             </button>
+            {/* [TR-01] Scroll-to-bottom button, visible when not at bottom */}
             <button
               className="bar-btn"
               style={{ visibility: showScrollBtn ? "visible" : "hidden" }}

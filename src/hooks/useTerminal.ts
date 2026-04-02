@@ -10,14 +10,15 @@ export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
 const PROMPT_MARKER_NEW = ">\u00A0"; // > + NBSP — current Claude Code prompt
 const PROMPT_MARKER_OLD = "\u276F"; // ❯ — legacy Claude Code prompt
-const BOTTOM_TOLERANCE = 2; // Lines of slack for "at bottom" detection
+// [PT-08] 2-line tolerance for near-bottom snap detection
+const BOTTOM_TOLERANCE = 2;
 
 // Minimal buffer type for findPromptLine (structural typing)
 interface BufferLike {
   getLine(y: number): { translateToString(trimRight?: boolean): string } | undefined;
 }
 
-/** Scan buffer backward from `fromLine` for a Claude Code prompt line. */
+// [TR-08] Scan buffer backward for Claude Code prompt markers
 function findPromptLine(buf: BufferLike, fromLine: number): number {
   const stop = Math.max(0, fromLine - 50_000);
   for (let i = fromLine; i >= stop; i--) {
@@ -117,6 +118,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       await document.fonts.ready;
       if (cancelled) return;
 
+      // [PT-06] Fixed 1M scrollback buffer — no dynamic resizing
       term = new Terminal({
         cursorBlink: true,
         fontSize: 14,
@@ -150,12 +152,12 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
           }).catch(() => {});
           return false; // We handled it
         }
-        // Ctrl+Home: scroll to top
+        // [TR-03] Ctrl+Home: scroll to top
         if (ev.ctrlKey && ev.key === "Home" && ev.type === "keydown") {
           term!.scrollToTop();
           return false; // We handled it
         }
-        // Ctrl+End: scroll to bottom
+        // [TR-03] Ctrl+End: scroll to bottom
         if (ev.ctrlKey && ev.key === "End" && ev.type === "keydown") {
           term!.scrollToBottom();
           return false; // We handled it
@@ -279,7 +281,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
       }
     }
 
-    // xterm.js preserves scroll position across writes natively.
+    // [PT-20] Detect scrollback clear (baseY shrinkage) and scroll to bottom
     const buf = term.buffer.active;
     const baseYBefore = buf.baseY;
 
@@ -294,7 +296,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     }
   }, []);
 
-  // Debounced write: accumulates ConPTY chunks and flushes after 4ms of
+  // [PT-16] Debounced write: accumulates ConPTY chunks and flushes after 4ms of
   // quiet or 50ms max latency. Coalesces BSU+content+ESU into single writes
   // so DEC 2026 sync rendering works correctly.
   const writeBytes = useCallback((data: Uint8Array) => {
@@ -379,6 +381,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     return term.buffer.active.viewportY <= 0;
   }, []);
 
+  // [PT-09] FitAddon dimension guard — skip fit if rows <= 1 (not laid out)
   const fit = useCallback(() => {
     try {
       const f = fitRef.current;
@@ -449,7 +452,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     return "";
   }, []);
 
-  // Discard any pending write-batch chunks and cancel debounce timer.
+  // [PT-11] Discard pending write-batch chunks and cancel debounce timer.
   // Called during respawn to prevent stale PTY data from being flushed
   // after the terminal reset (\x1bc).
   const clearPending = useCallback(() => {
