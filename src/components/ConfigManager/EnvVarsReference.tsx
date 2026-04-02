@@ -80,9 +80,7 @@ export function EnvVarsReference({
                   </span>
                   {isSetInActive && <span className="sr-field-check">{"\u2713"}</span>}
                 </div>
-                {v.description && (
-                  <div className="sr-field-desc">{v.description}</div>
-                )}
+                <div className="sr-field-desc" title={v.description || undefined}>{v.description}</div>
                 {setInScopes.length > 0 && (
                   <div className="ev-scope-chips">
                     {setInScopes.map((s) => (

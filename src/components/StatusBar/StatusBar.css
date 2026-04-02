@@ -10,7 +10,7 @@
   color: var(--text-secondary);
   user-select: none;
   flex-shrink: 0;
-  gap: 0;
+  gap: 8px;
 }
 
 .status-bar-content {

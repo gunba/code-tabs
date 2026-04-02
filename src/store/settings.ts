@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
 import type { LaunchPreset, SessionConfig, PastSession, ProviderConfig, ModelRoute, SystemPromptRule } from "../types/session";
 import { DEFAULT_SESSION_CONFIG, DEFAULT_PROVIDER_CONFIG } from "../types/session";
-import { normalizePath } from "../lib/paths";
+import { normalizePath, parseWorktreePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import type { EnvVarEntry } from "../lib/envVars";
 import type { ModelRegistryEntry } from "../lib/claude";
@@ -158,7 +158,8 @@ export const useSettingsStore = create<SettingsState>()(
 
       addRecentDir: (dir) =>
         set((s) => {
-          const norm = normalizePath(dir);
+          const wt = parseWorktreePath(dir);
+          const norm = normalizePath(wt ? wt.projectRoot : dir);
           const normLower = norm.toLowerCase();
           return {
             recentDirs: [norm, ...s.recentDirs.filter((d) =>

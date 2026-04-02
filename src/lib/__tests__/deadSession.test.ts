@@ -31,12 +31,12 @@ const DEFAULT_CONFIG: SessionConfig = {
 
 const DEFAULT_METADATA: SessionMetadata = {
   costUsd: 0,
-  contextPercent: 0,
   contextDebug: null,
   durationSecs: 0,
   currentAction: null,
   nodeSummary: null,
   currentToolName: null,
+  currentEventKind: null,
   inputTokens: 0,
   outputTokens: 0,
   assistantMessageCount: 0,

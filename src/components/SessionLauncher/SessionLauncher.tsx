@@ -5,6 +5,7 @@ import { useSettingsStore } from "../../store/settings";
 import { dlog } from "../../lib/debugLog";
 import type { CliOption, CliCommand } from "../../store/settings";
 import { dirToTabName, computeHeatLevel, heatClassName, MODEL_FAMILIES, extractModelFamily, isModel1m, resolveModelId } from "../../lib/claude";
+import { parseWorktreePath, normalizePath } from "../../lib/paths";
 import {
   type SessionConfig,
   type PermissionMode,
@@ -139,15 +140,21 @@ export function SessionLauncher() {
     el?.focus();
   }, []);
 
-  // Deduplicate recent directories (case-insensitive, slash-invariant)
+  // Deduplicate recent directories (case-insensitive, slash-invariant).
+  // Worktree paths are collapsed to their project root so they don't appear
+  // as separate (identical-looking) entries.
   const uniqueRecentDirs = useMemo(() => {
     const seen = new Set<string>();
-    return recentDirs.filter(dir => {
-      const normalized = dir.replace(/\\/g, "/").toLowerCase();
-      if (seen.has(normalized)) return false;
-      seen.add(normalized);
-      return true;
-    });
+    const result: string[] = [];
+    for (const dir of recentDirs) {
+      const wt = parseWorktreePath(dir);
+      const resolved = normalizePath(wt ? wt.projectRoot : dir);
+      const key = resolved.replace(/\\/g, "/").toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(resolved);
+    }
+    return result;
   }, [recentDirs]);
 
   const updateConfig = useCallback(
@@ -465,6 +472,7 @@ export function SessionLauncher() {
             onChange={handlePermChange}
             disabled={isNonSessionCommand}
           />
+          <span className="launcher-pills-break" />
           <span className="launcher-pill-icon" title="Effort"><IconLightning size={13} /></span>
           <PillGroup
             options={EFFORT_PILLS}
@@ -634,7 +642,7 @@ export function SessionLauncher() {
               value={commandLine}
               onChange={(e) => setCommandLine(e.target.value)}
               spellCheck={false}
-              rows={2}
+              rows={4}
             />
             <button
               className="launcher-cmd-reset"

@@ -133,12 +133,13 @@ export function toolCategoryColor(toolName: string): string {
   return TOOL_COLORS[toolName] ?? "var(--text-muted)";
 }
 
-/** Derive activity display from current tool name.
- *  Returns null when no tool is active. */
+/** Derive activity display from current tool name or event kind.
+ *  Returns null when there is nothing to show. */
 export function getActivityText(
   currentToolName: string | null,
+  currentEventKind?: string | null,
 ): string | null {
-  return currentToolName;
+  return currentToolName ?? currentEventKind ?? null;
 }
 
 /** Session colors — assigned sequentially, no collisions until wrap-around. */

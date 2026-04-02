@@ -797,7 +797,7 @@ export const INSTALL_TAPS = `(function() {
                 if (!savedAnthropicPingHeaders && url.indexOf('api.anthropic.com') >= 0 && method === 'POST' && resp.status >= 200 && resp.status < 300) {
                   try {
                     var ph = {};
-                    var h = init && init.headers;
+                    var h = (init && init.headers) || (input && typeof input === 'object' && input.headers);
                     if (h) {
                       var ak = h.get ? h.get('x-api-key') : (h['x-api-key'] || '');
                       var av = h.get ? h.get('anthropic-version') : (h['anthropic-version'] || '');

@@ -505,6 +505,9 @@
   flex: 0 1 200px;
   min-width: 90px;
   max-width: 200px;
+  height: 56px;
+  overflow: hidden;
+  box-sizing: border-box;
   transition: background 0.15s, box-shadow 0.15s;
   text-align: left;
   position: relative;
@@ -566,6 +569,7 @@
   flex-direction: column;
   min-width: 0;
   flex: 1;
+  align-self: stretch;
 }
 
 /* Mirrors .tab-name */

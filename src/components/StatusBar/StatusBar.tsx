@@ -108,26 +108,24 @@ function SessionStatus({
           </span>
         )}
         {(() => {
-          const ctxPct = session.metadata.contextPercent ?? 0;
           const dbg = session.metadata.contextDebug;
-          if (ctxPct <= 0 && !dbg) return null;
-          const titleParts = [`Context: ${ctxPct}%`];
-          if (dbg) {
-            titleParts.push(`[${dbg.source}]`);
-            titleParts.push(`model=${dbg.model ?? "unknown"}`);
-            titleParts.push(`input=${dbg.inputTokens.toLocaleString()}`);
-            titleParts.push(`cacheRead=${dbg.cacheRead.toLocaleString()}`);
-            titleParts.push(`cacheCreation=${dbg.cacheCreation.toLocaleString()}`);
-            titleParts.push(`total=${dbg.totalContextTokens.toLocaleString()} / ${dbg.windowSize.toLocaleString()}`);
-            titleParts.push(`windowSource=${dbg.windowSource}`);
-          }
+          if (!dbg) return null;
+          const titleParts = [
+            `[${dbg.source}]`,
+            `model=${dbg.model ?? "unknown"}`,
+            `input=${dbg.inputTokens.toLocaleString()}`,
+            `cacheRead=${dbg.cacheRead.toLocaleString()}`,
+            `cacheCreation=${dbg.cacheCreation.toLocaleString()}`,
+            `total=${dbg.totalContextTokens.toLocaleString()}`,
+          ];
+          const label = `${formatTokenCount(dbg.inputTokens)}${dbg.cacheCreation > 0 ? ` (+${formatTokenCount(dbg.cacheCreation)})` : ""}`;
           return (
             <span
               className="status-item"
               title={titleParts.join("\n")}
-              style={{ color: ctxPct > 80 ? "var(--error)" : ctxPct > 50 ? "var(--warning)" : "var(--text-secondary)" }}
+              style={{ color: "var(--text-secondary)" }}
             >
-              {ctxPct}% ctx
+              {label}
             </span>
           );
         })()}

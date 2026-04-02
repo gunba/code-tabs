@@ -77,7 +77,7 @@ export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
             </span>
             <span className="context-token-item">
               <span className="context-token-label">Total</span>
-              <span className="context-token-value">{formatTokenCount(dbg.totalContextTokens)} / {formatTokenCount(dbg.windowSize)}</span>
+              <span className="context-token-value">{formatTokenCount(dbg.totalContextTokens)}</span>
             </span>
           </div>
         )}

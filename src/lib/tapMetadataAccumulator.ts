@@ -1,18 +1,6 @@
 import type { TapEvent } from "../types/tapEvents";
 import type { SessionMetadata, SystemPromptBlock } from "../types/session";
 
-/**
- * Infer context window size from model identifier.
- * Matches patterns like [1m], (1M), [1m context] etc.
- * Falls back to 200k for models without a size suffix.
- */
-function inferContextWindowSize(model: string | null): number {
-  if (!model) return 200_000;
-  const match = model.match(/[\[(](\d+)[mM]/);
-  if (match) return parseInt(match[1], 10) * 1_000_000;
-  return 200_000;
-}
-
 // [SI-07] Tool actions, user prompts, assistant text captured inline via event processing
 // [IN-11] StatusBar enrichment: model, subscription, region, latency, rate limits, lines changed
 /**
@@ -25,6 +13,7 @@ export class TapMetadataAccumulator {
   private outputTokens = 0;
   private runtimeModel: string | null = null;
   private currentToolName: string | null = null;
+  private currentEventKind: string | null = null;
   private currentAction: string | null = null;
   private nodeSummary: string | null = null;
   private assistantMessageCount = 0;
@@ -82,6 +71,9 @@ export class TapMetadataAccumulator {
 
   /** Process an event and return a metadata diff, or null if unchanged. */
   process(event: TapEvent): Partial<SessionMetadata> | null {
+    if (event.kind !== "ApiTelemetry" && event.kind !== "ProcessHealth") {
+      this.currentEventKind = event.kind;
+    }
     switch (event.kind) {
       case "ApiTelemetry": {
         // Deduplicate: Claude Code may stringify the same telemetry object multiple times
@@ -369,23 +361,13 @@ export class TapMetadataAccumulator {
 
   /** Return metadata if changed since last call, otherwise null. */
   private diff(): Partial<SessionMetadata> | null {
-    // Context % from TurnStart token data.
-    // Total context tokens = input + cacheRead + cacheCreation (matches ccstatusline approach).
-    // Window size inferred from model name ([1m] → 1M, default 200k).
     const contextTokens = this.lastTurnInputTokens + this.lastCacheRead + this.lastCacheCreation;
-    const windowSize = inferContextWindowSize(this.runtimeModel);
-    const contextPercent = contextTokens > 0 && windowSize > 0
-      ? Math.min(100, Math.round((contextTokens / windowSize) * 100))
-      : 0;
-
     const contextDebug: SessionMetadata["contextDebug"] = contextTokens > 0
       ? {
           inputTokens: this.lastTurnInputTokens,
           cacheRead: this.lastCacheRead,
           cacheCreation: this.lastCacheCreation,
           totalContextTokens: contextTokens,
-          windowSize,
-          windowSource: this.runtimeModel ? `model:${this.runtimeModel}` : "default",
           model: this.runtimeModel,
           source: "turnStart" as const,
         }
@@ -393,12 +375,12 @@ export class TapMetadataAccumulator {
 
     const metadata: Partial<SessionMetadata> = {
       costUsd: this.costUsd,
-      contextPercent,
       contextDebug,
       inputTokens: this.inputTokens,
       outputTokens: this.outputTokens,
       currentAction: this.currentAction,
       currentToolName: this.currentToolName,
+      currentEventKind: this.currentEventKind,
       choiceHint: this.choiceHint,
       runtimeModel: this.runtimeModel,
       assistantMessageCount: this.assistantMessageCount,
@@ -456,6 +438,7 @@ export class TapMetadataAccumulator {
     this.outputTokens = 0;
     this.runtimeModel = null;
     this.currentToolName = null;
+    this.currentEventKind = null;
     this.currentAction = null;
     this.nodeSummary = null;
     this.assistantMessageCount = 0;
