@@ -1,20 +1,21 @@
 node_modules/
 dist/
-src-tauri/target
 src-tauri/target/
-.claude/
-.proofs/
-plans/
-DOCS/
-logs/
+src-tauri/pty-patch/target/
 *.log
 *.local
+*.stackdump
 
 # Test artifacts
 test-state.json
 test-commands.json
-node_modules
-CLAUDE.md
-.proofs
-bash.exe.stackdump
-*.stackdump
+
+# Claude ephemeral / per-machine
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+.claude/changelog-last-version
+
+# Runtime output
+.proofs/runs.jsonl
+logs/
+plans/
