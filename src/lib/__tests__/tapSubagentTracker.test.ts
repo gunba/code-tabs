@@ -1,0 +1,401 @@
+/**
+ * Tests for TapSubagentTracker — covers cases NOT in subagentAwareness.test.ts.
+ *
+ * subagentAwareness.test.ts already covers:
+ *   - hasActiveAgents (empty, active, after idle)
+ *   - stale cleanup on UserInput
+ *   - SubagentLifecycle end/killed marks dead, enriches metadata
+ *   - SubagentNotification marks dead
+ *   - tool name prefix stripping (known, unknown, bare)
+ *   - costUsd accumulation
+ *
+ * This file covers the remaining process() paths, reset(), edge cases,
+ * and multi-agent scenarios not exercised there.
+ */
+import { describe, it, expect, beforeEach } from "vitest";
+import { TapSubagentTracker } from "../tapSubagentTracker";
+import type { TapEvent, ConversationMessage, SubagentSpawn, ApiTelemetry } from "../../types/tapEvents";
+
+// ── Helpers ──
+
+function makeSpawn(description = "test agent", prompt = "do stuff"): SubagentSpawn {
+  return { kind: "SubagentSpawn", ts: 1, description, prompt };
+}
+
+function makeSidechainMsg(
+  agentId: string,
+  overrides: Partial<ConversationMessage> = {},
+): ConversationMessage {
+  return {
+    kind: "ConversationMessage",
+    ts: 2,
+    messageType: "assistant",
+    isSidechain: true,
+    agentId,
+    uuid: null,
+    parentUuid: null,
+    promptId: null,
+    stopReason: "tool_use",
+    toolNames: ["Bash"],
+    toolAction: "Bash: ls",
+    textSnippet: null,
+    cwd: null,
+    hasToolError: false,
+    toolErrorText: null,
+    ...overrides,
+  };
+}
+
+function makeTelemetry(queryDepth: number, overrides: Partial<ApiTelemetry> = {}): ApiTelemetry {
+  return {
+    kind: "ApiTelemetry",
+    ts: 5,
+    model: "haiku",
+    costUSD: 0.01,
+    inputTokens: 100,
+    outputTokens: 50,
+    cachedInputTokens: 0,
+    uncachedInputTokens: 100,
+    durationMs: 200,
+    ttftMs: 50,
+    queryChainId: null,
+    queryDepth,
+    stopReason: "end_turn",
+    ...overrides,
+  };
+}
+
+function spawnAndActivate(tracker: TapSubagentTracker, agentId: string, desc = "agent"): void {
+  tracker.process(makeSpawn(desc));
+  tracker.process(makeSidechainMsg(agentId));
+}
+
+// ── Tests ──
+
+describe("TapSubagentTracker", () => {
+  let tracker: TapSubagentTracker;
+
+  beforeEach(() => {
+    tracker = new TapSubagentTracker("session-1");
+  });
+
+  // ── Unhandled event kinds ──
+
+  it("returns empty array for unhandled event kinds", () => {
+    const actions = tracker.process({ kind: "ThinkingStart", ts: 1, index: 0 } as TapEvent);
+    expect(actions).toEqual([]);
+  });
+
+  // ── SubagentSpawn queuing ──
+
+  describe("SubagentSpawn", () => {
+    it("queues description without creating a subagent", () => {
+      const actions = tracker.process(makeSpawn("my agent"));
+      expect(actions).toEqual([]);
+      expect(tracker.hasActiveAgents()).toBe(false);
+    });
+
+    it("queues multiple descriptions consumed in FIFO order", () => {
+      tracker.process(makeSpawn("first"));
+      tracker.process(makeSpawn("second"));
+
+      const actionsA = tracker.process(makeSidechainMsg("agent-a"));
+      expect(actionsA.find(a => a.type === "add")!.subagent!.description).toBe("first");
+
+      const actionsB = tracker.process(makeSidechainMsg("agent-b"));
+      expect(actionsB.find(a => a.type === "add")!.subagent!.description).toBe("second");
+    });
+  });
+
+  // ── ConversationMessage filtering ──
+
+  describe("ConversationMessage filtering", () => {
+    it("ignores non-sidechain messages", () => {
+      tracker.process(makeSpawn());
+      const actions = tracker.process(makeSidechainMsg("agent-1", { isSidechain: false }));
+      expect(actions).toEqual([]);
+      expect(tracker.hasActiveAgents()).toBe(false);
+    });
+
+    it("ignores messages without agentId", () => {
+      tracker.process(makeSpawn());
+      const actions = tracker.process(makeSidechainMsg("agent-1", { agentId: null }));
+      expect(actions).toEqual([]);
+    });
+
+    it("uses 'Agent' as default description when no pending desc", () => {
+      const actions = tracker.process(makeSidechainMsg("agent-1"));
+      const addAction = actions.find(a => a.type === "add");
+      expect(addAction!.subagent!.description).toBe("Agent");
+    });
+  });
+
+  // ── Subagent creation ──
+
+  describe("subagent creation", () => {
+    it("emits clearIdle then add on first sidechain message", () => {
+      tracker.process(makeSpawn("my desc"));
+      const actions = tracker.process(makeSidechainMsg("agent-1"));
+
+      expect(actions[0].type).toBe("clearIdle");
+      const addAction = actions.find(a => a.type === "add")!;
+      expect(addAction.subagent!.id).toBe("agent-1");
+      expect(addAction.subagent!.description).toBe("my desc");
+      expect(addAction.subagent!.state).toBe("starting");
+      expect(addAction.subagent!.tokenCount).toBe(0);
+      expect(addAction.subagent!.messages).toEqual([]);
+      expect(addAction.subagent!.parentSessionId).toBe("session-1");
+    });
+
+    it("uses the event timestamp for createdAt", () => {
+      tracker.process(makeSpawn());
+      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 42 }));
+      expect(actions.find(a => a.type === "add")!.subagent!.createdAt).toBe(42);
+    });
+  });
+
+  // ── State derivation from stopReason / messageType ──
+
+  describe("state derivation", () => {
+    it("thinking when stopReason is null (assistant)", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process(makeSidechainMsg("agent-1", { stopReason: null }));
+      expect(actions.find(a => a.type === "update")!.updates!.state).toBe("thinking");
+    });
+
+    it("thinking for user messageType regardless of stopReason", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process(makeSidechainMsg("agent-1", { messageType: "user", stopReason: "end_turn" }));
+      expect(actions.find(a => a.type === "update")!.updates!.state).toBe("thinking");
+    });
+
+    it("idle for result messageType", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process(makeSidechainMsg("agent-1", { messageType: "result" }));
+      expect(actions.find(a => a.type === "update")!.updates!.state).toBe("idle");
+    });
+  });
+
+  // ── Message accumulation ──
+
+  describe("message accumulation", () => {
+    it("includes both text and tool messages in a single update", () => {
+      // Activate with no tool action so the only messages come from the test message
+      tracker.process(makeSpawn());
+      tracker.process(makeSidechainMsg("agent-1", {
+        toolAction: null, toolNames: [], textSnippet: null,
+      }));
+
+      const actions = tracker.process(makeSidechainMsg("agent-1", {
+        textSnippet: "Working on it",
+        toolAction: "Bash: echo hi",
+        toolNames: ["Bash"],
+      }));
+      const msgs = actions.find(a => a.type === "update" && a.updates?.messages)!.updates!.messages!;
+      expect(msgs.filter(m => m.role === "assistant")).toHaveLength(1);
+      expect(msgs.filter(m => m.role === "tool")).toHaveLength(1);
+    });
+
+    it("caps messages at 200 entries", () => {
+      spawnAndActivate(tracker, "agent-1");
+      for (let i = 0; i < 205; i++) {
+        tracker.process(makeSidechainMsg("agent-1", {
+          ts: 10 + i,
+          textSnippet: `msg-${i}`,
+          toolAction: null,
+          toolNames: [],
+        }));
+      }
+      const lastActions = tracker.process(makeSidechainMsg("agent-1", {
+        ts: 999,
+        textSnippet: "final",
+        toolAction: null,
+        toolNames: [],
+      }));
+      expect(lastActions.find(a => a.type === "update")!.updates!.messages!.length).toBeLessThanOrEqual(200);
+    });
+  });
+
+  // ── Late message suppression ──
+
+  describe("late message suppression", () => {
+    it("drops messages for agents marked dead", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process({ kind: "SubagentNotification", ts: 5, status: "completed", summary: "" } as TapEvent);
+
+      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 10 }));
+      expect(actions).toEqual([]);
+      expect(tracker.hasActiveAgents()).toBe(false);
+    });
+
+    it("drops messages for agents marked idle", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process(makeSidechainMsg("agent-1", { stopReason: "end_turn" }));
+
+      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 20 }));
+      expect(actions).toEqual([]);
+    });
+
+    it("drops messages for agents marked interrupted", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process({ kind: "UserInterruption", ts: 5, forToolUse: false } as TapEvent);
+
+      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 20 }));
+      expect(actions).toEqual([]);
+    });
+  });
+
+  // ── Nested Agent tool → grandchild description queuing ──
+
+  describe("nested Agent tool description queuing", () => {
+    it("queues description from Agent tool_use for grandchild", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process(makeSidechainMsg("agent-1", {
+        toolAction: "Agent: Summarize the code",
+        toolNames: ["Agent"],
+      }));
+      const actions = tracker.process(makeSidechainMsg("agent-2"));
+      expect(actions.find(a => a.type === "add")!.subagent!.description).toBe("Summarize the code");
+    });
+  });
+
+  // ── ApiTelemetry edge cases ──
+
+  describe("ApiTelemetry", () => {
+    it("ignores queryDepth 0 (parent session telemetry)", () => {
+      spawnAndActivate(tracker, "agent-1");
+      expect(tracker.process(makeTelemetry(0))).toEqual([]);
+    });
+
+    it("returns empty when no lastActiveAgent exists", () => {
+      expect(tracker.process(makeTelemetry(1))).toEqual([]);
+    });
+
+    it("includes model in updates when present", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process(makeTelemetry(1, { model: "claude-haiku-4-5-20251001" }));
+      expect(actions.find(a => a.type === "update")!.updates!.model).toBe("claude-haiku-4-5-20251001");
+    });
+  });
+
+  // ── UserInterruption ──
+
+  describe("UserInterruption", () => {
+    it("is a no-op when no active agents", () => {
+      const actions = tracker.process({ kind: "UserInterruption", ts: 10, forToolUse: true } as TapEvent);
+      expect(actions).toEqual([]);
+    });
+  });
+
+  // ── SlashCommand stale cleanup ──
+
+  describe("SlashCommand", () => {
+    it("marks active agents idle on SlashCommand", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "SlashCommand", ts: 10, command: "/help", display: "/help",
+      } as TapEvent);
+      expect(tracker.hasActiveAgents()).toBe(false);
+      expect(actions.some(a => a.updates?.state === "idle")).toBe(true);
+    });
+
+    it("is a no-op when all agents already dead", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process({ kind: "SubagentNotification", ts: 5, status: "completed", summary: "" } as TapEvent);
+      const actions = tracker.process({
+        kind: "SlashCommand", ts: 10, command: "/help", display: "/help",
+      } as TapEvent);
+      expect(actions).toEqual([]);
+    });
+  });
+
+  // ── SubagentLifecycle start ──
+
+  describe("SubagentLifecycle start", () => {
+    it("enriches with agentType, isAsync, model", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "SubagentLifecycle", ts: 5, variant: "start",
+        agentType: "code_review", isAsync: true, model: "haiku",
+        totalTokens: null, totalToolUses: null, durationMs: null, reason: null,
+      } as TapEvent);
+      const update = actions.find(a => a.type === "update")!;
+      expect(update.updates!.agentType).toBe("code_review");
+      expect(update.updates!.isAsync).toBe(true);
+      expect(update.updates!.model).toBe("haiku");
+    });
+
+    it("is a no-op when no lastActiveAgent", () => {
+      const actions = tracker.process({
+        kind: "SubagentLifecycle", ts: 5, variant: "start",
+        agentType: "code_review", isAsync: false, model: null,
+        totalTokens: null, totalToolUses: null, durationMs: null, reason: null,
+      } as TapEvent);
+      expect(actions).toEqual([]);
+    });
+  });
+
+  // ── SubagentLifecycle end without metadata ──
+
+  describe("SubagentLifecycle end without metadata", () => {
+    it("still marks agents dead when no toolUses/durationMs", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "SubagentLifecycle", ts: 10, variant: "end",
+        agentType: null, isAsync: null, model: null,
+        totalTokens: null, totalToolUses: null, durationMs: null, reason: null,
+      } as TapEvent);
+      expect(tracker.hasActiveAgents()).toBe(false);
+      expect(actions.some(a => a.updates?.state === "dead")).toBe(true);
+    });
+  });
+
+  // ── reset() ──
+
+  describe("reset", () => {
+    it("clears all tracked state", () => {
+      spawnAndActivate(tracker, "agent-1");
+      expect(tracker.hasActiveAgents()).toBe(true);
+
+      tracker.reset();
+      expect(tracker.hasActiveAgents()).toBe(false);
+    });
+
+    it("clears pending descriptions", () => {
+      tracker.process(makeSpawn("leftover"));
+      tracker.reset();
+      // New agent should get default desc, not "leftover"
+      const actions = tracker.process(makeSidechainMsg("agent-2"));
+      expect(actions.find(a => a.type === "add")!.subagent!.description).toBe("Agent");
+    });
+
+    it("clears lastActiveAgent so telemetry is ignored", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.reset();
+      const actions = tracker.process(makeTelemetry(1));
+      expect(actions).toEqual([]);
+    });
+  });
+
+  // ── Multiple agents ──
+
+  describe("multiple concurrent agents", () => {
+    it("tracks two agents independently with correct descriptions", () => {
+      tracker.process(makeSpawn("agent A desc"));
+      tracker.process(makeSpawn("agent B desc"));
+
+      const addA = tracker.process(makeSidechainMsg("agent-a")).find(a => a.type === "add")!;
+      expect(addA.subagent!.description).toBe("agent A desc");
+
+      const addB = tracker.process(makeSidechainMsg("agent-b")).find(a => a.type === "add")!;
+      expect(addB.subagent!.description).toBe("agent B desc");
+    });
+
+    it("telemetry routes to lastActiveAgent", () => {
+      spawnAndActivate(tracker, "agent-a");
+      spawnAndActivate(tracker, "agent-b"); // now lastActiveAgent
+      const actions = tracker.process(makeTelemetry(1, { inputTokens: 100, outputTokens: 50 }));
+      expect(actions.find(a => a.type === "update")!.subagentId).toBe("agent-b");
+    });
+  });
+});
