@@ -651,7 +651,7 @@ export function classifyTapEntry(entry: TapEntry): TapEvent | null {
       return classifyFetch(ts, entry);
     }
 
-    // Ping: dedicated HTTP ping to Anthropic origin
+    // [IN-18] Ping: dedicated HTTP ping to Anthropic origin
     if (cat === "ping") {
       return {
         kind: "HttpPing", ts,

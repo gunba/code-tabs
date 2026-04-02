@@ -197,7 +197,7 @@ export class TapMetadataAccumulator {
         if (event.rateLimitReset) this.rateLimitReset = event.rateLimitReset;
         break;
 
-      // Dedicated HTTP ping to Anthropic origin (GET /v1/models with auth, bypasses CF cache)
+      // [IN-18] Dedicated HTTP ping to Anthropic origin (GET /v1/models with auth, bypasses CF cache)
       case "HttpPing":
         if (event.durationMs > 0) this.apiLatencyMs = event.durationMs;
         break;

@@ -203,6 +203,7 @@ export interface ApiFetch extends TapEventBase {
   rateLimitReset: string | null;
 }
 
+// [IN-18] HttpPing: dedicated HTTP ping to Anthropic origin
 export interface HttpPing extends TapEventBase {
   kind: "HttpPing";
   durationMs: number;
