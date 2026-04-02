@@ -474,3 +474,36 @@ describe("skillInvocation actions", () => {
     expect(useSessionStore.getState()).toBe(before);
   });
 });
+
+describe("addSeenToolName", () => {
+  beforeEach(() => {
+    resetStore();
+    useSessionStore.setState({ seenToolNames: new Set() });
+  });
+
+  it("adds a new tool name", () => {
+    useSessionStore.getState().addSeenToolName("Bash");
+    expect(useSessionStore.getState().seenToolNames.has("Bash")).toBe(true);
+  });
+
+  it("deduplicates — same name does not increase size", () => {
+    useSessionStore.getState().addSeenToolName("Bash");
+    useSessionStore.getState().addSeenToolName("Bash");
+    expect(useSessionStore.getState().seenToolNames.size).toBe(1);
+  });
+
+  it("tracks multiple distinct tool names", () => {
+    useSessionStore.getState().addSeenToolName("Grep");
+    useSessionStore.getState().addSeenToolName("Read");
+    expect(useSessionStore.getState().seenToolNames.size).toBe(2);
+    expect(useSessionStore.getState().seenToolNames.has("Grep")).toBe(true);
+    expect(useSessionStore.getState().seenToolNames.has("Read")).toBe(true);
+  });
+
+  it("returns same state reference for duplicate (no re-render)", () => {
+    useSessionStore.getState().addSeenToolName("Bash");
+    const stateBefore = useSessionStore.getState();
+    useSessionStore.getState().addSeenToolName("Bash");
+    expect(useSessionStore.getState()).toBe(stateBefore);
+  });
+});

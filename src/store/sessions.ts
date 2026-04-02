@@ -32,6 +32,7 @@ interface SessionsState {
   trafficRecording: Map<string, string>; // sessionId -> file path
   processHealth: Map<string, { rss: number; heapUsed: number; uptime: number }>;
   autoTrafficLogOnStart: Set<string>; // session IDs pending auto-start traffic logging
+  seenToolNames: Set<string>; // [TA-02] all unique tool names observed across sessions
 
   // Actions
   init: () => Promise<void>;
@@ -63,6 +64,7 @@ interface SessionsState {
   removeSkillInvocation: (sessionId: string, invocationId: string) => void;
   addCommandHistory: (sessionId: string, command: string, ts: number) => void;
   updateProcessHealth: (id: string, data: { rss: number; heapUsed: number; uptime: number }) => void;
+  addSeenToolName: (name: string) => void;
 }
 
 export const useSessionStore = create<SessionsState>((set) => ({
@@ -81,6 +83,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
   trafficRecording: new Map(),
   processHealth: new Map(),
   autoTrafficLogOnStart: new Set(),
+  seenToolNames: new Set(),
 
   init: async () => {
     trace("init: start");
@@ -323,6 +326,15 @@ export const useSessionStore = create<SessionsState>((set) => ({
         next.delete(id);
       }
       return { inspectorOffSessions: next };
+    });
+  },
+
+  addSeenToolName: (name) => {
+    set((s) => {
+      if (s.seenToolNames.has(name)) return s;
+      const next = new Set(s.seenToolNames);
+      next.add(name);
+      return { seenToolNames: next };
     });
   },
 

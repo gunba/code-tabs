@@ -108,6 +108,39 @@ export function modelColor(model: string | null): string {
   return resolveModelFamily(model)?.color ?? "var(--text-muted)";
 }
 
+/** Tool name → category color for tab activity display. */ // [TA-01]
+export const TOOL_COLORS: Record<string, string> = {
+  // Search
+  Grep: "#4ec9b0", Glob: "#4ec9b0", WebSearch: "#4ec9b0",
+  // File ops
+  Read: "#569cd6", Write: "#569cd6", Edit: "#569cd6", NotebookEdit: "#569cd6",
+  // Execution
+  Bash: "#ce9178",
+  // Agent
+  Agent: "#c586c0", Skill: "#c586c0", RemoteTrigger: "#c586c0",
+  // Network
+  WebFetch: "#4fc1ff",
+  // LSP
+  LSP: "#9cdcfe",
+  // Plan
+  EnterPlanMode: "#d4a0e0", ExitPlanMode: "#d4a0e0",
+  // System
+  AskUserQuestion: "#6a9955",
+};
+
+/** Color for a tool name. Falls back to muted for unknown/MCP tools. */
+export function toolCategoryColor(toolName: string): string {
+  return TOOL_COLORS[toolName] ?? "var(--text-muted)";
+}
+
+/** Derive activity display from current tool name.
+ *  Returns null when no tool is active. */
+export function getActivityText(
+  currentToolName: string | null,
+): string | null {
+  return currentToolName;
+}
+
 /** Session colors — assigned sequentially, no collisions until wrap-around. */
 export const SESSION_COLORS = [
   "#d4744a", // clay/orange (accent)

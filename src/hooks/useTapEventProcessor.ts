@@ -139,6 +139,11 @@ export function useTapEventProcessor(
         updateMetadata(sid, metaDiff);
       }
 
+      // 2a. [TA-02] Track unique tool names seen across all sessions
+      if (event.kind === "ToolCallStart") {
+        useSessionStore.getState().addSeenToolName(event.toolName);
+      }
+
       // 2b. Model registry — capture observed model IDs + context window sizes
       if (event.kind === "StatusLineUpdate" && event.modelId && event.contextWindowSize > 0) {
         const family = resolveModelFamily(event.modelId);

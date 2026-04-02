@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags, formatTokenCount } from "./lib/claude";
+import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags, formatTokenCount, toolCategoryColor, getActivityText } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
 
@@ -362,7 +362,9 @@ export default function App() {
               const isActive = session.id === activeTabId;
               const fullName = session.name || dirToTabName(session.config.workingDir);
               const isDead = session.state === "dead";
-              const summary = session.metadata.nodeSummary ?? session.metadata.currentAction;
+              // [TA-01] Tab activity: current tool name from TAP, colored by category
+              const activity = getActivityText(session.metadata.currentToolName);
+              const activityColor = activity ? toolCategoryColor(session.metadata.currentToolName!) : undefined;
 
               // Meta row: model | effort | agents (each colored)
               const m = effectiveModel(session);
@@ -453,7 +455,11 @@ export default function App() {
                   <span className={`tab-dot state-${getEffectiveState(session.state, subs)}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
                   <span className="tab-label">
                     <span className="tab-name">{fullName}</span>
-                    {summary && <span className="tab-summary">{summary}</span>}
+                    {activity && (
+                      <span className="tab-activity" style={{ color: activityColor }}>
+                        {activity}
+                      </span>
+                    )}
                     {metaSpans.length > 0 && (
                       <span className="tab-meta">
                         {metaSpans.map((s, i) => (

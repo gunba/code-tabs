@@ -202,15 +202,15 @@
   line-height: 18px;
 }
 
-.tab-summary {
-  font-size: 9px;
-  color: var(--text-muted);
+/* [TA-03] .tab-activity: single-line tool activity display */
+.tab-activity {
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  line-height: 1.3;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .tab-meta {
@@ -578,7 +578,7 @@
   line-height: 16px;
 }
 
-/* Mirrors .tab-summary */
+/* Single-line activity summary */
 .subagent-summary {
   font-size: 9px;
   color: var(--text-muted);

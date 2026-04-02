@@ -16,6 +16,9 @@ import {
   effectiveModel,
   stripWorktreeFlags,
   findNearestLiveTab,
+  toolCategoryColor,
+  getActivityText,
+  TOOL_COLORS,
 } from "../claude";
 import type { Session } from "../../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../../types/session";
@@ -480,5 +483,47 @@ describe("findNearestLiveTab", () => {
   it("finds nearest live in mixed array", () => {
     const sessions = [dead("a"), dead("b"), live("c"), dead("d"), dead("e")];
     expect(findNearestLiveTab(sessions, 3)).toBe("c");
+  });
+});
+
+describe("toolCategoryColor", () => {
+  it("returns mapped color for known tool (Bash)", () => {
+    expect(toolCategoryColor("Bash")).toBe("#ce9178");
+  });
+
+  it("returns mapped color for known tool (Read)", () => {
+    expect(toolCategoryColor("Read")).toBe("#569cd6");
+  });
+
+  it("returns mapped color for known tool (Agent)", () => {
+    expect(toolCategoryColor("Agent")).toBe("#c586c0");
+  });
+
+  it("returns muted fallback for unknown/MCP tools", () => {
+    expect(toolCategoryColor("mcp_custom_tool")).toBe("var(--text-muted)");
+  });
+
+  it("returns muted fallback for empty string", () => {
+    expect(toolCategoryColor("")).toBe("var(--text-muted)");
+  });
+
+  it("every key in TOOL_COLORS returns its mapped value", () => {
+    for (const [tool, color] of Object.entries(TOOL_COLORS)) {
+      expect(toolCategoryColor(tool)).toBe(color);
+    }
+  });
+});
+
+describe("getActivityText", () => {
+  it("returns null for null input", () => {
+    expect(getActivityText(null)).toBeNull();
+  });
+
+  it("passes through known tool name", () => {
+    expect(getActivityText("Bash")).toBe("Bash");
+  });
+
+  it("passes through unknown tool name", () => {
+    expect(getActivityText("mcp_foo_bar")).toBe("mcp_foo_bar");
   });
 });
