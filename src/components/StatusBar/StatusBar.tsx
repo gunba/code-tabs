@@ -69,7 +69,7 @@ function SessionStatus({ session, gitStatus }: { session: Session; gitStatus: Gi
         (session.metadata.apiRegion || session.metadata.apiLatencyMs > 0)
           ? `Cloudflare POP: ${session.metadata.apiRegion || "—"}` +
             (apiIp ? ` · IP: ${apiIp}` : "") +
-            (session.metadata.apiLatencyMs > 0 ? ` · Latency: ${Math.round(session.metadata.apiLatencyMs)}ms (time to headers)` : "")
+            (session.metadata.apiLatencyMs > 0 ? ` · Ping: ${Math.round(session.metadata.apiLatencyMs)}ms` : "")
           : "Model"
       } style={{ color: modelColor(model) }}>
         {modelLabel(model)}

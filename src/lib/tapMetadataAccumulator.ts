@@ -55,7 +55,7 @@ export class TapMetadataAccumulator {
   // Rate limits
   private rateLimitRemaining: string | null = null;
   private rateLimitReset: string | null = null;
-  // API latency (time-to-headers from ApiFetch, NOT TTFT)
+  // API latency from dedicated HttpPing (GET /v1/models, bypasses CF cache)
   private apiLatencyMs = 0;
   // Dedup: skip consecutive identical ApiTelemetry (stringify can serialize the same object multiple times)
   private lastTelemetryKey = "";
@@ -186,7 +186,7 @@ export class TapMetadataAccumulator {
         this.choiceHint = false;
         break;
 
-      // API region from cf-ray header + latency from time-to-headers
+      // API region from cf-ray header; rate-limit tracking
       case "ApiFetch":
         if (event.cfRay) {
           const dash = event.cfRay.lastIndexOf("-");
@@ -195,6 +195,10 @@ export class TapMetadataAccumulator {
         if (event.requestId) this.lastRequestId = event.requestId;
         if (event.rateLimitRemaining) this.rateLimitRemaining = event.rateLimitRemaining;
         if (event.rateLimitReset) this.rateLimitReset = event.rateLimitReset;
+        break;
+
+      // Dedicated HTTP ping to Anthropic origin (GET /v1/models with auth, bypasses CF cache)
+      case "HttpPing":
         if (event.durationMs > 0) this.apiLatencyMs = event.durationMs;
         break;
 

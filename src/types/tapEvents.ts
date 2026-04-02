@@ -203,6 +203,12 @@ export interface ApiFetch extends TapEventBase {
   rateLimitReset: string | null;
 }
 
+export interface HttpPing extends TapEventBase {
+  kind: "HttpPing";
+  durationMs: number;
+  status: number | null;
+}
+
 // ── Spawn events ──
 
 export interface SubprocessSpawn extends TapEventBase {
@@ -422,6 +428,7 @@ export type TapEvent =
   | SessionResume
   // Fetch
   | ApiFetch
+  | HttpPing
   // Spawn
   | SubprocessSpawn
   // Classified metadata

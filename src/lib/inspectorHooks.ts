@@ -741,11 +741,27 @@ export const INSTALL_TAPS = `(function() {
   } catch(e) {}
 
   // 5. fetch request metadata — API call patterns (URL, method, status, timing)
+  // Ping state: captured auth headers from first Anthropic POST, used for periodic GET /v1/models pings
+  var savedAnthropicPingHeaders = null;
   try {
     // Only wrap if not already wrapped by INSTALL_HOOK (check for our marker)
     if (globalThis.fetch && !globalThis.__tapFetchInstalled) {
       globalThis.__tapFetchInstalled = true;
       var prevFetch = globalThis.fetch;
+
+      function doPing() {
+        if (!savedAnthropicPingHeaders) return;
+        var t0 = Date.now();
+        prevFetch.call(globalThis, 'https://api.anthropic.com/v1/models', {
+          method: 'GET',
+          headers: savedAnthropicPingHeaders
+        }).then(function(resp) {
+          try {
+            push('ping', { dur: Date.now() - t0, status: resp.status });
+          } catch(e) {}
+        }).catch(function() {});
+      }
+
       globalThis.fetch = function(input, init) {
         var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
         var method = (init && init.method) || 'GET';
@@ -770,6 +786,26 @@ export const INSTALL_TAPS = `(function() {
                 push('fetch', flags.fetch
                   ? { url: url.slice(0, 300), method: method, status: resp.status, bodyLen: bodyLen, dur: Date.now() - t0, hdrs: hdrs }
                   : { url: '', method: method, status: resp.status, dur: Date.now() - t0, hdrs: hdrs });
+                // Capture Anthropic auth from first successful POST to start dedicated ping loop
+                if (!savedAnthropicPingHeaders && url.indexOf('api.anthropic.com') >= 0 && method === 'POST' && resp.status >= 200 && resp.status < 300) {
+                  try {
+                    var ph = {};
+                    var h = init && init.headers;
+                    if (h) {
+                      var ak = h.get ? h.get('x-api-key') : (h['x-api-key'] || '');
+                      var av = h.get ? h.get('anthropic-version') : (h['anthropic-version'] || '');
+                      var ab = h.get ? h.get('authorization') : (h['Authorization'] || h['authorization'] || '');
+                      if (ak) ph['x-api-key'] = ak;
+                      ph['anthropic-version'] = av || '2023-06-01';
+                      if (ab) ph['Authorization'] = ab;
+                      if (ak || ab) {
+                        savedAnthropicPingHeaders = ph;
+                        doPing();
+                        setInterval(doPing, 30000);
+                      }
+                    }
+                  } catch(e3) {}
+                }
               } catch(e) {}
               return resp;
             }, function(err) {

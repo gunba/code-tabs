@@ -630,3 +630,17 @@ describe("classifyTapEntry — status-line", () => {
     }
   });
 });
+
+describe("classifyTapEntry — ping", () => {
+  it("classifies cat=ping as HttpPing", () => {
+    const entry: TapEntry = { ts: 1000, cat: "ping", dur: 87, status: 200 };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({ kind: "HttpPing", ts: 1000, durationMs: 87, status: 200 });
+  });
+
+  it("handles missing dur/status gracefully", () => {
+    const entry: TapEntry = { ts: 1000, cat: "ping" };
+    const event = classifyTapEntry(entry);
+    expect(event).toEqual({ kind: "HttpPing", ts: 1000, durationMs: 0, status: null });
+  });
+});

@@ -151,7 +151,21 @@ describe("TapMetadataAccumulator", () => {
     expect(diff?.effortLevel).toBeNull();
   });
 
-  it("stores apiLatencyMs from ApiFetch with cfRay", () => {
+  it("stores apiLatencyMs from HttpPing", () => {
+    const acc = new TapMetadataAccumulator();
+    const diff = acc.process({ kind: "HttpPing", ts: 0, durationMs: 142, status: 200 });
+    expect(diff?.apiLatencyMs).toBe(142);
+  });
+
+  it("does not update apiLatencyMs from HttpPing with durationMs=0", () => {
+    const acc = new TapMetadataAccumulator();
+    acc.process({ kind: "HttpPing", ts: 0, durationMs: 100, status: 200 });
+    // Zero-duration ping must not overwrite the stored value
+    const diff = acc.process({ kind: "HttpPing", ts: 1, durationMs: 0, status: 200 });
+    expect(diff).toBeNull(); // no change
+  });
+
+  it("does not store apiLatencyMs from ApiFetch (dedicated ping only)", () => {
     const acc = new TapMetadataAccumulator();
     const diff = acc.process({
       kind: "ApiFetch", ts: 0,
@@ -160,19 +174,7 @@ describe("TapMetadataAccumulator", () => {
       requestId: "req-1", cfRay: "abc123-IAD",
       rateLimitRemaining: "1000", rateLimitReset: "2026-01-01T00:00:00Z",
     });
-    expect(diff?.apiLatencyMs).toBe(245);
-  });
-
-  it("stores apiLatencyMs from ApiFetch without cfRay too", () => {
-    const acc = new TapMetadataAccumulator();
-    const diff = acc.process({
-      kind: "ApiFetch", ts: 0,
-      url: "https://other-service.example.com/api", method: "GET",
-      status: 200, bodyLen: 1000, durationMs: 50,
-      requestId: null, cfRay: null,
-      rateLimitRemaining: null, rateLimitReset: null,
-    });
-    expect(diff?.apiLatencyMs).toBe(50);
+    expect(diff?.apiLatencyMs).toBe(0);
   });
 
   it("ignores contextBudget (system prompt size) and uses model-inferred window instead", () => {

@@ -651,6 +651,15 @@ export function classifyTapEntry(entry: TapEntry): TapEvent | null {
       return classifyFetch(ts, entry);
     }
 
+    // Ping: dedicated HTTP ping to Anthropic origin
+    if (cat === "ping") {
+      return {
+        kind: "HttpPing", ts,
+        durationMs: typeof entry.dur === "number" ? entry.dur : 0,
+        status: typeof entry.status === "number" ? entry.status : null,
+      };
+    }
+
     // Spawn: direct mapping (both child_process and Bun.spawn)
     if (cat === "spawn" || cat === "bun.spawn") {
       return classifySpawn(ts, entry);
