@@ -17,7 +17,7 @@ use proxy::ProxyState;
 use session::SessionManager;
 use tap_server::TapServerState;
 
-/// OS PIDs of active PTY child processes, registered by the frontend.
+/// [PT-07] OS PIDs of active PTY child processes, registered by the frontend.
 /// Killed on app exit to prevent orphaned Claude Code CLI processes.
 pub struct ActivePids(pub Mutex<HashSet<u32>>);
 
@@ -90,9 +90,8 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     setup_child_reaper();
 
-    // Strip CLAUDECODE env var so spawned Claude CLI sessions don't think
-    // they're nested inside another Claude Code session. Claude Tabs manages
-    // independent sessions — it's not a nested invocation.
+    // [PT-03] Strip CLAUDECODE env var so spawned PTYs don't think
+    // they're nested inside another Claude Code session.
     std::env::remove_var("CLAUDECODE");
 
     tauri::Builder::default()

@@ -1,4 +1,4 @@
-/// Output filter — scrollback fix + security.
+/// [PT-17] Output security filter: byte-level state machine.
 ///
 /// Scrollback fix:
 ///   ESC[2J → ESC[3J + ESC[H + ESC[J (clears scrollback before each full redraw
@@ -8,7 +8,7 @@
 /// Security:
 ///   OSC 52 (clipboard write) — stripped (prevents clipboard hijack)
 ///   DCS sequences — stripped
-///   C1 controls (UTF-8 encoded U+0080..U+009F) — stripped
+///   C1 controls (UTF-8 encoded U+0080..U+009F) — stripped (cross-chunk PendingC2)
 pub struct OutputFilter {
     state: FilterState,
     output: Vec<u8>,
@@ -175,10 +175,10 @@ impl OutputFilter {
         let params = &buf[..buf.len() - 1];
 
         match final_byte {
-            // CSI 3 J — erase scrollback. Always stripped.
+            // [PT-20] CSI 3 J — erase scrollback. Always stripped.
             b'J' if params == b"3" => true,
 
-            // CSI 2 J — clear screen. Replace with ESC[3J + ESC[H + ESC[J.
+            // [PT-20] CSI 2 J — clear screen. Replace with ESC[3J + ESC[H + ESC[J.
             // ESC[3J clears scrollback to prevent duplication from viewport overflow
             // (xterm.js pushes overflow into scrollback during full redraws).
             b'J' if params == b"2" => {
