@@ -93,7 +93,7 @@ export function HooksPane({ scope, projectDir, onStatus }: PaneComponentProps) {
 
   const currentHooks: Record<string, MatcherGroup[]> = hooksData[scopeKey] ?? {};
 
-  // Flatten for display
+  // [HM-06] Flatten for display — unknown event names are iterated and displayed/editable
   const flatHooks: FlatHook[] = [];
   for (const [eventName, matcherGroups] of Object.entries(currentHooks)) {
     if (!Array.isArray(matcherGroups)) continue;
