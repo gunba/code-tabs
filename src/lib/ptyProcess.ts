@@ -16,7 +16,7 @@ export function unregisterActivePid(osPid: number): void {
   invoke("unregister_active_pid", { pid: osPid }).catch(() => {});
 }
 
-/** Fire-and-forget kill all active PTY process trees. Called on beforeunload. */
+/** [PS-04] Fire-and-forget kill all active PTY process trees. Called on beforeunload. */
 export function killAllActivePtys(): void {
   for (const pid of activePids) {
     invoke("kill_process_tree", { pid }).catch(() => {});

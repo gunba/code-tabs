@@ -1,3 +1,4 @@
+/* [MO-01] Fixed overlay, inset 0, z-index 100 */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -9,6 +10,7 @@
   outline: none;
 }
 
+/* [MO-01] Frosted glass: color-mix(bg-surface 93%, transparent) + backdrop-filter blur(12px) */
 .modal-content {
   max-height: 90vh;
   overflow: hidden;

@@ -19,6 +19,7 @@ import { getEffectiveState } from "../lib/claude";
  * Rate-limited to avoid notification spam (max one per session per 30s).
  *
  * Clicking a notification switches to the target tab and focuses the window.
+ * [WN-03] Rate-limited 1/session/30s. Rust WinRT toast with on_activated callback.
  */
 export function useNotifications() {
   const notificationsEnabled = useSettingsStore((s) => s.notificationsEnabled);

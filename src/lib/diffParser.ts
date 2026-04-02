@@ -265,6 +265,7 @@ export function statusLabel(code: string): string {
 
 // ── Side-by-side diff transformation ────────────────────────────────
 
+// [DF-10] toSideBySide: transforms unified DiffHunk[] into aligned SideBySideRow[] for dual-pane rendering
 export function toSideBySide(hunks: DiffHunk[]): SideBySideRow[] {
   const rows: SideBySideRow[] = [];
 

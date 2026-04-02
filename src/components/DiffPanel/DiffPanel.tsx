@@ -74,6 +74,8 @@ function EmptyPanel({ onClose, message, error }: { onClose: () => void; message:
   );
 }
 
+// [GD-01] Side panel (400px) toggled via Ctrl+Shift+G with staged/unstaged/untracked sections
+// [GD-05] Diff cache with stale-response protection via request counter
 export function DiffPanel({ onClose }: DiffPanelProps) {
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const sessions = useSessionStore((s) => s.sessions);

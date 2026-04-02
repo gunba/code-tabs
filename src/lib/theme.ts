@@ -137,7 +137,7 @@ export function applyTheme(theme: Theme): void {
   root.style.setProperty("--scroll-thumb", c.scrollThumb);
   root.style.setProperty("--scroll-track", c.scrollTrack);
 
-  // Rarity colors (WoW item quality — fixed cross-theme)
+  // [CB-12] Rarity CSS variables (WoW item quality — fixed cross-theme)
   root.style.setProperty("--rarity-uncommon", "#1eff00");
   root.style.setProperty("--rarity-rare", "#0070dd");
   root.style.setProperty("--rarity-epic", "#a335ee");

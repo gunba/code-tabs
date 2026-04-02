@@ -128,6 +128,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
       return;
     }
 
+    // [SR-07] Content search: 3+ chars, debounced 400ms, Rust backend JSONL scan, counter-based stale check
     setContentSearching(true);
     const counter = ++searchCounterRef.current;
 
@@ -201,7 +202,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
     return list;
   }, [pastSessions, dirFilter, deadSessionMap, sessionNames]);
 
-  // Merge chain sessions into single entries
+  // [SL-05] Chain merging: sessions linked by parentId merged into single card
   const mergedList = useMemo((): MergedChain[] => {
     const childrenOf = new Map<string, PastSession[]>();
     const childIds = new Set<string>();

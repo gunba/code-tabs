@@ -114,7 +114,7 @@
   background: var(--bg-surface-hover);
 }
 
-/* ── Heat gradient: WoW rarity (Uncommon → Rare → Epic → Legendary) ── */
+/* [CB-12] Heat gradient: 5-tier WoW rarity (Uncommon → Rare → Epic → Legendary) */
 
 .command-btn.heat-1 {
   color: color-mix(in srgb, var(--rarity-uncommon) 50%, var(--text-muted));
@@ -136,7 +136,7 @@
   background: color-mix(in srgb, var(--rarity-legendary) 15%, var(--bg-primary));
 }
 
-/* ── Ctrl-held: suppress heat, subtle box outline ──── */
+/* [CB-07] Ctrl-held: suppress heat gradient, show blue border */
 
 .ctrl-held .command-btn.heat-1,
 .ctrl-held .command-btn.heat-2,

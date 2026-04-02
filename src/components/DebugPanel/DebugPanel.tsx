@@ -19,6 +19,7 @@ function formatTs(ts: number): string {
   return `${hh}:${mm}:${ss}.${ms}`;
 }
 
+// [DP-09] Color-coded by severity: LOG=default, WARN=warning, ERR=error
 function levelClass(level: string): string {
   if (level === "WARN") return "debug-line debug-line-warn";
   if (level === "ERR") return "debug-line debug-line-err";
@@ -26,6 +27,7 @@ function levelClass(level: string): string {
   return "debug-line";
 }
 
+// [DP-01] Collapsible right-side panel (350px) with session/module filters
 export function DebugPanel({ onClose }: DebugPanelProps) {
   const [logs, setLogs] = useState<DebugLogEntry[]>([]);
   const [textFilter, setTextFilter] = useState("");
@@ -39,7 +41,7 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
   const sessions = useSessionStore((s) => s.sessions);
   const activeTabId = useSessionStore((s) => s.activeTabId);
 
-  // Poll structured buffer every 500ms
+  // [DP-05] Poll getDebugLog() every 500ms
   useEffect(() => {
     const interval = setInterval(() => {
       const buf = getDebugLog();
@@ -50,7 +52,7 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-scroll on new entries
+  // [DP-07] Auto-scroll to bottom on new entries (pauses if user scrolls up)
   useEffect(() => {
     if (logs.length > prevLenRef.current && autoScrollRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;

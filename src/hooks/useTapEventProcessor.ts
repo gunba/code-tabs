@@ -178,10 +178,12 @@ export function useTapEventProcessor(
       }
 
       // 5. Session-level signals
+      // [SS-01] [SS-02] Detect session switches via sid field change (plan-mode fork, /resume, compaction)
       if (event.kind === "SessionRegistration") {
         setClaudeSessionId(event.sessionId);
       }
 
+      // [SL-18] CustomTitle always persists to session store + settings sessionNames map
       if (event.kind === "CustomTitle") {
         const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
         if (session && event.title !== session.name) {

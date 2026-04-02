@@ -77,7 +77,7 @@ export interface TabGroup {
   sessions: Session[];  // ordered subset preserving relative order from flat array
 }
 
-/** Group sessions by normalized workingDir. Worktrees collapse into their project root. Group order = first occurrence. */
+/** [DF-09] Group sessions by normalized workingDir. Worktrees collapse into project root. O(n). */
 export function groupSessionsByDir(sessions: Session[]): TabGroup[] {
   const map = new Map<string, TabGroup>();
   for (const s of sessions) {
@@ -94,7 +94,7 @@ export function groupSessionsByDir(sessions: Session[]): TabGroup[] {
   return [...map.values()];
 }
 
-/** Swap a session with its neighbor within its group. Returns new ID order, or null at boundary. */
+/** [DF-09] Swap a session with its neighbor within its group. Returns new ID order, or null at boundary. */
 export function swapWithinGroup(
   allIds: string[],
   targetId: string,
@@ -121,6 +121,7 @@ export function swapWithinGroup(
  * Normalizes backslashes to forward slashes and abbreviates project paths.
  */
 // [CM-02] Normalize backslashes, abbreviate project-scope paths; user-scope (~/) unchanged
+/** [CI-02] Format a scope path for display. Normalizes backslashes and abbreviates project paths. */
 export function formatScopePath(fullPath: string): string {
   const normalized = fullPath.replace(/\\/g, "/");
   // User-scope paths (~/...) pass through as-is

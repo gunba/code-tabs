@@ -20,7 +20,7 @@ export function unregisterPtyWriter(sessionId: string): void {
   ptyWriters.delete(sessionId);
 }
 
-/** Write data to a session's PTY. Returns true if the writer was found. */
+/** [DF-01] Write data to a session's PTY. Returns true if the writer was found. */
 export function writeToPty(sessionId: string, data: string): boolean {
   const write = ptyWriters.get(sessionId);
   if (!write) return false;

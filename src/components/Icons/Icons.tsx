@@ -1,5 +1,6 @@
 import type { SVGProps } from "react";
 
+// [DF-08] Icons module: inline SVG components (stroke-based, 16x16, currentColor, pointerEvents none)
 interface IconProps extends SVGProps<SVGSVGElement> {
   size?: number;
 }

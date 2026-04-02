@@ -251,8 +251,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       dlog("terminal", session.id, `exit code=${info.exitCode}`);
       // Stop TCP tap server immediately (before any early-return paths)
       invoke("stop_tap_server", { sessionId: session.id }).catch(() => {});
-      // If the CLI exited because the session is already in use,
-      // try to kill stale orphans (our own descendants) and retry.
+      // [DS-07] [RS-06] Session-in-use auto-recovery: kill own orphans, retry; show overlay for external
       if (sessionInUseRef.current && !sessionInUseRetried.current) {
         sessionInUseRef.current = false;
         sessionInUseRetried.current = true;
@@ -285,7 +284,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         updateSubagent(session.id, sub.id, { state: "dead" });
       }
       updateState(session.id, "dead");
-      // Switch away from the dead tab to the nearest live tab
+      // [DS-01] Switch away from dead tab to nearest live tab via findNearestLiveTab
       const store = useSessionStore.getState();
       if (store.activeTabId === session.id) {
         const idx = store.sessions.findIndex((x) => x.id === session.id);
@@ -301,6 +300,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // ── In-tab respawn ────────────────────────────────────────────────────
   const triggerRespawnRef = useRef<(config?: SessionConfig, name?: string) => void>(() => {});
   // Stable ref so callbacks can call triggerRespawn without stale closures
+  // [RS-01] triggerRespawn: cleanup old PTY/watchers/inspector, allocate port, increment respawnCounter
   triggerRespawnRef.current = (config?: SessionConfig, name?: string) => {
     dlog("terminal", session.id, "respawn triggered");
     // 1. Clean up old PTY, watchers, inspector, and tap server
@@ -327,10 +327,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     if (name) renameSession(session.id, name);
 
     // [PT-11] Clear stale buffers before terminal reset
+    // 4. Visual feedback + loading spinner for resumed sessions
+    // [PT-11] [RS-09] Clear stale buffers then terminal reset (ANSI RIS \x1bc)
     bgBufferRef.current = [];
     deferredResizeRef.current = null;
     terminal.clearPending();
-    terminalRef.current?.write("\x1bc");  // RIS: full terminal reset
+    terminalRef.current?.write("\x1bc");  // [RS-09] RIS: full terminal reset + fit
     terminal.fit();
     terminalRef.current?.write("\x1b[90m[Resuming...]\x1b[0m\r\n");
     setLoading(!!newConfig.resumeSession);
@@ -404,7 +406,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     [terminal]
   );
 
-  // Spawn PTY once (respawnCounter triggers re-spawn)
+  // [RS-07] Spawn PTY once; guards against dead sessions (prevents stale auto-spawn on startup)
   useEffect(() => {
     if (spawnedRef.current || !claudePath || session.state === "dead") return;
 
@@ -469,15 +471,14 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claudePath, session.id, respawnCounter]);
 
-  // Auto-resume dead tabs when they become visible (user clicks a dead tab).
-  // When a session dies while visible, handlePtyExit switches to another tab,
-  // hiding this one. Clicking the dead tab later triggers this effect.
+  // [DS-09] [RS-08] Auto-resume: hidden-to-visible transition on dead+resumable tab
   const prevVisibleRef = useRef(false);
   useEffect(() => {
     const becameVisible = visible && !prevVisibleRef.current;
     prevVisibleRef.current = visible;
     if (!becameVisible || session.state !== "dead" || !claudePath) return;
     if (!canResumeSession(session)) return;
+    // [RS-08] 150ms delay for render settling
     const timer = setTimeout(() => triggerRespawnRef.current(), 150);
     return () => clearTimeout(timer);
   }, [visible, session.state, claudePath]);

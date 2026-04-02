@@ -7,6 +7,7 @@ interface ModalOverlayProps {
   className?: string;
 }
 
+// [MO-01] Shared modal wrapper: fixed overlay, z-100, frosted glass, blocks keys except Esc/Ctrl+,
 export function ModalOverlay({ children, onClose, className }: ModalOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   useEffect(() => { overlayRef.current?.focus(); }, []);

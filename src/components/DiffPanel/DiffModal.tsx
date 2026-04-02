@@ -102,8 +102,9 @@ interface DiffModalProps {
   onClose: () => void;
 }
 
-// ── Component ───────────────────────────────────────────────────────
-
+// [GD-02] Side-by-side diff modal via ModalOverlay + createPortal
+// [GD-03] Syntax highlighting via highlight.js/lib/core with 23 registered languages
+// [GD-04] File navigation: prev/next arrows, Alt+Left/Right, Escape closes modal only
 export function DiffModal({ file, diff, loading, error, allFiles, onNavigate, onClose }: DiffModalProps) {
   const { dir, name } = splitFilePath(file.file.path);
   const fileIndex = Math.max(0, allFiles.findIndex(f => f.key === file.key));

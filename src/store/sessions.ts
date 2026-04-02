@@ -113,8 +113,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
       if (s.config.sessionId) sessionIds.add(s.config.sessionId);
       if (s.config.resumeSession) sessionIds.add(s.config.resumeSession);
     }
-    // Kill orphan processes and detect CLI in parallel — both must
-    // complete before claudePath is set (which gates PTY spawning)
+    // [PS-05] [DS-08] Kill orphans + detect CLI in parallel; both must complete before claudePath is set
     const [claudePath] = await Promise.all([
       traceAsync("init: detect_claude_cli", () => invoke<string>("detect_claude_cli"))
         .catch((e) => { dlog("session", null, `CLI detection failed: ${e}`, "ERR"); return null as string | null; }),
@@ -124,7 +123,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
           ).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`); })
            .catch((e) => dlog("session", null, `orphan cleanup failed: ${e}`, "ERR"))
         : Promise.resolve(),
-      // Start API proxy for multi-provider routing
+      // [PS-06] Proxy lifecycle: start API proxy, store port, listen for route events
       traceAsync("init: start_api_proxy", () => {
         const { providerConfig } = useSettingsStore.getState();
         return invoke<number>("start_api_proxy", { config: providerConfig })
@@ -191,7 +190,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
       if (s.activeTabId !== id) {
         activeTabId = s.activeTabId;
       } else {
-        // Prefer nearest live (non-dead) tab; falls back to dead if all are dead
+        // [DS-12] Prefer nearest live (non-dead) tab; falls back to dead if all are dead
         activeTabId = findNearestLiveTab(sessions, closedIndex);
       }
       const subagents = new Map(s.subagents);
@@ -267,6 +266,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
     });
   },
 
+  // [PS-01] Frontend-owned persistence via persist_sessions_json
   persist: async () => {
     // Serialize from the frontend store (not the Rust session manager)
     // because the Rust side doesn't receive metadata updates.

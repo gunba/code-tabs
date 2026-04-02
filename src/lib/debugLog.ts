@@ -1,4 +1,4 @@
-// Structured debug logging — the single entry point for all application logging.
+// [DP-03] Structured debug logging — single entry point for all app logging via dlog()
 // Zero imports to avoid circular dependencies. Session color lookup happens in the DebugPanel.
 
 export type LogLevel = "DEBUG" | "LOG" | "WARN" | "ERR";
@@ -11,7 +11,7 @@ export interface DebugLogEntry {
   message: string;
 }
 
-const MAX_ENTRIES = 2000;
+const MAX_ENTRIES = 2000; // [DP-04] Ring buffer: 2000 entries, oldest evicted first
 const buffer: DebugLogEntry[] = [];
 (globalThis as Record<string, unknown>).__debugLogEntries = buffer;
 

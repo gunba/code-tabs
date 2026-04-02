@@ -148,7 +148,7 @@ export default function App() {
     invoke("cleanup_tap_logs", { maxAgeHours: 48 }).catch(() => {});
   }, [init]);
 
-  // Quick launch with saved defaults (Ctrl+Click "+" or Ctrl+Shift+T)
+  // [SL-02] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T, uses saved defaults or last config
   const quickLaunch = useCallback(async () => {
     const { savedDefaults, lastConfig } = useSettingsStore.getState();
     const defaults = (savedDefaults && savedDefaults.workingDir.trim()) ? savedDefaults : lastConfig;
@@ -156,6 +156,7 @@ export default function App() {
       setShowLauncher(true);
       return;
     }
+    // [RS-04] One-shot flags cleared: resumeSession, continueSession never persist in lastConfig
     const cleanConfig = { ...defaults, resumeSession: null, continueSession: false, sessionId: null, runMode: false };
     const name = dirToTabName(cleanConfig.workingDir);
     useSettingsStore.getState().addRecentDir(cleanConfig.workingDir);
@@ -168,7 +169,7 @@ export default function App() {
     }
   }, [createSession, setShowLauncher]);
 
-  // Auto-persist sessions on changes (debounced)
+  // [PS-03] Debounced auto-persist every 2s on session array changes
   useEffect(() => {
     if (sessions.length > 0) {
       const timer = setTimeout(() => persist(), 2000);
@@ -176,7 +177,7 @@ export default function App() {
     }
   }, [sessions, persist]);
 
-  // Kill active PTY processes and persist on window close
+  // [PS-02] [PS-04] beforeunload: kill all active PTY trees + flush persist
   useEffect(() => {
     const handler = () => {
       killAllActivePtys();
@@ -194,7 +195,7 @@ export default function App() {
       if (id !== activeTabId) {
         setActiveTab(id);
       } else {
-        // Clicking already-active dead tab: trigger respawn with proper resume config
+        // [DS-11] Clicking already-active dead tab triggers respawn via requestRespawn
         const session = useSessionStore.getState().sessions.find((s) => s.id === id);
         if (session?.state === "dead" && canResumeSession(session)) {
           useSessionStore.getState().requestRespawn(id, {
@@ -225,15 +226,16 @@ export default function App() {
     closeSession(id);
   }, [sessions, closeSession]);
 
-  // Global keyboard shortcuts
+  // Global keyboard shortcuts [KB-01] through [KB-11]
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "t") {
         e.preventDefault();
         if (e.shiftKey) {
+          // [SL-02] Ctrl+Shift+T: quick launch without modal
           quickLaunch();
         } else {
-          // Clear resume/continue flags so the launcher opens fresh
+          // [KB-01] [SL-01] Ctrl+T: open new session (clears resume/continue)
           const lc = useSettingsStore.getState().lastConfig;
           if (lc.resumeSession || lc.continueSession) {
             setLastConfig({ ...lc, resumeSession: null, continueSession: false });
@@ -242,26 +244,31 @@ export default function App() {
         }
       }
 
+      // [KB-02] Ctrl+W: close active tab
       if (e.ctrlKey && e.key === "w") {
         e.preventDefault();
         if (activeTabId) handleCloseSession(activeTabId);
       }
 
+      // [KB-06] Ctrl+K: command palette
       if (e.ctrlKey && e.key === "k") {
         e.preventDefault();
         setShowPalette((v) => !v);
       }
 
+      // [KB-03] Ctrl+Shift+R: resume picker
       if (e.ctrlKey && e.shiftKey && e.key === "R") {
         e.preventDefault();
         setShowResumePicker(true);
       }
 
+      // [KB-07] Ctrl+,: config manager
       if (e.ctrlKey && e.key === ",") {
         e.preventDefault();
         setShowConfigManager(showConfigManager ? false : "settings");
       }
 
+      // [DP-02] Ctrl+Shift+D: toggle debug panel
       if (e.ctrlKey && e.shiftKey && e.key === "D") {
         e.preventDefault();
         setSidePanel(sidePanel === "debug" ? null : "debug");
@@ -272,11 +279,13 @@ export default function App() {
         setSidePanel(sidePanel === "diff" ? null : "diff");
       }
 
+      // [KB-11] Ctrl+Shift+F: cross-session terminal search panel
       if (e.ctrlKey && e.shiftKey && e.key === "F") {
         e.preventDefault();
         setSidePanel(sidePanel === "search" ? null : "search");
       }
 
+      // [KB-09] Escape dismissal chain: contextMenu -> palette -> sidePanel -> config -> resume -> launcher -> inspector
       if (e.key === "Escape") {
         if (tabContextMenu) { setTabContextMenu(null); return; }
         if (showPalette) return;
@@ -289,6 +298,8 @@ export default function App() {
         if (el && !el.closest('.xterm')) el.blur();
       }
 
+      // [KB-04] Ctrl+Tab/Ctrl+Shift+Tab: cycle tabs
+      // [DS-10] Ctrl+Tab skips dead tabs (filters to non-dead pool, fallback to full)
       if (e.ctrlKey && e.key === "Tab") {
         e.preventDefault();
         const nonMeta = sessions.filter((s) => !s.isMetaAgent);
@@ -303,6 +314,7 @@ export default function App() {
         }
       }
 
+      // [KB-05] Alt+1-9: jump to tab N
       if (e.altKey && e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         const nonMeta = sessions.filter((s) => !s.isMetaAgent);

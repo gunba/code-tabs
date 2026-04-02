@@ -1281,9 +1281,8 @@ pub fn build_claude_args(config: SessionConfig) -> Result<Vec<String>, String> {
         }
     }
 
-    // Pass --session-id only for new sessions. Claude CLI rejects
-    // --session-id combined with --resume or --continue unless
-    // --fork-session is also specified.
+    // [RS-05] Skip --session-id when using --resume or --continue
+    // Claude CLI rejects the combination unless --fork-session is also specified.
     if !config.continue_session && config.resume_session.is_none() {
         if let Some(ref sid) = config.session_id {
             args.push("--session-id".into());

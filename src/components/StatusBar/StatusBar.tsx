@@ -4,6 +4,7 @@ import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { effectiveModel, modelLabel, modelColor, formatTokenCount } from "../../lib/claude";
 import { parseWorktreePath, worktreeAcronym } from "../../lib/paths";
+// [HM-10] All status bar icons are inline SVG components -- no emoji
 import {
   IconPencil, IconLightning, IconUnlock, IconClipboard,
   IconClock, IconBudget,
@@ -211,6 +212,7 @@ function SessionStatus({ session, gitStatus }: { session: Session; gitStatus: Gi
   );
 }
 
+// [HM-07] Hook count reflects actual entries (sums hooks[] within each MatcherGroup)
 function countHookEntries(hooks: Record<string, unknown>): number {
   let count = 0;
   for (const scopeHooks of Object.values(hooks)) {

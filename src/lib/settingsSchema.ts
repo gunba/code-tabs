@@ -215,6 +215,7 @@ function keyToLabel(key: string): string {
 
 /**
  * [CM-03] Build settings schema from four sources (in priority order):
+ * [CI-03] Build settings schema from four sources (in priority order):
  * 1. JSON Schema from schemastore (most complete — all keys, types, descriptions)
  * 2. CLI --help options (reliable for flag-settable keys)
  * 3. Binary Zod schema scan (discovers settings-only keys)

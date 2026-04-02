@@ -423,6 +423,7 @@ export const useSettingsStore = create<SettingsState>()(
       name: "claude-tabs-settings",
       version: 2,
       storage: createJSONStorage(() => localStorage),
+      // [CI-04] Migration: v0 drops tierOverrides + converts modelPatterns to routes; v1->v2 adds modelRegistry
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>;
         if (version === 0) {

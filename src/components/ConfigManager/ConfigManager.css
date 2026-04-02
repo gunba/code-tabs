@@ -12,6 +12,7 @@
 
 
 /* [CM-01] Header: CSS grid 1fr auto 1fr keeps tab row centered */
+/* [CI-01] Header uses CSS grid (1fr auto 1fr) so tab row stays centered */
 
 .config-header {
   display: grid;

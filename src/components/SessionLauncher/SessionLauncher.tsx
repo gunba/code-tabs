@@ -43,7 +43,7 @@ const CONTEXT_PILLS: Array<{ value: "200k" | "1m"; label: string }> = [
   { value: "1m", label: "1M" },
 ];
 
-// Flags with dedicated UI controls — exclude from the options grid
+// [SL-11] Flags with dedicated UI controls excluded from the options grid
 const DEDICATED_FLAGS = new Set([
   "--model", "--permission-mode", "--effort",
   "--dangerously-skip-permissions", "--project-dir",
@@ -51,7 +51,7 @@ const DEDICATED_FLAGS = new Set([
   "--system-prompt", "--append-system-prompt",
 ]);
 
-// Flags that don't start an interactive session
+// [SL-14] Non-session flags rendered in separate Utility Commands section
 const NON_SESSION_FLAGS = new Set([
   "--version", "-V", "--help", "-h",
   "--print", "-p",          // Non-interactive print mode
@@ -62,6 +62,8 @@ const NON_SESSION_FLAGS = new Set([
 
 // ── Main component ──────────────────────────────────────────────────
 
+// [SL-01] Modal for new session or resume
+// [SL-09] Config restore: savedDefaults with lastConfig fallback, clears one-shot fields
 export function SessionLauncher() {
   const createSession = useSessionStore((s) => s.createSession);
   const claudePath = useSessionStore((s) => s.claudePath);
@@ -192,6 +194,7 @@ export function SessionLauncher() {
     return commandLine.split(/\s+/);
   }, [commandLine]);
 
+  // [SL-12] Active flag indicators: pills highlight when flag is in command line
   const activeFlags = useMemo((): Set<string> => {
     return new Set(commandTokens.filter((t) => t.startsWith("-")));
   }, [commandTokens]);
@@ -214,7 +217,7 @@ export function SessionLauncher() {
 
   isUtilityRef.current = isNonSessionCommand;
 
-  // CLI subcommands sorted by usage frequency (most-used first, then alphabetical)
+  // [SL-10] CLI command pills sorted by usage frequency (same heat gradient as Command Bar)
   const sortedCliCommands = useMemo((): CliCommand[] => {
     return [...(cliCapabilities.commands || [])].sort((a, b) => {
       const aCount = commandUsage[a.name] || 0;

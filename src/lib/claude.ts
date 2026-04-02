@@ -11,18 +11,18 @@ export async function buildClaudeArgs(
   return invoke<string[]>("build_claude_args", { config });
 }
 
-/** Resume target: chains through revivals to find the original CLI session ID. */
+/** [RS-02] Resume target: chains through revivals to find the original CLI session ID. */
 export function getResumeId(session: Session): string {
   return session.config.resumeSession || session.config.sessionId || session.id;
 }
 
-/** Whether a session has a conversation that can be resumed. */
+// [DS-03] canResumeSession: derived from sessionId, resumeSession, or nodeSummary (no JSONL check)
+// [RS-03] Check conversation existence via nodeSummary || resumeSession (in-memory)
 export function canResumeSession(session: Session): boolean {
   return !!session.config.sessionId || !!session.config.resumeSession || !!session.metadata.nodeSummary;
 }
 
-/** Find the nearest non-dead tab from a given index. Searches right then left.
- *  Falls back to any tab if all are dead. Returns null if the array is empty. */
+/** [DS-01] [DS-12] Find nearest non-dead tab from a given index. Falls back to any tab if all dead. */
 export function findNearestLiveTab(sessions: Session[], fromIndex: number): string | null {
   // Pass 1: nearest non-dead tab
   for (let dist = 0; dist < sessions.length; dist++) {
@@ -35,7 +35,7 @@ export function findNearestLiveTab(sessions: Session[], fromIndex: number): stri
   return sessions[fromIndex]?.id ?? sessions[fromIndex - 1]?.id ?? null;
 }
 
-/** Strip -w / --worktree from extra flags (used on resume to avoid creating a new worktree). */
+/** [SR-08] Strip -w/--worktree from extraFlags on resume/respawn to avoid duplicate worktree. */
 export function stripWorktreeFlags(flags: string | null): string | null {
   if (!flags) return null;
   const stripped = flags.replace(/\s*--?w(?:orktree)?\b/g, "").trim();
@@ -174,7 +174,7 @@ export function forceSessionColor(sessionId: string, colorIndex: number): void {
   colorAssignments.set(sessionId, colorIndex % SESSION_COLORS.length);
 }
 
-/** Compute heat level (0–4) for command frequency visualization (WoW rarity). */
+/** [CB-12] Compute heat level (0-4) for command frequency (WoW rarity). Thresholds: 0.20, 0.50, 0.80. */
 export function computeHeatLevel(count: number, maxCount: number): 0 | 1 | 2 | 3 | 4 {
   if (count <= 0 || maxCount <= 0) return 0;
   const ratio = count / maxCount;
@@ -184,7 +184,7 @@ export function computeHeatLevel(count: number, maxCount: number): 0 | 1 | 2 | 3
   return 4;
 }
 
-/** CSS class for heat level — green → blue → purple → orange (WoW rarity). */
+/** [CB-10] CSS class for heat level -- green, blue, purple, orange (WoW rarity). */
 export function heatClassName(level: 0 | 1 | 2 | 3 | 4): string {
   switch (level) {
     case 1: return "heat-1";

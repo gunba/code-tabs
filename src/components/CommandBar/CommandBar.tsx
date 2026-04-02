@@ -43,7 +43,7 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
     [sessionId]
   );
 
-  // Sort: frequently-used first (by count desc), then alphabetical
+  // [CB-01] Sort pills by usage frequency desc, then alphabetical
   const sortedCommands = useMemo(() => {
     return [...slashCommands].sort((a, b) => {
       const aCount = commandUsage[a.cmd] || 0;
@@ -63,10 +63,10 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
       if (!sessionId) return;
 
       if (e.ctrlKey) {
-        // Ctrl+Click: send immediately (type + Enter)
+        // [CB-05] Ctrl+Click sends command to PTY immediately
         sendCommand(command);
       } else {
-        // Normal click: type into terminal without sending
+        // [CB-04] Normal click types command into terminal without sending
         typeCommand(command);
       }
     },
@@ -101,7 +101,7 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
 
   return (
     <div className="command-bar">
-      {/* Toggle: chevron to expand/collapse slash commands */}
+      {/* [CB-11] Toggle chevron shows/hides slash-command grid only (not history) */}
       <div className="command-bar-collapse" onClick={() => setExpanded(!expanded)}>
         <span className="command-bar-chevron">{expanded ? "\u25BC" : "\u25B3"}</span>
       </div>
@@ -129,7 +129,7 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
           )}
         </div>
       )}
-      {/* Unified history strip: commands + skill invocations interleaved by time */}
+      {/* [CB-09] Per-session command history strip: newest left, merged with skill invocations */}
       {merged.length > 0 && (
         <div className="command-history">
           {merged.map((entry) => (

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import type { PaneComponentProps } from "./ThreePaneEditor";
 
+// [HM-05] Custom events: includes "Custom event..." option with freeform text input
 const HOOK_EVENTS = [
   { name: "PreToolUse", desc: "Before tool execution", hasMatcher: true },
   { name: "PostToolUse", desc: "After tool execution", hasMatcher: true },
@@ -17,7 +18,7 @@ const HOOK_EVENTS = [
   { name: "SessionEnd", desc: "Session ends", hasMatcher: false },
 ] as const;
 
-const HOOK_TYPES = ["command", "prompt", "agent"] as const;
+const HOOK_TYPES = ["command", "prompt", "agent"] as const; // [HM-09] Three hook types
 
 interface HookEntry {
   type: string;
@@ -58,6 +59,8 @@ const EMPTY_FORM: FormState = {
 };
 
 // [CM-15] Per-scope hooks CRUD. Scope is a prop, not a dropdown. Calls bumpHookChange() after save.
+// [HM-01] Three scopes: User, Project, Project Local
+// [HM-03] Non-destructive saves: merges hooks into existing settings (preserves other keys)
 export function HooksPane({ scope, projectDir, onStatus }: PaneComponentProps) {
   const [hooksData, setHooksData] = useState<Record<string, Record<string, MatcherGroup[]>>>({});
   const [editing, setEditing] = useState<FlatHook | null>(null);
@@ -115,6 +118,7 @@ export function HooksPane({ scope, projectDir, onStatus }: PaneComponentProps) {
     }
   }, [scope, projectDir, loadHooks, onStatus]);
 
+  // [HM-04] Edit preserves unknown fields via spread of original entry
   const handleSave = useCallback(() => {
     if (!form.command.trim()) return;
     const newHook: HookEntry = {
