@@ -165,7 +165,7 @@ describe("TapMetadataAccumulator", () => {
     expect(diff).toBeNull(); // no change
   });
 
-  it("does not store apiLatencyMs from ApiFetch (dedicated ping only)", () => {
+  it("stores apiLatencyMs from ApiFetch round-trip time", () => {
     const acc = new TapMetadataAccumulator();
     const diff = acc.process({
       kind: "ApiFetch", ts: 0,
@@ -174,7 +174,7 @@ describe("TapMetadataAccumulator", () => {
       requestId: "req-1", cfRay: "abc123-IAD",
       rateLimitRemaining: "1000", rateLimitReset: "2026-01-01T00:00:00Z",
     });
-    expect(diff?.apiLatencyMs).toBe(0);
+    expect(diff?.apiLatencyMs).toBe(245);
   });
 
   it("populates contextDebug with all TurnStart token components", () => {

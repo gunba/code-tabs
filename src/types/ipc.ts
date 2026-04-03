@@ -43,7 +43,12 @@ export interface IpcCommands {
   git_diff_file: (args: { workingDir: string; filePath: string; staged: boolean; untracked?: boolean }) => Promise<string>;
   append_tap_data: (args: { sessionId: string; lines: string }) => Promise<number>;
   open_tap_log: (args: { sessionId: string }) => Promise<void>;
-  cleanup_tap_logs: (args: { maxAgeHours: number }) => Promise<number>;
+  open_session_data_dir: (args: { sessionId: string }) => Promise<void>;
+  cleanup_session_data: (args: { maxAgeHours: number }) => Promise<number>;
+  get_session_data_path: (args: { sessionId: string }) => Promise<string>;
+  write_session_manifest: (args: { sessionId: string; manifestJson: string }) => Promise<void>;
+  read_session_manifest: (args: { sessionId: string }) => Promise<string>;
+  migrate_legacy_data: () => Promise<number>;
   list_agents: (args: { scope: string; workingDir: string }) => Promise<Array<{ name: string; path: string }>>;
   list_skills: (args: { scope: string; workingDir: string }) => Promise<Array<{ name: string; path: string }>>;
   resolve_api_host: () => Promise<string>;
@@ -51,5 +56,4 @@ export interface IpcCommands {
   start_traffic_log: (args: { sessionId: string }) => Promise<string>;
   stop_traffic_log: (args: { sessionId: string }) => Promise<void>;
   get_traffic_log_path: (args: { sessionId: string }) => Promise<string | null>;
-  cleanup_traffic_logs: (args: { maxAgeHours: number }) => Promise<number>;
 }

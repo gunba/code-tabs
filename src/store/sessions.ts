@@ -28,10 +28,8 @@ interface SessionsState {
   killRequest: string | null; // sessionId to kill
   hookChangeCounter: number;
   inspectorOffSessions: Set<string>;
-  tapCategories: Map<string, Set<string>>; // sessionId -> enabled tap category names
   trafficRecording: Map<string, string>; // sessionId -> file path
   processHealth: Map<string, { rss: number; heapUsed: number; uptime: number }>;
-  autoTrafficLogOnStart: Set<string>; // session IDs pending auto-start traffic logging
   seenToolNames: Set<string>; // [TA-02] all unique tool names observed across sessions
 
   // Actions
@@ -51,12 +49,8 @@ interface SessionsState {
   clearKillRequest: () => void;
   bumpHookChange: () => void;
   setInspectorOff: (id: string, off: boolean) => void;
-  startAllTaps: (id: string) => void;
-  stopAllTaps: (id: string) => void;
   startTrafficLog: (id: string, path: string) => void;
   stopTrafficLog: (id: string) => void;
-  setAutoTrafficLogOnStart: (id: string) => void;
-  clearAutoTrafficLogOnStart: (id: string) => void;
   addSubagent: (sessionId: string, subagent: Subagent) => void;
   updateSubagent: (sessionId: string, subagentId: string, updates: Partial<Subagent>) => void;
   clearIdleSubagents: (sessionId: string) => void;
@@ -79,10 +73,8 @@ export const useSessionStore = create<SessionsState>((set) => ({
   killRequest: null,
   hookChangeCounter: 0,
   inspectorOffSessions: new Set(),
-  tapCategories: new Map(),
   trafficRecording: new Map(),
   processHealth: new Map(),
-  autoTrafficLogOnStart: new Set(),
   seenToolNames: new Set(),
 
   init: async () => {
@@ -204,8 +196,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
       commandHistory.delete(id);
       const inspectorOffSessions = new Set(s.inspectorOffSessions);
       inspectorOffSessions.delete(id);
-      const tapCategories = new Map(s.tapCategories);
-      tapCategories.delete(id);
       const trafficRecording = new Map(s.trafficRecording);
       if (trafficRecording.has(id)) {
         trafficRecording.delete(id);
@@ -213,9 +203,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
       }
       const processHealth = new Map(s.processHealth);
       processHealth.delete(id);
-      const autoTrafficLogOnStart = new Set(s.autoTrafficLogOnStart);
-      autoTrafficLogOnStart.delete(id);
-      return { sessions, activeTabId, subagents, skillInvocations, commandHistory, inspectorOffSessions, tapCategories, trafficRecording, processHealth, autoTrafficLogOnStart };
+      return { sessions, activeTabId, subagents, skillInvocations, commandHistory, inspectorOffSessions, trafficRecording, processHealth };
     });
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();
@@ -338,22 +326,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
     });
   },
 
-  startAllTaps: (id) => {
-    set((s) => {
-      const next = new Map(s.tapCategories);
-      next.set(id, new Set(["parse", "stringify", "console", "fs", "spawn", "fetch", "exit", "timer", "stdout", "stderr", "require", "bun"]));
-      return { tapCategories: next };
-    });
-  },
-
-  stopAllTaps: (id) => {
-    set((s) => {
-      const next = new Map(s.tapCategories);
-      next.delete(id);
-      return { tapCategories: next };
-    });
-  },
-
   startTrafficLog: (id, path) => {
     set((s) => {
       const next = new Map(s.trafficRecording);
@@ -370,21 +342,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
     });
   },
 
-  setAutoTrafficLogOnStart: (id) => {
-    set((s) => {
-      const next = new Set(s.autoTrafficLogOnStart);
-      next.add(id);
-      return { autoTrafficLogOnStart: next };
-    });
-  },
 
-  clearAutoTrafficLogOnStart: (id) => {
-    set((s) => {
-      const next = new Set(s.autoTrafficLogOnStart);
-      next.delete(id);
-      return { autoTrafficLogOnStart: next };
-    });
-  },
 
   addSubagent: (sessionId, subagent) => {
     set((s) => {

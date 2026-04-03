@@ -40,7 +40,6 @@ function resetStore() {
     killRequest: null,
     hookChangeCounter: 0,
     inspectorOffSessions: new Set(),
-    tapCategories: new Map(),
     processHealth: new Map(),
   });
 }
@@ -317,14 +316,13 @@ describe("closeSession tab selection", () => {
 describe("closeSession cleanup", () => {
   beforeEach(resetStore);
 
-  it("removes subagents, skillInvocations, commandHistory, tapCategories, and processHealth for closed session", async () => {
+  it("removes subagents, skillInvocations, commandHistory, and processHealth for closed session", async () => {
     useSessionStore.setState({
       sessions: [makeSession("s1"), makeSession("s2")],
       activeTabId: "s1",
       subagents: new Map([["s1", [makeSub("sub-1")]], ["s2", [makeSub("sub-2")]]]),
       skillInvocations: new Map([["s1", [{ id: "skill-100", skill: "commit", success: true, allowedTools: [], timestamp: 100 }]]]),
       commandHistory: new Map([["s1", [{ cmd: "/review", ts: 1000 }]], ["s2", [{ cmd: "/build", ts: 2000 }]]]),
-      tapCategories: new Map([["s1", new Set(["parse", "stringify"])], ["s2", new Set(["parse"])]]),
       processHealth: new Map([["s1", { rss: 100, heapUsed: 50, uptime: 10 }], ["s2", { rss: 200, heapUsed: 80, uptime: 20 }]]),
     });
     await useSessionStore.getState().closeSession("s1");
@@ -334,8 +332,6 @@ describe("closeSession cleanup", () => {
     expect(state.skillInvocations.has("s1")).toBe(false);
     expect(state.commandHistory.has("s1")).toBe(false);
     expect(state.commandHistory.has("s2")).toBe(true);
-    expect(state.tapCategories.has("s1")).toBe(false);
-    expect(state.tapCategories.has("s2")).toBe(true);
     expect(state.processHealth.has("s1")).toBe(false);
     expect(state.processHealth.has("s2")).toBe(true);
   });

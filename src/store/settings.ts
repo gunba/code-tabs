@@ -9,6 +9,32 @@ import type { EnvVarEntry } from "../lib/envVars";
 import type { ModelRegistryEntry } from "../lib/claude";
 import { useSessionStore } from "./sessions";
 
+export interface RecordingConfig {
+  taps: {
+    enabled: boolean;
+    categories: Record<string, boolean>;
+  };
+  traffic: { enabled: boolean };
+  globalHooks: { enabled: boolean };
+  maxAgeHours: number;
+}
+
+export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
+  taps: {
+    enabled: true,
+    categories: {
+      parse: true, stringify: true,
+      console: true, fs: true, spawn: true, fetch: true,
+      exit: true, timer: true, stdout: true, stderr: true,
+      require: true, bun: true,
+      websocket: false, net: false, stream: false,
+    },
+  },
+  traffic: { enabled: true },
+  globalHooks: { enabled: true },
+  maxAgeHours: 72,
+};
+
 function syncRulesToProxy() {
   const rules = useSettingsStore.getState().systemPromptRules;
   invoke("update_system_prompt_rules", { rules }).catch(() => {});
@@ -80,6 +106,7 @@ interface SettingsState {
   apiIp: string | null;
   systemPromptRules: SystemPromptRule[];
   modelRegistry: Record<string, ModelRegistryEntry>;
+  recordingConfig: RecordingConfig;
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -118,6 +145,7 @@ interface SettingsState {
   removeSystemPromptRule: (id: string) => void;
   reorderSystemPromptRules: (id: string, direction: -1 | 1) => void;
   updateModelRegistry: (entry: ModelRegistryEntry) => void;
+  setRecordingConfig: (config: Partial<RecordingConfig>) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -155,6 +183,7 @@ export const useSettingsStore = create<SettingsState>()(
       apiIp: null,
       systemPromptRules: [],
       modelRegistry: {},
+      recordingConfig: DEFAULT_RECORDING_CONFIG,
 
       addRecentDir: (dir) =>
         set((s) => {
@@ -419,10 +448,14 @@ export const useSettingsStore = create<SettingsState>()(
         for (const e of entries) pruned[e.modelId] = e;
         return { modelRegistry: pruned };
       }),
+
+      setRecordingConfig: (config) => set((s) => ({
+        recordingConfig: { ...s.recordingConfig, ...config },
+      })),
     }),
     {
       name: "claude-tabs-settings",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Migration: v0 drops tierOverrides + converts modelPatterns to routes; v1->v2 adds modelRegistry
       migrate: (persisted: unknown, version: number) => {
@@ -452,6 +485,10 @@ export const useSettingsStore = create<SettingsState>()(
           // Add model registry
           if (!state.modelRegistry) state.modelRegistry = {};
         }
+        if (version < 3) {
+          // Add recording config
+          if (!state.recordingConfig) state.recordingConfig = DEFAULT_RECORDING_CONFIG;
+        }
         return state;
       },
       // Don't persist transient UI state
@@ -475,6 +512,7 @@ export const useSettingsStore = create<SettingsState>()(
         providerConfig: state.providerConfig,
         systemPromptRules: state.systemPromptRules,
         modelRegistry: state.modelRegistry,
+        recordingConfig: state.recordingConfig,
       }),
     }
   )

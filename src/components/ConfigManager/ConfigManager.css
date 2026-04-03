@@ -2033,3 +2033,167 @@
   gap: 6px;
   justify-content: flex-end;
 }
+
+/* ── Recording Pane ──────────────────────────────────── */
+
+.recording-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.recording-section {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.recording-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.recording-master-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.recording-master-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.recording-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.recording-categories {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recording-categories.recording-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.recording-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.recording-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.recording-group-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.recording-category {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.recording-category input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.recording-category input[type="checkbox"]:disabled {
+  cursor: default;
+}
+
+.recording-data-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.recording-age-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.recording-age-input {
+  width: 50px;
+  padding: 2px 4px;
+  font-size: 11px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  text-align: center;
+}
+
+.recording-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.recording-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.recording-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.recording-hooks-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.recording-hooks-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.recording-hooks-missing {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  word-break: break-word;
+}

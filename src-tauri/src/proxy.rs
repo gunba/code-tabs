@@ -191,8 +191,8 @@ pub fn update_system_prompt_rules(
 
 #[tauri::command]
 pub fn start_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>) -> Result<String, String> {
-    let dir = crate::commands::get_traffic_dir()?;
-    let path = dir.join(format!("{}.jsonl", session_id));
+    let dir = crate::commands::get_session_data_dir(&session_id)?;
+    let path = dir.join("traffic.jsonl");
     let file = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -223,28 +223,7 @@ pub fn get_traffic_log_path(session_id: String, proxy_state: State<'_, ProxyStat
     Ok(s.traffic_log_paths.get(&session_id).map(|p| p.to_string_lossy().to_string()))
 }
 
-#[tauri::command]
-pub fn cleanup_traffic_logs(max_age_hours: u64) -> Result<u32, String> {
-    let dir = crate::commands::get_traffic_dir()?;
-    let mut removed = 0u32;
-    let cutoff = std::time::SystemTime::now()
-        - std::time::Duration::from_secs(max_age_hours * 3600);
-    if let Ok(entries) = std::fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-                continue;
-            }
-            if let Ok(meta) = path.metadata() {
-                if meta.modified().unwrap_or(std::time::UNIX_EPOCH) < cutoff {
-                    let _ = std::fs::remove_file(&path);
-                    removed += 1;
-                }
-            }
-        }
-    }
-    Ok(removed)
-}
+// cleanup_traffic_logs removed — unified cleanup via commands::cleanup_session_data
 
 // ── Connection handler ───────────────────────────────────────────────
 

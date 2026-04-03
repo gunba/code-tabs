@@ -49,9 +49,6 @@ export default function App() {
   const requestKill = useSessionStore((s) => s.requestKill);
   const inspectorOffSessions = useSessionStore((s) => s.inspectorOffSessions);
   const setInspectorOff = useSessionStore((s) => s.setInspectorOff);
-  const tapCategories = useSessionStore((s) => s.tapCategories);
-  const startAllTaps = useSessionStore((s) => s.startAllTaps);
-  const stopAllTaps = useSessionStore((s) => s.stopAllTaps);
   const showLauncher = useSettingsStore((s) => s.showLauncher);
   const launcherGeneration = useSettingsStore((s) => s.launcherGeneration);
   const setShowLauncher = useSettingsStore((s) => s.setShowLauncher);
@@ -147,7 +144,14 @@ export default function App() {
     init();
     useUiConfigStore.getState().loadConfig();
     useSettingsStore.getState().loadPastSessions();
-    invoke("cleanup_tap_logs", { maxAgeHours: 48 }).catch(() => {});
+    invoke("migrate_legacy_data").catch(() => {});
+    invoke("cleanup_session_data", { maxAgeHours: 72 }).catch(() => {});
+    // Auto-install global recording hooks if enabled
+    if (useSettingsStore.getState().recordingConfig.globalHooks.enabled) {
+      import("./lib/globalHooks").then(({ installGlobalHooks }) =>
+        installGlobalHooks().catch(() => {})
+      );
+    }
   }, [init]);
 
   // [SL-02] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T, uses saved defaults or last config
@@ -766,39 +770,25 @@ export default function App() {
                       )}
                     </>
                   )}
-                  {(() => {
-                    const cats = tapCategories.get(ctxSession.id);
-                    const hasTaps = cats && cats.size > 0;
-                    return (
-                      <>
-                        <div className="tab-context-menu-label">Recording</div>
-                        <button
-                          className="tab-context-menu-item"
-                          onClick={() => {
-                            if (hasTaps) {
-                              stopAllTaps(ctxSession.id);
-                            } else {
-                              startAllTaps(ctxSession.id);
-                            }
-                            setTabContextMenu(null);
-                          }}
-                        >
-                          {hasTaps ? "■ Stop Taps" : "▶ Start Taps"}
-                        </button>
-                        {hasTaps && (
-                          <button
-                            className="tab-context-menu-item"
-                            onClick={() => {
-                              invoke("open_tap_log", { sessionId: ctxSession.id });
-                              setTabContextMenu(null);
-                            }}
-                          >
-                            Open Tap Log
-                          </button>
-                        )}
-                      </>
-                    );
-                  })()}
+                  <div className="tab-context-menu-label">Recording</div>
+                  <button
+                    className="tab-context-menu-item"
+                    onClick={() => {
+                      invoke("open_session_data_dir", { sessionId: ctxSession.id });
+                      setTabContextMenu(null);
+                    }}
+                  >
+                    Open Session Data
+                  </button>
+                  <button
+                    className="tab-context-menu-item"
+                    onClick={() => {
+                      invoke("open_tap_log", { sessionId: ctxSession.id });
+                      setTabContextMenu(null);
+                    }}
+                  >
+                    Open Tap Log
+                  </button>
                   {isDead && (
                     <button
                       className="tab-context-menu-item"

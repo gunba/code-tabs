@@ -82,6 +82,9 @@ export function reduceTapEvent(state: SessionState, event: TapEvent): SessionSta
     case "UserInterruption":
       return "interrupted"; // [IN-13] UserInterruption -> interrupted (not idle)
 
+    case "SessionEndEvent":
+      return "dead";
+
     case "ConversationMessage":
       if (event.messageType === "user" && !event.isSidechain) return "thinking";
       if (event.messageType === "assistant" && !event.isSidechain) {

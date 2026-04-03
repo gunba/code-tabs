@@ -2217,33 +2217,52 @@ pub async fn resolve_api_host() -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
-// ── Tap logging (inspector hook data capture) ─────────────────────
+// ── Unified session data directory ──────────────────────────────────
 
-/// Get the taps subdirectory inside the data dir, creating if needed.
-fn get_taps_dir() -> Result<std::path::PathBuf, String> {
-    let dir = get_data_dir()?.join("taps");
+/// Get the per-session data directory: data/sessions/{sessionId}/.
+/// Creates it if it doesn't exist.
+pub(crate) fn get_session_data_dir(session_id: &str) -> Result<std::path::PathBuf, String> {
+    let dir = get_data_dir()?.join("sessions").join(session_id);
     if !dir.exists() {
         std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create taps dir: {}", e))?;
+            .map_err(|e| format!("Failed to create session data dir: {}", e))?;
     }
     Ok(dir)
 }
 
-/// Get the traffic subdirectory inside the data dir, creating if needed.
-pub(crate) fn get_traffic_dir() -> Result<std::path::PathBuf, String> {
-    let dir = get_data_dir()?.join("traffic");
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create traffic dir: {}", e))?;
+/// Return the absolute path to a session's data directory.
+#[tauri::command]
+pub fn get_session_data_path(session_id: String) -> Result<String, String> {
+    let dir = get_session_data_dir(&session_id)?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+/// Write or update a session's manifest.json with metadata.
+#[tauri::command]
+pub fn write_session_manifest(session_id: String, manifest_json: String) -> Result<(), String> {
+    let dir = get_session_data_dir(&session_id)?;
+    let path = dir.join("manifest.json");
+    std::fs::write(&path, manifest_json)
+        .map_err(|e| format!("Failed to write manifest: {}", e))
+}
+
+/// Read a session's manifest.json. Returns empty string if not found.
+#[tauri::command]
+pub fn read_session_manifest(session_id: String) -> Result<String, String> {
+    let dir = get_data_dir()?.join("sessions").join(&session_id);
+    let path = dir.join("manifest.json");
+    if !path.exists() {
+        return Ok(String::new());
     }
-    Ok(dir)
+    std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read manifest: {}", e))
 }
 
 /// Append pre-serialized JSONL lines to the session's tap log file.
 /// Returns the current file size in bytes (for frontend rotation decisions).
 #[tauri::command]
 pub fn append_tap_data(session_id: String, lines: String) -> Result<u64, String> {
-    let path = get_taps_dir()?.join(format!("{}.jsonl", session_id));
+    let path = get_session_data_dir(&session_id)?.join("taps.jsonl");
     use std::io::Write;
     let mut file = std::fs::OpenOptions::new()
         .create(true)
@@ -2259,7 +2278,7 @@ pub fn append_tap_data(session_id: String, lines: String) -> Result<u64, String>
 /// Open the tap log file in the system's default editor/viewer.
 #[tauri::command]
 pub fn open_tap_log(session_id: String) -> Result<(), String> {
-    let path = get_taps_dir()?.join(format!("{}.jsonl", session_id));
+    let path = get_session_data_dir(&session_id)?.join("taps.jsonl");
     if !path.exists() {
         return Err("No tap log exists for this session".into());
     }
@@ -2267,28 +2286,131 @@ pub fn open_tap_log(session_id: String) -> Result<(), String> {
         .map_err(|e| format!("Failed to open tap log: {}", e))
 }
 
-/// Delete tap log files older than max_age_hours. Returns count of files removed.
+/// Open a session's data directory in the system file manager.
 #[tauri::command]
-pub fn cleanup_tap_logs(max_age_hours: u64) -> Result<u32, String> {
-    let dir = get_taps_dir()?;
+pub fn open_session_data_dir(session_id: String) -> Result<(), String> {
+    let dir = get_session_data_dir(&session_id)?;
+    open::that_detached(&dir)
+        .map_err(|e| format!("Failed to open session data dir: {}", e))
+}
+
+/// Delete session data directories older than max_age_hours.
+/// Uses manifest.json startedAt if available, falls back to directory mtime.
+/// Returns count of session directories removed.
+#[tauri::command]
+pub fn cleanup_session_data(max_age_hours: u64) -> Result<u32, String> {
+    let sessions_dir = get_data_dir()?.join("sessions");
+    if !sessions_dir.exists() {
+        return Ok(0);
+    }
     let mut removed = 0u32;
     let cutoff = std::time::SystemTime::now()
         - std::time::Duration::from_secs(max_age_hours * 3600);
-    if let Ok(entries) = std::fs::read_dir(&dir) {
+    if let Ok(entries) = std::fs::read_dir(&sessions_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            if !path.is_dir() {
                 continue;
             }
-            if let Ok(meta) = path.metadata() {
-                if meta.modified().unwrap_or(std::time::UNIX_EPOCH) < cutoff {
-                    let _ = std::fs::remove_file(&path);
-                    removed += 1;
+            // Try manifest.json startedAt, fall back to dir mtime
+            let is_old = {
+                let manifest_path = path.join("manifest.json");
+                if manifest_path.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&manifest_path) {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                            if let Some(started) = val["startedAt"].as_str() {
+                                // Parse ISO timestamp and compare
+                                chrono::DateTime::parse_from_rfc3339(started)
+                                    .map(|dt| {
+                                        let sys: std::time::SystemTime = dt.into();
+                                        sys < cutoff
+                                    })
+                                    .unwrap_or(false)
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    // No manifest — use directory mtime
+                    path.metadata()
+                        .and_then(|m| m.modified())
+                        .map(|t| t < cutoff)
+                        .unwrap_or(false)
                 }
+            };
+            if is_old {
+                let _ = std::fs::remove_dir_all(&path);
+                removed += 1;
             }
         }
     }
     Ok(removed)
+}
+
+/// Migrate legacy flat tap/traffic files into per-session directories.
+/// Idempotent — skips sessions where the destination already exists.
+/// Returns count of files migrated.
+#[tauri::command]
+pub fn migrate_legacy_data() -> Result<u32, String> {
+    let data_dir = get_data_dir()?;
+    let mut migrated = 0u32;
+
+    // Migrate data/taps/{sid}.jsonl -> data/sessions/{sid}/taps.jsonl
+    let taps_dir = data_dir.join("taps");
+    if taps_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&taps_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                    continue;
+                }
+                if let Some(sid) = path.file_stem().and_then(|s| s.to_str()) {
+                    let dest_dir = data_dir.join("sessions").join(sid);
+                    let dest_file = dest_dir.join("taps.jsonl");
+                    if !dest_file.exists() {
+                        let _ = std::fs::create_dir_all(&dest_dir);
+                        if std::fs::rename(&path, &dest_file).is_ok() {
+                            migrated += 1;
+                        }
+                    }
+                }
+            }
+        }
+        // Clean up empty taps directory
+        let _ = std::fs::remove_dir(&taps_dir);
+    }
+
+    // Migrate data/traffic/{sid}.jsonl -> data/sessions/{sid}/traffic.jsonl
+    let traffic_dir = data_dir.join("traffic");
+    if traffic_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&traffic_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                    continue;
+                }
+                if let Some(sid) = path.file_stem().and_then(|s| s.to_str()) {
+                    let dest_dir = data_dir.join("sessions").join(sid);
+                    let dest_file = dest_dir.join("traffic.jsonl");
+                    if !dest_file.exists() {
+                        let _ = std::fs::create_dir_all(&dest_dir);
+                        if std::fs::rename(&path, &dest_file).is_ok() {
+                            migrated += 1;
+                        }
+                    }
+                }
+            }
+        }
+        // Clean up empty traffic directory
+        let _ = std::fs::remove_dir(&traffic_dir);
+    }
+
+    Ok(migrated)
 }
 
 // [RC-19] git worktree remove --force (always forced — dialog is the confirmation)

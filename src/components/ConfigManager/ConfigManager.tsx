@@ -12,12 +12,13 @@ import { AgentEditor } from "./AgentEditor";
 import { PromptsTab } from "./PromptsTab";
 import { SkillsEditor } from "./SkillsEditor";
 import { ProvidersPane } from "./ProvidersPane";
-import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconLightning, IconBraces, IconClose } from "../Icons/Icons";
+import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconLightning, IconBraces, IconClose, IconCircleFilled } from "../Icons/Icons";
+import { RecordingPane } from "./RecordingPane";
 import { parseWorktreePath } from "../../lib/paths";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import "./ConfigManager.css";
 
-type Tab = "settings" | "envvars" | "claudemd" | "hooks" | "plugins" | "agents" | "prompts" | "skills" | "providers";
+type Tab = "settings" | "envvars" | "claudemd" | "hooks" | "plugins" | "agents" | "prompts" | "skills" | "providers" | "recording";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <IconGear size={11} /> },
@@ -29,6 +30,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "prompts", label: "Prompts", icon: <IconDocument size={11} /> },
   { id: "skills", label: "Skills", icon: <IconSkill size={11} /> },
   { id: "providers", label: "Providers", icon: <IconLightning size={11} /> },
+  { id: "recording", label: "Recording", icon: <IconCircleFilled size={11} /> },
 ];
 
 // [CM-11] 9-tab config modal (84vw, max 1500px, 78vh), store-controlled active tab
@@ -142,6 +144,9 @@ export function ConfigManager() {
           <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} onStatus={setStatusMsg} tabId="skills" scopes={["user", "project"]} />
         )}
         <ProvidersPane visible={tab === "providers"} onStatus={setStatusMsg} />
+        {tab === "recording" && (
+          <RecordingPane onStatus={setStatusMsg} />
+        )}
       </div>
 
       {/* Footer */}

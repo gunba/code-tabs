@@ -17,7 +17,6 @@ import type { GitStatusData } from "../../types/git";
 import { isSessionIdle } from "../../types/session";
 import { getEffectiveState } from "../../lib/claude";
 import { useStabilizedValue } from "../../lib/stabilizer";
-import { dlog } from "../../lib/debugLog";
 import "./StatusBar.css";
 
 function formatDuration(secs: number): string {
@@ -69,7 +68,7 @@ function SessionStatus({
 }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
-  const tapEnabled = useSessionStore((s) => (s.tapCategories.get(session.id)?.size ?? 0) > 0);
+  const tapEnabled = useSettingsStore((s) => s.recordingConfig.taps.enabled);
   const health = useSessionStore((s) => s.processHealth.get(session.id));
   const apiIp = useSettingsStore((s) => s.apiIp);
   const model = effectiveModel(session);
@@ -285,8 +284,9 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const activeSession = sessions.find((s) => s.id === activeTabId);
   const [hookCount, setHookCount] = useState(0);
-  const [usageData, setUsageData] = useState<{ fiveHourPercent: number | null; sevenDayPercent: number | null } | null>(null);
-  const [usageError, setUsageError] = useState<string | null>(null);
+  // Usage data is derived passively from TAP StatusLineUpdate events
+  const usageData = null;
+  const usageError = null;
   const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
   const sidePanel = useSettingsStore((s) => s.sidePanel);
   const setSidePanel = useSettingsStore((s) => s.setSidePanel);
@@ -315,46 +315,9 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const aliveSessions = sessions.filter((s) => s.state !== "dead");
   const aliveCountRef = useRef(0);
   aliveCountRef.current = aliveSessions.length;
-  // Poll Anthropic Usage API for 5h/7d rate-limit utilization.
-  // Timer-based poll is justified: there is no push source for this data.
-  // Ref check avoids re-triggering the effect (and an immediate poll) on every session change.
-  useEffect(() => {
-    const poll = () => {
-      if (aliveCountRef.current === 0) return;
-      invoke<{ fiveHourPercent: number | null; sevenDayPercent: number | null }>("fetch_usage")
-        .then((d) => { setUsageData(d); setUsageError(null); })
-        .catch((e: unknown) => {
-          const msg = String(e);
-          dlog("session", null, `fetch_usage failed: ${msg}`, "WARN");
-          setUsageError(msg);
-        });
-    };
-    poll();
-    const t = setInterval(poll, 120_000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Poll API ping latency via Rust IPC (bypasses Cloudflare, no tap pipeline dependency)
-  useEffect(() => {
-    const doPing = () => {
-      if (aliveCountRef.current === 0) return;
-      invoke<{ latencyMs: number; status: number }>("ping_api")
-        .then((result) => {
-          if (result.latencyMs === 0) return; // no credentials, skip
-          const state = useSessionStore.getState();
-          const activeId = state.activeTabId;
-          if (activeId) {
-            state.updateMetadata(activeId, { apiLatencyMs: result.latencyMs });
-          }
-        })
-        .catch((e: unknown) => {
-          dlog("session", null, `ping_api failed: ${String(e)}`, "WARN");
-        });
-    };
-    doPing();
-    const t = setInterval(doPing, 30_000);
-    return () => clearInterval(t);
-  }, []);
+  // Usage data and ping latency are now derived passively from TAP events
+  // (StatusLineUpdate provides 5h/7d percentages, ApiFetch provides latency)
+  // instead of polling disabled OAuth endpoints.
 
   const activeSessions = aliveSessions.filter((s) =>
     !isSessionIdle(getEffectiveState(s.state, subagentMap.get(s.id) || []))

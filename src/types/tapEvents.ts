@@ -399,6 +399,136 @@ export interface SkillInvocationEvent extends TapEventBase {
   allowedTools: string[];
 }
 
+// ── New TAP category events (MISSED-HOOKS) ──
+
+export interface AsyncFileOp extends TapEventBase {
+  kind: "AsyncFileOp";
+  op: string;
+  path: string;
+  size: number;
+  durationMs: number;
+  error: string | null;
+}
+
+export interface BunFileOp extends TapEventBase {
+  kind: "BunFileOp";
+  op: string;
+  path: string;
+  durationMs: number;
+}
+
+export interface AbortSignal extends TapEventBase {
+  kind: "AbortSignal";
+  reason: string;
+}
+
+export interface FileWatch extends TapEventBase {
+  kind: "FileWatch";
+  op: string;
+  path: string;
+}
+
+export interface TextDecoderChunk extends TapEventBase {
+  kind: "TextDecoderChunk";
+  length: number;
+  snap: string;
+}
+
+export interface EmitterEvent extends TapEventBase {
+  kind: "EmitterEvent";
+  eventType: string;
+  source: string;
+}
+
+export interface EnvAccess extends TapEventBase {
+  kind: "EnvAccess";
+  key: string;
+  hasValue: boolean;
+}
+
+// ── Hook events (captured via global no-op hooks triggering JSON.stringify) ──
+
+export interface SessionEndEvent extends TapEventBase {
+  kind: "SessionEndEvent";
+  reason: string;
+}
+
+export interface StopEvent extends TapEventBase {
+  kind: "StopEvent";
+  stopHookActive: boolean;
+}
+
+export interface PreCompactEvent extends TapEventBase {
+  kind: "PreCompactEvent";
+  trigger: string;
+}
+
+export interface PostCompactEvent extends TapEventBase {
+  kind: "PostCompactEvent";
+  trigger: string;
+  summary: string;
+}
+
+export interface InstructionsLoadedEvent extends TapEventBase {
+  kind: "InstructionsLoadedEvent";
+  filePath: string;
+  memoryType: string;
+  loadReason: string;
+}
+
+export interface ConfigChangeEvent extends TapEventBase {
+  kind: "ConfigChangeEvent";
+  source: string;
+  filePath: string;
+}
+
+export interface CwdChangedEvent extends TapEventBase {
+  kind: "CwdChangedEvent";
+  oldCwd: string;
+  newCwd: string;
+}
+
+export interface FileChangedEvent extends TapEventBase {
+  kind: "FileChangedEvent";
+  filePath: string;
+  event: string;
+}
+
+export interface TaskCreatedEvent extends TapEventBase {
+  kind: "TaskCreatedEvent";
+  taskId: string;
+  taskSubject: string;
+}
+
+export interface TaskCompletedEvent extends TapEventBase {
+  kind: "TaskCompletedEvent";
+  taskId: string;
+  taskSubject: string;
+}
+
+export interface ElicitationEvent extends TapEventBase {
+  kind: "ElicitationEvent";
+  mcpServerName: string;
+  message: string;
+}
+
+export interface NotificationHookEvent extends TapEventBase {
+  kind: "NotificationHookEvent";
+  message: string;
+  title: string;
+}
+
+export interface SubagentStopEvent extends TapEventBase {
+  kind: "SubagentStopEvent";
+  agentId: string;
+  agentType: string;
+}
+
+export interface SetupEvent extends TapEventBase {
+  kind: "SetupEvent";
+  trigger: string;
+}
+
 // ── Discriminated union ──
 
 export type TapEvent =
@@ -456,4 +586,27 @@ export type TapEvent =
   | EffortLevel
   | StatusLineUpdate
   | IdlePrompt
-  | SkillInvocationEvent;
+  | SkillInvocationEvent
+  // New TAP categories (MISSED-HOOKS)
+  | AsyncFileOp
+  | BunFileOp
+  | AbortSignal
+  | FileWatch
+  | TextDecoderChunk
+  | EmitterEvent
+  | EnvAccess
+  // Hook events (global no-op hooks)
+  | SessionEndEvent
+  | StopEvent
+  | PreCompactEvent
+  | PostCompactEvent
+  | InstructionsLoadedEvent
+  | ConfigChangeEvent
+  | CwdChangedEvent
+  | FileChangedEvent
+  | TaskCreatedEvent
+  | TaskCompletedEvent
+  | ElicitationEvent
+  | NotificationHookEvent
+  | SubagentStopEvent
+  | SetupEvent;

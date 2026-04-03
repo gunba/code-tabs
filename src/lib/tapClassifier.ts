@@ -552,6 +552,72 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
     }
   }
 
+  // ── Hook events (serialized when global no-op hooks are registered) ──
+
+  // Hook event data uses `hook_event_name` field (consistent with UserPromptSubmit/Status)
+  if (typeof parsed.hook_event_name === "string") {
+    const he = parsed.hook_event_name;
+    const data = parsed.data ?? parsed;
+
+    if (he === "SessionEnd") {
+      return { kind: "SessionEndEvent", ts, reason: data.reason || "" };
+    }
+    if (he === "Stop" || he === "StopFailure") {
+      return { kind: "StopEvent", ts, stopHookActive: !!data.stop_hook_active };
+    }
+    if (he === "PreCompact") {
+      return { kind: "PreCompactEvent", ts, trigger: data.trigger || "" };
+    }
+    if (he === "PostCompact") {
+      return { kind: "PostCompactEvent", ts, trigger: data.trigger || "", summary: data.compact_summary || "" };
+    }
+    if (he === "InstructionsLoaded") {
+      return { kind: "InstructionsLoadedEvent", ts, filePath: data.file_path || "", memoryType: data.memory_type || "", loadReason: data.load_reason || "" };
+    }
+    if (he === "ConfigChange") {
+      return { kind: "ConfigChangeEvent", ts, source: data.source || "", filePath: data.file_path || "" };
+    }
+    if (he === "CwdChanged") {
+      return { kind: "CwdChangedEvent", ts, oldCwd: data.old_cwd || "", newCwd: data.new_cwd || "" };
+    }
+    if (he === "FileChanged") {
+      return { kind: "FileChangedEvent", ts, filePath: data.file_path || "", event: data.event || "" };
+    }
+    if (he === "TaskCreated") {
+      return { kind: "TaskCreatedEvent", ts, taskId: data.task_id || "", taskSubject: data.task_subject || "" };
+    }
+    if (he === "TaskCompleted") {
+      return { kind: "TaskCompletedEvent", ts, taskId: data.task_id || "", taskSubject: data.task_subject || "" };
+    }
+    if (he === "Elicitation" || he === "ElicitationResult") {
+      return { kind: "ElicitationEvent", ts, mcpServerName: data.mcp_server_name || "", message: data.message || "" };
+    }
+    if (he === "Notification") {
+      return { kind: "NotificationHookEvent", ts, message: data.message || "", title: data.title || "" };
+    }
+    if (he === "SubagentStop") {
+      return { kind: "SubagentStopEvent", ts, agentId: data.agent_id || "", agentType: data.agent_type || "" };
+    }
+    if (he === "Setup") {
+      return { kind: "SetupEvent", ts, trigger: data.trigger || "" };
+    }
+    if (he === "PostToolUseFailure") {
+      // Map to existing ToolResult with error
+      return { kind: "ToolResult", ts, toolName: data.tool_name || "", durationMs: 0, toolResultSizeBytes: 0, error: data.error || "hook failure" };
+    }
+  }
+
+  // Alternative: some hook events may arrive via the progress-style wrapper
+  if (parsed.type === "progress" && parsed.data?.type === "hook_event") {
+    const he = parsed.data.hook_event_name;
+    if (he === "SessionEnd") {
+      return { kind: "SessionEndEvent", ts, reason: parsed.data.reason || "" };
+    }
+    if (he === "CwdChanged") {
+      return { kind: "CwdChangedEvent", ts, oldCwd: parsed.data.old_cwd || "", newCwd: parsed.data.new_cwd || "" };
+    }
+  }
+
   return null;
 }
 
@@ -693,7 +759,68 @@ export function classifyTapEntry(entry: TapEntry): TapEvent | null {
       };
     }
 
-    // All other categories (console, fs, timer, stdout, stderr, etc.) → null (disk only)
+    // ── New TAP categories (MISSED-HOOKS) ──
+
+    if (cat === "fspromises") {
+      return {
+        kind: "AsyncFileOp", ts,
+        op: String(entry.op || ""),
+        path: String(entry.path || ""),
+        size: typeof entry.size === "number" ? entry.size : 0,
+        durationMs: typeof entry.dur === "number" ? entry.dur : 0,
+        error: entry.err ? String(entry.err) : null,
+      };
+    }
+
+    if (cat === "bunfile") {
+      return {
+        kind: "BunFileOp", ts,
+        op: String(entry.op || ""),
+        path: String(entry.path || ""),
+        durationMs: typeof entry.dur === "number" ? entry.dur : 0,
+      };
+    }
+
+    if (cat === "abort") {
+      return {
+        kind: "AbortSignal", ts,
+        reason: String(entry.reason || ""),
+      };
+    }
+
+    if (cat === "fswatch") {
+      return {
+        kind: "FileWatch", ts,
+        op: String(entry.op || ""),
+        path: String(entry.path || ""),
+      };
+    }
+
+    if (cat === "textdecoder") {
+      return {
+        kind: "TextDecoderChunk", ts,
+        length: typeof entry.len === "number" ? entry.len : 0,
+        snap: typeof entry.snap === "string" ? entry.snap : "",
+      };
+    }
+
+    if (cat === "events") {
+      return {
+        kind: "EmitterEvent", ts,
+        eventType: String(entry.type || ""),
+        source: String(entry.src || ""),
+      };
+    }
+
+    if (cat === "envproxy") {
+      return {
+        kind: "EnvAccess", ts,
+        key: String(entry.key || ""),
+        hasValue: !!entry.hasValue,
+      };
+    }
+
+    // All other categories (console, fs, timer, stdout, stderr, etc.) -> null (disk only)
     return null;
   } catch {
     return null;

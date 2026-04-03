@@ -18,7 +18,6 @@ import type { Session, SessionConfig, SessionState } from "../../types/session";
 import { isSessionIdle } from "../../types/session";
 import "./TerminalPanel.css";
 
-const EMPTY_TAP_SET = new Set<string>();
 
 interface TerminalPanelProps {
   session: Session;
@@ -90,13 +89,28 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     inspectorReconnectKey
   );
 
-  const tapCategories = useSessionStore((s) => s.tapCategories.get(session.id) ?? EMPTY_TAP_SET);
   useTapPipeline({
     sessionId: session.state !== "dead" ? session.id : null,
     wsSend: inspector.wsSend,
     connected: inspector.connected,
-    categories: tapCategories,
   });
+
+  // Auto-start traffic logging when recording config enables it
+  const trafficEnabled = useSettingsStore((s) => s.recordingConfig.traffic.enabled);
+  const startTrafficLog = useSessionStore((s) => s.startTrafficLog);
+  const trafficStartedRef = useRef(false);
+  useEffect(() => {
+    if (!inspector.connected || session.state === "dead") {
+      trafficStartedRef.current = false;
+      return;
+    }
+    if (trafficEnabled && !trafficStartedRef.current) {
+      trafficStartedRef.current = true;
+      invoke<string>("start_traffic_log", { sessionId: session.id })
+        .then((path) => startTrafficLog(session.id, path))
+        .catch((e) => dlog("traffic", session.id, `auto-start failed: ${e}`, "WARN"));
+    }
+  }, [inspector.connected, trafficEnabled, session.id, session.state, startTrafficLog]);
 
   // Tap event processor: sole source of state, metadata, subagent data
   const tapProcessor = useTapEventProcessor(

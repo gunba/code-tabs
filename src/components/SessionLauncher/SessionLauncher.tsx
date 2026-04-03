@@ -11,7 +11,7 @@ import {
   type PermissionMode,
   DEFAULT_SESSION_CONFIG,
 } from "../../types/session";
-import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning, IconSkull, IconBulldozer, IconAntenna, IconTraffic } from "../Icons/Icons";
+import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning, IconSkull, IconBulldozer } from "../Icons/Icons";
 import { PillGroup } from "../PillGroup/PillGroup";
 import "./SessionLauncher.css";
 
@@ -93,8 +93,6 @@ export function SessionLauncher() {
   const [defaultsSaved, setDefaultsSaved] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState<string>("");
   const [promptMode, setPromptMode] = useState<"replace" | "append">("replace");
-  const [autoTap, setAutoTap] = useState(false);
-  const [autoTraffic, setAutoTraffic] = useState(false);
 
   // Derive model family + context variant from config.model for the pill UI.
   // e.g. "claude-opus-4-6[1m]" → family="opus", variant="1m"
@@ -293,15 +291,12 @@ export function SessionLauncher() {
         await closeSession(replaceId);
         useSettingsStore.getState().setReplaceSessionId(null);
       }
-      const session = await createSession(name, finalConfig);
-      // Auto-start recording flags (consumed by TerminalPanel on spawn/connect)
-      if (autoTap) useSessionStore.getState().startAllTaps(session.id);
-      if (autoTraffic) useSessionStore.getState().setAutoTrafficLogOnStart(session.id);
+      await createSession(name, finalConfig);
       setShowLauncher(false);
     } catch (err) {
       dlog("launcher", null, `create session failed: ${err}`, "ERR");
     }
-  }, [launchConfig, isNonSessionCommand, commandTokens, createSession, closeSession, setShowLauncher, addRecentDir, setLastConfig, autoTap]);
+  }, [launchConfig, isNonSessionCommand, commandTokens, createSession, closeSession, setShowLauncher, addRecentDir, setLastConfig]);
 
   const handleBrowse = useCallback(async () => {
     const selected = await open({
@@ -541,26 +536,6 @@ export function SessionLauncher() {
               ) : <span />}
             </div>
             <div className="launcher-cli-header-right">
-              <button
-                className={`launcher-toggle-pill${autoTap ? " launcher-toggle-pill-on launcher-toggle-tap" : ""}`}
-                onClick={() => setAutoTap((v) => !v)}
-                aria-pressed={autoTap}
-                title="Auto-start TAP recording on connect"
-                type="button"
-                disabled={isNonSessionCommand}
-              >
-                <IconAntenna size={12} /> TAP
-              </button>
-              <button
-                className={`launcher-toggle-pill${autoTraffic ? " launcher-toggle-pill-on launcher-toggle-tfc" : ""}`}
-                onClick={() => setAutoTraffic((v) => !v)}
-                aria-pressed={autoTraffic}
-                title="Auto-start API traffic logging from first request"
-                type="button"
-                disabled={isNonSessionCommand}
-              >
-                <IconTraffic size={12} /> TFC
-              </button>
               <button
                 className={`launcher-save-defaults${defaultsSaved ? " launcher-save-defaults-saved" : ""}`}
                 onClick={() => { setSavedDefaults(launchConfig); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}

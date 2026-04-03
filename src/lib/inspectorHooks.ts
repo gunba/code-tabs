@@ -397,7 +397,7 @@ export const INSTALL_HOOK = `(function() {
   return 'ok';
 })()`;
 
-// [SI-21] INSTALL_TAPS: 15 tap categories, TCP push via Bun.connect to TAP_PORT
+// [SI-21] INSTALL_TAPS: 22 tap categories, TCP push via Bun.connect to TAP_PORT
 // [IN-02] Status-line detection, WebFetch bypass, HTTPS/fetch timeout patches, wrapAfter helper
 /**
  * Runtime.evaluate expression that installs tap hooks for deep inspection
@@ -419,7 +419,7 @@ export const INSTALL_TAPS = `(function() {
   if (globalThis.__tapsInstalled) return 'already';
   globalThis.__tapsInstalled = true;
 
-  var flags = { parse: true, stringify: true, console: false, fs: false, spawn: false, fetch: false, exit: false, timer: false, stdout: false, stderr: false, require: false, bun: false, websocket: false, net: false, stream: false };
+  var flags = { parse: true, stringify: true, console: false, fs: false, spawn: false, fetch: false, exit: false, timer: false, stdout: false, stderr: false, require: false, bun: false, websocket: false, net: false, stream: false, fspromises: false, bunfile: false, abort: false, fswatch: false, textdecoder: false, events: false, envproxy: false };
   globalThis.__tapFlags = flags;
 
   // Save originals BEFORE any wrapping — push() needs these to avoid recursion
@@ -1166,11 +1166,163 @@ export const INSTALL_TAPS = `(function() {
     }
   } catch(e) {}
 
+  // ── fs.promises async file I/O ──
+  try {
+    var fsp = require('fs').promises;
+    if (fsp && !fsp.__tapped) {
+      fsp.__tapped = true;
+      ['readFile', 'writeFile', 'mkdir', 'rm', 'access', 'appendFile'].forEach(function(method) {
+        if (typeof fsp[method] !== 'function') return;
+        var orig = fsp[method];
+        fsp[method] = function(pathArg) {
+          var args = arguments;
+          var t0 = Date.now();
+          return orig.apply(fsp, args).then(function(result) {
+            if (flags.fspromises) {
+              var p = typeof pathArg === 'string' ? pathArg : String(pathArg);
+              var size = result ? (result.length || result.byteLength || 0) : 0;
+              push('fspromises', { op: method, path: p.slice(-200), size: size, dur: Date.now() - t0 });
+            }
+            return result;
+          }, function(err) {
+            if (flags.fspromises) {
+              push('fspromises', { op: method, path: String(pathArg).slice(-200), err: String(err).slice(0, 200), dur: Date.now() - t0 });
+            }
+            throw err;
+          });
+        };
+      });
+    }
+  } catch(e) {}
+
+  // ── Bun.file() instance methods ──
+  try {
+    if (typeof Bun !== 'undefined' && typeof Bun.file === 'function' && !Bun.__fileTapped) {
+      Bun.__fileTapped = true;
+      var origBunFile = Bun.file;
+      Bun.file = function(path) {
+        var file = origBunFile.apply(Bun, arguments);
+        if (!flags.bunfile) return file;
+        var fp = typeof path === 'string' ? path.slice(-200) : String(path).slice(-200);
+        ['text', 'json', 'exists'].forEach(function(m) {
+          if (typeof file[m] !== 'function') return;
+          var orig = file[m].bind(file);
+          file[m] = function() {
+            var t0 = Date.now();
+            return orig().then(function(result) {
+              if (flags.bunfile) {
+                push('bunfile', { op: m, path: fp, dur: Date.now() - t0 });
+              }
+              return result;
+            });
+          };
+        });
+        return file;
+      };
+    }
+  } catch(e) {}
+
+  // ── AbortController.prototype.abort ──
+  try {
+    var origAbort = AbortController.prototype.abort;
+    AbortController.prototype.abort = function(reason) {
+      if (flags.abort) {
+        push('abort', { reason: String(reason || '').slice(0, 200) });
+      }
+      return origAbort.apply(this, arguments);
+    };
+  } catch(e) {}
+
+  // ── fs.watch / fs.watchFile ──
+  try {
+    var fsMod = require('fs');
+    if (fsMod.watch && !fsMod.__watchTapped) {
+      fsMod.__watchTapped = true;
+      var origWatch = fsMod.watch;
+      fsMod.watch = function(path) {
+        if (flags.fswatch) {
+          push('fswatch', { op: 'watch', path: String(path).slice(-200) });
+        }
+        return origWatch.apply(fsMod, arguments);
+      };
+    }
+    if (fsMod.watchFile && !fsMod.__watchFileTapped) {
+      fsMod.__watchFileTapped = true;
+      var origWatchFile = fsMod.watchFile;
+      fsMod.watchFile = function(path) {
+        if (flags.fswatch) {
+          push('fswatch', { op: 'watchFile', path: String(path).slice(-200) });
+        }
+        return origWatchFile.apply(fsMod, arguments);
+      };
+    }
+  } catch(e) {}
+
+  // ── TextDecoder.prototype.decode (SSE streaming) ──
+  try {
+    var origDecode = TextDecoder.prototype.decode;
+    TextDecoder.prototype.decode = function(input, options) {
+      var result = origDecode.apply(this, arguments);
+      if (flags.textdecoder && result && result.length > 0) {
+        // Only capture chunks that look like SSE data
+        if (result.indexOf('data:') !== -1 || result.indexOf('event:') !== -1) {
+          push('textdecoder', { len: result.length, snap: result.slice(0, 2000) });
+        }
+      }
+      return result;
+    };
+  } catch(e) {}
+
+  // ── EventEmitter.prototype.emit (filtered for hook events) ──
+  try {
+    var EventEmitter = require('events').EventEmitter;
+    if (EventEmitter && !EventEmitter.prototype.__emitTapped) {
+      EventEmitter.prototype.__emitTapped = true;
+      var origEmit = EventEmitter.prototype.emit;
+      EventEmitter.prototype.emit = function(type) {
+        if (flags.events && typeof type === 'string') {
+          // Only capture hook-related and lifecycle events to manage volume
+          if (type.indexOf('Hook') === 0 || type === 'SessionEnd' || type === 'ConfigChange' || type === 'CwdChanged') {
+            var args = [];
+            for (var i = 1; i < arguments.length && i < 3; i++) {
+              try { args.push(origStringify(arguments[i]).slice(0, 500)); } catch(e2) { args.push('[circular]'); }
+            }
+            push('events', { type: type, args: args, src: this.constructor ? this.constructor.name : '' });
+          }
+        }
+        return origEmit.apply(this, arguments);
+      };
+    }
+  } catch(e) {}
+
+  // ── process.env Proxy (CLAUDE_*/ANTHROPIC_* only) ──
+  try {
+    if (flags.envproxy === false && !process.env.__envProxyReady) {
+      process.env.__envProxyReady = true;
+      // Deferred: only activate when flag is toggled on
+      // The proxy is installed but checks flags.envproxy each access
+      var origEnv = process.env;
+      var envHandler = {
+        get: function(target, prop) {
+          if (flags.envproxy && typeof prop === 'string' && (prop.indexOf('CLAUDE') === 0 || prop.indexOf('ANTHROPIC') === 0)) {
+            push('envproxy', { key: prop, hasValue: target[prop] !== undefined });
+          }
+          return target[prop];
+        },
+        set: function(target, prop, value) {
+          target[prop] = value;
+          return true;
+        }
+      };
+      try { process.env = new Proxy(origEnv, envHandler); } catch(e2) { /* Proxy not supported or env frozen */ }
+    }
+  } catch(e) {}
+
   return 'ok';
 })()`;
 
 /** All tap category names. */
-export type TapCategory = "parse" | "stringify" | "console" | "fs" | "spawn" | "fetch" | "exit" | "timer" | "stdout" | "stderr" | "require" | "bun" | "websocket" | "net" | "stream";
+export type TapCategory = "parse" | "stringify" | "console" | "fs" | "spawn" | "fetch" | "exit" | "timer" | "stdout" | "stderr" | "require" | "bun" | "websocket" | "net" | "stream" | "fspromises" | "bunfile" | "abort" | "fswatch" | "textdecoder" | "events" | "envproxy";
 
 /**
  * Build a Runtime.evaluate expression to toggle a single tap category.
@@ -1184,7 +1336,7 @@ export function tapToggleExpr(category: TapCategory, enabled: boolean): string {
  */
 export function tapToggleAllExpr(enabled: boolean): string {
   // parse and stringify are always-on (drive state detection) — only toggle optional categories
-  return `(function(){var f=globalThis.__tapFlags;if(f){f.console=${enabled};f.fs=${enabled};f.spawn=${enabled};f.fetch=${enabled};f.exit=${enabled};f.timer=${enabled};f.stdout=${enabled};f.stderr=${enabled};f.require=${enabled};f.bun=${enabled};f.websocket=${enabled};f.net=${enabled};f.stream=${enabled}}return 'ok'})()`;
+  return `(function(){var f=globalThis.__tapFlags;if(f){f.console=${enabled};f.fs=${enabled};f.spawn=${enabled};f.fetch=${enabled};f.exit=${enabled};f.timer=${enabled};f.stdout=${enabled};f.stderr=${enabled};f.require=${enabled};f.bun=${enabled};f.websocket=${enabled};f.net=${enabled};f.stream=${enabled};f.fspromises=${enabled};f.bunfile=${enabled};f.abort=${enabled};f.fswatch=${enabled};f.textdecoder=${enabled};f.events=${enabled};f.envproxy=${enabled}}return 'ok'})()`;
 }
 
 // [SI-15] POLL_STATE fields: retained for tests/legacy, not consumed by running app

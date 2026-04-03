@@ -188,7 +188,7 @@ export class TapMetadataAccumulator {
         this.choiceHint = false;
         break;
 
-      // API region from cf-ray header; rate-limit tracking
+      // API region from cf-ray header; rate-limit tracking; latency from round-trip time
       case "ApiFetch":
         if (event.cfRay) {
           const dash = event.cfRay.lastIndexOf("-");
@@ -197,9 +197,10 @@ export class TapMetadataAccumulator {
         if (event.requestId) this.lastRequestId = event.requestId;
         if (event.rateLimitRemaining) this.rateLimitRemaining = event.rateLimitRemaining;
         if (event.rateLimitReset) this.rateLimitReset = event.rateLimitReset;
+        if (event.durationMs > 0) this.apiLatencyMs = event.durationMs;
         break;
 
-      // [IN-18] Dedicated HTTP ping to Anthropic origin (GET /v1/models with auth, bypasses CF cache)
+      // [IN-18] Dedicated HTTP ping — overrides ApiFetch latency with a cleaner measurement
       case "HttpPing":
         if (event.durationMs > 0) this.apiLatencyMs = event.durationMs;
         break;
@@ -362,6 +363,23 @@ export class TapMetadataAccumulator {
           sevenDayResetsAt: event.sevenDayResetsAt,
           vimMode: event.vimMode,
         };
+        break;
+
+      // Hook events — extract metadata-enriching fields
+      case "PreCompactEvent":
+      case "PostCompactEvent":
+        this.currentAction = event.kind === "PreCompactEvent" ? "compacting..." : null;
+        break;
+
+      case "CwdChangedEvent":
+        // CWD change is informational — accumulate for metadata visibility
+        break;
+
+      case "TaskCreatedEvent":
+      case "TaskCompletedEvent":
+        this.currentAction = event.kind === "TaskCreatedEvent"
+          ? `task: ${event.taskSubject}`
+          : null;
         break;
 
       default:
