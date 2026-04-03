@@ -705,8 +705,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         if (cancelled) return;
         const active = document.activeElement;
         if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT")) return;
-        // Don't reclaim focus if a modal overlay is open
-        if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .modal-overlay, .palette-overlay')) return;
+        // Don't reclaim focus if a modal overlay or side panel is open
+        if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .modal-overlay, .palette-overlay, .search-panel, .debug-panel, .diff-panel')) return;
         terminal.termRef.current?.focus();
       });
     };

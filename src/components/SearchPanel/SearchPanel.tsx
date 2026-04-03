@@ -40,6 +40,18 @@ export function SearchPanel({ onClose }: SearchPanelProps) {
   const sessions = useSessionStore((s) => s.sessions);
   const setActiveTab = useSessionStore((s) => s.setActiveTab);
 
+  // Ref for reading current sessions without triggering executeSearch recreation.
+  // executeSearch only needs session IDs (to call getSessionTranscript), not full objects.
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
+  // Stable scope key: only changes when sessions are added/removed (not on state/metadata churn).
+  // Prevents session state transitions (idle/waiting/active) from re-triggering search.
+  const sessionScope = useMemo(
+    () => sessions.filter(s => !s.isMetaAgent).map(s => s.id).join('\0'),
+    [sessions]
+  );
+
   // Auto-focus input on mount
   useEffect(() => {
     inputRef.current?.focus();
@@ -66,7 +78,7 @@ export function SearchPanel({ onClose }: SearchPanelProps) {
     setRegexError(null);
 
     const buffers: Array<{ id: string; text: string }> = [];
-    for (const s of sessions) {
+    for (const s of sessionsRef.current) {
       if (s.isMetaAgent) continue;
       const text = getSessionTranscript(s.id);
       if (text) buffers.push({ id: s.id, text });
@@ -76,7 +88,8 @@ export function SearchPanel({ onClose }: SearchPanelProps) {
     setResults(matches);
     setActiveIndex(matches.length > 0 ? 0 : -1);
     dlog("search", null, `Search "${query}" → ${matches.length} matches across ${buffers.length} sessions`);
-  }, [query, caseSensitive, useRegex, sessions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, caseSensitive, useRegex, sessionScope]);
 
   // Debounce search on query/options change
   useEffect(() => {
@@ -118,6 +131,9 @@ export function SearchPanel({ onClose }: SearchPanelProps) {
 
   // Navigate to a specific result
   const navigateToResult = useCallback((match: SearchMatch) => {
+    // Skip if session was closed while results are still displayed
+    if (!sessionsRef.current.some(s => s.id === match.sessionId)) return;
+
     // Clear previous highlight
     if (prevHighlightSession.current && prevHighlightSession.current !== match.sessionId) {
       clearHighlight(prevHighlightSession.current);
