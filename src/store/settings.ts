@@ -23,15 +23,18 @@ export const DEFAULT_NOISY_EVENT_KINDS: string[] = [
   "ApiTelemetry", "ProcessHealth", "EnvAccess", "TextDecoderChunk",
 ];
 
+// [CI-05] Recording defaults expand TAP categories, keep stdout/stderr off, and v6 backfills older persisted configs.
 export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
   taps: {
     enabled: true,
     categories: {
       parse: true, stringify: true,
       console: true, fs: true, spawn: true, fetch: true,
-      exit: true, timer: true, stdout: true, stderr: true,
+      exit: true, timer: true, stdout: false, stderr: false,
       require: true, bun: true,
       websocket: false, net: false, stream: false,
+      fspromises: true, bunfile: true, abort: true,
+      fswatch: false, textdecoder: false, events: false, envproxy: false,
     },
   },
   traffic: { enabled: true },
@@ -468,9 +471,9 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "claude-tabs-settings",
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => localStorage),
-      // [CI-04] Migration: v0 drops tierOverrides + converts modelPatterns to routes; v1->v2 adds modelRegistry
+      // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>;
         if (version === 0) {
@@ -512,6 +515,22 @@ export const useSettingsStore = create<SettingsState>()(
           const recordingConfig = state.recordingConfig as Record<string, unknown> | undefined;
           if (recordingConfig && !Array.isArray(recordingConfig.noisyEventKinds)) {
             recordingConfig.noisyEventKinds = DEFAULT_NOISY_EVENT_KINDS;
+          }
+        }
+        if (version < 6) {
+          const rc = state.recordingConfig as { taps?: { categories?: Record<string, boolean> } } | undefined;
+          if (rc?.taps?.categories) {
+            // Default stdout/stderr off — pure ANSI noise
+            rc.taps.categories.stdout = false;
+            rc.taps.categories.stderr = false;
+            // Add missing categories from MISSED-HOOKS expansion
+            if (rc.taps.categories.fspromises === undefined) rc.taps.categories.fspromises = true;
+            if (rc.taps.categories.bunfile === undefined) rc.taps.categories.bunfile = true;
+            if (rc.taps.categories.abort === undefined) rc.taps.categories.abort = true;
+            if (rc.taps.categories.fswatch === undefined) rc.taps.categories.fswatch = false;
+            if (rc.taps.categories.textdecoder === undefined) rc.taps.categories.textdecoder = false;
+            if (rc.taps.categories.events === undefined) rc.taps.categories.events = false;
+            if (rc.taps.categories.envproxy === undefined) rc.taps.categories.envproxy = false;
           }
         }
         return state;

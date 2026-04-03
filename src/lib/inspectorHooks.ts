@@ -397,12 +397,12 @@ export const INSTALL_HOOK = `(function() {
   return 'ok';
 })()`;
 
-// [SI-21] INSTALL_TAPS: 22 tap categories, TCP push via Bun.connect to TAP_PORT
+// [SI-21] INSTALL_TAPS: 22 flag-gated tap categories; multi-op families use shared cat+op payloads via TCP push
 // [IN-02] Status-line detection, WebFetch bypass, HTTPS/fetch timeout patches, wrapAfter helper
 /**
  * Runtime.evaluate expression that installs tap hooks for deep inspection
- * of Claude Code internals. Push-based delivery via console.debug with
- * \\x00TAP prefix — no polling needed.
+ * of Claude Code internals. Push-based delivery via Bun.connect TCP on
+ * TAP_PORT — no polling needed.
  *
  * parse and stringify are always on (drive state detection).
  * Other categories (console, fs, spawn, fetch, etc.) are opt-in via flags.
@@ -633,7 +633,7 @@ export const INSTALL_TAPS = `(function() {
             var parts = [];
             for (var ai = 0; ai < arguments.length; ai++) parts.push(String(arguments[ai]));
             var msg = parts.join(' ');
-            if (msg.length > 0) push('console.' + method, { msg: msg.slice(0, 1000) });
+            if (msg.length > 0) push('console', { op: method, msg: msg.slice(0, 1000) });
           } catch(e) {}
         }
         return orig.apply(console, arguments);
@@ -667,7 +667,7 @@ export const INSTALL_TAPS = `(function() {
         try {
           var p = typeof path === 'string' ? path : String(path);
           var s = snip(result);
-          push('fs.read', { path: p.slice(-200), size: s.size, content: s.content });
+          push('fs', { op: 'read', path: p.slice(-200), size: s.size, content: s.content });
         } catch(e) {}
       }
       return result;
@@ -678,7 +678,7 @@ export const INSTALL_TAPS = `(function() {
         try {
           var p = typeof path === 'string' ? path : String(path);
           var s = snip(data);
-          push('fs.write', { path: p.slice(-200), size: s.size, content: s.content });
+          push('fs', { op: 'write', path: p.slice(-200), size: s.size, content: s.content });
         } catch(e) {}
       }
       return origWrite.apply(this, arguments);
@@ -689,7 +689,7 @@ export const INSTALL_TAPS = `(function() {
       var result = origExists.apply(this, arguments);
       if (flags.fs) {
         try {
-          push('fs.exists', { path: (typeof path === 'string' ? path : String(path)).slice(-200), result: result });
+          push('fs', { op: 'exists', path: (typeof path === 'string' ? path : String(path)).slice(-200), result: result });
         } catch(e) {}
       }
       return result;
@@ -699,7 +699,7 @@ export const INSTALL_TAPS = `(function() {
       var result = origStat.apply(this, arguments);
       if (flags.fs) {
         try {
-          push('fs.stat', { path: (typeof path === 'string' ? path : String(path)).slice(-200), isDir: result.isDirectory(), size: result.size });
+          push('fs', { op: 'stat', path: (typeof path === 'string' ? path : String(path)).slice(-200), isDir: result.isDirectory(), size: result.size });
         } catch(e) {}
       }
       return result;
@@ -709,7 +709,7 @@ export const INSTALL_TAPS = `(function() {
       var result = origReaddir.apply(this, arguments);
       if (flags.fs) {
         try {
-          push('fs.readdir', { path: (typeof path === 'string' ? path : String(path)).slice(-200), count: result.length });
+          push('fs', { op: 'readdir', path: (typeof path === 'string' ? path : String(path)).slice(-200), count: result.length });
         } catch(e) {}
       }
       return result;
@@ -745,7 +745,7 @@ export const INSTALL_TAPS = `(function() {
     cp.exec = function(cmd) {
       if (flags.spawn) {
         try {
-          push('exec', { cmd: String(cmd || '').slice(0, 500) });
+          push('spawn', { op: 'exec', cmd: String(cmd || '').slice(0, 500) });
         } catch(e) {}
       }
       return origExec.apply(this, arguments);
@@ -858,14 +858,14 @@ export const INSTALL_TAPS = `(function() {
           var caller = '';
           try { caller = (new Error()).stack.split('\\n')[2] || ''; caller = caller.trim().slice(0, 150); } catch(e) {}
           timerMap[result] = seq;
-          push('setTimeout', { id: seq, delay: delay, caller: caller });
+          push('timer', { op: 'setTimeout', id: seq, delay: delay, caller: caller });
         } catch(e) {}
       }
       return result;
     };
     globalThis.clearTimeout = function(id) {
       if (flags.timer && id && timerMap[id]) {
-        try { push('clearTimeout', { id: timerMap[id] }); delete timerMap[id]; } catch(e) {}
+        try { push('timer', { op: 'clearTimeout', id: timerMap[id] }); delete timerMap[id]; } catch(e) {}
       }
       return origClearTimeout.apply(globalThis, arguments);
     };
@@ -926,14 +926,14 @@ export const INSTALL_TAPS = `(function() {
           var caller = '';
           try { caller = (new Error()).stack.split('\\n')[2] || ''; caller = caller.trim().slice(0, 150); } catch(e) {}
           intervalMap[result] = seq;
-          push('setInterval', { id: seq, delay: delay, caller: caller });
+          push('timer', { op: 'setInterval', id: seq, delay: delay, caller: caller });
         } catch(e) {}
       }
       return result;
     };
     globalThis.clearInterval = function(id) {
       if (flags.timer && id && intervalMap[id]) {
-        try { push('clearInterval', { id: intervalMap[id] }); delete intervalMap[id]; } catch(e) {}
+        try { push('timer', { op: 'clearInterval', id: intervalMap[id] }); delete intervalMap[id]; } catch(e) {}
       }
       return origClearInterval.apply(globalThis, arguments);
     };
@@ -950,7 +950,7 @@ export const INSTALL_TAPS = `(function() {
             try {
               var p = typeof dest === 'string' ? dest : (dest && dest.name ? dest.name : String(dest));
               var size = typeof data === 'string' ? data.length : (data && data.byteLength ? data.byteLength : 0);
-              push('bun.write', { path: p.slice(-200), size: size });
+              push('bun', { op: 'write', path: p.slice(-200), size: size });
             } catch(e) {}
           }
           return result;
@@ -968,7 +968,7 @@ export const INSTALL_TAPS = `(function() {
               else c = String(cmd);
               var o = opts || cmd;
               var cwd = (o && o.cwd) ? String(o.cwd).slice(-200) : null;
-              push('bun.spawn', { cmd: c.slice(0, 500), cwd: cwd, pid: result && result.pid });
+              push('bun', { op: 'spawn', cmd: c.slice(0, 500), cwd: cwd, pid: result && result.pid });
             } catch(e) {}
           }
           return result;
@@ -987,7 +987,7 @@ export const INSTALL_TAPS = `(function() {
               else c = String(cmd);
               var o = opts || cmd;
               var cwd = (o && o.cwd) ? String(o.cwd).slice(-200) : null;
-              push('bun.spawnSync', { cmd: c.slice(0, 500), cwd: cwd, code: result && result.exitCode, dur: Date.now() - t0 });
+              push('bun', { op: 'spawnSync', cmd: c.slice(0, 500), cwd: cwd, code: result && result.exitCode, dur: Date.now() - t0 });
             } catch(e) {}
           }
           return result;
@@ -1016,10 +1016,10 @@ export const INSTALL_TAPS = `(function() {
       globalThis.WebSocket = function(url, protocols) {
         var ws = protocols ? new OrigWS(url, protocols) : new OrigWS(url);
         if (flags.websocket) {
-          try { push('websocket.open', { url: String(url).slice(0, 300) }); } catch(e) {}
+          try { push('websocket', { op: 'open', url: String(url).slice(0, 300) }); } catch(e) {}
           ws.addEventListener('close', function(ev) {
             if (flags.websocket) {
-              try { push('websocket.close', { url: String(url).slice(0, 300), code: ev.code, reason: String(ev.reason || '').slice(0, 100) }); } catch(e) {}
+              try { push('websocket', { op: 'close', url: String(url).slice(0, 300), code: ev.code, reason: String(ev.reason || '').slice(0, 100) }); } catch(e) {}
             }
           });
         }
@@ -1028,7 +1028,7 @@ export const INSTALL_TAPS = `(function() {
           if (flags.websocket) {
             try {
               var len = typeof data === 'string' ? data.length : (data.byteLength || 0);
-              push('websocket.send', { url: String(url).slice(0, 300), len: len });
+              push('websocket', { op: 'send', url: String(url).slice(0, 300), len: len });
             } catch(e) {}
           }
           return origSend(data);
@@ -1069,7 +1069,7 @@ export const INSTALL_TAPS = `(function() {
           try {
             var srcName = (this.constructor && this.constructor.name) || 'Readable';
             var destName = (dest && dest.constructor && dest.constructor.name) || 'Writable';
-            push('stream.pipe', { src: srcName, dest: destName });
+            push('stream', { op: 'pipe', src: srcName, dest: destName });
           } catch(e) {}
         }
         return origPipe.apply(this, arguments);

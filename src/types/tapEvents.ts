@@ -448,6 +448,57 @@ export interface EnvAccess extends TapEventBase {
   hasValue: boolean;
 }
 
+export interface ConsoleOutput extends TapEventBase {
+  kind: "ConsoleOutput";
+  op: string;       // log, warn, error
+  msg: string;
+}
+
+export interface SyncFileOp extends TapEventBase {
+  kind: "SyncFileOp";
+  op: string;        // read, write, exists, stat, readdir
+  path: string;
+  size: number;
+  content: string | null;
+  result: boolean | null;  // exists result
+}
+
+export interface TimerOp extends TapEventBase {
+  kind: "TimerOp";
+  op: string;        // setTimeout, clearTimeout, setInterval, clearInterval
+  id: number;
+  delay: number;
+  caller: string;
+}
+
+export interface BunOp extends TapEventBase {
+  kind: "BunOp";
+  op: string;        // write, spawn, spawnSync
+  path: string;
+  cmd: string;
+  cwd: string | null;
+  pid: number | null;
+  code: number | null;
+  size: number;
+  durationMs: number;
+}
+
+export interface WebSocketOp extends TapEventBase {
+  kind: "WebSocketOp";
+  op: string;        // open, close, send
+  url: string;
+  code: number | null;
+  reason: string;
+  length: number;
+}
+
+export interface StreamOp extends TapEventBase {
+  kind: "StreamOp";
+  op: string;        // pipe
+  src: string;
+  dest: string;
+}
+
 // ── Hook events (captured only when Claude Code emits hook payloads) ──
 
 export interface SessionEndEvent extends TapEventBase {
@@ -597,6 +648,12 @@ export type TapEvent =
   | TextDecoderChunk
   | EmitterEvent
   | EnvAccess
+  | ConsoleOutput
+  | SyncFileOp
+  | TimerOp
+  | BunOp
+  | WebSocketOp
+  | StreamOp
   // Hook events
   | SessionEndEvent
   | StopEvent

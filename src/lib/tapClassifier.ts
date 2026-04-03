@@ -683,7 +683,7 @@ function classifyStatusLine(ts: number, entry: TapEntry): TapEvent {
   };
 }
 
-// [IN-10] Tap event pipeline: classifies ~49 typed events from raw TapEntry
+// [IN-10] Tap event pipeline: classifies raw TapEntry values into typed TapEvent objects
 /**
  * Classify a raw TapEntry into a typed TapEvent.
  * Returns null for noise, deltas, and unrecognized entries.
@@ -734,7 +734,7 @@ function classifyTapEntryInner(entry: TapEntry): TapEvent | null {
     }
 
     // Spawn: direct mapping (both child_process and Bun.spawn)
-    if (cat === "spawn" || cat === "bun.spawn") {
+    if (cat === "spawn") {
       return classifySpawn(ts, entry);
     }
 
@@ -826,7 +826,70 @@ function classifyTapEntryInner(entry: TapEntry): TapEvent | null {
       };
     }
 
-    // All other categories (console, fs, timer, stdout, stderr, etc.) -> null (disk only)
+    if (cat === "console") {
+      return {
+        kind: "ConsoleOutput", ts,
+        op: String(entry.op || ""),
+        msg: String(entry.msg || ""),
+      };
+    }
+
+    if (cat === "fs") {
+      return {
+        kind: "SyncFileOp", ts,
+        op: String(entry.op || ""),
+        path: String(entry.path || ""),
+        size: typeof entry.size === "number" ? entry.size : 0,
+        content: typeof entry.content === "string" ? entry.content : null,
+        result: typeof entry.result === "boolean" ? entry.result : null,
+      };
+    }
+
+    if (cat === "timer") {
+      return {
+        kind: "TimerOp", ts,
+        op: String(entry.op || ""),
+        id: typeof entry.id === "number" ? entry.id : 0,
+        delay: typeof entry.delay === "number" ? entry.delay : 0,
+        caller: String(entry.caller || ""),
+      };
+    }
+
+    if (cat === "bun") {
+      return {
+        kind: "BunOp", ts,
+        op: String(entry.op || ""),
+        path: String(entry.path || ""),
+        cmd: String(entry.cmd || ""),
+        cwd: typeof entry.cwd === "string" ? entry.cwd : null,
+        pid: typeof entry.pid === "number" ? entry.pid : null,
+        code: typeof entry.code === "number" ? entry.code : null,
+        size: typeof entry.size === "number" ? entry.size : 0,
+        durationMs: typeof entry.dur === "number" ? entry.dur : 0,
+      };
+    }
+
+    if (cat === "websocket") {
+      return {
+        kind: "WebSocketOp", ts,
+        op: String(entry.op || ""),
+        url: String(entry.url || ""),
+        code: typeof entry.code === "number" ? entry.code : null,
+        reason: String(entry.reason || ""),
+        length: typeof entry.len === "number" ? entry.len : 0,
+      };
+    }
+
+    if (cat === "stream") {
+      return {
+        kind: "StreamOp", ts,
+        op: String(entry.op || ""),
+        src: String(entry.src || ""),
+        dest: String(entry.dest || ""),
+      };
+    }
+
+    // Remaining categories (stdout, stderr, require) -> null (disk only)
     return null;
   } catch {
     return null;

@@ -217,7 +217,7 @@ describe("INSTALL_TAPS console hooks", () => {
     (g.__tapFlags as Record<string, boolean>).console = true;
     mockTapWrites = [];
     console.warn("test warning");
-    const entries = collectTapEntries().filter((e) => e.cat === "console.warn");
+    const entries = collectTapEntries().filter((e) => e.cat === "console" && e.op === "warn");
     expect(entries.length).toBe(1);
     expect(entries[0].msg).toBe("test warning");
   });
@@ -225,7 +225,7 @@ describe("INSTALL_TAPS console hooks", () => {
   it("is no-op when console flag is false", () => {
     mockTapWrites = [];
     console.log("invisible");
-    const entries = collectTapEntries().filter((e) => String(e.cat).startsWith("console."));
+    const entries = collectTapEntries().filter((e) => e.cat === "console");
     expect(entries.length).toBe(0);
   });
 });
@@ -326,7 +326,7 @@ describe("INSTALL_TAPS console hooks — all methods", () => {
     mockTapWrites = [];
     console.log("test log");
     const entries = collectTapEntries();
-    expect(entries.some((e) => e.cat === "console.log" && e.msg === "test log")).toBe(true);
+    expect(entries.some((e) => e.cat === "console" && e.op === "log" && e.msg === "test log")).toBe(true);
   });
 
   it("captures console.error", () => {
@@ -335,7 +335,7 @@ describe("INSTALL_TAPS console hooks — all methods", () => {
     mockTapWrites = [];
     console.error("test error");
     const entries = collectTapEntries();
-    expect(entries.some((e) => e.cat === "console.error" && e.msg === "test error")).toBe(true);
+    expect(entries.some((e) => e.cat === "console" && e.op === "error" && e.msg === "test error")).toBe(true);
   });
 
   it("joins multiple arguments with space", () => {
@@ -398,7 +398,7 @@ describe("INSTALL_TAPS timer hook", () => {
     mockTapWrites = [];
     const id = setTimeout(() => {}, 200);
     clearTimeout(id);
-    const entries = collectTapEntries().filter((e) => e.cat === "setTimeout");
+    const entries = collectTapEntries().filter((e) => e.cat === "timer" && e.op === "setTimeout");
     expect(entries.length).toBe(1);
     expect(entries[0].delay).toBe(200);
     expect(typeof entries[0].caller).toBe("string");
@@ -410,7 +410,7 @@ describe("INSTALL_TAPS timer hook", () => {
     mockTapWrites = [];
     const id = setTimeout(() => {}, 10);
     clearTimeout(id);
-    const entries = collectTapEntries().filter((e) => e.cat === "setTimeout");
+    const entries = collectTapEntries().filter((e) => e.cat === "timer" && e.op === "setTimeout");
     expect(entries.length).toBe(0);
   });
 });

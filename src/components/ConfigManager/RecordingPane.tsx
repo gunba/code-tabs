@@ -213,6 +213,8 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
                       disabled={cat.locked || !recordingConfig.taps.enabled}
                     />
                     <span>{cat.label}</span>
+                    {/* [CM-27] Show the persisted TAP category key beside the friendly label. */}
+                    <span className="recording-cat-key">{cat.key}</span>
                   </label>
                 ))}
               </div>

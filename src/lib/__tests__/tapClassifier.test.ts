@@ -311,14 +311,15 @@ describe("classifyTapEntry — fetch", () => {
 });
 
 describe("classifyTapEntry — spawn", () => {
-  it("classifies bun.spawn → SubprocessSpawn", () => {
+  it("classifies bun spawn → BunOp", () => {
     const entry: TapEntry = {
-      ts: 4000, cat: "bun.spawn",
-      cmd: "bash.exe -c npm test", cwd: "/projects/app", pid: 12345,
+      ts: 4000, cat: "bun",
+      op: "spawn", cmd: "bash.exe -c npm test", cwd: "/projects/app", pid: 12345,
     };
     const event = classifyTapEntry(entry);
-    expect(event?.kind).toBe("SubprocessSpawn");
-    if (event?.kind === "SubprocessSpawn") {
+    expect(event?.kind).toBe("BunOp");
+    if (event?.kind === "BunOp") {
+      expect(event.op).toBe("spawn");
       expect(event.cmd).toBe("bash.exe -c npm test");
       expect(event.pid).toBe(12345);
     }

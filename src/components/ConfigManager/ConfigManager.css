@@ -2132,6 +2132,13 @@
   cursor: default;
 }
 
+.recording-cat-key {
+  font-size: 9px;
+  font-family: var(--mono);
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+
 .recording-data-row {
   display: flex;
   align-items: center;

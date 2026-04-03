@@ -33,8 +33,8 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "recording", label: "Recording", icon: <IconCircleFilled size={11} /> },
 ];
 
-// [CM-11] 9-tab config modal (84vw, max 1500px, 78vh), store-controlled active tab
-// [CM-05] Tab routing: ThreePaneEditor (2 or 3 col), dedicated single-pane, or keep-alive
+// [CM-11] 10-tab config modal (84vw, max 1500px, 78vh), store-controlled active tab
+// [CM-05] Tab routing: editor tabs plus dedicated Plugins/Prompts/Providers/Recording panes
 // [CM-18] Inline SVG icons per tab — monochrome, cross-platform
 // [CM-20] Tab label "Claude" (not "CLAUDE.md")
 export function ConfigManager() {
