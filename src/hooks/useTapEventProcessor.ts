@@ -190,8 +190,14 @@ export function useTapEventProcessor(
 
       // 5. Session-level signals
       // [SS-01] [SS-02] Detect session switches via sid field change (plan-mode fork, /resume, compaction)
+      // Gate behind isSubagentInFlight: subagent session init records arrive through TAP
+      // before the first sidechain ConversationMessage, so sidechainActive alone is insufficient.
       if (event.kind === "SessionRegistration") {
-        setClaudeSessionId(event.sessionId);
+        if (!subTracker.isSubagentInFlight()) {
+          setClaudeSessionId(event.sessionId);
+        } else {
+          dlog("tap", sid, `SessionRegistration(${event.sessionId}) suppressed — subagent in flight`, "DEBUG");
+        }
       }
 
       // [SL-18] CustomTitle always persists to session store + settings sessionNames map
@@ -251,12 +257,16 @@ export function useTapEventProcessor(
         }
       }
 
-      // [SI-20] Worktree cwd detection
+      // [SI-20] Worktree cwd detection: SessionRegistration gated behind isSubagentInFlight
       if (event.kind === "ConversationMessage" && event.cwd && !event.isSidechain) {
         updateCwdIfChanged(event.cwd);
       }
       if (event.kind === "SessionRegistration" && event.cwd) {
-        updateCwdIfChanged(event.cwd);
+        if (!subTracker.isSubagentInFlight()) {
+          updateCwdIfChanged(event.cwd);
+        } else {
+          dlog("tap", sid, `SessionRegistration cwd(${event.cwd}) suppressed — subagent in flight`, "DEBUG");
+        }
       }
       // WorktreeState: authoritative worktree path from CLI
       if (event.kind === "WorktreeState" && event.worktreePath) {

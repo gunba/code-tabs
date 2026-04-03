@@ -12,7 +12,7 @@ export interface SubagentAction {
 }
 
 // [SI-09] Subagent data captured via inspector tap events (no JSONL watcher)
-// [IN-03] Subagent tracking: Agent tool_use -> queue desc -> first sidechain msg creates entry
+// [IN-03] Subagent tracking: Agent tool_use -> queue desc -> first sidechain msg creates entry; pendingDescs drained on UserInterruption/UserInput/SlashCommand
 // [IN-05] Stale subagent detection removed -- push-based lifecycle via real-time events
 // [IN-06] Dead subagent purge removed -- idle subs remain visible until session ends
 /**
@@ -43,6 +43,13 @@ export class TapSubagentTracker {
       if (isSubagentActive(state)) return true;
     }
     return false;
+  }
+
+  /** True when any subagent lifecycle is in progress — from spawn through completion.
+   *  Covers the gap between SubagentSpawn and the first sidechain ConversationMessage
+   *  (where pendingDescs > 0 but hasActiveAgents() is false and sidechainActive is false). */
+  isSubagentInFlight(): boolean {
+    return this.pendingDescs.length > 0 || this.sidechainActive || this.hasActiveAgents();
   }
 
   /** Mark all active subagents with the given state, returning update actions. */
@@ -201,6 +208,7 @@ export class TapSubagentTracker {
         break;
 
       case "UserInterruption":
+        this.pendingDescs = [];
         actions.push(...this.markAllActive("interrupted"));
         break;
 
@@ -245,6 +253,7 @@ export class TapSubagentTracker {
       case "UserInput":
       case "SlashCommand":
         this.sidechainActive = false;
+        this.pendingDescs = [];
         // New user prompt → previous turn's agents are done; mark stale active agents idle
         actions.push(...this.markAllActive("idle"));
         break;

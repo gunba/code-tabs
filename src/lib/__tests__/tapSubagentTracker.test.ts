@@ -377,6 +377,139 @@ describe("TapSubagentTracker", () => {
     });
   });
 
+  // ── isSubagentInFlight ──
+
+  describe("isSubagentInFlight", () => {
+    it("returns false with no activity", () => {
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+
+    it("returns true after SubagentSpawn (before first sidechain message)", () => {
+      tracker.process(makeSpawn("review code"));
+      expect(tracker.isSubagentInFlight()).toBe(true);
+    });
+
+    it("returns true while agents are active", () => {
+      spawnAndActivate(tracker, "agent-1");
+      expect(tracker.isSubagentInFlight()).toBe(true);
+    });
+
+    it("returns false after all agents complete and sidechain clears", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process({ kind: "SubagentNotification", ts: 10, status: "completed", summary: "" } as TapEvent);
+      // sidechainActive still true until non-sidechain message
+      expect(tracker.isSubagentInFlight()).toBe(true);
+      // Non-sidechain message clears sidechainActive
+      tracker.process({
+        kind: "ConversationMessage", ts: 11, messageType: "user",
+        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+        promptId: null, stopReason: null, toolNames: [], toolAction: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      } as TapEvent);
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+
+    it("returns false after reset()", () => {
+      tracker.process(makeSpawn("test"));
+      tracker.reset();
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+
+    it("stale pendingDescs drained by UserInterruption", () => {
+      tracker.process(makeSpawn("will be interrupted"));
+      expect(tracker.isSubagentInFlight()).toBe(true);
+      tracker.process({ kind: "UserInterruption", ts: 5, forToolUse: false } as TapEvent);
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+
+    it("stale pendingDescs drained by UserInput", () => {
+      tracker.process(makeSpawn("will be abandoned"));
+      expect(tracker.isSubagentInFlight()).toBe(true);
+      tracker.process({
+        kind: "UserInput", ts: 5, display: "new prompt", sessionId: "s",
+      } as TapEvent);
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+
+    it("stale pendingDescs drained by SlashCommand", () => {
+      tracker.process(makeSpawn("will be abandoned"));
+      expect(tracker.isSubagentInFlight()).toBe(true);
+      tracker.process({
+        kind: "SlashCommand", ts: 5, command: "/help", display: "/help",
+      } as TapEvent);
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+
+    it("covers the full timing gap: SubagentSpawn → SessionRegistration window → complete", () => {
+      // 1. SubagentSpawn fires (main agent calls Agent tool)
+      tracker.process(makeSpawn("review code"));
+      expect(tracker.isSubagentInFlight()).toBe(true);  // pendingDescs > 0
+
+      // 2. ConversationMessage(assistant, isSidechain=false) — main agent tool_use (not modeled)
+      // 3. Subagent's SessionRegistration arrives here — no state change, still guarded
+      //    by pendingDescs from step 1. Processor would suppress it.
+
+      // 4. First sidechain ConversationMessage creates the subagent entry
+      tracker.process(makeSidechainMsg("agent-1"));
+      expect(tracker.isSubagentInFlight()).toBe(true);  // hasActiveAgents + sidechainActive
+
+      // 5. Subagent works (more sidechain messages — not modeled)
+      // 6. Subagent completes
+      tracker.process({ kind: "SubagentNotification", ts: 20, status: "completed", summary: "" } as TapEvent);
+
+      // Main agent resumes with non-sidechain message
+      tracker.process({
+        kind: "ConversationMessage", ts: 21, messageType: "assistant",
+        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+        promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
+        textSnippet: "Done", cwd: null, hasToolError: false, toolErrorText: null,
+      } as TapEvent);
+
+      // Now safe: all agents dead, sidechain cleared, no pending descs
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+
+    it("returns false after SubagentLifecycle end + non-sidechain ConversationMessage", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process({
+        kind: "SubagentLifecycle", ts: 10, variant: "end",
+        agentType: null, isAsync: null, model: null,
+        totalTokens: null, totalToolUses: null, durationMs: null, reason: null,
+      } as TapEvent);
+      // sidechainActive still set until non-sidechain message
+      expect(tracker.isSubagentInFlight()).toBe(true);
+      tracker.process({
+        kind: "ConversationMessage", ts: 11, messageType: "user",
+        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+        promptId: null, stopReason: null, toolNames: [], toolAction: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      } as TapEvent);
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+
+    it("handles parallel subagents — stays true until all complete", () => {
+      tracker.process(makeSpawn("agent A"));
+      tracker.process(makeSpawn("agent B"));
+      tracker.process(makeSidechainMsg("agent-a"));
+      tracker.process(makeSidechainMsg("agent-b"));
+      expect(tracker.isSubagentInFlight()).toBe(true);
+
+      // SubagentNotification marks ALL active dead
+      tracker.process({ kind: "SubagentNotification", ts: 10, status: "completed", summary: "" } as TapEvent);
+      expect(tracker.hasActiveAgents()).toBe(false);
+      // sidechainActive still true until non-sidechain message
+      expect(tracker.isSubagentInFlight()).toBe(true);
+
+      tracker.process({
+        kind: "ConversationMessage", ts: 11, messageType: "user",
+        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+        promptId: null, stopReason: null, toolNames: [], toolAction: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      } as TapEvent);
+      expect(tracker.isSubagentInFlight()).toBe(false);
+    });
+  });
+
   // ── Multiple agents ──
 
   describe("multiple concurrent agents", () => {
