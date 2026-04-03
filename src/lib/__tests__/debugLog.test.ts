@@ -67,13 +67,13 @@ describe("debugLog", () => {
 
   it("evicts oldest entries at MAX_ENTRIES", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    for (let i = 0; i < 2001; i++) {
+    for (let i = 0; i < 5001; i++) {
       dlog("m", null, `msg-${i}`);
     }
     const buf = getDebugLog();
-    expect(buf).toHaveLength(2000);
+    expect(buf).toHaveLength(5000);
     expect(buf[0].message).toBe("msg-1");
-    expect(buf[buf.length - 1].message).toBe("msg-2000");
+    expect(buf[buf.length - 1].message).toBe("msg-5000");
   });
 
   it("clearDebugLog empties the buffer", () => {
