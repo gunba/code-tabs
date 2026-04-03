@@ -1,6 +1,6 @@
-node_modules/
+node_modules
 dist/
-src-tauri/target/
+src-tauri/target
 src-tauri/pty-patch/target/
 *.log
 *.local
