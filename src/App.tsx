@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags, formatTokenCount, toolCategoryColor, getActivityText } from "./lib/claude";
+import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags, formatTokenCount, eventKindColor, getActivityText } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
 
@@ -365,9 +365,9 @@ export default function App() {
               const isActive = session.id === activeTabId;
               const fullName = session.name || dirToTabName(session.config.workingDir);
               const isDead = session.state === "dead";
-              // [TA-01] Tab activity: current tool name from TAP, colored by category
-              const activity = getActivityText(session.metadata.currentToolName);
-              const activityColor = activity ? toolCategoryColor(session.metadata.currentToolName!) : undefined;
+              // [TA-01] Tab activity: raw event kind from TAP, colored by event phase
+              const activity = getActivityText(session.metadata.currentToolName, session.metadata.currentEventKind);
+              const activityColor = activity ? eventKindColor(session.metadata.currentEventKind ?? session.metadata.currentToolName!) : undefined;
 
               // Meta row: model | effort | agents (each colored)
               const m = effectiveModel(session);
