@@ -1,0 +1,196 @@
+/* ── Recording Pane ──────────────────────────────────── */
+
+.recording-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.recording-section {
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.recording-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.recording-master-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.recording-master-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.recording-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.recording-categories {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recording-categories.recording-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.recording-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.recording-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.recording-group-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.recording-category {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.recording-category input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.recording-category input[type="checkbox"]:disabled {
+  cursor: default;
+}
+
+.recording-cat-key {
+  font-size: 9px;
+  font-family: var(--mono);
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+
+.recording-data-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.recording-age-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.recording-age-input {
+  width: 50px;
+  padding: 2px 4px;
+  font-size: 11px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  text-align: center;
+}
+
+.recording-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.recording-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.recording-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Event filter pills */
+.event-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 4px 0;
+}
+.event-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: background 0.15s, opacity 0.15s, border-color 0.15s;
+}
+.event-filter-pill:hover {
+  border-color: var(--text-secondary);
+}
+.event-filter-pill.active {
+  background: var(--bg-tertiary);
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.event-filter-pill.active:hover {
+  opacity: 0.7;
+}
+.event-filter-pill.discovered {
+  border-style: dashed;
+}
+.event-filter-export-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.event-filter-export-row .recording-hint {
+  margin-left: 0;
+}

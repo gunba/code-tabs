@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import type { PaneComponentProps } from "./ThreePaneEditor";
+import "./HooksPane.css";
 
 // [HM-05] Custom events: includes "Custom event..." option with freeform text input
 const HOOK_EVENTS = [

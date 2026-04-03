@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import type { PaneComponentProps } from "./ThreePaneEditor";
+import "./MarkdownPane.css";
 
 // [CM-14] Scope-to-fileType mapping: user=claudemd-user, project=claudemd-root, project-local=claudemd-local
 const SCOPE_TO_FILETYPE: Record<string, string> = {

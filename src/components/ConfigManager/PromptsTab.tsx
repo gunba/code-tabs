@@ -5,6 +5,7 @@ import { diffLines, applyRulesToText, generateRulesFromDiff } from "../../lib/pr
 import type { DiffLine } from "../../lib/promptDiff";
 import type { SystemPromptRule } from "../../types/session";
 import type { StatusMessage } from "../../lib/settingsSchema";
+import "./PromptsTab.css";
 
 interface PromptsTabProps {
   onStatus: (msg: StatusMessage | null) => void;

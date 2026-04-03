@@ -4,6 +4,7 @@ import { useSettingsStore } from "../../store/settings";
 import { useSessionStore } from "../../store/sessions";
 import seedEventKinds from "../../types/eventKinds.json";
 import type { StatusMessage } from "../../lib/settingsSchema";
+import "./RecordingPane.css";
 
 interface RecordingPaneProps {
   onStatus: (msg: StatusMessage | null) => void;

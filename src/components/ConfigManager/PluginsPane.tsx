@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { formatTokenCount } from "../../lib/claude";
 import type { StatusMessage } from "../../lib/settingsSchema";
+import "./PluginsPane.css";
 
 // ── Types ────────────────────────────────────────────────────────────────
 

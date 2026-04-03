@@ -1,0 +1,165 @@
+/* ── Hooks Pane ──────────────────────────────────────── */
+
+.hooks-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 6px;
+  gap: 6px;
+}
+
+.hooks-pane-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.hooks-pane-list::-webkit-scrollbar { width: 4px; }
+.hooks-pane-list::-webkit-scrollbar-track { background: transparent; }
+.hooks-pane-list::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 2px; }
+
+.hooks-pane-add {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.hooks-pane-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Hooks Pane Form ─────────────────────────────────── */
+
+.hooks-pane-form {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.hooks-pane-form-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.hooks-pane-form-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hooks-pane-form-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 50px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.hooks-pane-form-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.hooks-pane-form-input:focus {
+  border-color: var(--accent);
+}
+
+.hooks-pane-form-input::placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+}
+
+.hooks-pane-form-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.hooks-pane-form-select option {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.hooks-pane-form-hint {
+  font-size: 8px;
+  color: var(--text-muted);
+}
+
+.hooks-pane-form-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  padding-top: 3px;
+}
+
+.hooks-pane-form-save {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hooks-pane-form-save:hover {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.hooks-pane-form-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hooks-pane-form-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hooks-pane-form-cancel:hover {
+  color: var(--text-secondary);
+}
