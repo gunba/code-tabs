@@ -103,6 +103,13 @@
   background: var(--bg-surface-hover);
 }
 
+.launcher-path-error {
+  color: var(--status-error, #e55);
+  font-size: 12px;
+  margin-top: 4px;
+  padding-left: 2px;
+}
+
 /* ── Recent Directories (inline chips) ───────────────────── */
 
 .launcher-recent {

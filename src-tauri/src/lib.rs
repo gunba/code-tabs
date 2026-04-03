@@ -203,6 +203,7 @@ pub fn run() {
             commands::resolve_api_host,
             commands::fetch_usage,
             commands::ping_api,
+            commands::dir_exists,
             commands::git_repo_check,
             commands::git_status,
             commands::git_diff_file,
