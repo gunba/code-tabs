@@ -144,6 +144,7 @@ export default function App() {
     init();
     useUiConfigStore.getState().loadConfig();
     useSettingsStore.getState().loadPastSessions();
+    useSettingsStore.getState().pruneRecentDirs();
     invoke("migrate_legacy_data").catch(() => {});
     // [HM-11] Startup intentionally does not install or mutate Claude hook
     // settings; hook changes are user-managed via the Hooks UI only.

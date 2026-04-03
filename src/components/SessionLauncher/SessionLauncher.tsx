@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { dlog } from "../../lib/debugLog";
@@ -93,6 +94,7 @@ export function SessionLauncher() {
   const [defaultsSaved, setDefaultsSaved] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState<string>("");
   const [promptMode, setPromptMode] = useState<"replace" | "append">("replace");
+  const [launchError, setLaunchError] = useState<string>("");
 
   // Derive model family + context variant from config.model for the pill UI.
   // e.g. "claude-opus-4-6[1m]" → family="opus", variant="1m"
@@ -157,6 +159,7 @@ export function SessionLauncher() {
 
   const updateConfig = useCallback(
     <K extends keyof SessionConfig>(key: K, value: SessionConfig[K]) => {
+      if (key === "workingDir") setLaunchError("");
       setConfig((prev) => ({ ...prev, [key]: value }));
     },
     []
@@ -269,6 +272,14 @@ export function SessionLauncher() {
 
   const handleLaunch = useCallback(async () => {
     if (!isNonSessionCommand && !launchConfig.workingDir.trim()) return;
+    // [SL-19] Validate that the working directory actually exists on disk
+    if (!isNonSessionCommand && launchConfig.workingDir.trim()) {
+      const exists = await invoke<boolean>("dir_exists", { path: normalizePath(launchConfig.workingDir.trim()) });
+      if (!exists) {
+        setLaunchError("Directory does not exist");
+        return;
+      }
+    }
     const finalConfig: SessionConfig = isNonSessionCommand
       ? { ...launchConfig, runMode: true, model: null, permissionMode: "default", effort: null, dangerouslySkipPermissions: false, projectDir: false }
       : { ...launchConfig, runMode: false };
@@ -420,6 +431,7 @@ export function SessionLauncher() {
             </button>
           </div>
         )}
+        {launchError && <div className="launcher-path-error">{launchError}</div>}
 
         {/* Recent directories — only for new sessions */}
         {!isResuming && uniqueRecentDirs.length > 0 && (

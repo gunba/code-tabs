@@ -118,6 +118,7 @@ interface SettingsState {
   // Actions
   addRecentDir: (dir: string) => void;
   removeRecentDir: (dir: string) => void;
+  pruneRecentDirs: () => Promise<void>;
   savePreset: (name: string, config: Partial<SessionConfig>) => void;
   removePreset: (id: string) => void;
   setLastConfig: (config: SessionConfig) => void;
@@ -158,7 +159,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       recentDirs: [],
       presets: [],
       lastConfig: DEFAULT_SESSION_CONFIG,
@@ -214,6 +215,17 @@ export const useSettingsStore = create<SettingsState>()(
             ),
           };
         }),
+
+      // [SL-20] Prune recent dirs that no longer exist on disk
+      pruneRecentDirs: async () => {
+        const dirs = get().recentDirs;
+        if (dirs.length === 0) return;
+        const results = await Promise.all(
+          dirs.map((d) => invoke<boolean>("dir_exists", { path: normalizePath(d) }))
+        );
+        const valid = dirs.filter((_, i) => results[i]);
+        if (valid.length < dirs.length) set({ recentDirs: valid });
+      },
 
       savePreset: (name, config) =>
         set((s) => ({

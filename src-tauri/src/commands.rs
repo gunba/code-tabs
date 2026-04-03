@@ -2513,6 +2513,14 @@ pub fn check_port_available(port: u16) -> bool {
     std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
 
+// ── Filesystem helpers ──────────────────────────────────────────────────
+
+/// [SL-19] [SL-20] Check whether a path exists and is a directory.
+#[tauri::command]
+pub fn dir_exists(path: String) -> bool {
+    std::path::Path::new(&path).is_dir()
+}
+
 // ── Git diff panel commands ──────────────────────────────────────────────
 
 /// Check whether a directory is inside a git work tree.
