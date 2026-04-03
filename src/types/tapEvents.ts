@@ -205,6 +205,11 @@ export interface ApiFetch extends TapEventBase {
   cfRay: string | null;
   rateLimitRemaining: string | null;
   rateLimitReset: string | null;
+  contentType?: string;
+  contentLength?: number;
+  responseSnap?: string | null;
+  /** Distinguishes https.request response entries ('https-resp') from fetch entries */
+  op?: string;
 }
 
 // [IN-18] HttpPing: dedicated HTTP ping to Anthropic origin

@@ -636,6 +636,10 @@ function classifyFetch(ts: number, entry: TapEntry): TapEvent {
     cfRay: hdrs?.cfRay || null,
     rateLimitRemaining: hdrs?.rlRemain || null,
     rateLimitReset: hdrs?.rlReset || null,
+    contentType: typeof entry.ct === "string" ? entry.ct : undefined,
+    contentLength: typeof entry.cl === "number" ? entry.cl : undefined,
+    responseSnap: typeof entry.resp === "string" ? entry.resp : null,
+    op: typeof entry.op === "string" ? entry.op : undefined,
   };
 }
 

@@ -18,6 +18,7 @@ const _pristine = {
   consoleError: console.error,
   consoleDebug: console.debug,
   processExit: process.exit,
+  fetch: globalThis.fetch,
   Bun: (globalThis as any).Bun,
 };
 
@@ -35,6 +36,7 @@ function restoreGlobals() {
   console.error = _pristine.consoleError;
   console.debug = _pristine.consoleDebug;
   process.exit = _pristine.processExit;
+  globalThis.fetch = _pristine.fetch;
   if (_pristine.Bun) {
     (globalThis as any).Bun = _pristine.Bun;
   } else {
@@ -473,3 +475,4 @@ describe("INSTALL_TAPS status-line capture", () => {
     expect(statusEntries[0].modelDisplayName).toBe("");
   });
 });
+

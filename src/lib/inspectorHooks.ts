@@ -803,16 +803,30 @@ export const INSTALL_TAPS = `(function() {
             return p.then(function(resp) {
               try {
                 var hdrs = {};
+                var ct = '';
+                var cl = 0;
                 try {
                   hdrs.reqId = resp.headers.get('request-id') || '';
                   hdrs.cfRay = resp.headers.get('cf-ray') || '';
                   hdrs.rlRemain = resp.headers.get('x-ratelimit-limit-tokens') || '';
                   hdrs.rlReset = resp.headers.get('x-ratelimit-reset-tokens') || '';
+                  ct = resp.headers.get('content-type') || '';
+                  cl = parseInt(resp.headers.get('content-length') || '0') || 0;
                 } catch(e2) {}
-                // Always push headers (for region/rate-limits); full details only when fetch flag is on
-                push('fetch', flags.fetch
-                  ? { url: url.slice(0, 300), method: method, status: resp.status, bodyLen: bodyLen, dur: Date.now() - t0, hdrs: hdrs }
-                  : { url: '', method: method, status: resp.status, dur: Date.now() - t0, hdrs: hdrs });
+                var isStream = ct.indexOf('text/event-stream') !== -1;
+                var fetchEntry = flags.fetch
+                  ? { url: url.slice(0, 300), method: method, status: resp.status, bodyLen: bodyLen, dur: Date.now() - t0, hdrs: hdrs, ct: ct, cl: cl }
+                  : { url: '', method: method, status: resp.status, dur: Date.now() - t0, hdrs: hdrs, ct: ct, cl: cl };
+                if (flags.fetch && !isStream && cl > 0 && cl <= 32768) {
+                  try {
+                    resp.clone().text().then(function(txt) {
+                      fetchEntry.resp = txt.slice(0, 2000);
+                      push('fetch', fetchEntry);
+                    }, function() { push('fetch', fetchEntry); });
+                  } catch(e4) { push('fetch', fetchEntry); }
+                } else {
+                  push('fetch', fetchEntry);
+                }
               } catch(e) {}
               return resp;
             }, function(err) {
@@ -1114,7 +1128,35 @@ export const INSTALL_TAPS = `(function() {
         }
         return req;
       }
+      var httpsT0 = Date.now();
       var origReq = origHttpsRequest.apply(this, arguments);
+      if (flags.fetch) {
+        try {
+          origReq.on('response', function(res) {
+            var respCt = (res.headers && res.headers['content-type']) || '';
+            var respCl = parseInt((res.headers && res.headers['content-length']) || '0') || 0;
+            var respEntry = { op: 'https-resp', url: (h + p).slice(0, 300), status: res.statusCode, ct: respCt, cl: respCl, dur: Date.now() - httpsT0 };
+            var isRespStream = respCt.indexOf('text/event-stream') !== -1;
+            if (!isRespStream && respCl > 0 && respCl <= 32768) {
+              var chunks = [];
+              var total = 0;
+              res.on('data', function(chunk) {
+                total += chunk.length;
+                if (total <= 32768) chunks.push(chunk);
+              });
+              res.on('end', function() {
+                try {
+                  respEntry.resp = Buffer.concat(chunks).toString('utf8').slice(0, 2000);
+                  respEntry.cl = total;
+                } catch(eResp) {}
+                push('fetch', respEntry);
+              });
+            } else {
+              push('fetch', respEntry);
+            }
+          });
+        } catch(ePassive) {}
+      }
       var hardTimer = setTimeout(function() {
         if (!origReq.destroyed) {
           httpsTimeoutCount++;
