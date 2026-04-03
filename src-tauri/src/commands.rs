@@ -756,7 +756,8 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
 
 // [RC-09] Slash command discovery: builtin from binary scan, plugin from command directories
 /// Scan the Claude Code binary for built-in slash commands.
-/// Extracts from the command registration pattern: name:"cmd",description:"..."
+/// Two-step scan: finds name:"..." positions, then searches a brace-depth-bounded
+/// window for descriptions (literal, reversed, computed/ternary, template literal).
 #[tauri::command]
 pub async fn discover_builtin_commands(cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
     tokio::task::spawn_blocking(move || discover_builtin_commands_sync(cli_path.as_deref()))
