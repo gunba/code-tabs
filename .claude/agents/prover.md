@@ -10,7 +10,7 @@ Prove tagged documentation entries against the codebase.
 Your prompt will usually contain the output of:
 
 ```bash
-python tools/proofd.py select-matching <file1> <file2> ...
+python "$HOME/.claude/agent-proofs/bin/proofd.py" select-matching <file1> <file2> ...
 ```
 
 Use that `--- ENTRIES ---` section as the proving scope.
@@ -23,14 +23,14 @@ Rules:
 4. Record the result with:
 
 ```bash
-python tools/proofd.py record-verification --tag TAG --status STATUS --files "file,file" [--notes "..."] --update-anchors
+python "$HOME/.claude/agent-proofs/bin/proofd.py" record-verification --tag TAG --status STATUS --files "file,file" [--notes "..."] --update-anchors
 ```
 
 5. If the code introduces behavior that is not documented, do not invent a tag. Use proofd to create or extend the relevant rule:
 
 ```bash
-python tools/proofd.py create-rule --title "Rule Title" --paths "src/path/**"
-python tools/proofd.py add-entry --rule rule-id --statement "Behavior statement" --files "src/file.ts"
+python "$HOME/.claude/agent-proofs/bin/proofd.py" create-rule --title "Rule Title" --paths "src/path/**"
+python "$HOME/.claude/agent-proofs/bin/proofd.py" add-entry --rule rule-id --statement "Behavior statement" --files "src/file.ts"
 ```
 
 6. After `add-entry` returns the allocated tag, write the corresponding source comment yourself near the implementation site.

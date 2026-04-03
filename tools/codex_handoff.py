@@ -151,6 +151,25 @@ def proofd_context(repo_root: pathlib.Path, paths: list[str]) -> str:
     return result.stdout.strip()
 
 
+def proofd_select_matching(repo_root: pathlib.Path, paths: list[str]) -> str:
+    selected = rule_context_paths(repo_root, paths)
+    if not selected:
+        return ""
+    result = subprocess.run(
+        [sys.executable, "tools/proofd.py", "--repo-root", str(repo_root), "select-matching", *selected],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=child_env(),
+        check=False,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
 def plan_context_paths(repo_root: pathlib.Path, plan_text: str) -> list[str]:
     candidates = ["CLAUDE.md"]
     for pattern in (PATH_TOKEN_RE, BARE_FILE_TOKEN_RE):
@@ -259,6 +278,28 @@ def rule_context_lines(repo_root: pathlib.Path, paths: list[str], read_only: boo
     return lines
 
 
+def proof_selection_lines(repo_root: pathlib.Path, paths: list[str]) -> list[str]:
+    preloaded = proofd_select_matching(repo_root, paths)
+    lines = ["## Proof Selection"]
+    if preloaded:
+        lines.extend(
+            [
+                "Claude preloaded `proofd select-matching` for the current janitor scope:",
+                "```text",
+                preloaded,
+                "```",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "No preloaded `select-matching` output was available. Run `python tools/proofd.py select-matching <files...>` before creating or updating proofs.",
+            ]
+        )
+    lines.append("")
+    return lines
+
+
 def review_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
     diff_stat = run_git(repo_root, ["diff", "HEAD", "--stat"]) or "(no diff stat)"
     status = run_git(repo_root, ["status", "--short"]) or "(clean working tree)"
@@ -298,7 +339,7 @@ def review_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
     lines.extend(
         [
             "8. End with `## Cited` and list any tags you actually relied on.",
-            "9. Log the run with `python tools/proofd.py log-run --cmd r --summary \"...\" --cited-up \"TAG,TAG\"`.",
+            "9. Do not log the run yourself. Claude will log the review after the subprocess returns.",
             "",
             "## Workspace State",
             "```text",
@@ -332,18 +373,20 @@ def janitor_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
             "```",
             "",
             *rule_context_lines(repo_root, context_files),
+            *proof_selection_lines(repo_root, files),
             "## Instructions",
             "1. Determine the actual changed file list for the requested scope.",
-            "2. Request proofd rule context for those files before proving them.",
-            "3. Run `python tools/proofd.py select-matching <files...>`.",
+            "2. Start with the preloaded proofd context and the preloaded `select-matching` output above.",
+            "3. If you need a fresh selection, run `python tools/proofd.py select-matching <files...>`.",
             "4. Prove each selected entry against source code.",
             "5. Record outcomes with `python tools/proofd.py record-verification ...`.",
             "6. If documentation is missing, create rules or entries through `proofd` and only then add the source-code tag anchor.",
-            "7. Limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments. Do not make unrelated product-code changes.",
-            "8. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
-            "9. Run `python tools/proofd.py sync` and `python tools/proofd.py lint`.",
-            "10. End with a report plus `## Cited`.",
-            "11. Log the run with `python tools/proofd.py log-run --cmd j --summary \"...\" --cited-up \"TAG,TAG\"`.",
+            "7. If an existing source tag already covers the implementation site, reuse and cite it instead of creating a duplicate tag.",
+            "8. Limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments. Do not make unrelated product-code changes.",
+            "9. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
+            "10. Run `python tools/proofd.py sync` and `python tools/proofd.py lint`.",
+            "11. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle finalization after the janitor pass returns.",
+            "12. End with a report plus `## Cited`. If janitor is blocked, say so explicitly.",
             "",
         ]
     )
@@ -374,8 +417,8 @@ def build_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
             "5. If release is included, validate before bump, push, or release creation.",
             "6. This subprocess is non-interactive. Approval prompts are disabled; release-capable flows may be launched with full access by the wrapper so push and release steps can complete.",
             "7. Record build duration and summarize what was done.",
-            "8. End with a concise report suitable for the user.",
-            "9. Log the run with `python tools/proofd.py log-run --cmd b --summary \"...\" --build-time <seconds>`.",
+            "8. Do not log the run yourself. Claude will handle run logging after the subprocess returns.",
+            "9. End with a concise report suitable for the user.",
             "",
         ]
     )
@@ -406,15 +449,18 @@ def review_janitor_handoff(repo_root: pathlib.Path, args: argparse.Namespace) ->
             "```",
             "",
             *rule_context_lines(repo_root, context_files),
+            *proof_selection_lines(repo_root, files),
             "## Instructions",
             "1. Run the review pass first and keep it read-only.",
             "2. Then run the janitor or proof pass against the requested scope.",
-            "3. Request proofd rule context before acting on the changed files.",
-            "4. During the janitor phase, limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments.",
-            "5. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
-            "6. Keep review findings and janitor or proof outcomes separate in the final report.",
-            "7. End each section with any cited tags used in that phase.",
-            "8. Log the combined run with `python tools/proofd.py log-run --cmd rj --summary \"...\" --cited-up \"TAG,TAG\"`.",
+            "3. Start the janitor phase with the preloaded proofd context and the preloaded `select-matching` output above.",
+            "4. If you need a fresh proof selection, run `python tools/proofd.py select-matching <files...>`.",
+            "5. During the janitor phase, limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments.",
+            "6. If an existing source tag already covers the implementation site, reuse and cite it instead of creating a duplicate tag.",
+            "7. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
+            "8. Keep review findings and janitor or proof outcomes separate in the final report.",
+            "9. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle that after the combined pass returns.",
+            "10. End each section with any cited tags used in that phase, and say explicitly if janitor was blocked.",
             "",
         ]
     )

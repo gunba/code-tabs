@@ -126,6 +126,8 @@ def build_prompt(repo_root: pathlib.Path, workflow: str, workflow_args: list[str
 def default_sandbox(workflow: str) -> str:
     if workflow in {"review", "plan"}:
         return "read-only"
+    if workflow in {"janitor", "review-janitor"}:
+        return "danger-full-access"
     return "workspace-write"
 
 
@@ -256,7 +258,9 @@ def main() -> int:
     print(f"Approval policy: {approval}")
     print(f"Repo root: {repo_root}")
     print(f"Codex executable: {codex_executable}")
-    if release_requested and not args.sandbox and not args.full_access:
+    if args.workflow in {"janitor", "review-janitor"} and not args.sandbox and not args.full_access:
+        print("Access mode: auto-promoted to danger-full-access because janitor workflows need local proofd and git plumbing")
+    elif release_requested and not args.sandbox and not args.full_access:
         print("Access mode: auto-promoted to danger-full-access because the requested build flow includes release steps")
     print("")
 
