@@ -1,5 +1,5 @@
 import type { TapEntry, TapEvent } from "../types/tapEvents";
-import type { SystemPromptBlock } from "../types/session";
+import type { SystemPromptBlock, CapturedMessage } from "../types/session";
 
 /**
  * Shared helper: format tool_use name + input into a human-readable action string.
@@ -617,7 +617,7 @@ function classifyStatusLine(ts: number, entry: TapEntry): TapEvent {
   };
 }
 
-// [IN-10] Tap event pipeline: classifies ~47 typed events from raw TapEntry
+// [IN-10] Tap event pipeline: classifies ~49 typed events from raw TapEntry
 /**
  * Classify a raw TapEntry into a typed TapEvent.
  * Returns null for noise, deltas, and unrecognized entries.
@@ -680,12 +680,16 @@ export function classifyTapEntry(entry: TapEntry): TapEvent | null {
             return block;
           })
         : undefined;
+      const messages = Array.isArray(entry.messages)
+        ? (entry.messages as CapturedMessage[])
+        : undefined;
       return {
         kind: "SystemPromptCapture", ts,
         text: entry.text as string,
         model: String(entry.model || ""),
         messageCount: typeof entry.msgCount === "number" ? (entry.msgCount as number) : 0,
         blocks,
+        messages,
       };
     }
 

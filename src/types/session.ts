@@ -119,6 +119,7 @@ export interface SessionMetadata {
   effortLevel: string | null;
   capturedSystemPrompt: string | null;
   capturedSystemBlocks?: SystemPromptBlock[] | null;
+  capturedMessages?: CapturedMessage[] | null;
   worktreeInfo: {
     originalCwd: string;
     worktreePath: string;
@@ -260,6 +261,21 @@ export const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
 export interface SystemPromptBlock {
   text: string;
   cacheControl?: { type: string };
+}
+
+export interface CapturedContentBlock {
+  type: string;
+  text?: string;
+  name?: string;           // tool_use
+  input?: unknown;         // tool_use (full input object)
+  toolUseId?: string;      // tool_result
+  isError?: boolean;       // tool_result
+  mediaType?: string;      // image
+}
+
+export interface CapturedMessage {
+  role: string;
+  content: CapturedContentBlock[];
 }
 
 export interface SystemPromptRule {

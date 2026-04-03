@@ -1,5 +1,5 @@
 import type { TapEvent } from "../types/tapEvents";
-import type { SessionMetadata, SystemPromptBlock } from "../types/session";
+import type { SessionMetadata, SystemPromptBlock, CapturedMessage } from "../types/session";
 
 // [SI-07] Tool actions, user prompts, assistant text captured inline via event processing
 // [IN-11] StatusBar enrichment: model, subscription, region, latency, rate limits, lines changed
@@ -66,6 +66,8 @@ export class TapMetadataAccumulator {
   private capturedSystemPrompt: string | null = null;
   private capturedSystemBlocks: SystemPromptBlock[] | null = null;
   private blocksChanged = false;
+  private capturedMessages: CapturedMessage[] | null = null;
+  private messagesChanged = false;
   private worktreeInfo: SessionMetadata["worktreeInfo"] = null;
   private statusLine: SessionMetadata["statusLine"] = null;
 
@@ -317,13 +319,17 @@ export class TapMetadataAccumulator {
         this.worktreeInfo = null;
         break;
 
-      case "SystemPromptCapture": // [IN-19] stores capturedSystemPrompt + capturedSystemBlocks
+      case "SystemPromptCapture": // [IN-19] stores capturedSystemPrompt + capturedSystemBlocks + capturedMessages
         if (event.text !== this.capturedSystemPrompt) {
           this.capturedSystemPrompt = event.text;
         }
         if (event.blocks) {
           this.capturedSystemBlocks = event.blocks;
           this.blocksChanged = true;
+        }
+        if (event.messages) {
+          this.capturedMessages = event.messages;
+          this.messagesChanged = true;
         }
         break;
 
@@ -419,14 +425,19 @@ export class TapMetadataAccumulator {
     };
 
     const fp = JSON.stringify(metadata);
-    // Include blocks in the returned metadata but NOT in the fingerprint
-    // to avoid serializing large prompt text on every event
+    // Include blocks and messages in the returned metadata but NOT in the fingerprint
+    // to avoid serializing large prompt/message text on every event
     if (this.capturedSystemBlocks) {
       metadata.capturedSystemBlocks = this.capturedSystemBlocks;
     }
+    if (this.capturedMessages) {
+      metadata.capturedMessages = this.capturedMessages;
+    }
     const blocksJustChanged = this.blocksChanged;
+    const messagesJustChanged = this.messagesChanged;
     this.blocksChanged = false;
-    if (fp === this.lastFingerprint && !blocksJustChanged) return null;
+    this.messagesChanged = false;
+    if (fp === this.lastFingerprint && !blocksJustChanged && !messagesJustChanged) return null;
     this.lastFingerprint = fp;
     return metadata;
   }
@@ -479,6 +490,8 @@ export class TapMetadataAccumulator {
     this.capturedSystemPrompt = null;
     this.capturedSystemBlocks = null;
     this.blocksChanged = false;
+    this.capturedMessages = null;
+    this.messagesChanged = false;
     this.worktreeInfo = null;
     this.statusLine = null;
   }

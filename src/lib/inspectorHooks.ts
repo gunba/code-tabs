@@ -532,14 +532,48 @@ export const INSTALL_TAPS = `(function() {
                 var bo = { text: bt };
                 if (blk.cache_control) bo.cc = blk.cache_control;
                 sysBlocks.push(bo);
+                if (sysText.length > 0 && sysText[sysText.length - 1] !== '\\n') sysText += '\\n';
                 sysText += bt;
               }
             } else if (typeof value.system === 'string') {
               sysText = value.system;
               sysBlocks.push({ text: sysText });
             }
+            // Capture full conversation messages (images replaced with placeholder)
+            var msgs = [];
+            for (var mi = 0; mi < value.messages.length; mi++) {
+              var msg = value.messages[mi];
+              var mc = msg.content;
+              var cBlocks = [];
+              if (typeof mc === 'string') {
+                cBlocks.push({ type: 'text', text: mc });
+              } else if (Array.isArray(mc)) {
+                for (var ci = 0; ci < mc.length; ci++) {
+                  var cb = mc[ci];
+                  if (cb.type === 'text') {
+                    cBlocks.push({ type: 'text', text: cb.text });
+                  } else if (cb.type === 'tool_use') {
+                    cBlocks.push({ type: 'tool_use', name: cb.name, input: cb.input });
+                  } else if (cb.type === 'tool_result') {
+                    var trText = '';
+                    if (typeof cb.content === 'string') { trText = cb.content; }
+                    else if (Array.isArray(cb.content)) {
+                      for (var ti = 0; ti < cb.content.length; ti++) {
+                        if (cb.content[ti].type === 'text') trText += cb.content[ti].text || '';
+                      }
+                    }
+                    cBlocks.push({ type: 'tool_result', toolUseId: cb.tool_use_id, text: trText, isError: !!cb.is_error });
+                  } else if (cb.type === 'image') {
+                    cBlocks.push({ type: 'image', mediaType: (cb.source && cb.source.media_type) || 'unknown' });
+                  } else {
+                    cBlocks.push({ type: cb.type || 'unknown' });
+                  }
+                }
+              }
+              msgs.push({ role: msg.role, content: cBlocks });
+            }
             if (sysText.length > 0) {
-              push('system-prompt', { text: sysText, model: value.model, msgCount: value.messages.length, blocks: sysBlocks });
+              push('system-prompt', { text: sysText, model: value.model, msgCount: value.messages.length, blocks: sysBlocks, messages: msgs });
             }
           }
           // Detect status line payload — push full data bypassing 2000-char snap truncation
@@ -748,7 +782,7 @@ export const INSTALL_TAPS = `(function() {
   } catch(e) {}
 
   // 5. fetch request metadata — API call patterns (URL, method, status, timing)
-  // Ping state: captured auth headers from first Anthropic POST, used for periodic GET /v1/models pings
+  // [IN-20] Active HTTP ping loop: captured auth headers from first Anthropic POST, GET /v1/models every 30s via prevFetch
   var savedAnthropicPingHeaders = null;
   try {
     // Only wrap if not already wrapped by INSTALL_HOOK (check for our marker)

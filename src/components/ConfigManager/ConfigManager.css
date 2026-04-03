@@ -1906,75 +1906,64 @@
   color: var(--text-primary);
 }
 
-/* ── Observed prompt split layout ─────────────────────── */
+/* ── Observed prompt unified pane ────────────────────── */
 
-.prompts-observed-split {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  gap: 1px;
-  background: var(--border-subtle);
-}
-
-.prompts-diff-section,
-.prompts-edit-section {
+.prompts-observed-pane {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary);
+  overflow: hidden;
 }
 
-.prompts-diff-header {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 6px 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.prompts-diff-view {
+.prompts-inline-diff {
   flex: 1;
   overflow-y: auto;
+  margin: 0;
+  padding: 8px 10px;
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.4;
-  padding: 4px 0;
-}
-
-.prompts-diff-view::-webkit-scrollbar { width: 5px; }
-.prompts-diff-view::-webkit-scrollbar-track { background: transparent; }
-.prompts-diff-view::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
-
-.prompts-diff-line {
-  display: flex;
-  padding: 0 8px;
-  min-height: 16px;
-}
-
-.prompts-diff-marker {
-  width: 14px;
-  flex-shrink: 0;
-  text-align: center;
-  color: var(--text-muted);
-  user-select: none;
-}
-
-.prompts-diff-text {
-  flex: 1;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.prompts-diff-same {
   color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.prompts-inline-diff::-webkit-scrollbar { width: 5px; }
+.prompts-inline-diff::-webkit-scrollbar-track { background: transparent; }
+.prompts-inline-diff::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
+
+.prompts-inline-diff-plain {
+  color: var(--text-muted);
+}
+
+.prompts-inline-del {
+  background: rgba(255, 80, 80, 0.12);
+  color: var(--error);
+  text-decoration: line-through;
+}
+
+.prompts-inline-add {
+  background: rgba(80, 200, 80, 0.12);
+  color: var(--success);
+}
+
+.prompts-edit-toggle {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.prompts-edit-toggle:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .prompts-diff-del {

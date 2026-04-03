@@ -88,7 +88,7 @@
   color: var(--accent);
 }
 
-/* ── Block content ───────────────────────────────────── */
+/* ── Sections ───────────────────────────────────────── */
 
 .context-viewer-content {
   flex: 1;
@@ -99,6 +99,34 @@
 .context-viewer-content::-webkit-scrollbar { width: 6px; }
 .context-viewer-content::-webkit-scrollbar-track { background: transparent; }
 .context-viewer-content::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
+
+.context-section {
+  margin-bottom: 16px;
+}
+
+.context-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 8px;
+}
+
+.context-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.context-section-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── System prompt blocks ───────────────────────────── */
 
 .context-block {
   margin-bottom: 8px;
@@ -145,7 +173,7 @@
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 400px;
+  max-height: 50vh;
   overflow-y: auto;
 }
 
@@ -176,4 +204,157 @@
   text-transform: uppercase;
   letter-spacing: 0.3px;
   white-space: nowrap;
+}
+
+/* ── Messages ────────────────────────────────────────── */
+
+.context-messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-message {
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.context-message-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-secondary);
+  border: none;
+  width: 100%;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.context-message-header:hover {
+  background: var(--bg-hover);
+}
+
+.context-message-index {
+  font-size: 9px;
+  color: var(--text-muted);
+  min-width: 20px;
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+.context-message-role {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.context-role-user {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb, 100, 150, 255), 0.12);
+}
+
+.context-role-assistant {
+  color: var(--success);
+  background: rgba(80, 200, 80, 0.12);
+}
+
+.context-message-tools {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.context-message-preview {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 10px;
+  min-width: 0;
+}
+
+.context-message-blocks {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.context-message-chevron {
+  font-size: 8px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 10px;
+  text-align: center;
+}
+
+.context-message-body {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.context-message-body .context-block-text {
+  max-height: 30vh;
+}
+
+/* ── Tool blocks ─────────────────────────────────────── */
+
+.context-tool-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.context-tool-badge {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-radius: 3px;
+  padding: 1px 4px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.context-tool-error {
+  color: var(--error);
+  background: rgba(255, 80, 80, 0.12);
+}
+
+.context-tool-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.context-tool-preview {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  flex: 1;
+  min-width: 0;
 }
