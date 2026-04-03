@@ -18,11 +18,6 @@ pub fn sessions_file_path() -> PathBuf {
     sessions_file()
 }
 
-pub fn save_sessions(sessions: &[SessionSnapshot]) -> Result<(), String> {
-    let json = serde_json::to_string_pretty(sessions).map_err(|e| e.to_string())?;
-    fs::write(sessions_file(), json).map_err(|e| e.to_string())
-}
-
 pub fn load_sessions() -> Result<Vec<SessionSnapshot>, String> {
     let path = sessions_file();
     if !path.exists() {

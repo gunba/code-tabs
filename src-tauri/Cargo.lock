@@ -571,7 +571,6 @@ dependencies = [
 name = "claude-tabs"
 version = "0.34.0"
 dependencies = [
- "base64 0.22.1",
  "chrono",
  "dirs",
  "flate2",

@@ -136,17 +136,6 @@ pub async fn start_api_proxy(
 }
 
 #[tauri::command]
-pub fn stop_api_proxy(proxy_state: State<'_, ProxyState>) -> Result<(), String> {
-    let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(tx) = s.shutdown_tx.take() {
-        let _ = tx.send(());
-    }
-    s.port = None;
-    s.clients.clear();
-    Ok(())
-}
-
-#[tauri::command]
 pub fn update_provider_config(
     config: ProviderConfig,
     proxy_state: State<'_, ProxyState>,
@@ -156,12 +145,6 @@ pub fn update_provider_config(
     s.config = config;
     s.clients = clients;
     Ok(())
-}
-
-#[tauri::command]
-pub fn get_proxy_port(proxy_state: State<'_, ProxyState>) -> Result<Option<u16>, String> {
-    let s = proxy_state.0.lock().map_err(|e| e.to_string())?;
-    Ok(s.port)
 }
 
 #[tauri::command]
@@ -215,12 +198,6 @@ pub fn stop_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>) 
     s.traffic_log_files.remove(&session_id);
     s.traffic_log_paths.remove(&session_id);
     Ok(())
-}
-
-#[tauri::command]
-pub fn get_traffic_log_path(session_id: String, proxy_state: State<'_, ProxyState>) -> Result<Option<String>, String> {
-    let s = proxy_state.0.lock().map_err(|e| e.to_string())?;
-    Ok(s.traffic_log_paths.get(&session_id).map(|p| p.to_string_lossy().to_string()))
 }
 
 // cleanup_traffic_logs removed — unified cleanup via commands::cleanup_session_data

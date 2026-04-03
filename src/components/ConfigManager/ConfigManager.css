@@ -1023,21 +1023,6 @@
   border-color: var(--accent);
 }
 
-.config-tag-btn {
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 10px;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.config-tag-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 
 /* ── Settings Syntax Highlighting ────────────────────── */
 
@@ -1676,14 +1661,6 @@
   color: var(--text-primary);
 }
 
-.prompts-editor-badge {
-  font-size: 9px;
-  color: var(--text-muted);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 3px;
-  padding: 1px 5px;
-}
 
 .prompts-name-input {
   flex: 1;

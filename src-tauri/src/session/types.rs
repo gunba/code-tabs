@@ -145,9 +145,6 @@ pub struct Session {
     pub metadata: SessionMetadata,
     pub created_at: DateTime<Utc>,
     pub last_active: DateTime<Utc>,
-    /// The tauri-plugin-pty process ID (not the same as the session ID)
-    #[serde(skip)]
-    pub pty_id: Option<u32>,
 }
 
 impl Session {
@@ -161,7 +158,6 @@ impl Session {
             metadata: SessionMetadata::default(),
             created_at: now,
             last_active: now,
-            pty_id: None,
         }
     }
 }

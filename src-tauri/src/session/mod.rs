@@ -34,7 +34,6 @@ impl SessionManager {
                 metadata: snap.metadata,
                 created_at: snap.created_at,
                 last_active: snap.last_active,
-                pty_id: None,
             };
             order.push(snap.id.clone());
             sessions.insert(snap.id, session);
@@ -67,32 +66,11 @@ impl SessionManager {
         sessions.remove(id)
     }
 
-    pub fn get_session(&self, id: &str) -> Option<Session> {
-        self.sessions.lock().unwrap().get(id).cloned()
-    }
-
-    pub fn update_state(&self, id: &str, state: SessionState) {
-        if let Some(session) = self.sessions.lock().unwrap().get_mut(id) {
-            session.state = state;
-            session.last_active = chrono::Utc::now();
-        }
-    }
-
-    pub fn set_pty_id(&self, id: &str, pty_id: u32) {
-        if let Some(session) = self.sessions.lock().unwrap().get_mut(id) {
-            session.pty_id = Some(pty_id);
-        }
-    }
-
     pub fn set_active(&self, id: &str) {
         let sessions = self.sessions.lock().unwrap();
         if sessions.contains_key(id) {
             *self.active_tab.lock().unwrap() = Some(id.to_string());
         }
-    }
-
-    pub fn get_active(&self) -> Option<String> {
-        self.active_tab.lock().unwrap().clone()
     }
 
     pub fn reorder_tabs(&self, new_order: Vec<String>) {
@@ -108,7 +86,4 @@ impl SessionManager {
             .collect()
     }
 
-    pub fn snapshots(&self) -> Vec<SessionSnapshot> {
-        self.list_sessions().iter().map(SessionSnapshot::from).collect()
-    }
 }
