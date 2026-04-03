@@ -385,8 +385,10 @@ def janitor_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
             "8. Limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments. Do not make unrelated product-code changes.",
             "9. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
             "10. Run `python tools/proofd.py sync` and `python tools/proofd.py lint`.",
-            "11. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle finalization after the janitor pass returns.",
-            "12. End with a report plus `## Cited`. If janitor is blocked, say so explicitly.",
+            "11. `sync` regenerates local `.claude/rules/*.md` files for Claude context injection. Those files are gitignored/disposable output; do not expect them to appear in git diff, and do not treat that as a problem.",
+            "12. The canonical proof update lives in proofd KB/state plus any source tag comments you changed. Report those directly instead of reasoning from git-tracked rule markdown.",
+            "13. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle finalization after the janitor pass returns.",
+            "14. End with a report plus `## Cited`. If janitor is blocked, say so explicitly.",
             "",
         ]
     )
@@ -458,9 +460,10 @@ def review_janitor_handoff(repo_root: pathlib.Path, args: argparse.Namespace) ->
             "5. During the janitor phase, limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments.",
             "6. If an existing source tag already covers the implementation site, reuse and cite it instead of creating a duplicate tag.",
             "7. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
-            "8. Keep review findings and janitor or proof outcomes separate in the final report.",
-            "9. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle that after the combined pass returns.",
-            "10. End each section with any cited tags used in that phase, and say explicitly if janitor was blocked.",
+            "8. When janitor runs `sync`, remember that `.claude/rules/*.md` is generated local output and usually gitignored. Lack of git diff there is expected.",
+            "9. Keep review findings and janitor or proof outcomes separate in the final report.",
+            "10. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle that after the combined pass returns.",
+            "11. End each section with any cited tags used in that phase, and say explicitly if janitor was blocked.",
             "",
         ]
     )

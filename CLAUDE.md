@@ -26,6 +26,8 @@ All tagged documentation is managed by `proofd`. Canonical rule data lives outsi
 
 Do not hand-edit `.claude/rules/*.md`. Use `python "$HOME/.claude/agent-proofs/bin/proofd.py"` subcommands to create rules, add entries, split rules, record verifications, and regenerate the rule output.
 
+`python "$HOME/.claude/agent-proofs/bin/proofd.py" sync` regenerates local `.claude/rules/*.md` files on disk. Those files are generated, gitignored, and disposable. Their absence from `git status` is expected; the canonical proof update lives in the external proofd KB plus any source tag comments or code changes in the repo.
+
 Key rule files:
 - `project-conventions.md` — architecture, build commands, slash commands, layout (global)
 - `dev-rules.md` — development conventions: IPC, types, stores, components, testing, logging (global)

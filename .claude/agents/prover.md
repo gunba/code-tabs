@@ -35,7 +35,8 @@ python "$HOME/.claude/agent-proofs/bin/proofd.py" add-entry --rule rule-id --sta
 
 6. After `add-entry` returns the allocated tag, write the corresponding source comment yourself near the implementation site.
 7. Limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments. Do not make unrelated product-code changes.
-8. If a rule needs text changes outside normal proofd mutations, report that clearly so the main agent can review and apply them.
+8. `.claude/rules/*.md` is generated output for local context injection. Do not treat the absence of git-tracked rule markdown changes as a failure; the canonical update lives in proofd KB/state.
+9. If a rule needs text changes outside normal proofd mutations, report that clearly so the main agent can review and apply them.
 
 Never choose tag IDs manually.
 
