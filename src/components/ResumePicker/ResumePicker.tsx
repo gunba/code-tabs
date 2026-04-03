@@ -366,6 +366,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
       addRecentDir(workingDir);
       const name = displayName || sessionNames[ps.id] || ps.path;
 
+      // [DS-06] Active dead tab resumes in place instead of creating a new tab.
       if (activeIsDead && activeSession) {
         requestRespawn(activeSession.id, resumeConfig, name);
         onClose();

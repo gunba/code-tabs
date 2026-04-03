@@ -201,10 +201,8 @@ export interface ApiFetch extends TapEventBase {
   status: number | null;
   bodyLen: number;
   durationMs: number;
-  requestId: string | null;
-  cfRay: string | null;
-  rateLimitRemaining: string | null;
-  rateLimitReset: string | null;
+  /** All response headers (raw key-value pairs) */
+  headers: Record<string, string>;
   contentType?: string;
   contentLength?: number;
   responseSnap?: string | null;

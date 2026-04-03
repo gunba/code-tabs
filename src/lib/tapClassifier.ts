@@ -624,7 +624,7 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
 // ── Fetch classifier ──
 
 function classifyFetch(ts: number, entry: TapEntry): TapEvent {
-  const hdrs = entry.hdrs as Record<string, string> | undefined;
+  const hdrs = (entry.hdrs as Record<string, string> | undefined) ?? {};
   return {
     kind: "ApiFetch", ts,
     url: String(entry.url || ""),
@@ -632,10 +632,7 @@ function classifyFetch(ts: number, entry: TapEntry): TapEvent {
     status: typeof entry.status === "number" ? entry.status : null,
     bodyLen: typeof entry.bodyLen === "number" ? entry.bodyLen : 0,
     durationMs: typeof entry.dur === "number" ? entry.dur : 0,
-    requestId: hdrs?.reqId || null,
-    cfRay: hdrs?.cfRay || null,
-    rateLimitRemaining: hdrs?.rlRemain || null,
-    rateLimitReset: hdrs?.rlReset || null,
+    headers: hdrs,
     contentType: typeof entry.ct === "string" ? entry.ct : undefined,
     contentLength: typeof entry.cl === "number" ? entry.cl : undefined,
     responseSnap: typeof entry.resp === "string" ? entry.resp : null,

@@ -45,8 +45,16 @@ export class TapMetadataAccumulator {
   // Rate limits
   private rateLimitRemaining: string | null = null;
   private rateLimitReset: string | null = null;
+  private fiveHourPercent: number | null = null;
+  private fiveHourResetsAt: number | null = null;
+  private sevenDayPercent: number | null = null;
+  private sevenDayResetsAt: number | null = null;
   // API latency from dedicated HttpPing (GET /v1/models, bypasses CF cache)
   private apiLatencyMs = 0;
+  // EMA-smoothed network RTT (total dur minus server processing time)
+  private pingRttMs = 0;
+  // EMA-smoothed server-side processing time (from x-envoy-upstream-service-time header)
+  private serverTimeMs = 0;
   // Sidechain tracking: true when processing subagent events, prevents TurnStart from overwriting main context
   private sidechainActive = false;
   // Dedup: skip consecutive identical ApiTelemetry (stringify can serialize the same object multiple times)
@@ -76,7 +84,12 @@ export class TapMetadataAccumulator {
 
   /** Process an event and return a metadata diff, or null if unchanged. */
   process(event: TapEvent): Partial<SessionMetadata> | null {
-    if (!getNoisyEventKinds().has(event.kind)) {
+    // [IN-25] Sidechain metadata gating: update sidechainActive early from ConversationMessage
+    // so the very first sidechain event doesn't leak into parent's currentEventKind
+    if (event.kind === "ConversationMessage") {
+      this.sidechainActive = (event as { isSidechain: boolean }).isSidechain;
+    }
+    if (!getNoisyEventKinds().has(event.kind) && !this.sidechainActive) {
       this.currentEventKind = event.kind;
     }
     switch (event.kind) {
@@ -101,23 +114,24 @@ export class TapMetadataAccumulator {
       case "TurnStart":
         // Initializer-only: set model from first TurnStart, don't let subagent TurnStart overwrite
         if (event.model && !this.runtimeModel) this.runtimeModel = event.model;
-        // Only update context tokens from main session turns (not subagent sidechain turns)
+        // Only update from main session turns (not subagent sidechain turns)
         if (!this.sidechainActive) {
           this.lastCacheRead = event.cacheRead;
           this.lastTurnInputTokens = event.inputTokens;
           this.lastCacheCreation = event.cacheCreation;
+          this.hookStatus = null;
+          this.activeSubprocess = null;
+          this.lastToolDurationMs = null;
+          this.lastToolResultSize = null;
+          this.lastToolError = null;
+          this.apiErrorStatus = null;
+          this.apiRetryInfo = null;
+          this.hookTelemetry = null;
         }
-        this.hookStatus = null;
-        this.activeSubprocess = null;
-        this.lastToolDurationMs = null;
-        this.lastToolResultSize = null;
-        this.lastToolError = null;
-        this.apiErrorStatus = null;
-        this.apiRetryInfo = null;
-        this.hookTelemetry = null;
         break;
 
       case "ToolCallStart":
+        if (this.sidechainActive) break;
         this.currentToolName = event.toolName;
         // [SI-06] choiceHint: AskUserQuestion sets choiceHint, cleared on UserInput/TurnEnd/PermissionApproved
         // [IN-09] choiceHint detection via ToolCallStart with toolName=AskUserQuestion
@@ -125,6 +139,7 @@ export class TapMetadataAccumulator {
         break;
 
       case "ToolInput": {
+        if (this.sidechainActive) break;
         this.currentAction = event.toolName + ": " + String(
           event.input.command || event.input.file_path || event.input.pattern ||
           event.input.description || event.input.query || ""
@@ -169,13 +184,14 @@ export class TapMetadataAccumulator {
             this.nodeSummary = event.textSnippet.slice(0, 200);
           }
         }
-        // Tool errors → transient status
-        if (event.hasToolError && event.toolErrorText) {
+        // Tool errors → transient status (parent only)
+        if (event.hasToolError && event.toolErrorText && !event.isSidechain) {
           this.hookStatus = "Error: " + event.toolErrorText.slice(0, 60);
         }
         break;
 
       case "TurnEnd":
+        if (this.sidechainActive) break;
         if (event.stopReason === "end_turn") {
           this.currentToolName = null;
           this.currentAction = null;
@@ -190,16 +206,41 @@ export class TapMetadataAccumulator {
         break;
 
       // API region from cf-ray header; rate-limit tracking; latency from round-trip time
-      case "ApiFetch":
-        if (event.cfRay) {
-          const dash = event.cfRay.lastIndexOf("-");
-          if (dash > 0) this.apiRegion = event.cfRay.slice(dash + 1);
+      case "ApiFetch": {
+        const h = event.headers;
+        const cfRay = h["cf-ray"] || "";
+        if (cfRay) {
+          const dash = cfRay.lastIndexOf("-");
+          if (dash > 0) this.apiRegion = cfRay.slice(dash + 1);
         }
-        if (event.requestId) this.lastRequestId = event.requestId;
-        if (event.rateLimitRemaining) this.rateLimitRemaining = event.rateLimitRemaining;
-        if (event.rateLimitReset) this.rateLimitReset = event.rateLimitReset;
+        if (h["request-id"]) this.lastRequestId = h["request-id"];
+        if (h["x-ratelimit-limit-tokens"]) this.rateLimitRemaining = h["x-ratelimit-limit-tokens"];
+        if (h["x-ratelimit-reset-tokens"]) this.rateLimitReset = h["x-ratelimit-reset-tokens"];
+        // [IN-27] Unified rate limit headers from Anthropic API
+        const u5h = h["anthropic-ratelimit-unified-5h-utilization"];
+        const r5h = h["anthropic-ratelimit-unified-5h-reset"];
+        if (u5h) this.fiveHourPercent = parseFloat(u5h) * 100;
+        if (r5h) this.fiveHourResetsAt = parseInt(r5h);
+        const u7d = h["anthropic-ratelimit-unified-7d-utilization"];
+        const r7d = h["anthropic-ratelimit-unified-7d-reset"];
+        if (u7d) this.sevenDayPercent = parseFloat(u7d) * 100;
+        if (r7d) this.sevenDayResetsAt = parseInt(r7d);
         if (event.durationMs > 0) this.apiLatencyMs = event.durationMs;
+        // [IN-28] Decompose total duration into network RTT + server processing
+        const envoyMs = parseInt(h["x-envoy-upstream-service-time"] || "0") || 0;
+        if (event.durationMs > 0) {
+          const EMA = 0.3;
+          if (envoyMs > 0) {
+            const rtt = Math.max(0, event.durationMs - envoyMs);
+            this.pingRttMs = this.pingRttMs > 0 ? EMA * rtt + (1 - EMA) * this.pingRttMs : rtt;
+            this.serverTimeMs = this.serverTimeMs > 0 ? EMA * envoyMs + (1 - EMA) * this.serverTimeMs : envoyMs;
+          } else {
+            // No server-timing header (lightweight GET requests) — total dur ≈ RTT
+            this.pingRttMs = this.pingRttMs > 0 ? EMA * event.durationMs + (1 - EMA) * this.pingRttMs : event.durationMs;
+          }
+        }
         break;
+      }
 
       // [IN-18] Dedicated HTTP ping — overrides ApiFetch latency with a cleaner measurement
       case "HttpPing":
@@ -218,8 +259,9 @@ export class TapMetadataAccumulator {
         this.subscriptionType = event.subscriptionType;
         break;
 
-      // Hook progress
+      // Hook progress (parent only)
       case "HookProgress":
+        if (this.sidechainActive) break;
         this.hookStatus = event.statusMessage || event.command || null;
         break;
 
@@ -230,8 +272,9 @@ export class TapMetadataAccumulator {
         }
         break;
 
-      // Subprocess spawn → active indicator
+      // Subprocess spawn → active indicator (parent only)
       case "SubprocessSpawn": {
+        if (this.sidechainActive) break;
         const cmd = event.cmd;
         // Extract a short label: last path segment + eval'd command if bash
         const evalMatch = cmd.match(/eval '([^']+)'/);
@@ -253,6 +296,7 @@ export class TapMetadataAccumulator {
         break;
 
       case "ToolResult":
+        if (this.sidechainActive) break;
         this.lastToolDurationMs = event.durationMs;
         this.lastToolResultSize = event.toolResultSizeBytes;
         this.lastToolError = event.error;
@@ -260,16 +304,19 @@ export class TapMetadataAccumulator {
         break;
 
       case "LinesChanged":
+        if (this.sidechainActive) break;
         this.linesAdded += event.linesAdded;
         this.linesRemoved += event.linesRemoved;
         break;
 
       case "ApiStreamError":
       case "ApiError":
+        if (this.sidechainActive) break;
         this.apiErrorStatus = event.status;
         break;
 
       case "ApiRetry":
+        if (this.sidechainActive) break;
         this.apiRetryCount++;
         this.apiRetryInfo = {
           attempt: event.attempt,
@@ -279,6 +326,7 @@ export class TapMetadataAccumulator {
         break;
 
       case "StreamStall":
+        if (this.sidechainActive) break;
         this.stallDurationMs += event.stallDurationMs;
         this.stallCount++;
         break;
@@ -296,6 +344,7 @@ export class TapMetadataAccumulator {
         break;
 
       case "HookTelemetry":
+        if (this.sidechainActive) break;
         this.hookTelemetry = {
           hookName: event.hookName,
           numCommands: event.numCommands,
@@ -366,9 +415,10 @@ export class TapMetadataAccumulator {
         };
         break;
 
-      // Hook events — extract metadata-enriching fields
+      // Hook events — extract metadata-enriching fields (parent only)
       case "PreCompactEvent":
       case "PostCompactEvent":
+        if (this.sidechainActive) break;
         this.currentAction = event.kind === "PreCompactEvent" ? "compacting..." : null;
         break;
 
@@ -378,6 +428,7 @@ export class TapMetadataAccumulator {
 
       case "TaskCreatedEvent":
       case "TaskCompletedEvent":
+        if (this.sidechainActive) break;
         this.currentAction = event.kind === "TaskCreatedEvent"
           ? `task: ${event.taskSubject}`
           : null;
@@ -428,7 +479,13 @@ export class TapMetadataAccumulator {
       filesTouched: [...this.filesTouched],
       rateLimitRemaining: this.rateLimitRemaining,
       rateLimitReset: this.rateLimitReset,
+      fiveHourPercent: this.fiveHourPercent,
+      fiveHourResetsAt: this.fiveHourResetsAt,
+      sevenDayPercent: this.sevenDayPercent,
+      sevenDayResetsAt: this.sevenDayResetsAt,
       apiLatencyMs: this.apiLatencyMs,
+      pingRttMs: this.pingRttMs,
+      serverTimeMs: this.serverTimeMs,
       linesAdded: this.linesAdded,
       linesRemoved: this.linesRemoved,
       lastToolDurationMs: this.lastToolDurationMs,
@@ -496,7 +553,13 @@ export class TapMetadataAccumulator {
     this.filesTouched.clear();
     this.rateLimitRemaining = null;
     this.rateLimitReset = null;
+    this.fiveHourPercent = null;
+    this.fiveHourResetsAt = null;
+    this.sevenDayPercent = null;
+    this.sevenDayResetsAt = null;
     this.apiLatencyMs = 0;
+    this.pingRttMs = 0;
+    this.serverTimeMs = 0;
     this.sidechainActive = false;
     this.lastTelemetryKey = "";
     this.linesAdded = 0;

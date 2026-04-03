@@ -58,13 +58,9 @@ function permissionIcon(mode: PermissionMode): { icon: React.ReactNode; tip: str
 function SessionStatus({
   session,
   gitStatus,
-  usageData,
-  usageError,
 }: {
   session: Session;
   gitStatus: GitStatusData | null;
-  usageData: { fiveHourPercent: number | null; sevenDayPercent: number | null } | null;
-  usageError: string | null;
 }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
@@ -79,21 +75,24 @@ function SessionStatus({
   // subsequent changes (requires 2+ consecutive matching polls).
   const stableBranch = useStabilizedValue(gitStatus?.branch ?? null, 2);
 
-  // Resolve 5h/7d data: prefer statusLine (per-session), fall back to API data
-  const sl = session.metadata.statusLine;
-  const fiveHour = sl?.fiveHourUsedPercent ?? usageData?.fiveHourPercent ?? null;
-  const sevenDay = sl?.sevenDayUsedPercent ?? usageData?.sevenDayPercent ?? null;
-  const showUsageError = sl == null && usageError;
+  // Resolve 5h/7d data: prefer API response headers, fall back to statusLine
+  const m = session.metadata;
+  const sl = m.statusLine;
+  const fiveHour = m.fiveHourPercent ?? sl?.fiveHourUsedPercent ?? null;
+  const sevenDay = m.sevenDayPercent ?? sl?.sevenDayUsedPercent ?? null;
+  const fiveHourReset = m.fiveHourResetsAt ?? sl?.fiveHourResetsAt ?? 0;
+  const sevenDayReset = m.sevenDayResetsAt ?? sl?.sevenDayResetsAt ?? 0;
 
   return (
     <>
       {/* LEFT: primary operational info */}
       <div className="status-bar-content">
         <span className="status-item status-model" title={
-          (session.metadata.apiRegion || session.metadata.apiLatencyMs > 0)
-            ? `Cloudflare POP: ${session.metadata.apiRegion || "—"}` +
+          (m.apiRegion || m.pingRttMs > 0)
+            ? `Cloudflare POP: ${m.apiRegion || "—"}` +
               (apiIp ? ` · IP: ${apiIp}` : "") +
-              (session.metadata.apiLatencyMs > 0 ? ` · Ping: ${Math.round(session.metadata.apiLatencyMs)}ms` : "")
+              (m.pingRttMs > 0 ? ` · RTT: ${Math.round(m.pingRttMs)}ms` : "") +
+              (m.serverTimeMs > 0 ? ` · Server: ${Math.round(m.serverTimeMs)}ms` : "")
             : "Model"
         } style={{ color: modelColor(model) }}>
           {modelLabel(model)}
@@ -113,9 +112,14 @@ function SessionStatus({
             {apiIp}
           </span>
         )}
-        {session.metadata.apiLatencyMs > 0 && (
-          <span className="status-item" style={{ opacity: 0.5 }}>
-            {Math.round(session.metadata.apiLatencyMs)}ms
+        {m.pingRttMs > 0 && (
+          <span className="status-item" title="Network round-trip time (EMA)" style={{ opacity: 0.5 }}>
+            {Math.round(m.pingRttMs)}ms
+          </span>
+        )}
+        {m.serverTimeMs > 0 && (
+          <span className="status-item" title="Server processing time (EMA)" style={{ opacity: 0.5 }}>
+            srv:{Math.round(m.serverTimeMs)}ms
           </span>
         )}
         {(() => {
@@ -141,7 +145,7 @@ function SessionStatus({
           );
         })()}
         {fiveHour != null && fiveHour > 0 && (() => {
-          const rem = formatTimeRemaining(sl?.fiveHourResetsAt ?? 0);
+          const rem = formatTimeRemaining(fiveHourReset);
           return (
             <span
               className="status-item"
@@ -153,7 +157,7 @@ function SessionStatus({
           );
         })()}
         {sevenDay != null && sevenDay > 0 && (() => {
-          const rem = formatTimeRemaining(sl?.sevenDayResetsAt ?? 0);
+          const rem = formatTimeRemaining(sevenDayReset);
           return (
             <span
               className="status-item"
@@ -164,11 +168,6 @@ function SessionStatus({
             </span>
           );
         })()}
-        {showUsageError && (
-          <span className="status-item" title={`Usage fetch failed: ${usageError}`} style={{ color: "var(--text-muted)" }}>
-            5h/7d: ?
-          </span>
-        )}
         {inspectorOff && (
           <span className="status-item status-inspector-off" title="Inspector disconnected — right-click tab to reconnect">
             <IconCircleOutline size={12} /> Inspector off
@@ -284,9 +283,6 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const activeSession = sessions.find((s) => s.id === activeTabId);
   const [hookCount, setHookCount] = useState(0);
-  // Usage data is derived passively from TAP StatusLineUpdate events
-  const usageData = null;
-  const usageError = null;
   const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
   const sidePanel = useSettingsStore((s) => s.sidePanel);
   const setSidePanel = useSettingsStore((s) => s.setSidePanel);
@@ -325,7 +321,7 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   return (
     <div className="status-bar">
       {activeSession ? (
-        <SessionStatus session={activeSession} gitStatus={gitStatus} usageData={usageData} usageError={usageError} />
+        <SessionStatus session={activeSession} gitStatus={gitStatus} />
       ) : (
         <span className="status-empty">No active session</span>
       )}

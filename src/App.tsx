@@ -259,6 +259,7 @@ export default function App() {
       }
 
       // [KB-03] Ctrl+Shift+R: resume picker
+      // [DS-05] Resume picker opens regardless of current session state.
       if (e.ctrlKey && e.shiftKey && e.key === "R") {
         e.preventDefault();
         setShowResumePicker(true);
@@ -548,9 +549,9 @@ export default function App() {
               const isIdle = sub.state === "idle";
               const isInterrupted = sub.state === "interrupted";
               const isSelected = inspectedSubagent?.subagentId === sub.id && inspectedSubagent?.sessionId === activeTabId;
-              const lastMsg = sub.messages.length > 0
-                ? sub.messages[sub.messages.length - 1].text.slice(0, 200)
-                : null;
+              // [TA-06] Subagent activity: same display as parent tabs
+              const subActivity = getActivityText(sub.currentToolName, sub.currentEventKind);
+              const subActivityColor = subActivity ? eventKindColor(sub.currentEventKind ?? sub.currentToolName!) : undefined;
               const metaParts: string[] = [];
               if (sub.agentType) metaParts.push(sub.agentType);
               if (sub.model) metaParts.push(sub.model.replace(/^claude-/, "").split("-")[0]);
@@ -567,9 +568,11 @@ export default function App() {
                   <span className={`tab-dot state-${sub.state}`} />
                   <span className="subagent-label">
                     <span className="subagent-name">{sub.description}</span>
-                    <span className="subagent-summary">
-                      {isActive && sub.currentAction ? sub.currentAction : lastMsg || ""}
-                    </span>
+                    {subActivity && (
+                      <span className="tab-activity" style={{ color: subActivityColor }}>
+                        {subActivity}
+                      </span>
+                    )}
                     {metaParts.length > 0 && (
                       <span className="subagent-meta">{metaParts.join(" · ")}</span>
                     )}

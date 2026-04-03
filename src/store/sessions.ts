@@ -288,6 +288,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
     }));
   },
 
+  // [DS-02] Respawn requests target an existing tabId; callers reuse the tab in place.
   requestRespawn: (tabId, config, name) => {
     set({ respawnRequest: { tabId, config, name } });
   },

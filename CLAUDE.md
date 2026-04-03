@@ -1,8 +1,10 @@
 # Claude Tabs
 
-Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
+IMPORTANT: Working with an external application means we are developing around a moving target. Do not guess or assume how it works.
+- The Claude Code source itself (4/1/2026) is available here [C:\Users\jorda\PycharmProjects\claude_tabs]. 
+- For anything else, ask the user to log some test data. Logs are at [AppData\Local\claude-tabs\sessions].
 
-The Claude Code source itself (4/1/2026) is available here [C:\Users\jorda\PycharmProjects\claude_tabs] if you need to determine the internal behaviour of the embedded application.
+Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
 
 # Workflow
 

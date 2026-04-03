@@ -1399,6 +1399,7 @@ pub fn discover_hooks(working_dirs: Vec<String>) -> Result<serde_json::Value, St
             if let Ok(content) = std::fs::read_to_string(&settings_path) {
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
                     if let Some(hooks) = parsed.get("hooks") {
+                        // [HM-02] Scope-prefixed keys keep project and project-local hooks distinct.
                         let key = format!("{}:{}", prefix, dir);
                         all_hooks.insert(key, hooks.clone());
                     }

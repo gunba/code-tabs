@@ -65,7 +65,7 @@ function makeSession(id: string, name = "test"): Session {
       runtimeModel: null,
       apiRegion: null, lastRequestId: null, subscriptionType: null, hookStatus: null,
       lastTurnCostUsd: 0, lastTurnTtftMs: 0, systemPromptLength: 0, toolCount: 0, conversationLength: 0,
-      activeSubprocess: null, filesTouched: [], rateLimitRemaining: null, rateLimitReset: null, apiLatencyMs: 0, linesAdded: 0, linesRemoved: 0, lastToolDurationMs: null, lastToolResultSize: null, lastToolError: null, apiRetryCount: 0, apiErrorStatus: null, apiRetryInfo: null, stallDurationMs: 0, stallCount: 0, contextBudget: null, hookTelemetry: null, planOutcome: null, effortLevel: null, worktreeInfo: null, capturedSystemPrompt: null, statusLine: null,
+      activeSubprocess: null, filesTouched: [], rateLimitRemaining: null, rateLimitReset: null, fiveHourPercent: null, fiveHourResetsAt: null, sevenDayPercent: null, sevenDayResetsAt: null, apiLatencyMs: 0, pingRttMs: 0, serverTimeMs: 0, linesAdded: 0, linesRemoved: 0, lastToolDurationMs: null, lastToolResultSize: null, lastToolError: null, apiRetryCount: 0, apiErrorStatus: null, apiRetryInfo: null, stallDurationMs: 0, stallCount: 0, contextBudget: null, hookTelemetry: null, planOutcome: null, effortLevel: null, worktreeInfo: null, capturedSystemPrompt: null, statusLine: null,
     },
     createdAt: "2026-01-01T00:00:00Z",
     lastActive: "2026-01-01T00:00:00Z",
@@ -81,6 +81,8 @@ function makeSub(id: string, state: Subagent["state"] = "thinking"): Subagent {
     messages: [],
     tokenCount: 0,
     currentAction: null,
+    currentToolName: null,
+    currentEventKind: null,
     createdAt: 0,
   };
 }

@@ -806,18 +806,33 @@ export const INSTALL_TAPS = `(function() {
                 var ct = '';
                 var cl = 0;
                 try {
-                  hdrs.reqId = resp.headers.get('request-id') || '';
-                  hdrs.cfRay = resp.headers.get('cf-ray') || '';
-                  hdrs.rlRemain = resp.headers.get('x-ratelimit-limit-tokens') || '';
-                  hdrs.rlReset = resp.headers.get('x-ratelimit-reset-tokens') || '';
-                  ct = resp.headers.get('content-type') || '';
-                  cl = parseInt(resp.headers.get('content-length') || '0') || 0;
+                  resp.headers.forEach(function(v, k) { hdrs[k] = v; });
+                  ct = hdrs['content-type'] || '';
+                  cl = parseInt(hdrs['content-length'] || '0') || 0;
                 } catch(e2) {}
                 var isStream = ct.indexOf('text/event-stream') !== -1;
                 var fetchEntry = flags.fetch
                   ? { url: url.slice(0, 300), method: method, status: resp.status, bodyLen: bodyLen, dur: Date.now() - t0, hdrs: hdrs, ct: ct, cl: cl }
                   : { url: '', method: method, status: resp.status, dur: Date.now() - t0, hdrs: hdrs, ct: ct, cl: cl };
-                if (flags.fetch && !isStream && cl > 0 && cl <= 32768) {
+                if (flags.fetch && isStream) {
+                  // SSE: read first chunk via ReadableStream reader for usage data
+                  try {
+                    var clonedBody = resp.clone().body;
+                    if (clonedBody && clonedBody.getReader) {
+                      var rdr = clonedBody.getReader();
+                      rdr.read().then(function(r) {
+                        rdr.cancel();
+                        if (r.value) {
+                          try { fetchEntry.resp = new TextDecoder().decode(r.value).slice(0, 2000); } catch(e5) {}
+                        }
+                        push('fetch', fetchEntry);
+                      }, function() { push('fetch', fetchEntry); });
+                    } else {
+                      push('fetch', fetchEntry);
+                    }
+                  } catch(e4) { push('fetch', fetchEntry); }
+                } else if (flags.fetch) {
+                  // Non-streaming: clone and read full body
                   try {
                     resp.clone().text().then(function(txt) {
                       fetchEntry.resp = txt.slice(0, 2000);
@@ -866,7 +881,7 @@ export const INSTALL_TAPS = `(function() {
     var timerSeq = 0;
     globalThis.setTimeout = function(fn, delay) {
       var result = origSetTimeout.apply(globalThis, arguments);
-      if (flags.timer && typeof delay === 'number' && delay >= 100) {
+      if (flags.timer) {
         try {
           var seq = ++timerSeq;
           var caller = '';
@@ -1036,6 +1051,15 @@ export const INSTALL_TAPS = `(function() {
               try { push('websocket', { op: 'close', url: String(url).slice(0, 300), code: ev.code, reason: String(ev.reason || '').slice(0, 100) }); } catch(e) {}
             }
           });
+          ws.addEventListener('message', function(ev) {
+            if (flags.websocket) {
+              try {
+                var d = typeof ev.data === 'string' ? ev.data : '';
+                var mLen = typeof ev.data === 'string' ? ev.data.length : (ev.data && ev.data.byteLength || 0);
+                push('websocket', { op: 'message', url: String(url).slice(0, 300), len: mLen, snap: d.slice(0, 2000) });
+              } catch(e) {}
+            }
+          });
         }
         var origSend = ws.send.bind(ws);
         ws.send = function(data) {
@@ -1135,25 +1159,20 @@ export const INSTALL_TAPS = `(function() {
           origReq.on('response', function(res) {
             var respCt = (res.headers && res.headers['content-type']) || '';
             var respCl = parseInt((res.headers && res.headers['content-length']) || '0') || 0;
-            var respEntry = { op: 'https-resp', url: (h + p).slice(0, 300), status: res.statusCode, ct: respCt, cl: respCl, dur: Date.now() - httpsT0 };
-            var isRespStream = respCt.indexOf('text/event-stream') !== -1;
-            if (!isRespStream && respCl > 0 && respCl <= 32768) {
-              var chunks = [];
-              var total = 0;
-              res.on('data', function(chunk) {
-                total += chunk.length;
-                if (total <= 32768) chunks.push(chunk);
-              });
-              res.on('end', function() {
-                try {
-                  respEntry.resp = Buffer.concat(chunks).toString('utf8').slice(0, 2000);
-                  respEntry.cl = total;
-                } catch(eResp) {}
-                push('fetch', respEntry);
-              });
-            } else {
+            var respEntry = { op: 'https-resp', url: (h + p).slice(0, 300), status: res.statusCode, ct: respCt, cl: respCl, dur: Date.now() - httpsT0, hdrs: res.headers || {} };
+            var chunks = [];
+            var total = 0;
+            res.on('data', function(chunk) {
+              total += chunk.length;
+              if (total <= 32768) chunks.push(chunk);
+            });
+            res.on('end', function() {
+              try {
+                respEntry.resp = Buffer.concat(chunks).toString('utf8').slice(0, 2000);
+                respEntry.cl = total;
+              } catch(eResp) {}
               push('fetch', respEntry);
-            }
+            });
           });
         } catch(ePassive) {}
       }
@@ -1306,10 +1325,7 @@ export const INSTALL_TAPS = `(function() {
     TextDecoder.prototype.decode = function(input, options) {
       var result = origDecode.apply(this, arguments);
       if (flags.textdecoder && result && result.length > 0) {
-        // Only capture chunks that look like SSE data
-        if (result.indexOf('data:') !== -1 || result.indexOf('event:') !== -1) {
-          push('textdecoder', { len: result.length, snap: result.slice(0, 2000) });
-        }
+        push('textdecoder', { len: result.length, snap: result.slice(0, 2000) });
       }
       return result;
     };
@@ -1323,14 +1339,11 @@ export const INSTALL_TAPS = `(function() {
       var origEmit = EventEmitter.prototype.emit;
       EventEmitter.prototype.emit = function(type) {
         if (flags.events && typeof type === 'string') {
-          // Only capture hook-related and lifecycle events to manage volume
-          if (type.indexOf('Hook') === 0 || type === 'SessionEnd' || type === 'ConfigChange' || type === 'CwdChanged') {
-            var args = [];
-            for (var i = 1; i < arguments.length && i < 3; i++) {
-              try { args.push(origStringify(arguments[i]).slice(0, 500)); } catch(e2) { args.push('[circular]'); }
-            }
-            push('events', { type: type, args: args, src: this.constructor ? this.constructor.name : '' });
+          var args = [];
+          for (var i = 1; i < arguments.length && i < 3; i++) {
+            try { args.push(origStringify(arguments[i]).slice(0, 500)); } catch(e2) { args.push('[circular]'); }
           }
+          push('events', { type: type, args: args, src: this.constructor ? this.constructor.name : '' });
         }
         return origEmit.apply(this, arguments);
       };
@@ -1346,8 +1359,8 @@ export const INSTALL_TAPS = `(function() {
       var origEnv = process.env;
       var envHandler = {
         get: function(target, prop) {
-          if (flags.envproxy && typeof prop === 'string' && (prop.indexOf('CLAUDE') === 0 || prop.indexOf('ANTHROPIC') === 0)) {
-            push('envproxy', { key: prop, hasValue: target[prop] !== undefined });
+          if (flags.envproxy && typeof prop === 'string') {
+            push('envproxy', { key: prop, val: String(target[prop] === undefined ? '' : target[prop]).slice(0, 200) });
           }
           return target[prop];
         },

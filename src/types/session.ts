@@ -88,6 +88,15 @@ export interface SessionMetadata {
   rateLimitRemaining: string | null;
   rateLimitReset: string | null;
   apiLatencyMs: number;
+  /** Network round-trip time in ms (EMA-smoothed, server processing subtracted) */
+  pingRttMs: number;
+  /** Server-side processing time in ms (EMA-smoothed, from x-envoy-upstream-service-time) */
+  serverTimeMs: number;
+  // Unified rate limit data from API response headers
+  fiveHourPercent: number | null;
+  fiveHourResetsAt: number | null;
+  sevenDayPercent: number | null;
+  sevenDayResetsAt: number | null;
   // TAP pipeline expansion
   linesAdded: number;
   linesRemoved: number;
@@ -180,6 +189,8 @@ export interface Subagent {
   description: string;  // from Agent tool_use input.description
   tokenCount: number;
   currentAction: string | null;
+  currentToolName: string | null;
+  currentEventKind: string | null;
   messages: SubagentMessage[];
   createdAt: number;    // tap event ts when first seen (for chronological bar ordering)
   agentType?: string;

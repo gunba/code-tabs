@@ -1,6 +1,7 @@
 import type { TapEvent } from "../types/tapEvents";
 import type { Subagent, SubagentMessage, SessionState } from "../types/session";
 import { isSubagentActive } from "../types/session";
+import { getNoisyEventKinds } from "./noisyEventKinds";
 import { dlog } from "./debugLog";
 
 export interface SubagentAction {
@@ -30,6 +31,7 @@ export class TapSubagentTracker {
   private subagentMsgs = new Map<string, SubagentMessage[]>(); // agentId → messages
   private agentStates = new Map<string, SessionState>();
   private lastActiveAgent: string | null = null;
+  private sidechainActive = false;
 
   constructor(parentSessionId: string) {
     this.parentSessionId = parentSessionId;
@@ -51,7 +53,12 @@ export class TapSubagentTracker {
       if (currentState && isSubagentActive(currentState)) {
         dlog("inspector", this.parentSessionId, `subagent ${agentId} ${currentState} → ${targetState}`, "DEBUG");
         this.agentStates.set(agentId, targetState);
-        actions.push({ type: "update", subagentId: agentId, updates: { state: targetState } });
+        actions.push({ type: "update", subagentId: agentId, updates: {
+          state: targetState,
+          currentToolName: null,
+          currentEventKind: null,
+          currentAction: null,
+        } });
       }
     }
     return actions;
@@ -69,6 +76,8 @@ export class TapSubagentTracker {
         break;
 
       case "ConversationMessage": {
+        // Track sidechain state for routing non-ConversationMessage events
+        this.sidechainActive = event.isSidechain;
         // [IN-04] Subagent messages: isSidechain + agentId routing, late msg gating
         if (!event.isSidechain || !event.agentId) break;
 
@@ -101,6 +110,8 @@ export class TapSubagentTracker {
               description: desc,
               tokenCount: 0,
               currentAction: null,
+              currentToolName: null,
+              currentEventKind: null,
               messages: [],
               createdAt: event.ts,
             },
@@ -233,11 +244,61 @@ export class TapSubagentTracker {
 
       case "UserInput":
       case "SlashCommand":
+        this.sidechainActive = false;
         // New user prompt → previous turn's agents are done; mark stale active agents idle
         actions.push(...this.markAllActive("idle"));
         break;
 
+      // [IN-26] Route tool activity to active subagent (mirrors parent tab display)
+      case "ToolCallStart": {
+        if (!this.sidechainActive || !this.lastActiveAgent) break;
+        const tgt = this.lastActiveAgent;
+        if (!isSubagentActive(this.agentStates.get(tgt) ?? "dead")) break;
+        actions.push({
+          type: "update", subagentId: tgt,
+          updates: { currentToolName: event.toolName, currentEventKind: "ToolCallStart" },
+        });
+        break;
+      }
+
+      case "ToolInput": {
+        if (!this.sidechainActive || !this.lastActiveAgent) break;
+        const tgt = this.lastActiveAgent;
+        if (!isSubagentActive(this.agentStates.get(tgt) ?? "dead")) break;
+        const detail = String(
+          event.input.command || event.input.file_path || event.input.pattern ||
+          event.input.description || event.input.query || ""
+        ).slice(0, 80);
+        actions.push({
+          type: "update", subagentId: tgt,
+          updates: { currentAction: `${event.toolName}: ${detail}` },
+        });
+        break;
+      }
+
+      case "TurnEnd": {
+        if (!this.sidechainActive || !this.lastActiveAgent) break;
+        const tgt = this.lastActiveAgent;
+        if (!isSubagentActive(this.agentStates.get(tgt) ?? "dead")) break;
+        if (event.stopReason === "end_turn") {
+          actions.push({
+            type: "update", subagentId: tgt,
+            updates: { currentToolName: null, currentAction: null, currentEventKind: "TurnEnd" },
+          });
+        }
+        break;
+      }
+
       default:
+        // Route non-noisy event kinds to active subagent for tab-like activity display
+        if (this.sidechainActive && this.lastActiveAgent &&
+            !getNoisyEventKinds().has(event.kind) &&
+            isSubagentActive(this.agentStates.get(this.lastActiveAgent) ?? "dead")) {
+          actions.push({
+            type: "update", subagentId: this.lastActiveAgent,
+            updates: { currentEventKind: event.kind },
+          });
+        }
         break;
     }
 
@@ -253,5 +314,6 @@ export class TapSubagentTracker {
     this.subagentMsgs.clear();
     this.agentStates.clear();
     this.lastActiveAgent = null;
+    this.sidechainActive = false;
   }
 }

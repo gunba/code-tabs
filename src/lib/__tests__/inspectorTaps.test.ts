@@ -406,14 +406,15 @@ describe("INSTALL_TAPS timer hook", () => {
     expect(typeof entries[0].caller).toBe("string");
   });
 
-  it("skips setTimeout with delay < 100", () => {
+  it("captures setTimeout with delay < 100", () => {
     const g = globalThis as unknown as Record<string, unknown>;
     (g.__tapFlags as Record<string, boolean>).timer = true;
     mockTapWrites = [];
     const id = setTimeout(() => {}, 10);
     clearTimeout(id);
     const entries = collectTapEntries().filter((e) => e.cat === "timer" && e.op === "setTimeout");
-    expect(entries.length).toBe(0);
+    expect(entries.length).toBe(1);
+    expect(entries[0].delay).toBe(10);
   });
 });
 

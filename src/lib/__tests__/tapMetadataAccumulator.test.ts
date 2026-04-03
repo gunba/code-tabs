@@ -176,8 +176,7 @@ describe("TapMetadataAccumulator", () => {
       kind: "ApiFetch", ts: 0,
       url: "https://api.anthropic.com/v1/messages", method: "POST",
       status: 200, bodyLen: 50000, durationMs: 245,
-      requestId: "req-1", cfRay: "abc123-IAD",
-      rateLimitRemaining: "1000", rateLimitReset: "2026-01-01T00:00:00Z",
+      headers: { "request-id": "req-1", "cf-ray": "abc123-IAD", "x-ratelimit-limit-tokens": "1000", "x-ratelimit-reset-tokens": "2026-01-01T00:00:00Z" },
     });
     expect(diff?.apiLatencyMs).toBe(245);
   });
@@ -289,14 +288,12 @@ describe("TapMetadataAccumulator", () => {
       toolAction: null, textSnippet: "explore the codebase", cwd: null,
       hasToolError: false, toolErrorText: null,
     });
-    // Subagent TurnStart — should NOT overwrite context tokens
+    // Subagent TurnStart — no diff produced (all transient updates gated by sidechainActive)
     const diff = acc.process({
       kind: "TurnStart", ts: 3, model: "haiku",
       inputTokens: 500, outputTokens: 0, cacheRead: 100, cacheCreation: 10,
     });
-    expect(diff?.contextDebug?.inputTokens).toBe(20000); // unchanged
-    expect(diff?.contextDebug?.cacheRead).toBe(50000);    // unchanged
-    expect(diff?.contextDebug?.cacheCreation).toBe(5000);  // unchanged
+    expect(diff).toBeNull();
 
     // After sidechain ends (main agent message), TurnStart should update again
     acc.process({
