@@ -1,7 +1,10 @@
-// [TA-04] ContextViewer: conversation context viewer — system prompt blocks + messages, opened from StatusBar
-import { useState } from "react";
+// [TA-04] ContextViewer: conversation context viewer — unified list with per-subagent tabs
+import { useMemo, useState } from "react";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
-import type { SessionMetadata, SystemPromptBlock, CapturedMessage, CapturedContentBlock } from "../../types/session";
+import { formatTokenCount } from "../../lib/claude";
+import { buildMainTabEntries, buildSubagentTabs } from "../../lib/contextProjection";
+import type { UnifiedEntry, SubagentTab } from "../../lib/contextProjection";
+import type { SessionMetadata, SystemPromptBlock, CapturedContentBlock } from "../../types/session";
 import "./ContextViewer.css";
 
 interface ContextViewerProps {
@@ -9,11 +12,7 @@ interface ContextViewerProps {
   onClose: () => void;
 }
 
-function formatTokenCount(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "k";
-  return String(n);
-}
+// ── Content block renderer ──────────────────────────────
 
 function ContentBlockView({ block }: { block: CapturedContentBlock }) {
   if (block.type === "text") {
@@ -55,26 +54,60 @@ function ContentBlockView({ block }: { block: CapturedContentBlock }) {
   );
 }
 
-function MessageCard({ message, index }: { message: CapturedMessage; index: number }) {
-  const [expanded, setExpanded] = useState(false);
+// ── System block entry ──────────────────────────────────
+
+function SystemBlockEntry({ block, index, expanded, onToggle }: {
+  block: SystemPromptBlock;
+  index: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const preview = block.text.slice(0, 100).replace(/\n/g, " ");
+  return (
+    <div className="context-entry">
+      <button className="context-entry-header" onClick={onToggle}>
+        <span className="context-entry-index">{index + 1}</span>
+        <span className="context-entry-role context-role-system">system</span>
+        <span className="context-entry-meta">{block.text.length.toLocaleString()} chars</span>
+        {block.cacheControl && <span className="context-cache-badge">cached</span>}
+        {!expanded && <span className="context-entry-preview">{preview}{preview.length >= 100 ? "..." : ""}</span>}
+        <span className="context-entry-chevron">{expanded ? "\u25BC" : "\u25B6"}</span>
+      </button>
+      {expanded && (
+        <div className="context-entry-body">
+          <pre className="context-block-text">{block.text}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Message entry ───────────────────────────────────────
+
+function MessageEntry({ message, index, expanded, onToggle }: {
+  message: { role: string; content: CapturedContentBlock[] };
+  index: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const textPreview = message.content.find((b) => b.type === "text")?.text?.slice(0, 120);
   const blockTypes = message.content.map((b) => b.type);
   const hasTools = blockTypes.some((t) => t === "tool_use" || t === "tool_result");
 
   return (
-    <div className={`context-message${expanded ? " context-message-expanded" : ""}`}>
-      <button className="context-message-header" onClick={() => setExpanded(!expanded)}>
-        <span className="context-message-index">{index + 1}</span>
-        <span className={`context-message-role context-role-${message.role}`}>{message.role}</span>
-        {hasTools && <span className="context-message-tools">{blockTypes.filter((t) => t === "tool_use").length} tool{blockTypes.filter((t) => t === "tool_use").length !== 1 ? "s" : ""}</span>}
+    <div className="context-entry">
+      <button className="context-entry-header" onClick={onToggle}>
+        <span className="context-entry-index">{index + 1}</span>
+        <span className={`context-entry-role context-role-${message.role}`}>{message.role}</span>
+        {hasTools && <span className="context-entry-meta">{blockTypes.filter((t) => t === "tool_use").length} tool{blockTypes.filter((t) => t === "tool_use").length !== 1 ? "s" : ""}</span>}
         {!expanded && textPreview && (
-          <span className="context-message-preview">{textPreview}{(textPreview.length >= 120) ? "..." : ""}</span>
+          <span className="context-entry-preview">{textPreview}{textPreview.length >= 120 ? "..." : ""}</span>
         )}
-        <span className="context-message-blocks">{message.content.length} block{message.content.length !== 1 ? "s" : ""}</span>
-        <span className="context-message-chevron">{expanded ? "\u25BC" : "\u25B6"}</span>
+        <span className="context-entry-meta">{message.content.length} block{message.content.length !== 1 ? "s" : ""}</span>
+        <span className="context-entry-chevron">{expanded ? "\u25BC" : "\u25B6"}</span>
       </button>
       {expanded && (
-        <div className="context-message-body">
+        <div className="context-entry-body">
           {message.content.map((block, bi) => (
             <ContentBlockView key={bi} block={block} />
           ))}
@@ -84,11 +117,126 @@ function MessageCard({ message, index }: { message: CapturedMessage; index: numb
   );
 }
 
+// ── Subagent tab content ────────────────────────────────
+
+function SubagentTabContent({ tab, expandedSet, onToggle }: {
+  tab: SubagentTab;
+  expandedSet: Set<string>;
+  onToggle: (key: string) => void;
+}) {
+  const promptKey = `${tab.id}:prompt`;
+  const resultKey = `${tab.id}:result`;
+
+  return (
+    <div className="context-unified-list">
+      <div className="context-entry">
+        <button className="context-entry-header" onClick={() => onToggle(promptKey)}>
+          <span className="context-entry-role context-role-system">prompt</span>
+          <span className="context-entry-meta">{tab.promptText.length.toLocaleString()} chars</span>
+          {!expandedSet.has(promptKey) && (
+            <span className="context-entry-preview">{tab.promptText.slice(0, 120)}{tab.promptText.length > 120 ? "..." : ""}</span>
+          )}
+          <span className="context-entry-chevron">{expandedSet.has(promptKey) ? "\u25BC" : "\u25B6"}</span>
+        </button>
+        {expandedSet.has(promptKey) && (
+          <div className="context-entry-body">
+            <pre className="context-block-text">{tab.promptText}</pre>
+          </div>
+        )}
+      </div>
+      {tab.resultText != null ? (
+        <div className="context-entry">
+          <button className="context-entry-header" onClick={() => onToggle(resultKey)}>
+            <span className="context-entry-role context-role-assistant">result</span>
+            <span className="context-entry-meta">{tab.resultText.length.toLocaleString()} chars</span>
+            {!expandedSet.has(resultKey) && (
+              <span className="context-entry-preview">{tab.resultText.slice(0, 120)}{tab.resultText.length > 120 ? "..." : ""}</span>
+            )}
+            <span className="context-entry-chevron">{expandedSet.has(resultKey) ? "\u25BC" : "\u25B6"}</span>
+          </button>
+          {expandedSet.has(resultKey) && (
+            <div className="context-entry-body">
+              <pre className="context-block-text">{tab.resultText}</pre>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="context-subagent-pending">Pending...</div>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ──────────────────────────────────────
+
 export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
   const blocks = metadata.capturedSystemBlocks;
   const text = metadata.capturedSystemPrompt;
   const messages = metadata.capturedMessages;
   const dbg = metadata.contextDebug;
+
+  const [activeTab, setActiveTab] = useState("main");
+  const [expandedSet, setExpandedSet] = useState<Set<string>>(new Set());
+
+  // Preserve unstructured-system fallback
+  const displayBlocks: SystemPromptBlock[] = blocks ?? (text ? [{ text }] : []);
+
+  const lastCachedIdx = displayBlocks.reduce((acc, b, i) => (b.cacheControl ? i : acc), -1);
+
+  const totalChars = displayBlocks.reduce((sum, b) => sum + b.text.length, 0);
+
+  // Memoize projections
+  const mainEntries = useMemo(
+    () => buildMainTabEntries(displayBlocks, messages, lastCachedIdx),
+    [displayBlocks, messages, lastCachedIdx],
+  );
+
+  const subagentTabs = useMemo(
+    () => buildSubagentTabs(messages),
+    [messages],
+  );
+
+  // Ensure activeTab is valid
+  const validTab = activeTab === "main" || subagentTabs.some(t => t.id === activeTab)
+    ? activeTab
+    : "main";
+
+  // Keys for current tab (for Expand All)
+  const currentKeys = useMemo(() => {
+    if (validTab === "main") {
+      return mainEntries
+        .filter(e => e.kind !== "cache-boundary")
+        .map(e => e.kind === "system" ? `main:sys-${e.index}` : `main:msg-${(e as Extract<UnifiedEntry, { kind: "message" }>).index}`);
+    }
+    const tab = subagentTabs.find(t => t.id === validTab);
+    if (!tab) return [];
+    const keys = [`${tab.id}:prompt`];
+    if (tab.resultText != null) keys.push(`${tab.id}:result`);
+    return keys;
+  }, [validTab, mainEntries, subagentTabs]);
+
+  const allExpanded = currentKeys.length > 0 && currentKeys.every(k => expandedSet.has(k));
+
+  function toggleAll() {
+    setExpandedSet(prev => {
+      const next = new Set(prev);
+      if (allExpanded) {
+        for (const k of currentKeys) next.delete(k);
+      } else {
+        for (const k of currentKeys) next.add(k);
+      }
+      return next;
+    });
+  }
+
+  function toggleEntry(key: string) {
+    setExpandedSet(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   if (!text && !blocks && !messages?.length) {
     return (
@@ -104,20 +252,6 @@ export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
     );
   }
 
-  // Find the cache boundary: last block with cacheControl
-  const lastCachedIdx = blocks
-    ? blocks.reduce((acc, b, i) => (b.cacheControl ? i : acc), -1)
-    : -1;
-
-  const totalChars = blocks
-    ? blocks.reduce((sum, b) => sum + b.text.length, 0)
-    : (text?.length ?? 0);
-
-  const blockCount = blocks?.length ?? (text ? 1 : 0);
-
-  // If we don't have structured blocks, treat the full text as one block
-  const displayBlocks: SystemPromptBlock[] = blocks ?? (text ? [{ text }] : []);
-
   return (
     <ModalOverlay onClose={onClose} className="context-viewer-modal">
       <div className="context-viewer">
@@ -126,9 +260,14 @@ export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
           <span className="context-viewer-title">Conversation Context</span>
           <span className="context-viewer-stats">
             {totalChars.toLocaleString()} chars
-            {blockCount > 1 && ` \u00B7 ${blockCount} blocks`}
+            {displayBlocks.length > 1 && ` \u00B7 ${displayBlocks.length} blocks`}
             {messages && ` \u00B7 ${messages.length} messages`}
           </span>
+          <div className="context-viewer-controls">
+            <button className="context-viewer-toggle" onClick={toggleAll}>
+              {allExpanded ? "Collapse All" : "Expand All"}
+            </button>
+          </div>
           <button className="context-viewer-close" onClick={onClose}>Esc</button>
         </div>
 
@@ -154,53 +293,78 @@ export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
           </div>
         )}
 
+        {/* Tab bar (only when subagent tabs exist) */}
+        {subagentTabs.length > 0 && (
+          <div className="context-tab-bar">
+            <button
+              className={`context-tab${validTab === "main" ? " active" : ""}`}
+              onClick={() => setActiveTab("main")}
+            >
+              Main Agent
+            </button>
+            {subagentTabs.map(tab => (
+              <button
+                key={tab.id}
+                className={`context-tab${validTab === tab.id ? " active" : ""}`}
+                onClick={() => setActiveTab(tab.id)}
+                title={tab.label}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Content */}
         <div className="context-viewer-content">
-          {/* System prompt section */}
-          {displayBlocks.length > 0 && (
-            <div className="context-section">
-              <div className="context-section-header">
-                <span className="context-section-title">System Prompt</span>
-                <span className="context-section-badge">{totalChars.toLocaleString()} chars</span>
-              </div>
-              {displayBlocks.map((block, i) => (
-                <div key={i}>
-                  <div className="context-block">
-                    <div className="context-block-header">
-                      <span className="context-block-label">Block {i + 1}</span>
-                      <span className="context-block-size">{block.text.length.toLocaleString()} chars</span>
-                      {block.cacheControl && (
-                        <span className="context-block-cache-badge">cached</span>
-                      )}
-                    </div>
-                    <pre className="context-block-text">{block.text}</pre>
-                  </div>
-                  {/* Cache boundary after the last cached block */}
-                  {i === lastCachedIdx && i < displayBlocks.length - 1 && (
-                    <div className="context-cache-boundary">
+          {validTab === "main" ? (
+            <div className="context-unified-list">
+              {mainEntries.map((entry, i) => {
+                if (entry.kind === "cache-boundary") {
+                  return (
+                    <div key={`cb-${i}`} className="context-cache-boundary">
                       <span className="context-cache-boundary-line" />
                       <span className="context-cache-boundary-label">Cache boundary — content below not cached</span>
                       <span className="context-cache-boundary-line" />
                     </div>
-                  )}
-                </div>
-              ))}
+                  );
+                }
+                if (entry.kind === "system") {
+                  const key = `main:sys-${entry.index}`;
+                  return (
+                    <SystemBlockEntry
+                      key={key}
+                      block={entry.block}
+                      index={entry.index}
+                      expanded={expandedSet.has(key)}
+                      onToggle={() => toggleEntry(key)}
+                    />
+                  );
+                }
+                // message
+                const key = `main:msg-${entry.index}`;
+                return (
+                  <MessageEntry
+                    key={key}
+                    message={entry.message}
+                    index={entry.index}
+                    expanded={expandedSet.has(key)}
+                    onToggle={() => toggleEntry(key)}
+                  />
+                );
+              })}
             </div>
-          )}
-
-          {/* Messages section */}
-          {messages && messages.length > 0 && (
-            <div className="context-section">
-              <div className="context-section-header">
-                <span className="context-section-title">Messages</span>
-                <span className="context-section-badge">{messages.length} messages</span>
-              </div>
-              <div className="context-messages-list">
-                {messages.map((msg, i) => (
-                  <MessageCard key={i} message={msg} index={i} />
-                ))}
-              </div>
-            </div>
+          ) : (
+            (() => {
+              const tab = subagentTabs.find(t => t.id === validTab);
+              return tab ? (
+                <SubagentTabContent
+                  tab={tab}
+                  expandedSet={expandedSet}
+                  onToggle={toggleEntry}
+                />
+              ) : null;
+            })()
           )}
         </div>
       </div>
