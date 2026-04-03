@@ -17,8 +17,10 @@ import {
   stripWorktreeFlags,
   findNearestLiveTab,
   toolCategoryColor,
+  eventKindColor,
   getActivityText,
   TOOL_COLORS,
+  EVENT_KIND_COLORS,
 } from "../claude";
 import type { Session } from "../../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../../types/session";
@@ -515,15 +517,31 @@ describe("toolCategoryColor", () => {
 });
 
 describe("getActivityText", () => {
-  it("returns null for null input", () => {
+  it("returns null for null inputs", () => {
     expect(getActivityText(null)).toBeNull();
+    expect(getActivityText(null, null)).toBeNull();
   });
 
-  it("passes through known tool name", () => {
+  it("returns currentEventKind when both are provided", () => {
+    expect(getActivityText("Bash", "ToolCallStart")).toBe("ToolCallStart");
+  });
+
+  it("falls back to currentToolName when eventKind is null", () => {
+    expect(getActivityText("Bash", null)).toBe("Bash");
     expect(getActivityText("Bash")).toBe("Bash");
   });
 
-  it("passes through unknown tool name", () => {
-    expect(getActivityText("mcp_foo_bar")).toBe("mcp_foo_bar");
+  it("returns currentEventKind when toolName is null", () => {
+    expect(getActivityText(null, "ThinkingStart")).toBe("ThinkingStart");
+  });
+});
+
+describe("eventKindColor", () => {
+  it("returns mapped color for known event kind", () => {
+    expect(eventKindColor("ToolCallStart")).toBe(EVENT_KIND_COLORS["ToolCallStart"]);
+  });
+
+  it("returns muted fallback for unknown event kind", () => {
+    expect(eventKindColor("SomeUnknownEvent")).toBe("var(--text-muted)");
   });
 });

@@ -75,7 +75,7 @@ export class TapMetadataAccumulator {
 
   /** Process an event and return a metadata diff, or null if unchanged. */
   process(event: TapEvent): Partial<SessionMetadata> | null {
-    if (event.kind !== "ApiTelemetry" && event.kind !== "ProcessHealth") {
+    if (event.kind !== "ApiTelemetry" && event.kind !== "ProcessHealth" && event.kind !== "ApiFetch") {
       this.currentEventKind = event.kind;
     }
     switch (event.kind) {

@@ -133,13 +133,52 @@ export function toolCategoryColor(toolName: string): string {
   return TOOL_COLORS[toolName] ?? "var(--text-muted)";
 }
 
-/** Derive activity display from current tool name or event kind.
+/** Event kind → color for tab activity display. */
+export const EVENT_KIND_COLORS: Record<string, string> = {
+  // Turn lifecycle
+  TurnStart: "#6a9955", TurnEnd: "#6a9955",
+  // Thinking / text generation
+  ThinkingStart: "#d4a0e0", TextStart: "#dcdcaa",
+  // Tool lifecycle
+  ToolCallStart: "#c586c0", ToolInput: "#c586c0", ToolResult: "#4ec9b0",
+  // Permission flow
+  PermissionPromptShown: "#e08b67", PermissionApproved: "#5cb85c", PermissionRejected: "#e06e9a",
+  // User interaction
+  UserInput: "#569cd6", SlashCommand: "#569cd6", UserInterruption: "#e06e9a",
+  // Conversation
+  ConversationMessage: "#dcdcaa",
+  // Errors / retries
+  ApiError: "#f44747", ApiStreamError: "#f44747", ApiRetry: "#e08b67", StreamStall: "#e08b67",
+  // Rate limit
+  RateLimit: "#e08b67",
+  // Hooks
+  HookProgress: "#9cdcfe", HookTelemetry: "#9cdcfe",
+  // Subprocess
+  SubprocessSpawn: "#ce9178",
+  // Subagents
+  SubagentSpawn: "#c586c0", SubagentNotification: "#c586c0", SubagentLifecycle: "#c586c0",
+  // Plan mode
+  PlanModeEvent: "#d4a0e0",
+  // Session
+  SessionResume: "#6a9955", ModeChange: "#d4a0e0",
+  // Skills
+  SkillInvocation: "#c586c0",
+  // Idle
+  IdlePrompt: "#6a9955",
+};
+
+/** Color for an event kind. Falls back to muted for unknown kinds. */
+export function eventKindColor(eventKind: string): string {
+  return EVENT_KIND_COLORS[eventKind] ?? "var(--text-muted)";
+}
+
+/** Derive activity display from current event kind or tool name.
  *  Returns null when there is nothing to show. */
 export function getActivityText(
   currentToolName: string | null,
   currentEventKind?: string | null,
 ): string | null {
-  return currentToolName ?? currentEventKind ?? null;
+  return currentEventKind ?? currentToolName ?? null;
 }
 
 /** Session colors — assigned sequentially, no collisions until wrap-around. */
