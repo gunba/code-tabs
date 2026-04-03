@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::path_utils;
 use crate::session::persistence;
-use crate::session::types::{Session, SessionConfig, SessionState};
+use crate::session::types::{Session, SessionConfig};
 use crate::session::SessionManager;
 use crate::ActivePids;
 
@@ -31,26 +31,9 @@ pub fn close_session(id: String, manager: State<'_, SessionManager>) -> Result<(
 }
 
 #[tauri::command]
-pub fn get_session(id: String, manager: State<'_, SessionManager>) -> Result<Session, String> {
-    manager
-        .get_session(&id)
-        .ok_or_else(|| format!("Session {} not found", id))
-}
-
-#[tauri::command]
-pub fn list_sessions(manager: State<'_, SessionManager>) -> Result<Vec<Session>, String> {
-    Ok(manager.list_sessions())
-}
-
-#[tauri::command]
 pub fn set_active_tab(id: String, manager: State<'_, SessionManager>) -> Result<(), String> {
     manager.set_active(&id);
     Ok(())
-}
-
-#[tauri::command]
-pub fn get_active_tab(manager: State<'_, SessionManager>) -> Result<Option<String>, String> {
-    Ok(manager.get_active())
 }
 
 #[tauri::command]
@@ -60,32 +43,6 @@ pub fn reorder_tabs(
 ) -> Result<(), String> {
     manager.reorder_tabs(order);
     Ok(())
-}
-
-#[tauri::command]
-pub fn update_session_state(
-    id: String,
-    state: SessionState,
-    manager: State<'_, SessionManager>,
-) -> Result<(), String> {
-    manager.update_state(&id, state);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn set_session_pty_id(
-    id: String,
-    pty_id: u32,
-    manager: State<'_, SessionManager>,
-) -> Result<(), String> {
-    manager.set_pty_id(&id, pty_id);
-    Ok(())
-}
-
-#[tauri::command]
-pub fn persist_sessions(manager: State<'_, SessionManager>) -> Result<(), String> {
-    let snapshots = manager.snapshots();
-    persistence::save_sessions(&snapshots)
 }
 
 // [RC-08] Save/restore sessions — persist_sessions_json accepts frontend JSON directly
@@ -1183,49 +1140,6 @@ pub fn discover_plugin_commands(extra_dirs: Vec<String>) -> Result<Vec<serde_jso
     Ok(commands)
 }
 
-// [RC-07] Read first user message from session JSONL
-/// Read the first user message from a session's JSONL file.
-#[tauri::command]
-pub fn get_first_user_message(session_id: String, working_dir: String) -> Result<String, String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
-    let encoded = path_utils::encode_dir(&working_dir);
-    let path = home.join(".claude").join("projects").join(encoded).join(format!("{}.jsonl", session_id));
-
-    if !path.exists() {
-        return Err("JSONL file not found".into());
-    }
-
-    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    for line in content.lines() {
-        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
-            if parsed["type"].as_str() != Some("user") { continue; }
-            let msg_content = &parsed["message"]["content"];
-            // String content
-            if let Some(text) = msg_content.as_str() {
-                if text.len() > 10 && !text.contains("command-name") && !text.contains("local-command") {
-                    return Ok(text.chars().take(500).collect());
-                }
-            }
-            // Array content (text blocks) — skip tool_result messages (auto-generated, not user prompts)
-            if let Some(arr) = msg_content.as_array() {
-                let has_tool_result = arr.iter().any(|b| b["type"].as_str() == Some("tool_result"));
-                if !has_tool_result {
-                    for block in arr {
-                        if block["type"].as_str() == Some("text") {
-                            if let Some(t) = block["text"].as_str() {
-                                if t.len() > 10 && !t.contains("command-name") && !t.contains("local-command") {
-                                    return Ok(t.chars().take(500).collect());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Err("No user message found".into())
-}
-
 // [RC-02] SessionConfig -> CLI args (--resume, --session-id, --project-dir, etc.)
 #[tauri::command]
 pub fn build_claude_args(config: SessionConfig) -> Result<Vec<String>, String> {
@@ -2270,27 +2184,6 @@ pub fn get_session_data_path(session_id: String) -> Result<String, String> {
     Ok(dir.to_string_lossy().to_string())
 }
 
-/// Write or update a session's manifest.json with metadata.
-#[tauri::command]
-pub fn write_session_manifest(session_id: String, manifest_json: String) -> Result<(), String> {
-    let dir = get_session_data_dir(&session_id)?;
-    let path = dir.join("manifest.json");
-    std::fs::write(&path, manifest_json)
-        .map_err(|e| format!("Failed to write manifest: {}", e))
-}
-
-/// Read a session's manifest.json. Returns empty string if not found.
-#[tauri::command]
-pub fn read_session_manifest(session_id: String) -> Result<String, String> {
-    let dir = get_data_dir()?.join("sessions").join(&session_id);
-    let path = dir.join("manifest.json");
-    if !path.exists() {
-        return Ok(String::new());
-    }
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read manifest: {}", e))
-}
-
 /// Append pre-serialized JSONL lines to the session's tap log file.
 /// Returns the current file size in bytes (for frontend rotation decisions).
 #[tauri::command]
@@ -3197,39 +3090,4 @@ mod tests {
     }
 }
 
-// ── Terminal recording replay ──────────────────────────────────────────
-
-// ── Anthropic Usage API ───────────────────────────────────────────────
-
-#[derive(serde::Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct UsageData {
-    pub five_hour_percent: Option<f64>,
-    pub seven_day_percent: Option<f64>,
-}
-
-#[derive(serde::Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct PingResult {
-    pub latency_ms: u64,
-    pub status: u16,
-}
-
-/// Ping api.anthropic.com (GET /v1/models) and return round-trip latency.
-/// Currently disabled — separate OAuth calls risk bans. Returns zero always.
-/// Latency will be derived passively from Claude CLI's own API traffic timing.
-#[tauri::command]
-pub async fn ping_api() -> Result<PingResult, String> {
-    Ok(PingResult { latency_ms: 0, status: 0 })
-}
-
-/// Fetch 5-hour and 7-day rate-limit utilization from the Anthropic Usage API.
-/// DISABLED: direct OAuth requests from this wrapper look like a separate client
-/// and can trigger bans. Returns empty data until replaced with passive observation.
-#[tauri::command]
-pub async fn fetch_usage() -> Result<UsageData, String> {
-    // TODO: Re-enable via passive observation of Claude CLI's own usage responses
-    // rather than making direct OAuth-authenticated requests.
-    Ok(UsageData::default())
-}
 

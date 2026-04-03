@@ -226,23 +226,6 @@
   background: color-mix(in srgb, var(--error) 10%, transparent);
 }
 
-.launcher-toggle-tap.launcher-toggle-pill-on {
-  border-color: var(--accent-secondary);
-  color: var(--accent-secondary);
-  background: color-mix(in srgb, var(--accent-secondary) 10%, transparent);
-}
-
-.launcher-toggle-rec.launcher-toggle-pill-on {
-  border-color: var(--error);
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 10%, transparent);
-}
-
-.launcher-toggle-tfc.launcher-toggle-pill-on {
-  border-color: var(--accent-tertiary);
-  color: var(--accent-tertiary);
-  background: color-mix(in srgb, var(--accent-tertiary) 10%, transparent);
-}
 
 /* Disabled session controls in utility mode */
 .launcher-selects-disabled {

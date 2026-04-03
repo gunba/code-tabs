@@ -1,5 +1,4 @@
 mod commands;
-mod jsonl_watcher;
 mod output_filter;
 mod path_utils;
 mod proxy;
@@ -12,7 +11,6 @@ use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 
-use jsonl_watcher::WatcherState;
 use proxy::ProxyState;
 use session::SessionManager;
 use tap_server::TapServerState;
@@ -131,21 +129,14 @@ pub fn run() {
         })
         .manage(SessionManager::new())
         .manage(ActivePids(Mutex::new(HashSet::new())))
-        .manage(Arc::new(Mutex::new(WatcherState::new())))
         .manage(Arc::new(Mutex::new(TapServerState::new())))
         .manage(pty::PtyState::default())
         .manage(ProxyState::new())
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
             commands::close_session,
-            commands::get_session,
-            commands::list_sessions,
             commands::set_active_tab,
-            commands::get_active_tab,
             commands::reorder_tabs,
-            commands::update_session_state,
-            commands::set_session_pty_id,
-            commands::persist_sessions,
             commands::persist_sessions_json,
             commands::load_persisted_sessions,
             commands::detect_claude_cli,
@@ -161,7 +152,6 @@ pub fn run() {
             commands::get_cli_help,
             commands::read_ui_config,
             commands::write_ui_config,
-            commands::get_first_user_message,
             commands::discover_hooks,
             commands::save_hooks,
             commands::scan_command_usage,
@@ -177,13 +167,6 @@ pub fn run() {
             commands::force_kill_session_holder,
             commands::kill_orphan_sessions,
             commands::send_notification,
-            jsonl_watcher::find_active_jsonl_session,
-            jsonl_watcher::find_continuation_session,
-            jsonl_watcher::session_has_conversation,
-            jsonl_watcher::start_jsonl_watcher,
-            jsonl_watcher::stop_jsonl_watcher,
-            jsonl_watcher::start_subagent_watcher,
-            jsonl_watcher::stop_subagent_watcher,
             commands::check_port_available,
             commands::shell_open,
             commands::append_tap_data,
@@ -191,8 +174,6 @@ pub fn run() {
             commands::open_session_data_dir,
             commands::cleanup_session_data,
             commands::get_session_data_path,
-            commands::write_session_manifest,
-            commands::read_session_manifest,
             commands::migrate_legacy_data,
             commands::prune_worktree,
             commands::plugin_list,
@@ -201,8 +182,6 @@ pub fn run() {
             commands::plugin_enable,
             commands::plugin_disable,
             commands::resolve_api_host,
-            commands::fetch_usage,
-            commands::ping_api,
             commands::dir_exists,
             commands::git_repo_check,
             commands::git_status,
@@ -210,13 +189,10 @@ pub fn run() {
             tap_server::start_tap_server,
             tap_server::stop_tap_server,
             proxy::start_api_proxy,
-            proxy::stop_api_proxy,
             proxy::update_provider_config,
-            proxy::get_proxy_port,
             proxy::update_system_prompt_rules,
             proxy::start_traffic_log,
             proxy::stop_traffic_log,
-            proxy::get_traffic_log_path,
             pty::pty_spawn,
             pty::pty_read,
             pty::pty_write,

@@ -71,7 +71,7 @@ export function useCliWatcher(): void {
   }, []);
 }
 
-export function parseHelpText(help: string): CliCapabilities {
+function parseHelpText(help: string): CliCapabilities {
   const models: string[] = [];
   const permissionModes: string[] = [];
   const flags: string[] = [];

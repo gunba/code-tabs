@@ -31,7 +31,6 @@ open = { version = "5", features = ["shellexecute-on-windows"] }
 reqwest = { version = "0.12", features = ["blocking", "stream", "socks"] }
 glob-match = "0.2"
 flate2 = "1"
-base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"

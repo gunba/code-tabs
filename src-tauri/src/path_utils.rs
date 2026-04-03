@@ -1,20 +1,6 @@
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-/// Encode a directory path the same way Claude Code does:
-/// replaces ALL non-alphanumeric characters with hyphens, trims trailing hyphens.
-///
-/// This encoding is lossy — periods, spaces, and path separators all become '-'.
-/// `C:\Users\Jordan.Graham\Desktop` and `C:\Users\Jordan\Graham\Desktop` both
-/// encode to `C--Users-Jordan-Graham-Desktop`.
-pub fn encode_dir(dir: &str) -> String {
-    dir.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
-        .collect::<String>()
-        .trim_end_matches('-')
-        .to_string()
-}
-
 /// Resolve the original working directory for a Claude projects folder.
 ///
 /// Strategy (in priority order):
@@ -111,48 +97,3 @@ fn decode_project_dir_heuristic(encoded: &str) -> String {
     current.to_string_lossy().to_string()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn encode_basic_windows_path() {
-        assert_eq!(
-            encode_dir("C:\\Users\\jorda\\Desktop"),
-            "C--Users-jorda-Desktop"
-        );
-    }
-
-    #[test]
-    fn encode_path_with_periods() {
-        assert_eq!(
-            encode_dir("C:\\Users\\Jordan.Graham\\Desktop"),
-            "C--Users-Jordan-Graham-Desktop"
-        );
-    }
-
-    #[test]
-    fn encode_trims_trailing_hyphens() {
-        // Trailing path separator becomes hyphen, gets trimmed
-        assert_eq!(
-            encode_dir("C:\\Users\\jorda\\"),
-            "C--Users-jorda"
-        );
-    }
-
-    #[test]
-    fn encode_preserves_existing_hyphens() {
-        assert_eq!(
-            encode_dir("C:\\Users\\jorda\\my-project"),
-            "C--Users-jorda-my-project"
-        );
-    }
-
-    #[test]
-    fn encode_unix_path() {
-        assert_eq!(
-            encode_dir("/home/user/projects/my-app"),
-            "-home-user-projects-my-app"
-        );
-    }
-}
