@@ -246,7 +246,7 @@ export function useTapEventProcessor(
       }
 
       // [SI-20] Worktree cwd detection
-      if (event.kind === "ConversationMessage" && event.cwd) {
+      if (event.kind === "ConversationMessage" && event.cwd && !event.isSidechain) {
         updateCwdIfChanged(event.cwd);
       }
       if (event.kind === "SessionRegistration" && event.cwd) {

@@ -46,6 +46,8 @@ export class TapMetadataAccumulator {
   private rateLimitReset: string | null = null;
   // API latency from dedicated HttpPing (GET /v1/models, bypasses CF cache)
   private apiLatencyMs = 0;
+  // Sidechain tracking: true when processing subagent events, prevents TurnStart from overwriting main context
+  private sidechainActive = false;
   // Dedup: skip consecutive identical ApiTelemetry (stringify can serialize the same object multiple times)
   private lastTelemetryKey = "";
   // TAP pipeline expansion
@@ -96,9 +98,12 @@ export class TapMetadataAccumulator {
       case "TurnStart":
         // Initializer-only: set model from first TurnStart, don't let subagent TurnStart overwrite
         if (event.model && !this.runtimeModel) this.runtimeModel = event.model;
-        this.lastCacheRead = event.cacheRead;
-        this.lastTurnInputTokens = event.inputTokens;
-        this.lastCacheCreation = event.cacheCreation;
+        // Only update context tokens from main session turns (not subagent sidechain turns)
+        if (!this.sidechainActive) {
+          this.lastCacheRead = event.cacheRead;
+          this.lastTurnInputTokens = event.inputTokens;
+          this.lastCacheCreation = event.cacheCreation;
+        }
         this.hookStatus = null;
         this.activeSubprocess = null;
         this.lastToolDurationMs = null;
@@ -148,6 +153,7 @@ export class TapMetadataAccumulator {
         break;
 
       case "ConversationMessage":
+        this.sidechainActive = event.isSidechain;
         if (event.messageType === "assistant" && !event.isSidechain) {
           this.assistantMessageCount++;
           if (event.toolAction) this.currentAction = event.toolAction;
@@ -461,6 +467,7 @@ export class TapMetadataAccumulator {
     this.rateLimitRemaining = null;
     this.rateLimitReset = null;
     this.apiLatencyMs = 0;
+    this.sidechainActive = false;
     this.lastTelemetryKey = "";
     this.linesAdded = 0;
     this.linesRemoved = 0;

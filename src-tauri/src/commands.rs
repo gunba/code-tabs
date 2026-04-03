@@ -2813,6 +2813,52 @@ pub struct UsageData {
     pub seven_day_percent: Option<f64>,
 }
 
+#[derive(serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PingResult {
+    pub latency_ms: u64,
+    pub status: u16,
+}
+
+/// Ping api.anthropic.com (GET /v1/models) and return round-trip latency.
+/// Uses OAuth credentials from ~/.claude/.credentials.json.
+/// Returns zero latency/status when credentials are absent (API-key-only users).
+#[tauri::command]
+pub async fn ping_api() -> Result<PingResult, String> {
+    tokio::task::spawn_blocking(|| -> Result<PingResult, String> {
+        let creds_path = dirs::home_dir()
+            .ok_or("no home dir")?
+            .join(".claude")
+            .join(".credentials.json");
+        let Ok(content) = std::fs::read_to_string(&creds_path) else {
+            return Ok(PingResult { latency_ms: 0, status: 0 });
+        };
+        let creds: serde_json::Value =
+            serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        let Some(token) = creds["claudeAiOauth"]["accessToken"].as_str() else {
+            return Ok(PingResult { latency_ms: 0, status: 0 });
+        };
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| format!("HTTP client error: {}", e))?;
+        let t0 = std::time::Instant::now();
+        let resp = client
+            .get("https://api.anthropic.com/v1/models")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("anthropic-version", "2023-06-01")
+            .send()
+            .map_err(|e| format!("Ping failed: {}", e))?;
+        let latency_ms = t0.elapsed().as_millis() as u64;
+        Ok(PingResult {
+            latency_ms,
+            status: resp.status().as_u16(),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Fetch 5-hour and 7-day rate-limit utilization from the Anthropic Usage API.
 /// Reads OAuth credentials from ~/.claude/.credentials.json.
 /// Returns empty (None) fields rather than an error if credentials are absent
