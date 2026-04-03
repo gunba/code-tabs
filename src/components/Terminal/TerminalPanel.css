@@ -36,10 +36,9 @@
 
 .terminal-container {
   flex: 1;
-  padding: 4px;
   overflow: hidden;
-  /* Match terminal background so the gap below the last row
-     (FitAddon sizes to exact rows) is invisible */
+  /* Match terminal background so the sub-cell remainder from
+     FitAddon (rounds to whole character cells) is invisible */
   background: var(--term-bg, var(--bg-primary));
 }
 
