@@ -773,17 +773,80 @@ fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_js
     let mut commands = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    // Primary pattern: command registration objects — name:"cmd",description:"..."
-    let re = regex::Regex::new(r#"name:"([\w][\w-]*)",description:"([^"]*?)""#).unwrap();
-    for cap in re.captures_iter(&content) {
-        let name = &cap[1];
-        let desc_raw = &cap[2];
-        // Clean up escaped newlines in descriptions
-        let desc = desc_raw.replace("\\n", " ");
+    // Two-step scan: first find all name:"..." positions, then look for descriptions
+    // in a window around each. This handles intervening properties (aliases, type, etc.),
+    // reversed property order, computed descriptions (ternaries, getters), and template literals.
+    let name_re = regex::Regex::new(r#"name:"([\w][\w-]*)""#).unwrap();
+    let desc_literal_re = regex::Regex::new(r#"description:"([^"]*?)""#).unwrap();
+    let desc_computed_re = regex::Regex::new(r#"description[^"]{0,80}"([^"]*?)""#).unwrap();
+    let desc_template_re = regex::Regex::new(r#"description[^`]{0,80}`([^`]*?)`"#).unwrap();
+
+    for name_match in name_re.find_iter(&content) {
+        let name_cap = name_re.captures(&content[name_match.start()..]).unwrap();
+        let name = name_cap[1].to_string();
         let cmd = format!("/{}", name);
-        if cmd.len() >= 4 && seen.insert(cmd.clone()) {
-            commands.push(serde_json::json!({ "cmd": cmd, "desc": desc }));
+        if cmd.len() < 4 || !seen.insert(cmd.clone()) {
+            continue;
         }
+
+        // Look for description in a window around the name match.
+        // Forward window: up to 500 chars after name, bounded by the enclosing object.
+        // We track brace depth: { increments, } decrements. When depth reaches -1,
+        // we've exited the current object. This correctly handles nested braces in
+        // getter functions ({...}) and template literal interpolations (${...}).
+        let fwd_start = name_match.end();
+        let fwd_limit = (fwd_start + 500).min(content.len());
+        let fwd_raw = &content[fwd_start..fwd_limit];
+        let mut fwd_end = fwd_raw.len();
+        let mut depth: i32 = 0;
+        for (i, ch) in fwd_raw.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth < 0 {
+                        fwd_end = i;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let fwd_window = &fwd_raw[..fwd_end];
+
+        // Reverse window: up to 300 chars before name
+        let rev_start = name_match.start().saturating_sub(300);
+        let rev_window = &content[rev_start..name_match.start()];
+        // Truncate at last } to stay within the same object
+        let rev_window = match rev_window.rfind('}') {
+            Some(pos) => &rev_window[pos + 1..],
+            None => rev_window,
+        };
+
+        // Try patterns in priority order — search both forward and reverse windows
+        let strip_interpolations = |raw: &str| -> String {
+            let re = regex::Regex::new(r#"\$\{[^}]*\}"#).unwrap();
+            re.replace_all(raw, "").trim().to_string()
+        };
+
+        let desc = None
+            // 1. Literal description in forward window
+            .or_else(|| desc_literal_re.captures(fwd_window).map(|c| c[1].to_string()))
+            // 2. Literal description in reverse window (reversed property order)
+            .or_else(|| desc_literal_re.captures(rev_window).map(|c| c[1].to_string()))
+            // 3. Computed description in forward window
+            .or_else(|| desc_computed_re.captures(fwd_window).map(|c| c[1].to_string()))
+            // 4. Computed description in reverse window
+            .or_else(|| desc_computed_re.captures(rev_window).map(|c| c[1].to_string()))
+            // 5. Template literal in forward window
+            .or_else(|| desc_template_re.captures(fwd_window).map(|c| strip_interpolations(&c[1])))
+            // 6. Template literal in reverse window
+            .or_else(|| desc_template_re.captures(rev_window).map(|c| strip_interpolations(&c[1])))
+            .unwrap_or_default();
+
+        // Clean up escaped newlines in descriptions
+        let desc = desc.replace("\\n", " ");
+        commands.push(serde_json::json!({ "cmd": cmd, "desc": desc }));
     }
 
     // Filter out noise (internal tools, MCP tools, non-slash-commands)
@@ -2670,6 +2733,174 @@ mod tests {
             .filter_map(|c| c["cmd"].as_str())
             .collect();
         assert!(!names.contains(&"/ab"), "/ab should be filtered (too short)");
+    }
+
+    #[test]
+    fn discover_builtin_intervening_properties() {
+        // Commands with aliases/type/etc. between name and description
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"var x={type:"local-jsx",name:"tasks",aliases:["bashes"],description:"List and manage background tasks",load:()=>null};"#,
+            r#" var y={type:"local-jsx",name:"branch",aliases:["fork"],description:"Create a branch",argumentHint:"[name]",load:()=>null};"#,
+            r#" var z={type:"local-jsx",name:"permissions",aliases:["allowed-tools"],description:"Manage allow and deny tool permission rules",load:()=>null};"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(names.contains(&"/tasks"), "should find /tasks with intervening aliases");
+        assert!(names.contains(&"/branch"), "should find /branch with intervening aliases");
+        assert!(names.contains(&"/permissions"), "should find /permissions with intervening aliases");
+
+        let tasks_desc = commands.iter()
+            .find(|c| c["cmd"].as_str() == Some("/tasks"))
+            .and_then(|c| c["desc"].as_str())
+            .unwrap();
+        assert_eq!(tasks_desc, "List and manage background tasks");
+    }
+
+    #[test]
+    fn discover_builtin_reversed_property_order() {
+        // Commands where description comes before name in the object
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"var x={description:"Restore the code and/or conversation to a previous point",name:"rewind",aliases:["checkpoint"],type:"local"};"#,
+            r#" var y={description:"View release notes",name:"release-notes",type:"local",supportsNonInteractive:!0};"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(names.contains(&"/rewind"), "should find /rewind with reversed order");
+        assert!(names.contains(&"/release-notes"), "should find /release-notes with reversed order");
+
+        let rewind_desc = commands.iter()
+            .find(|c| c["cmd"].as_str() == Some("/rewind"))
+            .and_then(|c| c["desc"].as_str())
+            .unwrap();
+        assert!(rewind_desc.contains("Restore"), "rewind should have its description");
+    }
+
+    #[test]
+    fn discover_builtin_computed_description() {
+        // Commands with ternary or function-call descriptions
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"var x={name:"login",description:yv$()?"Switch Anthropic accounts":"Sign in with your Anthropic account",load:()=>null};"#,
+            r#" var y={name:"terminal-setup",description:M6==="Apple"?"Enable Option key":"Install Shift key",load:()=>null};"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(names.contains(&"/login"), "should find /login with computed description");
+        assert!(names.contains(&"/terminal-setup"), "should find /terminal-setup with computed description");
+
+        let login_desc = commands.iter()
+            .find(|c| c["cmd"].as_str() == Some("/login"))
+            .and_then(|c| c["desc"].as_str())
+            .unwrap();
+        assert!(login_desc.contains("Anthropic"), "login should have first branch of ternary as description");
+    }
+
+    #[test]
+    fn discover_builtin_template_literal_description() {
+        // Commands with template literal (backtick) descriptions
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = r#"var x={type:"local-jsx",name:"model",get description(){return`Set the AI model for Claude Code (currently ${Bw(Zf())})`}}"#;
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(names.contains(&"/model"), "should find /model with template literal description");
+
+        let model_desc = commands.iter()
+            .find(|c| c["cmd"].as_str() == Some("/model"))
+            .and_then(|c| c["desc"].as_str())
+            .unwrap();
+        assert!(model_desc.contains("Set the AI model"), "model should have template literal text");
+        assert!(!model_desc.contains("${"), "interpolations should be stripped");
+    }
+
+    #[test]
+    fn discover_builtin_name_only_fallback() {
+        // Commands with no extractable description get empty desc
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        // Name exists but description is a bare variable reference (no quoted strings nearby).
+        // Include a standard-pattern command (with object boundary) so content passes is_claude_content.
+        let content = concat!(
+            r#"var z={name:"review",description:"Review code"};"#,
+            r#"var x={name:"fast",get description(){return someVar},load:()=>null}"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(names.contains(&"/fast"), "should find /fast even without extractable description");
+
+        let fast_desc = commands.iter()
+            .find(|c| c["cmd"].as_str() == Some("/fast"))
+            .and_then(|c| c["desc"].as_str())
+            .unwrap();
+        assert_eq!(fast_desc, "", "should have empty description as fallback");
+    }
+
+    #[test]
+    fn discover_builtin_no_cross_object_theft() {
+        // A command with no description must not steal the next object's description
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"var a={name:"foo",type:"local",load:()=>null};"#,
+            r#"var b={name:"bar",description:"Bar description",load:()=>null};"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+
+        let foo_desc = commands.iter()
+            .find(|c| c["cmd"].as_str() == Some("/foo"))
+            .and_then(|c| c["desc"].as_str())
+            .unwrap();
+        let bar_desc = commands.iter()
+            .find(|c| c["cmd"].as_str() == Some("/bar"))
+            .and_then(|c| c["desc"].as_str())
+            .unwrap();
+
+        assert_eq!(foo_desc, "", "/foo should not steal /bar's description");
+        assert_eq!(bar_desc, "Bar description", "/bar should keep its own description");
     }
 
     // --- discover_settings_schema_sync tests ---
