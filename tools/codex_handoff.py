@@ -253,7 +253,7 @@ def build_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
             "3. Execute only the requested build pipeline steps.",
             "4. If commit is included, match recent commit style.",
             "5. If release is included, validate before bump, push, or release creation.",
-            "6. If a requested step needs network access or broader permissions than the current Codex subprocess has, stop at that boundary and report it instead of prompting interactively.",
+            "6. This subprocess is non-interactive. Approval prompts are disabled; release-capable flows may be launched with full access by the wrapper so push and release steps can complete.",
             "7. Record build duration and summarize what was done.",
             "8. End with a concise report suitable for the user.",
             "9. Log the run with `python tools/proofd.py log-run --cmd b --summary \"...\" --build-time <seconds>`.",

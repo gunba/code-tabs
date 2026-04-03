@@ -96,6 +96,17 @@ def default_sandbox(workflow: str) -> str:
     return "workspace-write"
 
 
+def default_approval_policy() -> str:
+    return "never"
+
+
+def workflow_requests_release(workflow: str, workflow_args: list[str]) -> bool:
+    if workflow != "build":
+        return False
+    joined = " ".join(workflow_args).lower()
+    return "release" in joined
+
+
 def resolve_codex_executable() -> str:
     direct = shutil.which("codex.cmd") or shutil.which("codex")
     if direct:
@@ -161,6 +172,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Launch Codex as a subprocess for a Claude workflow")
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--sandbox", choices=["read-only", "workspace-write", "danger-full-access"], default=None)
+    parser.add_argument("--approval", choices=["untrusted", "on-failure", "on-request", "never"], default=None)
+    parser.add_argument("--full-access", action="store_true", help="Run Codex with danger-full-access. Required for push/release workflows.")
     parser.add_argument("--model", default=None)
     parser.add_argument("--ephemeral", action="store_true")
     parser.add_argument("workflow", choices=["review", "janitor", "build", "review-janitor", "plan"])
@@ -173,7 +186,9 @@ def main() -> int:
     args = parser.parse_args()
     repo_root = repo_root_from(pathlib.Path(args.repo_root).resolve())
     status = proofd_status(repo_root)
-    sandbox = args.sandbox or default_sandbox(args.workflow)
+    release_requested = workflow_requests_release(args.workflow, args.workflow_args)
+    sandbox = args.sandbox or ("danger-full-access" if args.full_access or release_requested else default_sandbox(args.workflow))
+    approval = args.approval or default_approval_policy()
     codex_executable = resolve_codex_executable()
 
     prompt = build_prompt(repo_root, args.workflow, args.workflow_args)
@@ -182,6 +197,8 @@ def main() -> int:
 
     command = [
         codex_executable,
+        "--ask-for-approval",
+        approval,
         "exec",
         "--cd",
         str(repo_root),
@@ -203,8 +220,11 @@ def main() -> int:
     print(f"Prompt file: {prompt_path}")
     print(f"Result file: {result_path}")
     print(f"Sandbox: {sandbox}")
+    print(f"Approval policy: {approval}")
     print(f"Repo root: {repo_root}")
     print(f"Codex executable: {codex_executable}")
+    if release_requested and not args.sandbox and not args.full_access:
+        print("Access mode: auto-promoted to danger-full-access because the requested build flow includes release steps")
     print("")
 
     try:
