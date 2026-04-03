@@ -261,6 +261,54 @@ describe("TapMetadataAccumulator", () => {
     expect(diff?.statusLine?.vimMode).toBe("INSERT");
   });
 
+  it("does not overwrite context tokens during sidechain (subagent) turns", () => {
+    const acc = new TapMetadataAccumulator();
+    // Main agent turn with real context data
+    acc.process({
+      kind: "TurnStart", ts: 0, model: "opus",
+      inputTokens: 20000, outputTokens: 0, cacheRead: 50000, cacheCreation: 5000,
+    });
+    // Main agent message (not sidechain)
+    acc.process({
+      kind: "ConversationMessage", ts: 1, messageType: "assistant",
+      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+      promptId: null, stopReason: "end_turn", toolNames: ["Agent"],
+      toolAction: "Agent: explore", textSnippet: null, cwd: null,
+      hasToolError: false, toolErrorText: null,
+    });
+    // Sidechain message (entering subagent)
+    acc.process({
+      kind: "ConversationMessage", ts: 2, messageType: "user",
+      isSidechain: true, agentId: "sub1", uuid: null, parentUuid: null,
+      promptId: null, stopReason: null, toolNames: [],
+      toolAction: null, textSnippet: "explore the codebase", cwd: null,
+      hasToolError: false, toolErrorText: null,
+    });
+    // Subagent TurnStart — should NOT overwrite context tokens
+    const diff = acc.process({
+      kind: "TurnStart", ts: 3, model: "haiku",
+      inputTokens: 500, outputTokens: 0, cacheRead: 100, cacheCreation: 10,
+    });
+    expect(diff?.contextDebug?.inputTokens).toBe(20000); // unchanged
+    expect(diff?.contextDebug?.cacheRead).toBe(50000);    // unchanged
+    expect(diff?.contextDebug?.cacheCreation).toBe(5000);  // unchanged
+
+    // After sidechain ends (main agent message), TurnStart should update again
+    acc.process({
+      kind: "ConversationMessage", ts: 4, messageType: "assistant",
+      isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+      promptId: null, stopReason: "end_turn", toolNames: [],
+      toolAction: null, textSnippet: null, cwd: null,
+      hasToolError: false, toolErrorText: null,
+    });
+    const diff2 = acc.process({
+      kind: "TurnStart", ts: 5, model: "opus",
+      inputTokens: 25000, outputTokens: 0, cacheRead: 55000, cacheCreation: 6000,
+    });
+    expect(diff2?.contextDebug?.inputTokens).toBe(25000); // updated
+    expect(diff2?.contextDebug?.cacheRead).toBe(55000);    // updated
+  });
+
   it("resets statusLine on reset()", () => {
     const acc = new TapMetadataAccumulator();
     acc.process({

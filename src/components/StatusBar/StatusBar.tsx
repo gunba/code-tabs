@@ -29,6 +29,18 @@ function formatDuration(secs: number): string {
   return `${h}h${(m % 60).toString().padStart(2, "0")}m`;
 }
 
+function formatTimeRemaining(resetsAtSecs: number): string {
+  if (resetsAtSecs <= 0) return "";
+  const diffMs = resetsAtSecs * 1000 - Date.now();
+  if (diffMs <= 0) return "";
+  const totalMinutes = Math.floor(diffMs / 60_000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
 function permissionIcon(mode: PermissionMode): { icon: React.ReactNode; tip: string } | null {
   switch (mode) {
     case "acceptEdits":
@@ -113,12 +125,12 @@ function SessionStatus({
           const titleParts = [
             `[${dbg.source}]`,
             `model=${dbg.model ?? "unknown"}`,
-            `input=${dbg.inputTokens.toLocaleString()}`,
+            `input+cacheWrite=${(dbg.inputTokens + dbg.cacheCreation).toLocaleString()}`,
             `cacheRead=${dbg.cacheRead.toLocaleString()}`,
-            `cacheCreation=${dbg.cacheCreation.toLocaleString()}`,
             `total=${dbg.totalContextTokens.toLocaleString()}`,
           ];
-          const label = `${formatTokenCount(dbg.inputTokens)}${dbg.cacheCreation > 0 ? ` (+${formatTokenCount(dbg.cacheCreation)})` : ""}`;
+          const inputCost = dbg.inputTokens + dbg.cacheCreation;
+          const label = `${formatTokenCount(inputCost)}${dbg.cacheRead > 0 ? ` (${formatTokenCount(dbg.cacheRead)})` : ""}`;
           return (
             <span
               className="status-item"
@@ -129,24 +141,30 @@ function SessionStatus({
             </span>
           );
         })()}
-        {fiveHour != null && fiveHour > 0 && (
-          <span
-            className="status-item"
-            title={`5-hour budget: ${Math.round(fiveHour)}% used`}
-            style={{ color: fiveHour > 80 ? "var(--error)" : "var(--text-muted)" }}
-          >
-            5h: {Math.round(fiveHour)}%
-          </span>
-        )}
-        {sevenDay != null && sevenDay > 0 && (
-          <span
-            className="status-item"
-            title={`7-day budget: ${Math.round(sevenDay)}% used`}
-            style={{ color: sevenDay > 80 ? "var(--error)" : "var(--text-muted)" }}
-          >
-            7d: {Math.round(sevenDay)}%
-          </span>
-        )}
+        {fiveHour != null && fiveHour > 0 && (() => {
+          const rem = formatTimeRemaining(sl?.fiveHourResetsAt ?? 0);
+          return (
+            <span
+              className="status-item"
+              title={`5-hour budget: ${Math.round(fiveHour)}% used${rem ? ` · resets in ${rem}` : ""}`}
+              style={{ color: fiveHour > 80 ? "var(--error)" : "var(--text-muted)" }}
+            >
+              5h: {Math.round(fiveHour)}%{rem ? ` (${rem})` : ""}
+            </span>
+          );
+        })()}
+        {sevenDay != null && sevenDay > 0 && (() => {
+          const rem = formatTimeRemaining(sl?.sevenDayResetsAt ?? 0);
+          return (
+            <span
+              className="status-item"
+              title={`7-day budget: ${Math.round(sevenDay)}% used${rem ? ` · resets in ${rem}` : ""}`}
+              style={{ color: sevenDay > 80 ? "var(--error)" : "var(--text-muted)" }}
+            >
+              7d: {Math.round(sevenDay)}%{rem ? ` (${rem})` : ""}
+            </span>
+          );
+        })()}
         {showUsageError && (
           <span className="status-item" title={`Usage fetch failed: ${usageError}`} style={{ color: "var(--text-muted)" }}>
             5h/7d: ?
@@ -313,6 +331,28 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
     };
     poll();
     const t = setInterval(poll, 120_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Poll API ping latency via Rust IPC (bypasses Cloudflare, no tap pipeline dependency)
+  useEffect(() => {
+    const doPing = () => {
+      if (aliveCountRef.current === 0) return;
+      invoke<{ latencyMs: number; status: number }>("ping_api")
+        .then((result) => {
+          if (result.latencyMs === 0) return; // no credentials, skip
+          const state = useSessionStore.getState();
+          const activeId = state.activeTabId;
+          if (activeId) {
+            state.updateMetadata(activeId, { apiLatencyMs: result.latencyMs });
+          }
+        })
+        .catch((e: unknown) => {
+          dlog("session", null, `ping_api failed: ${String(e)}`, "WARN");
+        });
+    };
+    doPing();
+    const t = setInterval(doPing, 30_000);
     return () => clearInterval(t);
   }, []);
 
