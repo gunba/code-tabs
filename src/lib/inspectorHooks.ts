@@ -553,7 +553,7 @@ export const INSTALL_TAPS = `(function() {
                   if (cb.type === 'text') {
                     cBlocks.push({ type: 'text', text: cb.text });
                   } else if (cb.type === 'tool_use') {
-                    cBlocks.push({ type: 'tool_use', name: cb.name, input: cb.input });
+                    cBlocks.push({ type: 'tool_use', id: cb.id, name: cb.name, input: cb.input });
                   } else if (cb.type === 'tool_result') {
                     var trText = '';
                     if (typeof cb.content === 'string') { trText = cb.content; }

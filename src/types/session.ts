@@ -276,6 +276,7 @@ export interface SystemPromptBlock {
 
 export interface CapturedContentBlock {
   type: string;
+  id?: string;             // tool_use id (for pairing with tool_result)
   text?: string;
   name?: string;           // tool_use
   input?: unknown;         // tool_use (full input object)
