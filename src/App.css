@@ -475,6 +475,12 @@
   color: var(--error, #e55);
 }
 
+.tab-context-menu-item-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: default;
+}
+
 /* ── Subagent bar ────────────────────────────────────────────── */
 
 .subagent-bar {

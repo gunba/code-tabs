@@ -15,7 +15,7 @@ interface ContextViewerProps {
 
 // ── Content block renderer ──────────────────────────────
 
-function ContentBlockView({ block }: { block: CapturedContentBlock }) {
+export function ContentBlockView({ block }: { block: CapturedContentBlock }) {
   if (block.type === "text") {
     return <pre className="context-block-text">{block.text}</pre>;
   }
@@ -85,7 +85,7 @@ function SystemBlockEntry({ block, index, expanded, onToggle }: {
 
 // ── Message entry ───────────────────────────────────────
 
-function MessageEntry({ message, index, expanded, onToggle }: {
+export function MessageEntry({ message, index, expanded, onToggle }: {
   message: { role: string; content: CapturedContentBlock[] };
   index: number;
   expanded: boolean;

@@ -364,6 +364,7 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                     "parentId": serde_json::Value::Null,
                     "model": model,
                     "filePath": fpath.to_string_lossy().to_string(),
+                    "dirExists": std::path::Path::new(&decoded_dir).is_dir(),
                 }),
             });
         }
@@ -578,4 +579,148 @@ pub fn shell_open(path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn dir_exists(path: String) -> bool {
     std::path::Path::new(&path).is_dir()
+}
+
+const MAX_CONVERSATION_FILE_SIZE: u64 = 20 * 1024 * 1024;
+const MAX_CONVERSATION_MESSAGES: usize = 500;
+
+/// Read a conversation JSONL file and return structured messages as CapturedMessage[].
+#[tauri::command]
+pub async fn read_conversation(file_path: String) -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || read_conversation_sync(&file_path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, String> {
+    let path = std::path::Path::new(file_path);
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    let metadata = std::fs::metadata(path)
+        .map_err(|e| format!("Cannot read file metadata: {}", e))?;
+    if metadata.len() > MAX_CONVERSATION_FILE_SIZE {
+        return Err(format!(
+            "File too large ({:.1} MB, max {} MB)",
+            metadata.len() as f64 / (1024.0 * 1024.0),
+            MAX_CONVERSATION_FILE_SIZE / (1024 * 1024)
+        ));
+    }
+
+    let file = std::fs::File::open(path)
+        .map_err(|e| format!("Cannot open file: {}", e))?;
+
+    use std::io::BufRead;
+    let reader = std::io::BufReader::new(file);
+    let mut messages: Vec<serde_json::Value> = Vec::new();
+
+    for line in reader.lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let msg_type = match parsed["type"].as_str() {
+            Some(t) => t,
+            None => continue,
+        };
+
+        if msg_type != "user" && msg_type != "assistant" {
+            continue;
+        }
+
+        // Preserve the content block array structure for CapturedMessage compatibility
+        let content = &parsed["message"]["content"];
+        let content_blocks = if let Some(text) = content.as_str() {
+            // User messages can be a plain string — wrap in a text block
+            serde_json::json!([{ "type": "text", "text": text }])
+        } else if let Some(arr) = content.as_array() {
+            // Already an array of content blocks — pass through
+            serde_json::Value::Array(arr.iter().map(|block| {
+                let block_type = block["type"].as_str().unwrap_or("text");
+                match block_type {
+                    "text" => serde_json::json!({
+                        "type": "text",
+                        "text": block["text"].as_str().unwrap_or("")
+                    }),
+                    "tool_use" => {
+                        let mut obj = serde_json::json!({
+                            "type": "tool_use",
+                            "name": block["name"].as_str().unwrap_or("unknown"),
+                        });
+                        if let Some(id) = block["id"].as_str() {
+                            obj["id"] = serde_json::Value::String(id.to_string());
+                        }
+                        // Truncate large tool inputs
+                        if let Some(input) = block.get("input") {
+                            let input_str = serde_json::to_string(input).unwrap_or_default();
+                            if input_str.len() > 2000 {
+                                let end = input_str.floor_char_boundary(2000);
+                                obj["input"] = serde_json::Value::String(
+                                    format!("{}...", &input_str[..end])
+                                );
+                            } else {
+                                obj["input"] = input.clone();
+                            }
+                        }
+                        obj
+                    },
+                    "tool_result" => {
+                        let mut obj = serde_json::json!({ "type": "tool_result" });
+                        if let Some(id) = block["tool_use_id"].as_str() {
+                            obj["toolUseId"] = serde_json::Value::String(id.to_string());
+                        }
+                        if let Some(err) = block["is_error"].as_bool() {
+                            obj["isError"] = serde_json::Value::Bool(err);
+                        }
+                        // Extract text from tool result content
+                        if let Some(text) = block["content"].as_str() {
+                            let truncated = if text.len() > 2000 {
+                                let end = text.floor_char_boundary(2000);
+                                format!("{}...", &text[..end])
+                            } else {
+                                text.to_string()
+                            };
+                            obj["text"] = serde_json::Value::String(truncated);
+                        } else if let Some(arr) = block["content"].as_array() {
+                            let parts: Vec<&str> = arr.iter()
+                                .filter(|b| b["type"].as_str() == Some("text"))
+                                .filter_map(|b| b["text"].as_str())
+                                .collect();
+                            if !parts.is_empty() {
+                                let joined = parts.join("\n");
+                                let truncated = if joined.len() > 2000 {
+                                    let end = joined.floor_char_boundary(2000);
+                                    format!("{}...", &joined[..end])
+                                } else {
+                                    joined
+                                };
+                                obj["text"] = serde_json::Value::String(truncated);
+                            }
+                        }
+                        obj
+                    },
+                    _ => serde_json::json!({ "type": block_type }),
+                }
+            }).collect())
+        } else {
+            continue;
+        };
+
+        messages.push(serde_json::json!({
+            "role": msg_type,
+            "content": content_blocks,
+        }));
+
+        if messages.len() >= MAX_CONVERSATION_MESSAGES {
+            break;
+        }
+    }
+
+    Ok(messages)
 }

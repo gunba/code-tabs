@@ -151,6 +151,7 @@ pub fn run() {
             commands::discover_plugin_commands,
             commands::list_past_sessions,
             commands::search_session_content,
+            commands::read_conversation,
             commands::check_cli_version,
             commands::get_cli_help,
             commands::read_ui_config,

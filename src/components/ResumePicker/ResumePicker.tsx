@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
@@ -13,6 +14,7 @@ import {
   type SessionConfig,
   DEFAULT_SESSION_CONFIG,
 } from "../../types/session";
+import { ConversationViewer } from "../ConversationViewer/ConversationViewer";
 import { IconFolder } from "../Icons/Icons";
 import "./ResumePicker.css";
 
@@ -76,6 +78,7 @@ interface MergedChain {
   lastMessage: string;           // From latest session
   model: string;                 // From latest session
   chainLength: number;           // 1 = standalone
+  dirExists: boolean;            // Working directory exists on disk
 }
 
 // ── Props ───────────────────────────────────────────────────────────
@@ -103,6 +106,8 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
   const [dirFilter, setDirFilter] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [expandedChains, setExpandedChains] = useState<Set<string>>(new Set());
+  const [viewingConversation, setViewingConversation] = useState<MergedChain | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; chain: MergedChain } | null>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -281,6 +286,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         lastMessage,
         model: latest.model,
         chainLength: members.length,
+        dirExists: latest.dirExists,
       });
     }
     return chains;
@@ -326,6 +332,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         lastMessage: ps.lastMessage,
         model: ps.model,
         chainLength: 1,
+        dirExists: ps.dirExists,
       });
     }
 
@@ -437,18 +444,27 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (viewingConversation) { setViewingConversation(null); return; }
+        if (contextMenu) { setContextMenu(null); return; }
         onClose();
         return;
       }
+      // Skip non-Escape keys when suboverlays are open
+      if (contextMenu || viewingConversation) return;
+
       if (e.key === "Enter" && displayList.length > 0) {
         e.preventDefault();
         const chain = displayList[selectedIndex] ?? displayList[0];
         if (e.shiftKey) {
           handleRevealFile(chain);
         } else if (e.ctrlKey) {
-          handleConfigure(chain);
+          if (chain.dirExists) handleConfigure(chain);
         } else {
-          handleResume(chain);
+          if (chain.dirExists) {
+            handleResume(chain);
+          } else {
+            setViewingConversation(chain);
+          }
         }
         return;
       }
@@ -463,7 +479,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose, displayList, selectedIndex, handleResume, handleConfigure, handleRevealFile]);
+  }, [onClose, displayList, selectedIndex, handleResume, handleConfigure, handleRevealFile, contextMenu, viewingConversation]);
 
   return (
     <div className="resume-picker-overlay" onClick={onClose}>
@@ -516,6 +532,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
 
             // Build badges (all share base class + color modifier)
             const badges: { label: string; mod: string }[] = [];
+            if (!chain.dirExists) badges.push({ label: "Unavailable", mod: "resume-picker-badge-danger" });
             if (modelBadge) badges.push({ label: modelBadge, mod: "resume-picker-badge-model" });
             if (config?.dangerouslySkipPermissions) badges.push({ label: "Skip Perms", mod: "resume-picker-badge-danger" });
             if (config?.permissionMode && config.permissionMode !== "default") {
@@ -531,6 +548,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
               isSelected && "resume-picker-card-selected",
               chain.chainLength > 1 && "resume-picker-card-chain",
               isContentOnly && "resume-picker-card-content-match",
+              !chain.dirExists && "resume-picker-card-orphan",
             ].filter(Boolean).join(" ");
 
             return (
@@ -542,15 +560,24 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                 className={cardClass}
                 onClick={(e) => {
                   if (e.ctrlKey) {
-                    handleConfigure(chain);
-                  } else {
+                    if (chain.dirExists) handleConfigure(chain);
+                  } else if (chain.dirExists) {
                     handleResume(chain);
+                  } else {
+                    setViewingConversation(chain);
                   }
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({ x: e.clientX, y: e.clientY, chain });
+                }}
                 onMouseEnter={() => setSelectedIndex(idx)}
-                title={ctrlHeld
-                  ? `Ctrl+Click: Configure & relaunch\n${ps.directory}`
-                  : `${ps.directory}\nSession: ${ps.id}\nCtrl+Click to configure`}
+                title={!chain.dirExists
+                  ? `Directory no longer exists\n${ps.directory}\nClick to view conversation`
+                  : ctrlHeld
+                    ? `Ctrl+Click: Configure & relaunch\n${ps.directory}`
+                    : `${ps.directory}\nSession: ${ps.id}\nCtrl+Click to configure · Right-click for more`}
               >
                 <div className="resume-picker-card-top">
                   <span className="resume-picker-card-name">
@@ -563,18 +590,8 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                       dirToTabName(ps.directory)
                     )}
                   </span>
-                  <span className="resume-picker-card-actions">
-                    <button
-                      className="resume-picker-reveal-btn"
-                      onClick={(e) => { e.stopPropagation(); handleRevealFile(chain); }}
-                      title="Open file location"
-                      type="button"
-                    >
-                      <IconFolder size={11} />
-                    </button>
-                    <span className="resume-picker-card-date">
-                      {formatRelativeDate(chain.latestDate)}
-                    </span>
+                  <span className="resume-picker-card-date">
+                    {formatRelativeDate(chain.latestDate)}
                   </span>
                 </div>
                 <div className="resume-picker-card-mid">
@@ -639,9 +656,20 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                     {chain.members.map((m) => (
                       <div
                         key={m.id}
-                        className={`resume-picker-chain-member${m.id === chain.resumeSession.id ? " resume-picker-chain-member-latest" : ""}`}
-                        onClick={(e) => { e.stopPropagation(); resumeById(m); }}
-                        title={`Resume this session\n${m.id}`}
+                        className={`resume-picker-chain-member${m.id === chain.resumeSession.id ? " resume-picker-chain-member-latest" : ""}${!m.dirExists ? " resume-picker-chain-member-orphan" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (m.dirExists) {
+                            resumeById(m);
+                          } else {
+                            setViewingConversation({
+                              ...chain,
+                              resumeSession: m,
+                              displayName: sessionNames[m.id] || null,
+                            });
+                          }
+                        }}
+                        title={m.dirExists ? `Resume this session\n${m.id}` : `View conversation (directory missing)\n${m.id}`}
                       >
                         <span className="resume-picker-chain-member-date">
                           {formatRelativeDate(m.lastModified)}
@@ -667,9 +695,82 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
 
         {/* Hint */}
         <div className="resume-picker-hint">
-          <kbd>{"\u21B5"}</kbd> to resume &middot; <kbd>Ctrl+{"\u21B5"}</kbd> to configure &middot; <kbd>Shift+{"\u21B5"}</kbd> to reveal file
+          <kbd>{"\u21B5"}</kbd> to resume &middot; <kbd>Ctrl+{"\u21B5"}</kbd> to configure &middot; <kbd>Shift+{"\u21B5"}</kbd> to reveal &middot; Right-click for more
         </div>
       </div>
+
+      {/* Context menu (portal) */}
+      {contextMenu && createPortal(
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 199 }}
+          onClick={() => setContextMenu(null)}
+          onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+        >
+          <div
+            className="tab-context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className={`tab-context-menu-item${!contextMenu.chain.dirExists ? " tab-context-menu-item-disabled" : ""}`}
+              onClick={() => {
+                if (contextMenu.chain.dirExists) handleResume(contextMenu.chain);
+                setContextMenu(null);
+              }}
+            >
+              Resume
+            </button>
+            <button
+              className={`tab-context-menu-item${!contextMenu.chain.dirExists ? " tab-context-menu-item-disabled" : ""}`}
+              onClick={() => {
+                if (contextMenu.chain.dirExists) handleConfigure(contextMenu.chain);
+                setContextMenu(null);
+              }}
+            >
+              Configure &amp; Relaunch
+            </button>
+            <button
+              className="tab-context-menu-item"
+              onClick={() => {
+                setViewingConversation(contextMenu.chain);
+                setContextMenu(null);
+              }}
+            >
+              View Conversation
+            </button>
+            <div className="tab-context-menu-divider" />
+            <button
+              className="tab-context-menu-item"
+              onClick={() => {
+                handleRevealFile(contextMenu.chain);
+                setContextMenu(null);
+              }}
+            >
+              Open File Location
+            </button>
+            <button
+              className="tab-context-menu-item"
+              onClick={() => {
+                navigator.clipboard.writeText(contextMenu.chain.resumeSession.id);
+                setContextMenu(null);
+              }}
+            >
+              Copy Session ID
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Conversation viewer modal */}
+      {viewingConversation && (
+        <ConversationViewer
+          filePath={viewingConversation.resumeSession.filePath}
+          displayName={viewingConversation.displayName}
+          directory={viewingConversation.resumeSession.directory}
+          onClose={() => setViewingConversation(null)}
+        />
+      )}
     </div>
   );
 }

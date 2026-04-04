@@ -141,6 +141,18 @@
   background: color-mix(in srgb, var(--accent-secondary) 15%, var(--bg-primary));
 }
 
+/* ── Orphan cards (directory no longer exists) ──────────────── */
+
+.resume-picker-card-orphan {
+  opacity: 0.55;
+  border-left: 2px solid var(--error);
+}
+
+.resume-picker-card-orphan:hover,
+.resume-picker-card-orphan.resume-picker-card-selected {
+  opacity: 0.7;
+}
+
 /* ── Chain stacked effect ────────────────────────────────────── */
 
 .resume-picker-card-chain {
@@ -199,6 +211,10 @@
   border-left: 2px solid var(--accent);
 }
 
+.resume-picker-chain-member-orphan {
+  opacity: 0.55;
+}
+
 .resume-picker-chain-member-date {
   font-size: 9px;
   color: var(--text-muted);
@@ -254,38 +270,6 @@
   font-size: 9px;
   color: var(--text-muted);
   flex-shrink: 0;
-}
-
-.resume-picker-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  margin-left: 8px;
-}
-
-.resume-picker-reveal-btn {
-  background: none;
-  border: none;
-  padding: 2px 4px;
-  cursor: pointer;
-  color: var(--text-muted);
-  border-radius: 4px;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.12s, color 0.12s, background 0.12s;
-  line-height: 1;
-}
-
-.resume-picker-card:hover .resume-picker-reveal-btn,
-.resume-picker-card-selected .resume-picker-reveal-btn {
-  opacity: 0.6;
-}
-
-.resume-picker-reveal-btn:hover {
-  opacity: 1;
-  color: var(--accent);
-  background: var(--bg-surface);
 }
 
 .resume-picker-card-mid {

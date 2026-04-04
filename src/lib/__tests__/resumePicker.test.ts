@@ -16,6 +16,7 @@ function mkPastSession(overrides: Partial<PastSession> = {}): PastSession {
     parentId: null,
     model: "claude-sonnet-4-5-20250514",
     filePath: "C:/Users/jorda/.claude/projects/proj/session-abc123.jsonl",
+    dirExists: true,
     ...overrides,
   };
 }
@@ -308,6 +309,7 @@ interface MergedChain {
   lastMessage: string;
   model: string;
   chainLength: number;
+  dirExists: boolean;
 }
 
 function mkChain(ps: PastSession, members?: PastSession[]): MergedChain {
@@ -321,6 +323,7 @@ function mkChain(ps: PastSession, members?: PastSession[]): MergedChain {
     lastMessage: ps.lastMessage,
     model: ps.model,
     chainLength: members ? members.length : 1,
+    dirExists: ps.dirExists,
   };
 }
 
@@ -358,6 +361,7 @@ function computeDisplayList(
       lastMessage: ps.lastMessage,
       model: ps.model,
       chainLength: 1,
+      dirExists: ps.dirExists,
     });
   }
 

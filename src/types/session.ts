@@ -233,6 +233,7 @@ export interface PastSession {
   parentId: string | null;
   model: string;
   filePath: string;
+  dirExists: boolean;
 }
 
 export interface ContentSearchMatch {
