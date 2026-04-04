@@ -179,7 +179,7 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
   if (parsed.type === "queue-operation" && typeof parsed.content === "string") {
     const content = parsed.content as string;
     const statusMatch = content.match(/<status>(completed|killed)<\/status>/);
-    const summaryMatch = content.match(/<summary>(.*?)<\/summary>/);
+    const summaryMatch = content.match(/<summary>([\s\S]*?)<\/summary>/);
     if (statusMatch) {
       return {
         kind: "SubagentNotification", ts,
@@ -387,7 +387,7 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
           toolAction = fmtToolAction(block.name, block.input || {});
         }
         if (block.type === "text" && block.text) {
-          textSnippet = block.text.slice(0, 300);
+          textSnippet = block.text;
         }
       }
     }

@@ -219,7 +219,7 @@ describe("TapSubagentTracker", () => {
       expect(msgs.filter(m => m.role === "tool")).toHaveLength(1);
     });
 
-    it("caps messages at 200 entries", () => {
+    it("does not cap messages", () => {
       spawnAndActivate(tracker, "agent-1");
       for (let i = 0; i < 205; i++) {
         tracker.process(makeSidechainMsg("agent-1", {
@@ -235,7 +235,7 @@ describe("TapSubagentTracker", () => {
         toolAction: null,
         toolNames: [],
       }));
-      expect(lastActions.find(a => a.type === "update")!.updates!.messages!.length).toBeLessThanOrEqual(200);
+      expect(lastActions.find(a => a.type === "update")!.updates!.messages!.length).toBeGreaterThan(200);
     });
   });
 
@@ -315,6 +315,84 @@ describe("TapSubagentTracker", () => {
       } as TapEvent);
       expect(actions.every(a => !a.updates?.completed)).toBe(true);
       expect(actions.some(a => a.updates?.state === "dead")).toBe(true);
+    });
+  });
+
+  // ── TurnEnd state transition ──
+
+  describe("TurnEnd", () => {
+    it("end_turn marks active agent idle", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "TurnEnd", ts: 10, stopReason: "end_turn", outputTokens: 100,
+      } as TapEvent);
+      expect(actions.find(a => a.type === "update")!.updates!.state).toBe("idle");
+      expect(tracker.hasActiveAgents()).toBe(false);
+    });
+
+    it("tool_use does not change agent state", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "TurnEnd", ts: 10, stopReason: "tool_use", outputTokens: 100,
+      } as TapEvent);
+      // No state update emitted for tool_use stop reason
+      expect(actions).toEqual([]);
+      expect(tracker.hasActiveAgents()).toBe(true);
+    });
+  });
+
+  // ── Sidechain-exit fallback ──
+
+  describe("sidechain-exit fallback", () => {
+    it("marks active agent idle when parent resumes with non-sidechain message", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "ConversationMessage", ts: 20, messageType: "assistant",
+        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+        promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      } as TapEvent);
+      expect(actions.some(a => a.subagentId === "agent-1" && a.updates?.state === "idle")).toBe(true);
+      expect(tracker.hasActiveAgents()).toBe(false);
+    });
+  });
+
+  // ── ToolInput enrichment ──
+
+  describe("ToolInput enrichment", () => {
+    it("enriches last tool message with structured input", () => {
+      spawnAndActivate(tracker, "agent-1");
+      // A tool message arrives via sidechain ConversationMessage
+      tracker.process(makeSidechainMsg("agent-1", {
+        toolAction: "Bash: echo hi", toolNames: ["Bash"], textSnippet: null,
+      }));
+      // ToolInput arrives with structured input
+      const actions = tracker.process({
+        kind: "ToolInput", ts: 5, toolName: "Bash",
+        input: { command: "echo hi", description: "greet" },
+      } as TapEvent);
+      const update = actions.find(a => a.type === "update" && a.updates?.messages);
+      expect(update).toBeDefined();
+      const msgs = update!.updates!.messages!;
+      const lastMsg = msgs[msgs.length - 1];
+      expect(lastMsg.toolInput).toEqual({ command: "echo hi", description: "greet" });
+    });
+
+    it("creates a new array reference (not mutation) for React.memo", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const beforeActions = tracker.process(makeSidechainMsg("agent-1", {
+        toolAction: "Edit: fix", toolNames: ["Edit"], textSnippet: null,
+      }));
+      const beforeMsgs = beforeActions.find(a => a.updates?.messages)!.updates!.messages!;
+
+      const afterActions = tracker.process({
+        kind: "ToolInput", ts: 5, toolName: "Edit",
+        input: { file_path: "test.ts", old_string: "a", new_string: "b" },
+      } as TapEvent);
+      const afterMsgs = afterActions.find(a => a.updates?.messages)!.updates!.messages!;
+
+      expect(afterMsgs).not.toBe(beforeMsgs);
+      expect(afterMsgs[afterMsgs.length - 1]).not.toBe(beforeMsgs[beforeMsgs.length - 1]);
     });
   });
 

@@ -680,6 +680,7 @@ export default function App() {
       {showContextViewer && activeSession && (
         <ContextViewer
           metadata={activeSession.metadata}
+          subagents={subagentMap.get(activeSession.id) || []}
           onClose={() => setShowContextViewer(false)}
         />
       )}

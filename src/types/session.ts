@@ -183,6 +183,7 @@ export interface SubagentMessage {
   role: "assistant" | "tool";
   text: string;
   toolName?: string;
+  toolInput?: Record<string, unknown>;
   timestamp: number;
 }
 

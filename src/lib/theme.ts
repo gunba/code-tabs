@@ -137,6 +137,9 @@ export function applyTheme(theme: Theme): void {
   root.style.setProperty("--scroll-thumb", c.scrollThumb);
   root.style.setProperty("--scroll-track", c.scrollTrack);
 
+  // Font — match main terminal (TERMINAL_FONT_FAMILY in useTerminal.ts)
+  root.style.setProperty("--font-mono", "'Pragmasevka', 'Roboto Mono', monospace");
+
   // [CB-12] Rarity CSS variables (WoW item quality — fixed cross-theme)
   root.style.setProperty("--rarity-uncommon", "#1eff00");
   root.style.setProperty("--rarity-rare", "#0070dd");
