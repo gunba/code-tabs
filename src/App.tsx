@@ -583,7 +583,13 @@ export default function App() {
               const metaParts: string[] = [];
               const typeLabel = sub.subagentType || sub.agentType;
               if (typeLabel) metaParts.push(typeLabel);
-              if (sub.model) metaParts.push(sub.model.replace(/^claude-/, "").split("-")[0]);
+              // [TA-09] Subagent model meta: falls back to parent session effectiveModel when sub.model absent
+              const subModel = sub.model || (activeSession ? effectiveModel(activeSession) : null);
+              if (subModel) {
+                const vMatch = subModel.match(/(\d+)[.-](\d+)/);
+                const ver = vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
+                metaParts.push(modelLabel(subModel) + ver);
+              }
               if (sub.totalToolUses != null) metaParts.push(`${sub.totalToolUses} tools`);
               if (sub.durationMs != null) metaParts.push(`${Math.round(sub.durationMs / 1000)}s`);
               // [TA-08] Completed subagents stay visible in the bar with success styling/checkmark.
