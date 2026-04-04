@@ -390,6 +390,19 @@ export default function App() {
               const liveAgents = subs.filter((s) => isSubagentActive(s.state)).length;
               if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
               if (wt) metaSpans.push({ text: worktreeAcronym(wt.worktreeName), color: "var(--accent-tertiary)", title: wt.worktreeName });
+              // [SI-25] When Status hook data exists, surface the current
+              // context footprint in the tab meta row.
+              const sl = session.metadata.statusLine;
+              if (sl) {
+                const totalCtx = sl.cacheCreationInputTokens + sl.cacheReadInputTokens + sl.currentInputTokens;
+                if (totalCtx > 0) {
+                  metaSpans.push({
+                    text: formatTokenCount(totalCtx),
+                    color: "var(--text-muted)",
+                    title: `Context: ${sl.currentInputTokens.toLocaleString()} input + ${sl.cacheReadInputTokens.toLocaleString()} cache read + ${sl.cacheCreationInputTokens.toLocaleString()} cache write`,
+                  });
+                }
+              }
 
               return (
                 <div

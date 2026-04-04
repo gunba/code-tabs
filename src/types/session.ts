@@ -135,6 +135,7 @@ export interface SessionMetadata {
     worktreeName: string;
     worktreeBranch: string;
   } | null;
+  // [SI-25] Flattened Status hook snapshot captured from the TAP pipeline.
   statusLine: {
     cliVersion: string;
     outputStyle: string;
@@ -142,6 +143,9 @@ export interface SessionMetadata {
     totalApiDurationMs: number;
     totalLinesAdded: number;
     totalLinesRemoved: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalCostUsd: number;
     contextWindowSize: number;
     contextUsedPercent: number;
     contextRemainingPercent: number;

@@ -224,6 +224,9 @@ describe("TapMetadataAccumulator", () => {
     expect(diff?.statusLine?.vimMode).toBe("NORMAL");
     expect(diff?.statusLine?.cacheCreationInputTokens).toBe(4000);
     expect(diff?.statusLine?.cacheReadInputTokens).toBe(2000);
+    expect(diff?.statusLine?.totalInputTokens).toBe(50000);
+    expect(diff?.statusLine?.totalOutputTokens).toBe(10000);
+    expect(diff?.statusLine?.totalCostUsd).toBe(0.05);
   });
 
   it("updates statusLine on subsequent StatusLineUpdate", () => {

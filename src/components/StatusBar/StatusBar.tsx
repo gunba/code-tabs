@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
@@ -239,11 +239,19 @@ function SessionStatus({
             <IconWarning size={12} />
           </span>
         )}
-        {((session.metadata.statusLine?.currentInputTokens ?? 0) + (session.metadata.statusLine?.currentOutputTokens ?? 0)) > 0 && (
-          <span className="status-item" title="Session tokens (input + output)">
-            {formatTokenCount((session.metadata.statusLine!.currentInputTokens ?? 0) + (session.metadata.statusLine!.currentOutputTokens ?? 0))}
-          </span>
-        )}
+        {(() => {
+          // [SI-25] Prefer cumulative totals from the Status hook snapshot;
+          // fall back to ApiTelemetry aggregates when unavailable.
+          const totalIn = session.metadata.statusLine?.totalInputTokens ?? session.metadata.inputTokens;
+          const totalOut = session.metadata.statusLine?.totalOutputTokens ?? session.metadata.outputTokens;
+          const total = totalIn + totalOut;
+          if (total <= 0) return null;
+          return (
+            <span className="status-item" title={`Session total: ${totalIn.toLocaleString()} in + ${totalOut.toLocaleString()} out`}>
+              {formatTokenCount(total)}
+            </span>
+          );
+        })()}
         {session.metadata.hookStatus && (
           <span className="status-item status-dynamic" title="Hook executing">
             {session.metadata.hookStatus}
@@ -318,6 +326,16 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const activeSessions = aliveSessions.filter((s) =>
     !isSessionIdle(getEffectiveState(s.state, subagentMap.get(s.id) || []))
   ).length;
+  const allSessionsTokens = useMemo(() => {
+    // [SI-25] Cross-session token rollup uses the same statusLine-first fallback.
+    return aliveSessions
+      .filter((s) => !s.isMetaAgent)
+      .reduce((sum, s) => {
+        const inT = s.metadata.statusLine?.totalInputTokens ?? s.metadata.inputTokens;
+        const outT = s.metadata.statusLine?.totalOutputTokens ?? s.metadata.outputTokens;
+        return sum + inT + outT;
+      }, 0);
+  }, [aliveSessions]);
   return (
     <div className="status-bar">
       {activeSession ? (
@@ -359,6 +377,11 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
         >
           <IconHook size={12} /> {hookCount > 0 ? hookCount : "Hooks"}
         </button>
+        {allSessionsTokens > 0 && (
+          <span className="status-item" title={`Total tokens across all sessions: ${allSessionsTokens.toLocaleString()}`}>
+            All: {formatTokenCount(allSessionsTokens)}
+          </span>
+        )}
         {activeSessions > 0 && (
           <span className="status-item status-active" title={`${activeSessions} active`}>
             <span className="status-active-dot" />
