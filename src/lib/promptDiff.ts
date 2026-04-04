@@ -15,6 +15,59 @@ export function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// ── Display helpers ─────────────────────────────────────────────────
+
+/** Reverse escapeRegex — strip backslashes before regex metacharacters for display. */
+export function unescapeRegex(pattern: string): string {
+  return pattern.replace(/\\([.*+?^${}()|[\]\\])/g, "$1");
+}
+
+/** Strip newline anchors added by generateRulesFromDiff.
+ *  Two shapes: "\n" + escaped (with context) vs escaped + "(?:\\n|$)" (start-of-text).
+ *  Only strip leading \n when the suffix anchor is absent to avoid eating content. */
+function stripAnchors(pattern: string): string {
+  let p = pattern;
+  if (p.endsWith("(?:\\n|$)")) {
+    p = p.slice(0, -8);
+  } else if (p.startsWith("\n")) {
+    p = p.slice(1);
+  }
+  return p;
+}
+
+export interface RuleClassification {
+  type: "remove" | "add" | "replace";
+  displayLeft: string;
+  displayRight: string;
+}
+
+/** Classify a rule by its data and return human-readable display text. */
+export function classifyRule(rule: SystemPromptRule): RuleClassification {
+  if (rule.replacement === "") {
+    return {
+      type: "remove",
+      displayLeft: unescapeRegex(stripAnchors(rule.pattern)),
+      displayRight: "",
+    };
+  }
+
+  // Detect "Add after" shape: pattern = escapedContext + "\n"
+  if (rule.pattern.endsWith("\n")) {
+    const anchor = unescapeRegex(rule.pattern.slice(0, -1));
+    if (rule.replacement.startsWith(anchor + "\n")) {
+      let added = rule.replacement.slice(anchor.length + 1);
+      if (added.endsWith("\n")) added = added.slice(0, -1);
+      return { type: "add", displayLeft: anchor, displayRight: added };
+    }
+  }
+
+  return {
+    type: "replace",
+    displayLeft: unescapeRegex(rule.pattern),
+    displayRight: rule.replacement,
+  };
+}
+
 // ── Line Diff (LCS-based) ──────────────────────────────────────────
 
 /**

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSettingsStore } from "../../store/settings";
 import { PillGroup } from "../PillGroup/PillGroup";
 import { IconClose } from "../Icons/Icons";
-import { diffLines, applyRulesToText, generateRulesFromDiff } from "../../lib/promptDiff";
+import { diffLines, applyRulesToText, generateRulesFromDiff, classifyRule } from "../../lib/promptDiff";
 import type { DiffLine } from "../../lib/promptDiff";
 import type { SystemPromptRule } from "../../types/session";
 import type { StatusMessage } from "../../lib/settingsSchema";
@@ -599,12 +599,29 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
                       onChange={() => updateSystemPromptRule(rule.id, { enabled: !rule.enabled })}
                       onClick={(e) => e.stopPropagation()}
                     />
-                    <span className="prompts-rule-card-name">{rule.name || "Untitled"}</span>
-                    <span className="prompts-rule-card-pattern">
-                      {rule.pattern
-                        ? (rule.pattern.length > 40 ? rule.pattern.slice(0, 40) + "..." : rule.pattern)
-                        : "no pattern"}
-                    </span>
+                    {(() => {
+                      const info = classifyRule(rule);
+                      if (info.type === "remove") {
+                        return (
+                          <span className="prompts-rule-header-remove">
+                            {info.displayLeft || "no pattern"}
+                          </span>
+                        );
+                      }
+                      return (
+                        <div className="prompts-rule-header-transform">
+                          <span className="prompts-rule-header-left">
+                            {info.displayLeft || "no pattern"}
+                          </span>
+                          <span className="prompts-rule-header-arrow">
+                            {info.type === "add" ? "+" : "\u2192"}
+                          </span>
+                          <span className="prompts-rule-header-right">
+                            {info.displayRight}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     <div className="prompts-rule-card-actions">
                       <button
                         className="prompts-rule-arrow-btn"

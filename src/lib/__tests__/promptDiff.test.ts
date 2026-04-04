@@ -4,6 +4,8 @@ import {
   diffLines,
   generateRulesFromDiff,
   applyRulesToText,
+  unescapeRegex,
+  classifyRule,
 } from "../promptDiff";
 import type { SystemPromptRule } from "../../types/session";
 
@@ -332,5 +334,102 @@ describe("escapeRegex round-trip", () => {
       const re = new RegExp(pattern, "gs");
       expect(re.test(text)).toBe(true);
     }
+  });
+});
+
+// ── unescapeRegex ──────────────────────────────────────────────────
+
+describe("unescapeRegex", () => {
+  it("reverses escapeRegex for all metacharacters", () => {
+    expect(unescapeRegex("\\. \\* \\+ \\? \\^ \\$ \\{ \\} \\( \\) \\| \\[ \\] \\\\"))
+      .toBe(". * + ? ^ $ { } ( ) | [ ] \\");
+  });
+
+  it("leaves non-metacharacter backslash sequences unchanged", () => {
+    expect(unescapeRegex("\\n \\t \\d")).toBe("\\n \\t \\d");
+  });
+
+  it("round-trips with escapeRegex", () => {
+    const samples = ["hello (world)", "price: $99.99", "a[0]+b[1]", "path\\to\\file"];
+    for (const s of samples) {
+      expect(unescapeRegex(escapeRegex(s))).toBe(s);
+    }
+  });
+
+  it("handles empty string", () => {
+    expect(unescapeRegex("")).toBe("");
+  });
+});
+
+// ── classifyRule ───────────────────────────────────────────────────
+
+describe("classifyRule", () => {
+  it("classifies a generated remove-with-context rule", () => {
+    const rule = generateRulesFromDiff("a\nremove me\nb", "a\nb", [])[0];
+    const info = classifyRule(rule);
+    expect(info.type).toBe("remove");
+    expect(info.displayLeft).toBe("remove me");
+    expect(info.displayRight).toBe("");
+  });
+
+  it("classifies a generated remove-at-start rule", () => {
+    const rule = generateRulesFromDiff("remove me\nkeep", "keep", [])[0];
+    const info = classifyRule(rule);
+    expect(info.type).toBe("remove");
+    expect(info.displayLeft).toBe("remove me");
+  });
+
+  it("classifies a generated add-after rule", () => {
+    const rule = generateRulesFromDiff("a\nb", "a\nnew\nb", [])[0];
+    const info = classifyRule(rule);
+    expect(info.type).toBe("add");
+    expect(info.displayLeft).toBe("a");
+    expect(info.displayRight).toBe("new");
+  });
+
+  it("classifies add-after with metacharacter context", () => {
+    const rule = generateRulesFromDiff("price: $100\nb", "price: $100\nnew\nb", [])[0];
+    const info = classifyRule(rule);
+    expect(info.type).toBe("add");
+    expect(info.displayLeft).toBe("price: $100");
+  });
+
+  it("classifies a generated replace rule", () => {
+    const rule = generateRulesFromDiff("a\nold\nb", "a\nnew\nb", [])[0];
+    const info = classifyRule(rule);
+    expect(info.type).toBe("replace");
+    expect(info.displayLeft).toBe("old");
+    expect(info.displayRight).toBe("new");
+  });
+
+  it("classifies a manual rule as replace", () => {
+    const rule: SystemPromptRule = {
+      id: "1", name: "custom", pattern: "Claude", replacement: "Assistant",
+      flags: "g", enabled: true,
+    };
+    const info = classifyRule(rule);
+    expect(info.type).toBe("replace");
+    expect(info.displayLeft).toBe("Claude");
+    expect(info.displayRight).toBe("Assistant");
+  });
+
+  it("classifies empty-pattern empty-replacement as remove", () => {
+    const rule: SystemPromptRule = {
+      id: "1", name: "x", pattern: "", replacement: "",
+      flags: "g", enabled: false,
+    };
+    const info = classifyRule(rule);
+    expect(info.type).toBe("remove");
+    expect(info.displayLeft).toBe("");
+  });
+
+  it("classifies manual remove rule (non-empty pattern, empty replacement)", () => {
+    const rule: SystemPromptRule = {
+      id: "1", name: "strip warnings", pattern: "WARNING:.*",
+      replacement: "", flags: "g", enabled: true,
+    };
+    const info = classifyRule(rule);
+    expect(info.type).toBe("remove");
+    expect(info.displayLeft).toBe("WARNING:.*");
   });
 });
