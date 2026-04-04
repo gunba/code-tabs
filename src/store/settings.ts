@@ -7,6 +7,7 @@ import { normalizePath, parseWorktreePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import type { EnvVarEntry } from "../lib/envVars";
 import type { ModelRegistryEntry } from "../lib/claude";
+import { setDebugCaptureEnabled } from "../lib/debugLog";
 import { useSessionStore } from "./sessions";
 
 export interface RecordingConfig {
@@ -15,6 +16,7 @@ export interface RecordingConfig {
     categories: Record<string, boolean>;
   };
   traffic: { enabled: boolean };
+  debugCapture: boolean;
   maxAgeHours: number;
   noisyEventKinds: string[];
 }
@@ -24,6 +26,7 @@ export const DEFAULT_NOISY_EVENT_KINDS: string[] = [
 ];
 
 // [CI-05] Recording defaults expand TAP categories, keep stdout/stderr off, and v6 backfills older persisted configs.
+// [CI-06] debugCapture field controls DEBUG-level capture; v8 migration backfills true for older states.
 export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
   taps: {
     enabled: true,
@@ -38,6 +41,7 @@ export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
     },
   },
   traffic: { enabled: true },
+  debugCapture: true,
   maxAgeHours: 72,
   noisyEventKinds: DEFAULT_NOISY_EVENT_KINDS,
 };
@@ -517,7 +521,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "claude-tabs-settings",
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
@@ -582,6 +586,10 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 7) {
           if (!state.workspaceDefaults) state.workspaceDefaults = {};
         }
+        if (version < 8) {
+          const rc = state.recordingConfig as { debugCapture?: boolean } | undefined;
+          if (rc && rc.debugCapture === undefined) rc.debugCapture = true;
+        }
         return state;
       },
       // Don't persist transient UI state
@@ -611,3 +619,14 @@ export const useSettingsStore = create<SettingsState>()(
     }
   )
 );
+
+// Sync debug capture flag into the zero-import debugLog module
+let _prevDebugCapture = useSettingsStore.getState().recordingConfig.debugCapture;
+setDebugCaptureEnabled(_prevDebugCapture);
+useSettingsStore.subscribe((state) => {
+  const next = state.recordingConfig.debugCapture;
+  if (next !== _prevDebugCapture) {
+    _prevDebugCapture = next;
+    setDebugCaptureEnabled(next);
+  }
+});

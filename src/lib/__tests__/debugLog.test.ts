@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { dlog, getDebugLog, clearDebugLog } from "../debugLog";
+import { dlog, getDebugLog, getDebugLogForSession, clearDebugLog, removeDebugLogSession, getDebugLogGeneration, setDebugCaptureEnabled } from "../debugLog";
 import type { DebugLogEntry } from "../debugLog";
 
 describe("debugLog", () => {
   beforeEach(() => {
     clearDebugLog();
+    setDebugCaptureEnabled(true);
     vi.restoreAllMocks();
   });
 
@@ -65,30 +66,126 @@ describe("debugLog", () => {
     expect(spy).toHaveBeenCalledWith("[session] failed");
   });
 
-  it("evicts oldest entries at MAX_ENTRIES", () => {
+  it("evicts oldest entries at MAX_ENTRIES per session", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     for (let i = 0; i < 5001; i++) {
-      dlog("m", null, `msg-${i}`);
+      dlog("m", "sess-a", `msg-${i}`);
     }
-    const buf = getDebugLog();
+    const buf = getDebugLogForSession("sess-a");
     expect(buf).toHaveLength(5000);
     expect(buf[0].message).toBe("msg-1");
     expect(buf[buf.length - 1].message).toBe("msg-5000");
   });
 
-  it("clearDebugLog empties the buffer", () => {
+  it("clearDebugLog empties all buffers", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    dlog("m", null, "a");
-    dlog("m", null, "b");
+    dlog("m", "a", "x");
+    dlog("m", "b", "y");
+    dlog("m", null, "z");
     clearDebugLog();
     expect(getDebugLog()).toHaveLength(0);
+    expect(getDebugLogForSession("a")).toHaveLength(0);
+    expect(getDebugLogForSession("b")).toHaveLength(0);
+    expect(getDebugLogForSession(null)).toHaveLength(0);
   });
 
-  it("exposes buffer on globalThis.__debugLogEntries", () => {
+  it("exposes buffers on globalThis.__debugLogBuffers", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    dlog("m", null, "test");
-    const global = (globalThis as Record<string, unknown>).__debugLogEntries as DebugLogEntry[];
-    expect(global).toHaveLength(1);
-    expect(global[0].message).toBe("test");
+    dlog("m", "s1", "test");
+    const global = (globalThis as Record<string, unknown>).__debugLogBuffers as Map<string, DebugLogEntry[]>;
+    expect(global).toBeInstanceOf(Map);
+    expect(global.get("s1")).toHaveLength(1);
+    expect(global.get("s1")![0].message).toBe("test");
+  });
+
+  // --- Per-session isolation ---
+
+  it("isolates entries by session", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    dlog("m", "a", "msg-a");
+    dlog("m", "b", "msg-b");
+    dlog("m", null, "msg-global");
+
+    expect(getDebugLogForSession("a")).toHaveLength(1);
+    expect(getDebugLogForSession("a")[0].message).toBe("msg-a");
+    expect(getDebugLogForSession("b")).toHaveLength(1);
+    expect(getDebugLogForSession("b")[0].message).toBe("msg-b");
+    expect(getDebugLogForSession(null)).toHaveLength(1);
+    expect(getDebugLogForSession(null)[0].message).toBe("msg-global");
+    expect(getDebugLog()).toHaveLength(3);
+  });
+
+  it("per-session eviction does not affect other sessions", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    // Fill session A past capacity
+    for (let i = 0; i < 5001; i++) {
+      dlog("m", "a", `a-${i}`);
+    }
+    // Session B has 1 entry
+    dlog("m", "b", "b-only");
+
+    expect(getDebugLogForSession("a")).toHaveLength(5000);
+    expect(getDebugLogForSession("b")).toHaveLength(1);
+    expect(getDebugLogForSession("b")[0].message).toBe("b-only");
+  });
+
+  it("removeDebugLogSession cleans up one session", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    dlog("m", "a", "x");
+    dlog("m", "b", "y");
+    removeDebugLogSession("a");
+    expect(getDebugLogForSession("a")).toHaveLength(0);
+    expect(getDebugLogForSession("b")).toHaveLength(1);
+  });
+
+  it("merged all view sorts by timestamp", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    let now = 1000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+
+    now = 1000; dlog("m", "a", "first");
+    now = 3000; dlog("m", "b", "third");
+    now = 2000; dlog("m", "a", "second");
+
+    const all = getDebugLog();
+    expect(all.map((e) => e.message)).toEqual(["first", "second", "third"]);
+  });
+
+  it("generation counter increments across sessions", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const g0 = getDebugLogGeneration();
+    dlog("m", "a", "x");
+    expect(getDebugLogGeneration()).toBe(g0 + 1);
+    dlog("m", "b", "y");
+    expect(getDebugLogGeneration()).toBe(g0 + 2);
+  });
+
+  // --- Debug capture toggle ---
+
+  it("suppresses DEBUG entries when capture disabled", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    setDebugCaptureEnabled(false);
+    dlog("m", null, "debug-msg", "DEBUG");
+    expect(getDebugLog()).toHaveLength(0);
+    // Non-DEBUG still captured
+    dlog("m", null, "log-msg", "LOG");
+    expect(getDebugLog()).toHaveLength(1);
+  });
+
+  it("suppresses console output for DEBUG when capture disabled", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    setDebugCaptureEnabled(false);
+    dlog("m", null, "x", "DEBUG");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("re-enables DEBUG capture when toggled back on", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    setDebugCaptureEnabled(false);
+    dlog("m", null, "hidden", "DEBUG");
+    setDebugCaptureEnabled(true);
+    dlog("m", null, "visible", "DEBUG");
+    expect(getDebugLog()).toHaveLength(1);
+    expect(getDebugLog()[0].message).toBe("visible");
   });
 });

@@ -270,6 +270,19 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
         </label>
       </div>
 
+      {/* Debug Capture */}
+      <div className="recording-section">
+        <label className="recording-master-toggle">
+          <input
+            type="checkbox"
+            checked={recordingConfig.debugCapture}
+            onChange={() => setRecordingConfig({ debugCapture: !recordingConfig.debugCapture })}
+          />
+          <span className="recording-section-title">Debug Capture</span>
+          <span className="recording-hint">Capture DEBUG-level entries in the debug log buffer</span>
+        </label>
+      </div>
+
       {/* Data Management */}
       <div className="recording-section">
         <div className="recording-section-title">Data Management</div>
