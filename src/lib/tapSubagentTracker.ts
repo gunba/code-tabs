@@ -5,7 +5,7 @@ import { getNoisyEventKinds } from "./noisyEventKinds";
 import { dlog } from "./debugLog";
 
 export interface SubagentAction {
-  type: "add" | "update" | "clearIdle";
+  type: "add" | "update";
   subagentId?: string;
   subagent?: Subagent;
   updates?: Partial<Subagent>;
@@ -22,7 +22,7 @@ export interface SubagentAction {
  * Replaces the agentId routing in INSTALL_HOOK (lines 90-162) and
  * subagent processing in useInspectorState (lines 218-248).
  */
-type PendingSpawn = { description: string; subagentType?: string; model?: string };
+type PendingSpawn = { description: string; prompt?: string; subagentType?: string; model?: string };
 
 export class TapSubagentTracker {
   private parentSessionId: string;
@@ -82,6 +82,7 @@ export class TapSubagentTracker {
         // Agent tool input with description + prompt → queue spawn data
         this.pendingSpawns.push({
           description: event.description,
+          prompt: event.prompt,
           subagentType: event.subagentType,
           model: event.model,
         });
@@ -113,8 +114,6 @@ export class TapSubagentTracker {
           this.subagentTokens.set(agentId, 0);
           this.subagentMsgs.set(agentId, []);
 
-          // Clear idle subagents before adding new one
-          actions.push({ type: "clearIdle" });
           actions.push({
             type: "add",
             subagent: {
@@ -124,6 +123,7 @@ export class TapSubagentTracker {
               description: desc,
               subagentType: spawn?.subagentType,
               model: spawn?.model,
+              promptText: spawn?.prompt,
               tokenCount: 0,
               currentAction: null,
               currentToolName: null,
@@ -212,9 +212,34 @@ export class TapSubagentTracker {
         }
         break;
 
+      // [IN-30] Capture prompt/result/completed metadata for retained subagent cards + inspector.
       case "SubagentNotification":
         dlog("inspector", this.parentSessionId, `SubagentNotification(${event.status}) → marking all active dead`, "DEBUG");
-        actions.push(...this.markAllActive("dead"));
+        if (event.status === "completed" && event.summary && this.lastActiveAgent) {
+          // Capture result text on the last active agent before marking all dead
+          actions.push({
+            type: "update", subagentId: this.lastActiveAgent,
+            updates: { resultText: event.summary, completed: true },
+          });
+        }
+        // Mark all active with completed flag for clean completions, dead-only for killed
+        if (event.status === "completed") {
+          for (const agentId of this.knownIds) {
+            const currentState = this.agentStates.get(agentId);
+            if (currentState && isSubagentActive(currentState)) {
+              this.agentStates.set(agentId, "dead");
+              actions.push({ type: "update", subagentId: agentId, updates: {
+                state: "dead",
+                completed: true,
+                currentToolName: null,
+                currentEventKind: null,
+                currentAction: null,
+              } });
+            }
+          }
+        } else {
+          actions.push(...this.markAllActive("dead"));
+        }
         break;
 
       case "UserInterruption":
@@ -243,16 +268,26 @@ export class TapSubagentTracker {
           dlog("inspector", this.parentSessionId, `subagent lifecycle end target=${targetId} tools=${event.totalToolUses} dur=${event.durationMs}ms`, "DEBUG");
           // Enrich lastActiveAgent with metadata if available
           if (targetId && this.knownIds.has(targetId)) {
-            const metaUpdates: Partial<Subagent> = {};
+            const metaUpdates: Partial<Subagent> = { completed: true };
             if (event.totalToolUses != null) metaUpdates.totalToolUses = event.totalToolUses;
             if (event.durationMs != null) metaUpdates.durationMs = event.durationMs;
-            if (Object.keys(metaUpdates).length > 0) {
-              actions.push({ type: "update", subagentId: targetId, updates: metaUpdates });
+            actions.push({ type: "update", subagentId: targetId, updates: metaUpdates });
+          }
+          // Mark ALL active subagents as completed+dead — lifecycle "end" means the agent turn is done.
+          // Targeting all active handles parallel agents where lastActiveAgent may be wrong.
+          for (const agentId of this.knownIds) {
+            const currentState = this.agentStates.get(agentId);
+            if (currentState && isSubagentActive(currentState)) {
+              this.agentStates.set(agentId, "dead");
+              actions.push({ type: "update", subagentId: agentId, updates: {
+                state: "dead",
+                completed: true,
+                currentToolName: null,
+                currentEventKind: null,
+                currentAction: null,
+              } });
             }
           }
-          // Mark ALL active subagents as dead — lifecycle "end" means the agent turn is done.
-          // Targeting all active handles parallel agents where lastActiveAgent may be wrong.
-          actions.push(...this.markAllActive("dead"));
         } else if (event.variant === "killed") {
           dlog("inspector", this.parentSessionId, `subagent lifecycle killed → marking all active dead`, "DEBUG");
           actions.push(...this.markAllActive("dead"));

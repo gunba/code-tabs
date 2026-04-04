@@ -519,10 +519,11 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
 
   // SubagentSpawn: standalone object with description + prompt (Agent tool input)
   if (typeof parsed.description === "string" && typeof parsed.prompt === "string" && !parsed.type) {
+    // [IN-30] Preserve enough Agent prompt text for retained prompt/result inspector sections.
     return {
       kind: "SubagentSpawn", ts,
       description: parsed.description.slice(0, 200),
-      prompt: parsed.prompt.slice(0, 500),
+      prompt: parsed.prompt.slice(0, 2000),
       subagentType: typeof parsed.subagent_type === "string" ? parsed.subagent_type : undefined,
       model: typeof parsed.model === "string" ? parsed.model : undefined,
     };

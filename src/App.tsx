@@ -44,7 +44,6 @@ export default function App() {
   const closeSession = useSessionStore((s) => s.closeSession);
   const createSession = useSessionStore((s) => s.createSession);
   const persist = useSessionStore((s) => s.persist);
-  const updateSubagent = useSessionStore((s) => s.updateSubagent);
   const reorderTabs = useSessionStore((s) => s.reorderTabs);
   const requestKill = useSessionStore((s) => s.requestKill);
   const inspectorOffSessions = useSessionStore((s) => s.inspectorOffSessions);
@@ -347,13 +346,12 @@ export default function App() {
   // Active session's subagents + skill invocations — unified bar items
   const activeSession = sessions.find((s) => s.id === activeTabId);
   const allSubs = activeTabId ? (subagentMap.get(activeTabId) || []) : [];
-  const activeSubs = allSubs.filter((s) => s.state !== "dead");
-  // Build agent bar items sorted by timestamp (newest first) � subagents only
+  // Build agent bar items sorted by timestamp (newest first) — subagents only
   // Skills are shown in CommandBar (they are slash-command results)
   type BarItem = { type: "subagent"; subagent: Subagent; ts: number };
   const barItems = useMemo<BarItem[]>(() => {
     const items: BarItem[] = [];
-    for (const sub of activeSubs) items.push({ type: "subagent", subagent: sub, ts: sub.createdAt || 0 });
+    for (const sub of allSubs) items.push({ type: "subagent", subagent: sub, ts: sub.createdAt || 0 });
     items.sort((a, b) => b.ts - a.ts);
     return items;
   }, [subagentMap, activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -564,6 +562,8 @@ export default function App() {
             if (item.type === "subagent") {
               const sub = item.subagent;
               const isActive = isSubagentActive(sub.state);
+              const isCompleted = !!sub.completed;
+              const isDead = sub.state === "dead" && !isCompleted;
               const isIdle = sub.state === "idle";
               const isInterrupted = sub.state === "interrupted";
               const isSelected = inspectedSubagent?.subagentId === sub.id && inspectedSubagent?.sessionId === activeTabId;
@@ -576,15 +576,19 @@ export default function App() {
               if (sub.model) metaParts.push(sub.model.replace(/^claude-/, "").split("-")[0]);
               if (sub.totalToolUses != null) metaParts.push(`${sub.totalToolUses} tools`);
               if (sub.durationMs != null) metaParts.push(`${Math.round(sub.durationMs / 1000)}s`);
+              // [TA-08] Completed subagents stay visible in the bar with success styling/checkmark.
               // [TR-11] Subagent card with selected highlight when inspector is open
               return (
                 <button
                   key={sub.id}
-                  className={`subagent-card${isActive ? " subagent-active" : ""}${isIdle ? " subagent-idle" : ""}${isInterrupted ? " subagent-interrupted" : ""}${isSelected ? " subagent-selected" : ""}`}
+                  className={`subagent-card${isActive ? " subagent-active" : ""}${isCompleted ? " subagent-completed" : ""}${isDead ? " subagent-dead" : ""}${isIdle ? " subagent-idle" : ""}${isInterrupted ? " subagent-interrupted" : ""}${isSelected ? " subagent-selected" : ""}`}
                   onClick={() => activeTabId && setInspectedSubagent({ sessionId: activeTabId, subagentId: sub.id })}
                   title={sub.description}
                 >
-                  <span className={`tab-dot state-${sub.state}`} />
+                  {isCompleted
+                    ? <span className="subagent-check" />
+                    : <span className={`tab-dot state-${sub.state}`} />
+                  }
                   <span className="subagent-label">
                     <span className="subagent-name">{sub.description}</span>
                     {subActivity && (
@@ -593,18 +597,11 @@ export default function App() {
                       </span>
                     )}
                     {metaParts.length > 0 && (
-                      <span className="subagent-meta">{metaParts.join(" · ")}</span>
+                      <span className="subagent-meta">{metaParts.join(" \u00b7 ")}</span>
                     )}
                   </span>
                   {sub.tokenCount > 0 && (
                     <span className="subagent-tokens">{formatTokenCount(sub.tokenCount)}</span>
-                  )}
-                  {!isActive && (
-                    <span
-                      className="subagent-close"
-                      onClick={(e) => { e.stopPropagation(); activeTabId && updateSubagent(activeTabId, sub.id, { state: "dead" }); }}
-                      title="Dismiss"
-                    ><IconClose size={12} /></span>
                   )}
                 </button>
               );
@@ -628,6 +625,7 @@ export default function App() {
           {/* Subagent inspector overlay */}
           {activeSubagent && (
             <SubagentInspector
+              key={activeSubagent.id}
               subagent={activeSubagent}
               onClose={() => setInspectedSubagent(null)}
             />

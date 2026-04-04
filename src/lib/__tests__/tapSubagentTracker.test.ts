@@ -133,11 +133,11 @@ describe("TapSubagentTracker", () => {
   // ── Subagent creation ──
 
   describe("subagent creation", () => {
-    it("emits clearIdle then add on first sidechain message", () => {
+    it("emits add on first sidechain message", () => {
       tracker.process(makeSpawn("my desc"));
       const actions = tracker.process(makeSidechainMsg("agent-1"));
 
-      expect(actions[0].type).toBe("clearIdle");
+      expect(actions[0].type).toBe("add");
       const addAction = actions.find(a => a.type === "add")!;
       expect(addAction.subagent!.id).toBe("agent-1");
       expect(addAction.subagent!.description).toBe("my desc");
@@ -159,6 +159,13 @@ describe("TapSubagentTracker", () => {
       const addAction = actions.find(a => a.type === "add")!;
       expect(addAction.subagent!.subagentType).toBe("reviewer");
       expect(addAction.subagent!.model).toBe("sonnet");
+    });
+
+    it("propagates promptText from spawn to created subagent", () => {
+      tracker.process(makeSpawn("search files", "find all TypeScript files in src/"));
+      const actions = tracker.process(makeSidechainMsg("agent-1"));
+      const addAction = actions.find(a => a.type === "add")!;
+      expect(addAction.subagent!.promptText).toBe("find all TypeScript files in src/");
     });
 
     it("leaves subagentType/model undefined when not in spawn", () => {
@@ -258,6 +265,56 @@ describe("TapSubagentTracker", () => {
 
       const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 20 }));
       expect(actions).toEqual([]);
+    });
+  });
+
+  // ── Completion: resultText and completed flag ──
+
+  describe("completion tracking", () => {
+    it("sets completed and resultText from SubagentNotification with status=completed", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "SubagentNotification", ts: 10, status: "completed", summary: "Found 3 matching files",
+      } as TapEvent);
+      const resultUpdate = actions.find(a => a.subagentId === "agent-1" && a.updates?.resultText);
+      expect(resultUpdate).toBeDefined();
+      expect(resultUpdate!.updates!.resultText).toBe("Found 3 matching files");
+      expect(resultUpdate!.updates!.completed).toBe(true);
+      // All active agents get completed: true + state: dead
+      const stateUpdate = actions.find(a => a.updates?.state === "dead");
+      expect(stateUpdate!.updates!.completed).toBe(true);
+    });
+
+    it("does NOT set completed on SubagentNotification with status=killed", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "SubagentNotification", ts: 10, status: "killed", summary: "",
+      } as TapEvent);
+      // Should use markAllActive("dead") which does not set completed
+      expect(actions.every(a => !a.updates?.completed)).toBe(true);
+      expect(actions.some(a => a.updates?.state === "dead")).toBe(true);
+    });
+
+    it("sets completed on SubagentLifecycle end", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "SubagentLifecycle", ts: 10, variant: "end",
+        agentType: null, isAsync: null, model: null,
+        totalTokens: null, totalToolUses: 5, durationMs: 3000, reason: null,
+      } as TapEvent);
+      const deadUpdate = actions.find(a => a.updates?.state === "dead");
+      expect(deadUpdate!.updates!.completed).toBe(true);
+    });
+
+    it("does NOT set completed on SubagentLifecycle killed", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process({
+        kind: "SubagentLifecycle", ts: 10, variant: "killed",
+        agentType: null, isAsync: null, model: null,
+        totalTokens: null, totalToolUses: null, durationMs: null, reason: null,
+      } as TapEvent);
+      expect(actions.every(a => !a.updates?.completed)).toBe(true);
+      expect(actions.some(a => a.updates?.state === "dead")).toBe(true);
     });
   });
 

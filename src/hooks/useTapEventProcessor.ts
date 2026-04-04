@@ -57,7 +57,6 @@ export function useTapEventProcessor(
   const updateConfig = useSessionStore((s) => s.updateConfig);
   const addSubagent = useSessionStore((s) => s.addSubagent);
   const updateSubagent = useSessionStore((s) => s.updateSubagent);
-  const clearIdleSubagents = useSessionStore((s) => s.clearIdleSubagents);
   const addSkillInvocation = useSessionStore((s) => s.addSkillInvocation);
   const addCommandHistory = useSessionStore((s) => s.addCommandHistory);
   const updateProcessHealth = useSessionStore((s) => s.updateProcessHealth);
@@ -166,9 +165,7 @@ export function useTapEventProcessor(
       // 3. Subagent tracker
       const subActions = subTracker.process(event);
       for (const action of subActions) {
-        if (action.type === "clearIdle") {
-          clearIdleSubagents(sid);
-        } else if (action.type === "add" && action.subagent) {
+        if (action.type === "add" && action.subagent) {
           dlog("inspector", sid, `subagent discovered id=${action.subagent.id} desc="${action.subagent.description}"`, "DEBUG");
           addSubagent(sid, action.subagent);
         } else if (action.type === "update" && action.subagentId && action.updates) {
@@ -295,7 +292,7 @@ export function useTapEventProcessor(
       metaAccRef.current = null;
       subTrackerRef.current = null;
     };
-  }, [sessionId, updateState, updateMetadata, updateConfig, addSubagent, updateSubagent, clearIdleSubagents, addSkillInvocation, addCommandHistory, updateProcessHealth]);
+  }, [sessionId, updateState, updateMetadata, updateConfig, addSubagent, updateSubagent, addSkillInvocation, addCommandHistory, updateProcessHealth]);
 
   return { completionCount, claudeSessionId, userPrompt };
 }

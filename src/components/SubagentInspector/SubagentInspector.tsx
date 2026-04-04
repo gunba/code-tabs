@@ -22,7 +22,7 @@ const MessageBlock = memo(function MessageBlock({ msg, defaultExpanded }: { msg:
   if (msg.role === "assistant") {
     return (
       <div className="inspector-msg inspector-msg-assistant">
-        <div className="inspector-msg-md"><ReactMarkdown>{msg.text}</ReactMarkdown></div>
+        <ReactMarkdown>{msg.text}</ReactMarkdown>
       </div>
     );
   }
@@ -48,24 +48,41 @@ const MessageBlock = memo(function MessageBlock({ msg, defaultExpanded }: { msg:
   );
 }, (prev, next) => prev.msg === next.msg);
 
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="inspector-section-divider">
+      <span className="inspector-section-line" />
+      <span className="inspector-section-label">{label}</span>
+      <span className="inspector-section-line" />
+    </div>
+  );
+}
+
 export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
   const prevLenRef = useRef(subagent.messages.length);
+  const prevResultRef = useRef(subagent.resultText);
+  const [promptCollapsed, setPromptCollapsed] = useState(!!subagent.resultText);
 
-  // Scroll to bottom on mount
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, []);
+  const isActive = isSubagentActive(subagent.state);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages (during active execution)
   useEffect(() => {
-    if (subagent.messages.length > prevLenRef.current && scrollRef.current) {
+    if (subagent.messages.length > prevLenRef.current && scrollRef.current && isActive) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
     prevLenRef.current = subagent.messages.length;
-  }, [subagent.messages.length]);
+  }, [subagent.messages.length, isActive]);
+
+  // Scroll to result when it first appears
+  useEffect(() => {
+    if (subagent.resultText && !prevResultRef.current && resultRef.current) {
+      resultRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      setPromptCollapsed(true);
+    }
+    prevResultRef.current = subagent.resultText;
+  }, [subagent.resultText]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -75,40 +92,83 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const isActive = isSubagentActive(subagent.state);
   const lastToolIndex = isActive
     ? subagent.messages.reduce((acc, m, idx) => m.role === "tool" ? idx : acc, -1)
     : -1;
 
+  // Build metadata string
+  const metaParts: string[] = [];
+  const typeLabel = subagent.subagentType || subagent.agentType;
+  if (typeLabel) metaParts.push(typeLabel);
+  if (subagent.model) metaParts.push(subagent.model.replace(/^claude-/, "").split("-")[0]);
+  if (subagent.totalToolUses != null) metaParts.push(`${subagent.totalToolUses} tools`);
+  if (subagent.durationMs != null) metaParts.push(`${Math.round(subagent.durationMs / 1000)}s`);
+  if (subagent.messages.length > 0) metaParts.push(`${subagent.messages.length} msgs`);
+
   return (
     <div className="inspector-overlay">
       <div className="inspector-header">
-        <span className="inspector-header-desc">
-          {(subagent.subagentType || subagent.agentType) && <span className="inspector-agent-type">{subagent.subagentType || subagent.agentType}</span>}
-          {subagent.isAsync && <span className="inspector-async-badge">async</span>}
-          {subagent.description}
+        <span className="inspector-header-status">
+          {subagent.completed
+            ? <span className="inspector-status-done">{"\u2713"}</span>
+            : <span className={`inspector-status-dot state-${subagent.state}`} />
+          }
         </span>
-        <span className="inspector-header-meta">
-          {subagent.state}
-          {subagent.model && ` · ${subagent.model.replace(/^claude-/, "").split("-")[0]}`}
-          {subagent.totalToolUses != null && ` · ${subagent.totalToolUses} tools`}
-          {subagent.durationMs != null && ` · ${Math.round(subagent.durationMs / 1000)}s`}
-          {subagent.messages.length > 0 && ` · ${subagent.messages.length} msgs`}
-        </span>
-        <button className="inspector-header-close" onClick={onClose}>×</button>
-      </div>
-      <div className="inspector-messages" ref={scrollRef}>
-        {subagent.messages.length === 0 ? (
-          <div className="inspector-empty">
-            {subagent.state === "dead" || subagent.state === "idle"
-              ? "No conversation data captured."
-              : "Waiting for subagent output..."}
-          </div>
-        ) : (
-          subagent.messages.map((msg, i) => (
-            <MessageBlock key={i} msg={msg} defaultExpanded={msg.role === "assistant" || i === lastToolIndex} />
-          ))
+        <span className="inspector-header-desc">{subagent.description}</span>
+        {metaParts.length > 0 && (
+          <span className="inspector-header-meta">{metaParts.join(" \u00b7 ")}</span>
         )}
+        <button className="inspector-header-close" onClick={onClose}>Esc</button>
+      </div>
+
+      <div className="inspector-body" ref={scrollRef}>
+        {/* [TA-08] Terminal-style lifecycle viewer: prompt, conversation, result, and pending states. */}
+        {/* Prompt section */}
+        {subagent.promptText && (
+          <>
+            <div
+              className="inspector-section-divider inspector-section-clickable"
+              onClick={() => setPromptCollapsed(c => !c)}
+            >
+              <span className="inspector-section-line" />
+              <span className="inspector-section-label">
+                {promptCollapsed ? "\u25b8" : "\u25be"} Prompt
+              </span>
+              <span className="inspector-section-line" />
+            </div>
+            {!promptCollapsed && (
+              <div className="inspector-prompt">
+                <pre className="inspector-prompt-text">{subagent.promptText}</pre>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Conversation section */}
+        {subagent.messages.length > 0 && (
+          <>
+            <SectionDivider label="Conversation" />
+            {subagent.messages.map((msg, i) => (
+              <MessageBlock key={i} msg={msg} defaultExpanded={msg.role === "assistant" || i === lastToolIndex} />
+            ))}
+          </>
+        )}
+
+        {/* Result section */}
+        {subagent.resultText ? (
+          <div ref={resultRef}>
+            <SectionDivider label="Result" />
+            <div className="inspector-result">
+              <ReactMarkdown>{subagent.resultText}</ReactMarkdown>
+            </div>
+          </div>
+        ) : isActive ? (
+          <div className="inspector-pending">
+            <span className="inspector-pending-dots" />
+          </div>
+        ) : subagent.messages.length === 0 ? (
+          <div className="inspector-empty">No conversation data captured.</div>
+        ) : null}
       </div>
     </div>
   );

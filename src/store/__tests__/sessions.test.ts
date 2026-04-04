@@ -194,40 +194,7 @@ describe("subagent actions", () => {
     expect(subs![0].tokenCount).toBe(500);
   });
 
-  it("clearIdleSubagents filters out idle subagents", () => {
-    useSessionStore.getState().addSubagent("s1", makeSub("sub-1", "idle"));
-    useSessionStore.getState().addSubagent("s1", makeSub("sub-2", "thinking"));
-    useSessionStore.getState().clearIdleSubagents("s1");
-    const subs = useSessionStore.getState().subagents.get("s1");
-    expect(subs).toHaveLength(1);
-    expect(subs![0].id).toBe("sub-2");
-  });
-
-  it("clearIdleSubagents also clears dead subagents", () => {
-    useSessionStore.getState().addSubagent("s1", makeSub("sub-1", "dead"));
-    useSessionStore.getState().addSubagent("s1", makeSub("sub-2", "thinking"));
-    useSessionStore.getState().clearIdleSubagents("s1");
-    const subs = useSessionStore.getState().subagents.get("s1");
-    expect(subs).toHaveLength(1);
-    expect(subs![0].id).toBe("sub-2");
-  });
-
-  it("clearIdleSubagents also clears interrupted subagents", () => {
-    useSessionStore.getState().addSubagent("s1", makeSub("sub-1", "interrupted"));
-    useSessionStore.getState().addSubagent("s1", makeSub("sub-2", "thinking"));
-    useSessionStore.getState().clearIdleSubagents("s1");
-    const subs = useSessionStore.getState().subagents.get("s1");
-    expect(subs).toHaveLength(1);
-    expect(subs![0].id).toBe("sub-2");
-  });
-
-  it("clearIdleSubagents is a no-op when no idle subagents exist", () => {
-    useSessionStore.getState().addSubagent("s1", makeSub("sub-1", "thinking"));
-    const before = useSessionStore.getState().subagents;
-    useSessionStore.getState().clearIdleSubagents("s1");
-    // Same reference when nothing changed (optimization)
-    expect(useSessionStore.getState().subagents).toBe(before);
-  });
+  // clearIdleSubagents tests removed — action was removed from the store
 });
 
 describe("closeSession tab selection", () => {

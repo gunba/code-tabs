@@ -13,7 +13,6 @@ import type {
   SkillInvocation,
   CommandHistoryEntry,
 } from "../types/session";
-import { isSubagentActive } from "../types/session";
 import { useSettingsStore } from "./settings";
 
 interface SessionsState {
@@ -54,7 +53,6 @@ interface SessionsState {
   stopTrafficLog: (id: string) => void;
   addSubagent: (sessionId: string, subagent: Subagent) => void;
   updateSubagent: (sessionId: string, subagentId: string, updates: Partial<Subagent>) => void;
-  clearIdleSubagents: (sessionId: string) => void;
   addSkillInvocation: (sessionId: string, invocation: SkillInvocation) => void;
   removeSkillInvocation: (sessionId: string, invocationId: string) => void;
   addCommandHistory: (sessionId: string, command: string, ts: number) => void;
@@ -377,18 +375,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
         sa.id === subagentId ? { ...sa, ...updates } : sa
       );
       map.set(sessionId, updated);
-      return { subagents: map };
-    });
-  },
-
-  clearIdleSubagents: (sessionId) => {
-    set((s) => {
-      const map = new Map(s.subagents);
-      const list = map.get(sessionId);
-      if (!list) return s;
-      const active = list.filter((sa) => isSubagentActive(sa.state));
-      if (active.length === list.length) return s;
-      map.set(sessionId, active);
       return { subagents: map };
     });
   },

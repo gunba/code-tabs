@@ -204,6 +204,9 @@ export interface Subagent {
   durationMs?: number;
   model?: string;
   costUsd?: number;
+  promptText?: string;    // full prompt text from SubagentSpawn event
+  resultText?: string;    // final result from SubagentNotification summary
+  completed?: boolean;    // true = finished successfully (vs dead = killed/errored)
 }
 
 export interface SkillInvocation {
