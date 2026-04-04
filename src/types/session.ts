@@ -197,7 +197,8 @@ export interface Subagent {
   currentEventKind: string | null;
   messages: SubagentMessage[];
   createdAt: number;    // tap event ts when first seen (for chronological bar ordering)
-  agentType?: string;
+  subagentType?: string;  // from Agent tool input (e.g., "Explore", "plan-critic")
+  agentType?: string;     // from SubagentLifecycle telemetry
   isAsync?: boolean;
   totalToolUses?: number;
   durationMs?: number;

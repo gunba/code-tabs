@@ -248,15 +248,33 @@ describe("classifyTapEntry — stringify (outgoing)", () => {
     expect(event?.kind).toBe("PermissionRejected");
   });
 
-  it("classifies Agent tool input → SubagentSpawn", () => {
+  it("classifies Agent tool input → SubagentSpawn with subagentType and model", () => {
     const entry: TapEntry = {
       ts: 2013, cat: "stringify", len: 200,
-      snap: JSON.stringify({ description: "Write horse limericks", prompt: "Write a limerick about horses..." }),
+      snap: JSON.stringify({
+        description: "Write horse limericks", prompt: "Write a limerick about horses...",
+        subagent_type: "Explore", model: "sonnet",
+      }),
     };
     const event = classifyTapEntry(entry);
     expect(event?.kind).toBe("SubagentSpawn");
     if (event?.kind === "SubagentSpawn") {
       expect(event.description).toBe("Write horse limericks");
+      expect(event.subagentType).toBe("Explore");
+      expect(event.model).toBe("sonnet");
+    }
+  });
+
+  it("classifies Agent tool input → SubagentSpawn with undefined subagentType when absent", () => {
+    const entry: TapEntry = {
+      ts: 2013, cat: "stringify", len: 200,
+      snap: JSON.stringify({ description: "Simple task", prompt: "Do something" }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event?.kind).toBe("SubagentSpawn");
+    if (event?.kind === "SubagentSpawn") {
+      expect(event.subagentType).toBeUndefined();
+      expect(event.model).toBeUndefined();
     }
   });
 

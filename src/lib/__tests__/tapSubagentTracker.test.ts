@@ -18,8 +18,8 @@ import type { TapEvent, ConversationMessage, SubagentSpawn, ApiTelemetry } from 
 
 // ── Helpers ──
 
-function makeSpawn(description = "test agent", prompt = "do stuff"): SubagentSpawn {
-  return { kind: "SubagentSpawn", ts: 1, description, prompt };
+function makeSpawn(description = "test agent", prompt = "do stuff", overrides: Partial<SubagentSpawn> = {}): SubagentSpawn {
+  return { kind: "SubagentSpawn", ts: 1, description, prompt, ...overrides };
 }
 
 function makeSidechainMsg(
@@ -123,7 +123,7 @@ describe("TapSubagentTracker", () => {
       expect(actions).toEqual([]);
     });
 
-    it("uses 'Agent' as default description when no pending desc", () => {
+    it("uses 'Agent' as default description when no pending spawn", () => {
       const actions = tracker.process(makeSidechainMsg("agent-1"));
       const addAction = actions.find(a => a.type === "add");
       expect(addAction!.subagent!.description).toBe("Agent");
@@ -151,6 +151,22 @@ describe("TapSubagentTracker", () => {
       tracker.process(makeSpawn());
       const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 42 }));
       expect(actions.find(a => a.type === "add")!.subagent!.createdAt).toBe(42);
+    });
+
+    it("propagates subagentType and model from spawn to created subagent", () => {
+      tracker.process(makeSpawn("review code", "review", { subagentType: "reviewer", model: "sonnet" }));
+      const actions = tracker.process(makeSidechainMsg("agent-1"));
+      const addAction = actions.find(a => a.type === "add")!;
+      expect(addAction.subagent!.subagentType).toBe("reviewer");
+      expect(addAction.subagent!.model).toBe("sonnet");
+    });
+
+    it("leaves subagentType/model undefined when not in spawn", () => {
+      tracker.process(makeSpawn("basic agent"));
+      const actions = tracker.process(makeSidechainMsg("agent-1"));
+      const addAction = actions.find(a => a.type === "add")!;
+      expect(addAction.subagent!.subagentType).toBeUndefined();
+      expect(addAction.subagent!.model).toBeUndefined();
     });
   });
 
@@ -415,14 +431,14 @@ describe("TapSubagentTracker", () => {
       expect(tracker.isSubagentInFlight()).toBe(false);
     });
 
-    it("stale pendingDescs drained by UserInterruption", () => {
+    it("stale pendingSpawns drained by UserInterruption", () => {
       tracker.process(makeSpawn("will be interrupted"));
       expect(tracker.isSubagentInFlight()).toBe(true);
       tracker.process({ kind: "UserInterruption", ts: 5, forToolUse: false } as TapEvent);
       expect(tracker.isSubagentInFlight()).toBe(false);
     });
 
-    it("stale pendingDescs drained by UserInput", () => {
+    it("stale pendingSpawns drained by UserInput", () => {
       tracker.process(makeSpawn("will be abandoned"));
       expect(tracker.isSubagentInFlight()).toBe(true);
       tracker.process({
@@ -431,7 +447,7 @@ describe("TapSubagentTracker", () => {
       expect(tracker.isSubagentInFlight()).toBe(false);
     });
 
-    it("stale pendingDescs drained by SlashCommand", () => {
+    it("stale pendingSpawns drained by SlashCommand", () => {
       tracker.process(makeSpawn("will be abandoned"));
       expect(tracker.isSubagentInFlight()).toBe(true);
       tracker.process({
@@ -443,11 +459,11 @@ describe("TapSubagentTracker", () => {
     it("covers the full timing gap: SubagentSpawn → SessionRegistration window → complete", () => {
       // 1. SubagentSpawn fires (main agent calls Agent tool)
       tracker.process(makeSpawn("review code"));
-      expect(tracker.isSubagentInFlight()).toBe(true);  // pendingDescs > 0
+      expect(tracker.isSubagentInFlight()).toBe(true);  // pendingSpawns > 0
 
       // 2. ConversationMessage(assistant, isSidechain=false) — main agent tool_use (not modeled)
       // 3. Subagent's SessionRegistration arrives here — no state change, still guarded
-      //    by pendingDescs from step 1. Processor would suppress it.
+      //    by pendingSpawns from step 1. Processor would suppress it.
 
       // 4. First sidechain ConversationMessage creates the subagent entry
       tracker.process(makeSidechainMsg("agent-1"));
@@ -465,7 +481,7 @@ describe("TapSubagentTracker", () => {
         textSnippet: "Done", cwd: null, hasToolError: false, toolErrorText: null,
       } as TapEvent);
 
-      // Now safe: all agents dead, sidechain cleared, no pending descs
+      // Now safe: all agents dead, sidechain cleared, no pending spawns
       expect(tracker.isSubagentInFlight()).toBe(false);
     });
 

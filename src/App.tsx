@@ -571,7 +571,8 @@ export default function App() {
               const subActivity = getActivityText(sub.currentToolName, sub.currentEventKind);
               const subActivityColor = subActivity ? eventKindColor(sub.currentEventKind ?? sub.currentToolName!) : undefined;
               const metaParts: string[] = [];
-              if (sub.agentType) metaParts.push(sub.agentType);
+              const typeLabel = sub.subagentType || sub.agentType;
+              if (typeLabel) metaParts.push(typeLabel);
               if (sub.model) metaParts.push(sub.model.replace(/^claude-/, "").split("-")[0]);
               if (sub.totalToolUses != null) metaParts.push(`${sub.totalToolUses} tools`);
               if (sub.durationMs != null) metaParts.push(`${Math.round(sub.durationMs / 1000)}s`);

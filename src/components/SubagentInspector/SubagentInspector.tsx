@@ -84,7 +84,7 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
     <div className="inspector-overlay">
       <div className="inspector-header">
         <span className="inspector-header-desc">
-          {subagent.agentType && <span className="inspector-agent-type">{subagent.agentType}</span>}
+          {(subagent.subagentType || subagent.agentType) && <span className="inspector-agent-type">{subagent.subagentType || subagent.agentType}</span>}
           {subagent.isAsync && <span className="inspector-async-badge">async</span>}
           {subagent.description}
         </span>

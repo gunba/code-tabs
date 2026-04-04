@@ -12,7 +12,7 @@ export interface SubagentAction {
 }
 
 // [SI-09] Subagent data captured via inspector tap events (no JSONL watcher)
-// [IN-03] Subagent tracking: Agent tool_use -> queue desc -> first sidechain msg creates entry; pendingDescs drained on UserInterruption/UserInput/SlashCommand
+// [IN-03] Subagent tracking: Agent tool_use -> queue spawn -> first sidechain msg creates entry; pendingSpawns drained on UserInterruption/UserInput/SlashCommand
 // [IN-05] Stale subagent detection removed -- push-based lifecycle via real-time events
 // [IN-06] Dead subagent purge removed -- idle subs remain visible until session ends
 /**
@@ -22,9 +22,11 @@ export interface SubagentAction {
  * Replaces the agentId routing in INSTALL_HOOK (lines 90-162) and
  * subagent processing in useInspectorState (lines 218-248).
  */
+type PendingSpawn = { description: string; subagentType?: string; model?: string };
+
 export class TapSubagentTracker {
   private parentSessionId: string;
-  private pendingDescs: string[] = [];
+  private pendingSpawns: PendingSpawn[] = [];
   private knownIds = new Set<string>();
   private subagentTokens = new Map<string, number>(); // agentId → accumulated tokens
   private subagentCost = new Map<string, number>();   // agentId → accumulated costUsd
@@ -47,9 +49,9 @@ export class TapSubagentTracker {
 
   /** True when any subagent lifecycle is in progress — from spawn through completion.
    *  Covers the gap between SubagentSpawn and the first sidechain ConversationMessage
-   *  (where pendingDescs > 0 but hasActiveAgents() is false and sidechainActive is false). */
+   *  (where pendingSpawns > 0 but hasActiveAgents() is false and sidechainActive is false). */
   isSubagentInFlight(): boolean {
-    return this.pendingDescs.length > 0 || this.sidechainActive || this.hasActiveAgents();
+    return this.pendingSpawns.length > 0 || this.sidechainActive || this.hasActiveAgents();
   }
 
   /** Mark all active subagents with the given state, returning update actions. */
@@ -77,8 +79,12 @@ export class TapSubagentTracker {
 
     switch (event.kind) {
       case "SubagentSpawn":
-        // Agent tool input with description + prompt → queue description
-        this.pendingDescs.push(event.description);
+        // Agent tool input with description + prompt → queue spawn data
+        this.pendingSpawns.push({
+          description: event.description,
+          subagentType: event.subagentType,
+          model: event.model,
+        });
         dlog("inspector", this.parentSessionId, `subagent spawn queued desc="${event.description.slice(0, 60)}"`, "DEBUG");
         break;
 
@@ -102,7 +108,8 @@ export class TapSubagentTracker {
         if (!this.knownIds.has(agentId)) {
           this.knownIds.add(agentId);
           this.agentStates.set(agentId, "starting");
-          const desc = this.pendingDescs.shift() || "Agent";
+          const spawn = this.pendingSpawns.shift();
+          const desc = spawn?.description || "Agent";
           this.subagentTokens.set(agentId, 0);
           this.subagentMsgs.set(agentId, []);
 
@@ -115,6 +122,8 @@ export class TapSubagentTracker {
               parentSessionId: this.parentSessionId,
               state: "starting" as SessionState,
               description: desc,
+              subagentType: spawn?.subagentType,
+              model: spawn?.model,
               tokenCount: 0,
               currentAction: null,
               currentToolName: null,
@@ -123,7 +132,7 @@ export class TapSubagentTracker {
               createdAt: event.ts,
             },
           });
-          dlog("inspector", this.parentSessionId, `subagent ${agentId} created desc="${desc}" (${this.pendingDescs.length} pending descs remain)`, "DEBUG");
+          dlog("inspector", this.parentSessionId, `subagent ${agentId} created desc="${desc}" (${this.pendingSpawns.length} pending spawns remain)`, "DEBUG");
         }
 
         // Route messages
@@ -144,9 +153,10 @@ export class TapSubagentTracker {
             }
             newMsgs.push({ role: "tool", text: toolText, toolName, timestamp: now });
             // Nested Agent spawn: queue description for grandchild
+            // (subagentType/model not available from toolAction text; filled by SubagentLifecycle if present)
             for (const tn of event.toolNames) {
               if (tn === "Agent" && event.toolAction.startsWith("Agent: ")) {
-                this.pendingDescs.push(event.toolAction.slice(7).slice(0, 100));
+                this.pendingSpawns.push({ description: event.toolAction.slice(7).slice(0, 100) });
               }
             }
           }
@@ -208,7 +218,7 @@ export class TapSubagentTracker {
         break;
 
       case "UserInterruption":
-        this.pendingDescs = [];
+        this.pendingSpawns = [];
         actions.push(...this.markAllActive("interrupted"));
         break;
 
@@ -253,7 +263,7 @@ export class TapSubagentTracker {
       case "UserInput":
       case "SlashCommand":
         this.sidechainActive = false;
-        this.pendingDescs = [];
+        this.pendingSpawns = [];
         // New user prompt → previous turn's agents are done; mark stale active agents idle
         actions.push(...this.markAllActive("idle"));
         break;
@@ -316,7 +326,7 @@ export class TapSubagentTracker {
 
   /** Reset all tracked state. */
   reset(): void {
-    this.pendingDescs = [];
+    this.pendingSpawns = [];
     this.knownIds.clear();
     this.subagentTokens.clear();
     this.subagentCost.clear();

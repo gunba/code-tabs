@@ -107,6 +107,8 @@ export interface SubagentSpawn extends TapEventBase {
   kind: "SubagentSpawn";
   description: string;
   prompt: string;
+  subagentType?: string;  // from Agent tool input.subagent_type
+  model?: string;         // from Agent tool input.model
 }
 
 export interface SubagentNotification extends TapEventBase {

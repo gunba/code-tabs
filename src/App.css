@@ -189,17 +189,16 @@
   flex-direction: column;
   min-width: 0;
   flex: 1;
-  gap: 2px;
   align-self: stretch;
 }
 
 .tab-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 18px;
+  line-height: 16px;
 }
 
 /* [TA-03] .tab-activity: single-line tool activity display */

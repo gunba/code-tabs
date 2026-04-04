@@ -523,6 +523,8 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
       kind: "SubagentSpawn", ts,
       description: parsed.description.slice(0, 200),
       prompt: parsed.prompt.slice(0, 500),
+      subagentType: typeof parsed.subagent_type === "string" ? parsed.subagent_type : undefined,
+      model: typeof parsed.model === "string" ? parsed.model : undefined,
     };
   }
 
