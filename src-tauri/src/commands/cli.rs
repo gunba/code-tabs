@@ -262,6 +262,10 @@ fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_js
     for name_match in name_re.find_iter(&content) {
         let name_cap = name_re.captures(&content[name_match.start()..]).unwrap();
         let name = name_cap[1].to_string();
+        // Filter MCP prompt template fragments (name:"mcp__"+serverName+"__"+promptName)
+        if name.contains("__") {
+            continue;
+        }
         let cmd = format!("/{}", name);
         if cmd.len() < 4 || !seen.insert(cmd.clone()) {
             continue;
@@ -300,6 +304,25 @@ fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_js
             Some(pos) => &rev_window[pos + 1..],
             None => rev_window,
         };
+
+        // Require a command-specific type marker in the surrounding window.
+        // Real commands always declare type:"prompt", type:"local-jsx", or type:"local".
+        // This filters highlight.js languages, HTML elements, signals, AWS SDK, crypto, etc.
+        let has_command_type = fwd_window.contains(r#"type:"prompt""#)
+            || fwd_window.contains(r#"type:"local-jsx""#)
+            || fwd_window.contains(r#"type:"local""#)
+            || rev_window.contains(r#"type:"prompt""#)
+            || rev_window.contains(r#"type:"local-jsx""#)
+            || rev_window.contains(r#"type:"local""#);
+        if !has_command_type {
+            continue;
+        }
+
+        // Skip hidden commands (debug/internal: heapdump, output-style, rate-limit-options)
+        // Only matches literal isHidden:!0, not computed expressions like isHidden:someCondition
+        if fwd_window.contains("isHidden:!0") || rev_window.contains("isHidden:!0") {
+            continue;
+        }
 
         // Try patterns in priority order — search both forward and reverse windows
         let strip_interpolations = |raw: &str| -> String {
@@ -1071,10 +1094,10 @@ mod tests {
 
         // Simulated minified binary content with command registrations
         let content = concat!(
-            r#"something name:"review",description:"Review code changes" "#,
-            r#"something name:"init",description:"Initialize a new project" "#,
-            r#"something name:"compact",description:"Compact conversation history" "#,
-            r#"something name:"bug-report",description:"Report a bug""#,
+            r#"var a={type:"prompt",name:"review",description:"Review code changes"}; "#,
+            r#"var b={type:"local-jsx",name:"init",description:"Initialize a new project"}; "#,
+            r#"var c={type:"local",name:"compact",description:"Compact conversation history"}; "#,
+            r#"var d={type:"prompt",name:"bug-report",description:"Report a bug"};"#,
         );
         std::fs::write(&js_path, content).unwrap();
 
@@ -1097,7 +1120,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let js_path = dir.path().join("cli.js");
 
-        let content = r#"name:"review",description:"First" name:"review",description:"Second""#;
+        let content = r#"var a={type:"local",name:"review",description:"First"};var b={type:"local",name:"review",description:"Second"}"#;
         std::fs::write(&js_path, content).unwrap();
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
@@ -1114,8 +1137,8 @@ mod tests {
         let js_path = dir.path().join("cli.js");
 
         let content = concat!(
-            r#"name:"review",description:"Review code" "#,
-            r#"name:"browser-tool",description:"Interact with DOM elements""#,
+            r#"var a={type:"local",name:"review",description:"Review code"}; "#,
+            r#"var b={type:"local",name:"browser-tool",description:"Interact with DOM elements"}"#,
         );
         std::fs::write(&js_path, content).unwrap();
 
@@ -1134,7 +1157,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let js_path = dir.path().join("cli.js");
 
-        let content = r#"name:"review",description:"Line one\nLine two""#;
+        let content = r#"var a={type:"local",name:"review",description:"Line one\nLine two"}"#;
         std::fs::write(&js_path, content).unwrap();
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
@@ -1151,7 +1174,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let js_path = dir.path().join("cli.js");
         // Minimal valid content — "ab" is too short to pass the >=4 char filter
-        let content = r#"name:"ab",description:"Too short""#;
+        let content = r#"var a={type:"local",name:"ab",description:"Too short"}"#;
         std::fs::write(&js_path, content).unwrap();
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
@@ -1229,8 +1252,8 @@ mod tests {
         let js_path = dir.path().join("cli.js");
 
         let content = concat!(
-            r#"var x={name:"login",description:yv$()?"Switch Anthropic accounts":"Sign in with your Anthropic account",load:()=>null};"#,
-            r#" var y={name:"terminal-setup",description:M6==="Apple"?"Enable Option key":"Install Shift key",load:()=>null};"#,
+            r#"var x={type:"local-jsx",name:"login",description:yv$()?"Switch Anthropic accounts":"Sign in with your Anthropic account",load:()=>null};"#,
+            r#" var y={type:"local-jsx",name:"terminal-setup",description:M6==="Apple"?"Enable Option key":"Install Shift key",load:()=>null};"#,
         );
         std::fs::write(&js_path, content).unwrap();
 
@@ -1284,8 +1307,8 @@ mod tests {
         // Name exists but description is a bare variable reference (no quoted strings nearby).
         // Include a standard-pattern command (with object boundary) so content passes is_claude_content.
         let content = concat!(
-            r#"var z={name:"review",description:"Review code"};"#,
-            r#"var x={name:"fast",get description(){return someVar},load:()=>null}"#,
+            r#"var z={type:"local",name:"review",description:"Review code"};"#,
+            r#"var x={type:"local",name:"fast",get description(){return someVar},load:()=>null}"#,
         );
         std::fs::write(&js_path, content).unwrap();
 
@@ -1312,7 +1335,7 @@ mod tests {
 
         let content = concat!(
             r#"var a={name:"foo",type:"local",load:()=>null};"#,
-            r#"var b={name:"bar",description:"Bar description",load:()=>null};"#,
+            r#"var b={type:"local",name:"bar",description:"Bar description",load:()=>null};"#,
         );
         std::fs::write(&js_path, content).unwrap();
 
@@ -1330,6 +1353,74 @@ mod tests {
 
         assert_eq!(foo_desc, "", "/foo should not steal /bar's description");
         assert_eq!(bar_desc, "Bar description", "/bar should keep its own description");
+    }
+
+    #[test]
+    fn discover_builtin_rejects_non_command_names() {
+        // highlight.js languages, signals, HTML elements — all lack type:"prompt/local/local-jsx"
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"var real={type:"prompt",name:"commit",description:"Create a git commit"}; "#,
+            r#"{name:"Python",value:"python"}; "#,
+            r#"{name:"SIGABRT",number:6,action:"core",description:"Aborted",standard:"ansi"}; "#,
+            r#"NK({tag:"div",name:"HTMLDivElement",ctor:function($,q,K){i_.call(this,$,q,K)}})"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(names.contains(&"/commit"), "real command should be found");
+        assert!(!names.contains(&"/Python"), "highlight.js language should be filtered");
+        assert!(!names.contains(&"/SIGABRT"), "signal should be filtered");
+        assert!(!names.contains(&"/HTMLDivElement"), "HTML element should be filtered");
+    }
+
+    #[test]
+    fn discover_builtin_filters_hidden_commands() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"var a={type:"local",name:"heapdump",description:"Dump the JS heap",isHidden:!0,load:()=>null};"#,
+            r#"var b={type:"local-jsx",name:"help",description:"Show help",load:()=>null};"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(!names.contains(&"/heapdump"), "isHidden:!0 command should be filtered");
+        assert!(names.contains(&"/help"), "visible command should be kept");
+    }
+
+    #[test]
+    fn discover_builtin_filters_mcp_template_names() {
+        let dir = tempfile::tempdir().unwrap();
+        let js_path = dir.path().join("cli.js");
+
+        let content = concat!(
+            r#"var a={type:"prompt",name:"mcp__",description:"MCP prompt"}; "#,
+            r#"var b={type:"local-jsx",name:"mcp",description:"Manage MCP servers"};"#,
+        );
+        std::fs::write(&js_path, content).unwrap();
+
+        let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
+        let commands = result.unwrap();
+        let names: Vec<&str> = commands.iter()
+            .filter_map(|c| c["cmd"].as_str())
+            .collect();
+
+        assert!(!names.contains(&"/mcp__"), "MCP template fragment should be filtered");
+        assert!(names.contains(&"/mcp"), "real /mcp command should be kept");
     }
 
     // --- discover_settings_schema_sync tests ---
