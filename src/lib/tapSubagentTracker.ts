@@ -54,6 +54,16 @@ export class TapSubagentTracker {
     return this.pendingSpawns.length > 0 || this.sidechainActive || this.hasActiveAgents();
   }
 
+  /** Whether a sidechain (subagent) conversation is currently active. */
+  isSidechainActive(): boolean {
+    return this.sidechainActive;
+  }
+
+  /** The agent ID of the most recently active subagent, or null. */
+  getLastActiveAgentId(): string | null {
+    return this.lastActiveAgent;
+  }
+
   /** Mark all active subagents with the given state, returning update actions. */
   private markAllActive(targetState: SessionState): SubagentAction[] {
     const actions: SubagentAction[] = [];

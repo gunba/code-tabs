@@ -11,6 +11,7 @@ import { useTapPipeline } from "../../hooks/useTapPipeline";
 import { useTapEventProcessor } from "../../hooks/useTapEventProcessor";
 import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill, registerPtyHandleId, unregisterPtyHandleId, writeToPty } from "../../lib/ptyRegistry";
 import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader, registerTerminal, unregisterTerminal, registerScrollToLine, unregisterScrollToLine } from "../../lib/terminalRegistry";
+import { useFileWatcher } from "../../hooks/useFileWatcher";
 import { useSettingsStore } from "../../store/settings";
 import { IconSearch } from "../Icons/Icons";
 import { normalizePath } from "../../lib/paths";
@@ -115,6 +116,13 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // Tap event processor: sole source of state, metadata, subagent data
   const tapProcessor = useTapEventProcessor(
     session.state !== "dead" ? session.id : null
+  );
+
+  // Filesystem watcher: kernel-level file change detection for activity panel
+  useFileWatcher(
+    session.state !== "dead" ? session.id : null,
+    session.config.workingDir ?? null,
+    session.state,
   );
 
   // Register inspector disconnect/reconnect callbacks for external debugger support
@@ -625,9 +633,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, session.id]);
 
-  // Re-fit terminal on OS wake / display power-off recovery.
-  // Re-fit terminal on OS wake / display power-off recovery.
-  // Clear WebGL texture atlas to fix GPU corruption after sleep (DF-07).
+  // [DF-07] Visibility change handler: clears texture atlas and redraws on OS wake / tab restore (fixes GPU corruption after sleep)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState !== "visible" || !visible) return;

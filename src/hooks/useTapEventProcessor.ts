@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/sessions";
+import { useActivityStore } from "../store/activity";
 import { tapEventBus } from "../lib/tapEventBus";
 import { reduceTapEvent, isCompletionEvent } from "../lib/tapStateReducer";
 import { TapMetadataAccumulator } from "../lib/tapMetadataAccumulator";
@@ -12,6 +13,7 @@ import { dlog } from "../lib/debugLog";
 import { getNoisyEventKinds } from "../lib/noisyEventKinds";
 import type { TapEvent } from "../types/tapEvents";
 import type { SessionState, PermissionMode } from "../types/session";
+import type { ToolInputDiffData } from "../types/activity";
 
 
 /** Return discriminating fields for key event types (for debug logs). */
@@ -84,6 +86,7 @@ export function useTapEventProcessor(
     metaAccRef.current = metaAcc;
     subTrackerRef.current = subTracker;
     stateRef.current = "starting";
+    let activityTurnCounter = 0;
     setCompletionCount(0);
     setClaudeSessionId(null);
     setUserPrompt(null);
@@ -185,7 +188,85 @@ export function useTapEventProcessor(
         });
       }
 
-      // 5. Session-level signals
+      // 5. Activity tracking — file change events for the Activity Panel
+      {
+        const activityStore = useActivityStore.getState();
+        const isSidechain = subTracker.isSidechainActive?.() ?? false;
+        const agentId = isSidechain ? (subTracker.getLastActiveAgentId?.() ?? null) : null;
+
+        if (event.kind === "TurnStart" && !isSidechain) {
+          activityTurnCounter++;
+          activityStore.startTurn(sid, `turn-${activityTurnCounter}`);
+        }
+
+        if (event.kind === "TurnEnd" && event.stopReason === "end_turn" && !isSidechain) {
+          activityStore.endTurn(sid);
+        }
+
+        if (event.kind === "ToolInput") {
+          const filePath = event.input.file_path;
+          if (typeof filePath === "string") {
+            const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+            const workDir = session?.config.workingDir ?? "";
+            const isExternal = workDir ? !normalizePath(filePath).startsWith(workDir) : false;
+
+            if (event.toolName === "Read") {
+              activityStore.addFileActivity(sid, filePath, "read", {
+                agentId,
+                toolName: "Read",
+                isExternal,
+              });
+            } else if (event.toolName === "Write") {
+              const toolInputData: ToolInputDiffData = {
+                type: "write",
+                content: String(event.input.content ?? ""),
+              };
+              activityStore.addFileActivity(sid, filePath, "modified", {
+                agentId,
+                toolName: "Write",
+                isExternal,
+                toolInputData,
+              });
+            } else if (event.toolName === "Edit") {
+              const toolInputData: ToolInputDiffData = {
+                type: "edit",
+                oldString: String(event.input.old_string ?? ""),
+                newString: String(event.input.new_string ?? ""),
+              };
+              activityStore.addFileActivity(sid, filePath, "modified", {
+                agentId,
+                toolName: "Edit",
+                isExternal,
+                toolInputData,
+              });
+            }
+
+            // Expand watcher for external paths
+            if (isExternal) {
+              invoke("add_watch_path", { sessionId: sid, path: filePath }).catch(() => {});
+            }
+          }
+        }
+
+        if (event.kind === "PermissionRejected") {
+          const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+          const lastAction = session?.metadata.currentAction ?? "";
+          const pathMatch = lastAction.match(/:\s*(.+)/);
+          if (pathMatch) {
+            activityStore.markPermissionDenied(sid, pathMatch[1].trim());
+          }
+        }
+
+        if (event.kind === "InstructionsLoadedEvent") {
+          activityStore.addContextFile(sid, {
+            path: event.filePath,
+            memoryType: event.memoryType,
+            loadReason: event.loadReason,
+          });
+        }
+      }
+
+      // 6. Session-level signals
       // [SS-01] [SS-02] Detect session switches via sid field change (plan-mode fork, /resume, compaction)
       // Gate behind isSubagentInFlight: subagent session init records arrive through TAP
       // before the first sidechain ConversationMessage, so sidechainActive alone is insufficient.

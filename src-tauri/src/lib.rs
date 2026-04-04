@@ -1,4 +1,5 @@
 mod commands;
+mod file_watcher;
 mod output_filter;
 mod path_utils;
 mod proxy;
@@ -11,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 
+use file_watcher::FileWatcherState;
 use proxy::ProxyState;
 use session::SessionManager;
 use tap_server::TapServerState;
@@ -132,6 +134,7 @@ pub fn run() {
         .manage(Arc::new(Mutex::new(TapServerState::new())))
         .manage(pty::PtyState::default())
         .manage(ProxyState::new())
+        .manage(FileWatcherState::new())
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
             commands::close_session,
@@ -184,8 +187,11 @@ pub fn run() {
             commands::resolve_api_host,
             commands::dir_exists,
             commands::git_repo_check,
-            commands::git_status,
-            commands::git_diff_file,
+            commands::start_file_watcher,
+            commands::stop_file_watcher,
+            commands::add_watch_path,
+            commands::compute_file_diff,
+            commands::read_file_for_snapshot,
             tap_server::start_tap_server,
             tap_server::stop_tap_server,
             proxy::start_api_proxy,
@@ -221,6 +227,9 @@ pub fn run() {
                     }
                     s.port = None;
                 }
+                // Stop all file watchers
+                let fw_state = app_handle.state::<FileWatcherState>();
+                fw_state.stop_all();
                 // Stop all TCP tap server threads
                 let tap_state = app_handle.state::<Arc<Mutex<TapServerState>>>();
                 if let Ok(mut s) = tap_state.lock() {

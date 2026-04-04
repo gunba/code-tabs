@@ -11,12 +11,10 @@ import {
   IconWarning, IconHook, IconCircleFilled, IconCircleOutline,
   IconGitBranch,
 } from "../Icons/Icons";
-import { useGitStatus } from "../../hooks/useGitStatus";
+import { useActivityStore } from "../../store/activity";
 import type { Session, PermissionMode } from "../../types/session";
-import type { GitStatusData } from "../../types/git";
 import { isSessionIdle } from "../../types/session";
 import { getEffectiveState } from "../../lib/claude";
-import { useStabilizedValue } from "../../lib/stabilizer";
 import "./StatusBar.css";
 
 function formatDuration(secs: number): string {
@@ -57,10 +55,8 @@ function permissionIcon(mode: PermissionMode): { icon: React.ReactNode; tip: str
 
 function SessionStatus({
   session,
-  gitStatus,
 }: {
   session: Session;
-  gitStatus: GitStatusData | null;
 }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
@@ -71,9 +67,8 @@ function SessionStatus({
   const wt = parseWorktreePath(session.config.workingDir);
   const effort = session.metadata.effortLevel ?? session.config.effort;
 
-  // Branch stabilization: accept first value immediately, then debounce
-  // subsequent changes (requires 2+ consecutive matching polls).
-  const stableBranch = useStabilizedValue(gitStatus?.branch ?? null, 2);
+  // Branch: from worktreeInfo metadata (set via WorktreeState TAP event)
+  const branch = session.metadata.worktreeInfo?.worktreeBranch ?? null;
 
   // Resolve 5h/7d data: prefer API response headers, fall back to statusLine
   const m = session.metadata;
@@ -194,15 +189,9 @@ function SessionStatus({
             {worktreeAcronym(wt.worktreeName)}
           </span>
         )}
-        {stableBranch && (
-          <span className="status-item status-branch" title={`Branch: ${stableBranch}`}>
-            <IconGitBranch size={12} /> {stableBranch}
-          </span>
-        )}
-        {((gitStatus?.totalInsertions ?? 0) > 0 || (gitStatus?.totalDeletions ?? 0) > 0) && (
-          <span className="status-item status-lines" title="Git changes (staged + unstaged)">
-            <span style={{ color: "var(--success)" }}>+{gitStatus!.totalInsertions}</span>
-            <span style={{ color: "var(--error)" }}>-{gitStatus!.totalDeletions}</span>
+        {branch && (
+          <span className="status-item status-branch" title={`Branch: ${branch}`}>
+            <IconGitBranch size={12} /> {branch}
           </span>
         )}
         {session.metadata.lastToolDurationMs != null && session.state === "toolUse" && (
@@ -295,9 +284,10 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const sidePanel = useSettingsStore((s) => s.sidePanel);
   const setSidePanel = useSettingsStore((s) => s.setSidePanel);
 
-  const { isGitRepo, status: gitStatus } = useGitStatus(activeSession?.config.workingDir ?? null, true);
-  const hasChanges = gitStatus != null &&
-    (gitStatus.staged.length + gitStatus.unstaged.length + gitStatus.untracked.length) > 0;
+  const activitySessions = useActivityStore((s) => s.sessions);
+  const activityStats = activeSession ? activitySessions[activeSession.id]?.stats : null;
+  const hasChanges = activityStats != null &&
+    (activityStats.filesModified + activityStats.filesCreated + activityStats.filesDeleted) > 0;
 
   useEffect(() => {
     const dirs = sessions
@@ -339,19 +329,22 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   return (
     <div className="status-bar">
       {activeSession ? (
-        <SessionStatus session={activeSession} gitStatus={gitStatus} />
+        <SessionStatus session={activeSession} />
       ) : (
         <span className="status-empty">No active session</span>
       )}
       {/* Far-right action buttons — always visible */}
       <div className="status-actions">
-        {isGitRepo && hasChanges && (
+        {hasChanges && (
           <button
-            className={`status-item status-hooks-btn${sidePanel === "diff" ? " status-active-btn" : ""}`}
-            onClick={() => setSidePanel(sidePanel === "diff" ? null : "diff")}
-            title="Git changes (Ctrl+Shift+G)"
+            className={`status-item status-hooks-btn${sidePanel === "activity" ? " status-active-btn" : ""}`}
+            onClick={() => setSidePanel(sidePanel === "activity" ? null : "activity")}
+            title="File activity (Ctrl+Shift+G)"
           >
-            <IconGitBranch size={12} /> Changes
+            {activityStats!.filesModified > 0 && <span style={{ color: "var(--accent)" }}>{activityStats!.filesModified}M</span>}
+            {activityStats!.filesCreated > 0 && <span style={{ color: "var(--success, #5cb85c)" }}>{activityStats!.filesCreated}C</span>}
+            {activityStats!.filesDeleted > 0 && <span style={{ color: "var(--error, #d84b4b)" }}>{activityStats!.filesDeleted}D</span>}
+            {" "}Activity
           </button>
         )}
         {activeSession?.metadata.capturedSystemPrompt && onOpenContextViewer && (

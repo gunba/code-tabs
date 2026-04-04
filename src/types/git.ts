@@ -1,4 +1,4 @@
-// Git status and diff types — mirrors raw git output parsed by src/lib/diffParser.ts
+// Git and diff rendering types
 
 export type GitStatusCode = "M" | "A" | "D" | "R" | "C" | "U" | "?" | "!";
 
@@ -8,15 +8,6 @@ export interface GitFileEntry {
   oldPath: string | null;
   insertions: number;
   deletions: number;
-}
-
-export interface GitStatusData {
-  staged: GitFileEntry[];
-  unstaged: GitFileEntry[];
-  untracked: GitFileEntry[];
-  branch: string | null;
-  totalInsertions: number;
-  totalDeletions: number;
 }
 
 export interface DiffLine {
@@ -49,10 +40,4 @@ export interface SideBySideRow {
   type: "paired" | "separator";
   left: { lineNo: number; content: string; kind: "del" | "context" } | null;
   right: { lineNo: number; content: string; kind: "add" | "context" } | null;
-}
-
-export interface GitStatusRaw {
-  porcelain: string;
-  numstat: string;
-  numstatStaged: string;
 }

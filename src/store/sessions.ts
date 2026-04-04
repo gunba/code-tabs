@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { trace, traceAsync } from "../lib/perfTrace";
 import { assignSessionColor, releaseSessionColor, findNearestLiveTab } from "../lib/claude";
+import { useActivityStore } from "./activity";
 import { dlog } from "../lib/debugLog";
 import type {
   Session,
@@ -206,6 +207,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
       processHealth.delete(id);
       return { sessions, activeTabId, subagents, skillInvocations, commandHistory, inspectorOffSessions, trafficRecording, processHealth };
     });
+    useActivityStore.getState().clearSession(id);
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();
     // Notify backend (best-effort, fire-and-forget)

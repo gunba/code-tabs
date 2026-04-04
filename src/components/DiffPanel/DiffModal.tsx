@@ -89,7 +89,7 @@ function highlightLine(content: string, language: string | null): string {
 export interface DiffModalFile {
   key: string;
   file: GitFileEntry;
-  section: "staged" | "unstaged" | "untracked";
+  section?: string;
 }
 
 interface DiffModalProps {
