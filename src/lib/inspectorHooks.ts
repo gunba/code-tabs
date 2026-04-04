@@ -576,8 +576,10 @@ export const INSTALL_TAPS = `(function() {
               push('system-prompt', { text: sysText, model: value.model, msgCount: value.messages.length, blocks: sysBlocks, messages: msgs });
             }
           }
-          // Detect status line payload — push full data bypassing 2000-char snap truncation
-          if (value && value.hook_event_name === 'Status') {
+          // Detect status line payload — push full data bypassing 2000-char snap truncation.
+          // Match StatusLineCommandInput shape: has cost.total_cost_usd + context_window + session_id.
+          if (value && value.session_id && value.cost && typeof value.cost.total_cost_usd === 'number'
+              && value.context_window && typeof value.context_window.total_input_tokens === 'number') {
             var m = value.model || {};
             var c = value.cost || {};
             var cw = value.context_window || {};

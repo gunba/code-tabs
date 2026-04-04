@@ -241,7 +241,7 @@ function SessionStatus({
         )}
         {(() => {
           // [SI-25] Prefer cumulative totals from the Status hook snapshot;
-          // fall back to ApiTelemetry aggregates when unavailable.
+          // fall back to session metadata totals when unavailable.
           const totalIn = session.metadata.statusLine?.totalInputTokens ?? session.metadata.inputTokens;
           const totalOut = session.metadata.statusLine?.totalOutputTokens ?? session.metadata.outputTokens;
           const total = totalIn + totalOut;

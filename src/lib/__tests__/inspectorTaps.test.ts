@@ -431,8 +431,8 @@ describe("INSTALL_TAPS status-line capture", () => {
     const g = globalThis as unknown as Record<string, unknown>;
     (g.__tapFlags as Record<string, boolean>).stringify = true;
     mockTapWrites = [];
+    // StatusLineCommandInput shape: session_id + cost.total_cost_usd + context_window.total_input_tokens
     JSON.stringify({
-      hook_event_name: "Status",
       session_id: "abc123",
       cwd: "/test",
       model: { id: "claude-opus-4-6[1m]", display_name: "Opus 4.6" },
@@ -464,9 +464,10 @@ describe("INSTALL_TAPS status-line capture", () => {
     (g.__tapFlags as Record<string, boolean>).stringify = true;
     mockTapWrites = [];
     JSON.stringify({
-      hook_event_name: "Status",
       session_id: "def456",
       model: "claude-sonnet-4-6",
+      cost: { total_cost_usd: 0 },
+      context_window: { total_input_tokens: 0 },
     });
     await new Promise<void>((r) => queueMicrotask(r));
     const entries = collectTapEntries();

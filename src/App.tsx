@@ -389,7 +389,7 @@ export default function App() {
               if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
               if (wt) metaSpans.push({ text: worktreeAcronym(wt.worktreeName), color: "var(--accent-tertiary)", title: wt.worktreeName });
               // [SI-25] When Status hook data exists, surface the current
-              // context footprint in the tab meta row.
+              // context footprint in the tab meta row. Fall back to contextDebug (SSE-derived).
               const sl = session.metadata.statusLine;
               if (sl) {
                 const totalCtx = sl.cacheCreationInputTokens + sl.cacheReadInputTokens + sl.currentInputTokens;
@@ -398,6 +398,15 @@ export default function App() {
                     text: formatTokenCount(totalCtx),
                     color: "var(--text-muted)",
                     title: `Context: ${sl.currentInputTokens.toLocaleString()} input + ${sl.cacheReadInputTokens.toLocaleString()} cache read + ${sl.cacheCreationInputTokens.toLocaleString()} cache write`,
+                  });
+                }
+              } else if (session.metadata.contextDebug) {
+                const dbg = session.metadata.contextDebug;
+                if (dbg.totalContextTokens > 0) {
+                  metaSpans.push({
+                    text: formatTokenCount(dbg.totalContextTokens),
+                    color: "var(--text-muted)",
+                    title: `Context: ${dbg.inputTokens.toLocaleString()} input + ${dbg.cacheRead.toLocaleString()} cache read + ${dbg.cacheCreation.toLocaleString()} cache write`,
                   });
                 }
               }

@@ -11,7 +11,8 @@ describe("TapMetadataAccumulator", () => {
       queryChainId: null, queryDepth: 0, stopReason: null,
     });
     expect(diff1?.costUsd).toBe(0.01);
-    expect(diff1?.inputTokens).toBe(300); // 100 + 200 cached
+    // Token accumulation is now from TurnEnd (SSE), not ApiTelemetry
+    expect(diff1?.inputTokens).toBe(0);
 
     const diff2 = acc.process({
       kind: "ApiTelemetry", ts: 1, model: "opus", costUSD: 0.02,
@@ -20,7 +21,34 @@ describe("TapMetadataAccumulator", () => {
       queryChainId: null, queryDepth: 0, stopReason: null,
     });
     expect(diff2?.costUsd).toBe(0.03); // accumulated
-    expect(diff2?.outputTokens).toBe(75); // 50 + 25
+    expect(diff2?.outputTokens).toBe(0); // not from ApiTelemetry anymore
+  });
+
+  it("accumulates session tokens from TurnStart/TurnEnd (SSE)", () => {
+    const acc = new TapMetadataAccumulator();
+
+    // Turn 1: TurnStart captures per-turn tokens
+    acc.process({
+      kind: "TurnStart", ts: 0, model: "opus",
+      inputTokens: 1000, outputTokens: 0, cacheRead: 5000, cacheCreation: 2000,
+    });
+    // TurnEnd accumulates session totals
+    const diff1 = acc.process({
+      kind: "TurnEnd", ts: 1, stopReason: "end_turn", outputTokens: 500,
+    });
+    expect(diff1?.inputTokens).toBe(8000); // 1000 + 5000 + 2000
+    expect(diff1?.outputTokens).toBe(500);
+
+    // Turn 2: more tokens
+    acc.process({
+      kind: "TurnStart", ts: 2, model: "opus",
+      inputTokens: 2000, outputTokens: 0, cacheRead: 6000, cacheCreation: 100,
+    });
+    const diff2 = acc.process({
+      kind: "TurnEnd", ts: 3, stopReason: "end_turn", outputTokens: 300,
+    });
+    expect(diff2?.inputTokens).toBe(16100); // 8000 + 2000 + 6000 + 100
+    expect(diff2?.outputTokens).toBe(800); // 500 + 300
   });
 
   it("sets runtimeModel from TurnStart", () => {
