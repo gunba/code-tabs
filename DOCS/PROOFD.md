@@ -62,6 +62,7 @@ Generate and audit:
 python tools/proofd.py sync
 python tools/proofd.py lint
 python tools/proofd.py context src/components/ConfigManager/ConfigManager.tsx
+python tools/proofd.py entry-files --tag CI-01
 ```
 
 Mutate rules without editing markdown:
@@ -70,6 +71,7 @@ Mutate rules without editing markdown:
 python tools/proofd.py create-rule --title "Foo" --paths "src/foo/**"
 python tools/proofd.py add-entry --rule foo --statement "Foo does bar" --files "src/foo/index.ts"
 python tools/proofd.py update-entry --tag FO-01 --statement "Updated text"
+python tools/proofd.py entry-files --tag FO-01
 python tools/proofd.py delete-entry --tag FO-02
 python tools/proofd.py split-rule --rule foo --new-title "Foo Advanced" --tags FO-03,FO-04
 python tools/proofd.py record-verification --tag FO-01 --status confirmed --files "src/foo/index.ts"
@@ -84,9 +86,8 @@ Generated rule files include:
 
 - Rule title
 - Stable tag statements
-- Source file anchors
 
-They intentionally omit verification telemetry and long historical notes.
+They intentionally omit verification telemetry, `Files:` lines, and long historical notes. Query anchors on demand with `proofd entry-files --tag <TAG>`.
 
 ## MCP
 
@@ -99,6 +100,7 @@ python tools/proofd.py mcp
 Current tools:
 
 - `proofd_context`
+- `proofd_entry_files`
 - `proofd_create_rule`
 - `proofd_add_entry`
 - `proofd_update_entry`

@@ -363,9 +363,18 @@ def parse_rule_markdown(path: pathlib.Path) -> dict[str, Any]:
     summary_lines: list[str] = []
     entries: list[dict[str, Any]] = []
     current_entry: dict[str, Any] | None = None
+    in_fenced_detail = False
 
     for index, line in enumerate(lines):
         if index <= title_index:
+            continue
+        stripped = line.strip()
+        if current_entry and stripped.startswith("```"):
+            current_entry["details"].append(stripped)
+            in_fenced_detail = not in_fenced_detail
+            continue
+        if current_entry and in_fenced_detail:
+            current_entry["details"].append(line.rstrip())
             continue
         entry_match = ENTRY_RE.match(line)
         if entry_match:
@@ -1072,7 +1081,7 @@ class ProofStore:
             "tag_id": tag_id,
             "statement": statement.strip(),
             "anchors": [{"path": normalize_anchor_path(file_path)} for file_path in files],
-            "details": details or ([] if not files else [f"Files: {', '.join(normalize_anchor_path(file_path) for file_path in files)}"]),
+            "details": details or [],
             "notes": [],
             "prefix": tag_id.split("-", 1)[0],
         }
@@ -1103,11 +1112,26 @@ class ProofStore:
             normalized_files = [normalize_anchor_path(file_path) for file_path in files]
             mutable_entry["anchors"] = [{"path": file_path} for file_path in normalized_files]
             if details is None:
-                mutable_entry["details"] = [f"Files: {', '.join(normalized_files)}"] if normalized_files else []
+                mutable_entry["details"] = [
+                    detail for detail in mutable_entry.get("details", [])
+                    if not detail.lower().startswith("files:")
+                ]
         if details is not None:
             mutable_entry["details"] = details
         self.save_rule(rule, layer=layer, branch=branch)
         return rule, mutable_entry
+
+    def entry_files(self, tag_id: str, branch: str | None = None) -> dict[str, Any]:
+        branch = branch or current_branch(self.repo_root)
+        rule, entry = self.find_entry(tag_id, branch=branch)
+        anchors = [anchor["path"] for anchor in entry.get("anchors", []) if anchor.get("path")]
+        source_hits = self.scan_source_tags().get(tag_id, [])
+        return {
+            "tag_id": tag_id,
+            "rule_id": rule["rule_id"],
+            "files": anchors,
+            "source_hits": source_hits,
+        }
 
     def delete_entry(
         self,
@@ -1402,8 +1426,6 @@ class ProofStore:
                 if imported_meta.get("files") and not entry.get("anchors"):
                     normalized_files = [normalize_anchor_path(file_path) for file_path in imported_meta["files"]]
                     entry["anchors"] = [{"path": file_path} for file_path in normalized_files]
-                    if not entry.get("details"):
-                        entry["details"] = [f"Files: {', '.join(normalized_files)}"]
                 counts = citations.get(tag_id, {})
                 self.upsert_tag_stats(
                     tag_id,
@@ -1502,9 +1524,6 @@ class ProofStore:
                 non_file_details = [detail for detail in entry.get("details", []) if not detail.lower().startswith("files:")]
                 for detail in non_file_details:
                     lines.append(f"  - {detail}")
-                anchor_paths = [anchor["path"] for anchor in entry.get("anchors", []) if anchor.get("path")]
-                if anchor_paths:
-                    lines.append(f"  - Files: {', '.join(anchor_paths)}")
         else:
             lines.append("")
             lines.append("_No entries yet._")
@@ -1683,6 +1702,9 @@ class ProofStore:
                 anchors = [anchor["path"] for anchor in entry.get("anchors", []) if anchor.get("path")]
                 if not anchors and tag_id not in source_hits:
                     warnings.append(f"UNANCHORED ENTRY: {tag_id} in {rule['rule_id']} has no anchors and no source-code tag hit")
+                non_file_details = [detail for detail in entry.get("details", []) if not detail.lower().startswith("files:")]
+                if entry.get("statement", "").strip().endswith(":") and not non_file_details:
+                    warnings.append(f"SUSPICIOUS ENTRY: {tag_id} in {rule['rule_id']} ends with ':' but has no supporting details")
 
         for tag_id, paths in sorted(source_hits.items()):
             if tag_id not in entries_by_tag:
@@ -1790,6 +1812,11 @@ def build_parser() -> argparse.ArgumentParser:
     context_parser.add_argument("paths", nargs="+")
     context_parser.add_argument("--branch", default=None)
     context_parser.add_argument("--format", choices=["markdown", "json"], default="markdown")
+
+    entry_files_parser = subparsers.add_parser("entry-files")
+    entry_files_parser.add_argument("--tag", required=True)
+    entry_files_parser.add_argument("--branch", default=None)
+    entry_files_parser.add_argument("--format", choices=["markdown", "json"], default="markdown")
 
     select_parser = subparsers.add_parser("select-matching")
     select_parser.add_argument("paths", nargs="+")
@@ -1948,6 +1975,23 @@ def run_cli(args: argparse.Namespace) -> int:
             return 0
         if command == "context":
             print(store.context(args.paths, branch=args.branch, format_name=args.format), end="")
+            return 0
+        if command == "entry-files":
+            payload = store.entry_files(args.tag, branch=args.branch)
+            if args.format == "json":
+                print_json(payload)
+            else:
+                print(f"# Files for {payload['tag_id']} ({payload['rule_id']})")
+                if payload["files"]:
+                    for path in payload["files"]:
+                        print(path)
+                else:
+                    print("_No anchored files._")
+                if payload["source_hits"]:
+                    print("")
+                    print("## Source Tag Hits")
+                    for path in payload["source_hits"]:
+                        print(path)
             return 0
         if command == "select-matching":
             payload = store.select_matching(args.paths, batch_size=args.batch_size, branch=args.branch)
@@ -2111,6 +2155,15 @@ def mcp_tools() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "proofd_entry_files",
+            "description": "Return anchored files and source tag hits for one tag.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"tag": {"type": "string"}},
+                "required": ["tag"],
+            },
+        },
+        {
             "name": "proofd_add_entry",
             "description": "Add an entry to an existing rule. The tag is allocated centrally by proofd.",
             "inputSchema": {
@@ -2242,6 +2295,8 @@ def run_mcp_server(store: ProofStore, branch: str | None = None) -> int:
                 arguments = params.get("arguments", {})
                 if name == "proofd_context":
                     result_text = store.context(arguments.get("paths", []), branch=branch, format_name=arguments.get("format", "markdown"))
+                elif name == "proofd_entry_files":
+                    result_text = stable_json(store.entry_files(arguments["tag"], branch=branch))
                 elif name == "proofd_add_entry":
                     result_text = stable_json(
                         store.add_entry(
