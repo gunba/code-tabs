@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { trace, traceAsync } from "../lib/perfTrace";
 import { assignSessionColor, releaseSessionColor, findNearestLiveTab } from "../lib/claude";
 import { useActivityStore } from "./activity";
-import { dlog } from "../lib/debugLog";
+import { dlog, removeDebugLogSession } from "../lib/debugLog";
 import type {
   Session,
   SessionConfig,
@@ -208,6 +208,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
       return { sessions, activeTabId, subagents, skillInvocations, commandHistory, inspectorOffSessions, trafficRecording, processHealth };
     });
     useActivityStore.getState().clearSession(id);
+    removeDebugLogSession(id);
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();
     // Notify backend (best-effort, fire-and-forget)

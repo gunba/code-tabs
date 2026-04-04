@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from "../../store/sessions";
 import { sessionColor } from "../../lib/claude";
 import { dirToTabName } from "../../lib/paths";
-import { getDebugLog, getDebugLogGeneration, clearDebugLog, type DebugLogEntry } from "../../lib/debugLog";
+import { getDebugLog, getDebugLogForSession, getDebugLogGeneration, clearDebugLog, type DebugLogEntry } from "../../lib/debugLog";
 import { IconClose } from "../Icons/Icons";
 import "./DebugPanel.css";
 
@@ -44,6 +44,7 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
 
   // [DP-05] Poll getDebugLog() every 500ms — use generation counter to detect ring-buffer changes.
   // Skip update while user has active text selection in the panel to preserve highlight.
+  // Uses per-session fetch when a specific filter is active to avoid merge cost.
   useEffect(() => {
     const interval = setInterval(() => {
       const gen = getDebugLogGeneration();
@@ -53,11 +54,17 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
           return; // defer — user is selecting text
         }
         prevGenRef.current = gen;
-        setLogs([...getDebugLog()]);
+        if (sessionFilter === "all") {
+          setLogs(getDebugLog());
+        } else if (sessionFilter === "global") {
+          setLogs([...getDebugLogForSession(null)]);
+        } else {
+          setLogs([...getDebugLogForSession(sessionFilter)]);
+        }
       }
     }, 500);
     return () => clearInterval(interval);
-  }, []);
+  }, [sessionFilter]);
 
   // [DP-07] Auto-scroll to bottom on new entries (pauses if user scrolls up)
   useEffect(() => {
