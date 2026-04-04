@@ -18,6 +18,7 @@
     "notification:allow-request-permission",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
-    "core:window:allow-show"
+    "core:window:allow-show",
+    "core:window:allow-request-user-attention"
   ]
 }

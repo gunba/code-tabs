@@ -5,7 +5,8 @@ import {
 } from "@tauri-apps/plugin-notification";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
+import { dlog } from "../lib/debugLog";
 import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { isSessionIdle } from "../types/session";
@@ -26,6 +27,7 @@ export function useNotifications() {
   const permissionCheckedRef = useRef(false);
   const permissionGrantedRef = useRef(false);
   const lastNotifyRef = useRef<Record<string, number>>({});
+  const windowFocusedRef = useRef(true);
 
   // Check/request permission once on mount
   useEffect(() => {
@@ -55,6 +57,15 @@ export function useNotifications() {
       win.unminimize().then(() => win.show()).then(() => win.setFocus()).catch(() => {});
     });
 
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
+  // Track window focus for taskbar flash gating
+  useEffect(() => {
+    const win = getCurrentWindow();
+    const unlisten = win.onFocusChanged(({ payload: focused }) => {
+      windowFocusedRef.current = focused;
+    });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
@@ -109,6 +120,15 @@ export function useNotifications() {
         if (title && body) {
           lastNotifyRef.current[session.id] = now;
           invoke("send_notification", { title, body, sessionId: session.id });
+
+          // [WN-04] Flash OS taskbar when window is not focused
+          // [DR-08] Record notification-attention flashes in structured debug logs.
+          if (!windowFocusedRef.current) {
+            dlog("notify", session.id, `taskbar flash: ${effState}`);
+            getCurrentWindow()
+              .requestUserAttention(UserAttentionType.Informational)
+              .catch(() => {});
+          }
         }
       }
 
