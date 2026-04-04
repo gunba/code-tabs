@@ -4,12 +4,13 @@ import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
 import { formatTokenCount } from "../../lib/claude";
 import { buildMainTabEntries, buildSubagentTabs } from "../../lib/contextProjection";
 import type { UnifiedEntry, SubagentTab } from "../../lib/contextProjection";
-import type { SessionMetadata, SystemPromptBlock, CapturedContentBlock } from "../../types/session";
+import type { SessionMetadata, SystemPromptBlock, CapturedContentBlock, Subagent, SubagentMessage } from "../../types/session";
 import { IconClose } from "../Icons/Icons";
 import "./ContextViewer.css";
 
 interface ContextViewerProps {
   metadata: SessionMetadata;
+  subagents?: Subagent[];
   onClose: () => void;
 }
 
@@ -118,10 +119,56 @@ function MessageEntry({ message, index, expanded, onToggle }: {
   );
 }
 
+// ── Subagent conversation message renderer ─────────────
+
+function SubagentMessageEntry({ msg, expanded, onToggle }: {
+  msg: SubagentMessage;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  if (msg.role === "assistant") {
+    const preview = msg.text.slice(0, 120);
+    return (
+      <div className="context-entry">
+        <button className="context-entry-header" onClick={onToggle}>
+          <span className="context-entry-role context-role-assistant">assistant</span>
+          <span className="context-entry-meta">{msg.text.length.toLocaleString()} chars</span>
+          {!expanded && <span className="context-entry-preview">{preview}{preview.length >= 120 ? "..." : ""}</span>}
+          <span className="context-entry-chevron">{expanded ? "\u25BC" : "\u25B6"}</span>
+        </button>
+        {expanded && (
+          <div className="context-entry-body">
+            <pre className="context-block-text">{msg.text}</pre>
+          </div>
+        )}
+      </div>
+    );
+  }
+  // Tool message
+  const toolLabel = msg.toolName || "tool";
+  const preview = msg.text.slice(0, 120);
+  return (
+    <div className="context-entry">
+      <button className="context-entry-header" onClick={onToggle}>
+        <span className="context-tool-badge">{toolLabel}</span>
+        <span className="context-entry-meta">{msg.text.length.toLocaleString()} chars</span>
+        {!expanded && <span className="context-entry-preview">{preview}{preview.length >= 120 ? "..." : ""}</span>}
+        <span className="context-entry-chevron">{expanded ? "\u25BC" : "\u25B6"}</span>
+      </button>
+      {expanded && (
+        <div className="context-entry-body">
+          <pre className="context-tool-preview">{msg.text}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Subagent tab content ────────────────────────────────
 
-function SubagentTabContent({ tab, expandedSet, onToggle }: {
+function SubagentTabContent({ tab, messages, expandedSet, onToggle }: {
   tab: SubagentTab;
+  messages?: SubagentMessage[];
   expandedSet: Set<string>;
   onToggle: (key: string) => void;
 }) {
@@ -145,6 +192,27 @@ function SubagentTabContent({ tab, expandedSet, onToggle }: {
           </div>
         )}
       </div>
+
+      {/* Subagent conversation from TAP sidechain data */}
+      {messages && messages.length > 0 && (
+        <>
+          <div className="context-subagent-conversation-header">
+            <span className="context-entry-meta">{messages.length} sidechain messages</span>
+          </div>
+          {messages.map((msg, i) => {
+            const msgKey = `${tab.id}:msg-${i}`;
+            return (
+              <SubagentMessageEntry
+                key={msgKey}
+                msg={msg}
+                expanded={expandedSet.has(msgKey)}
+                onToggle={() => onToggle(msgKey)}
+              />
+            );
+          })}
+        </>
+      )}
+
       {tab.resultText != null ? (
         <div className="context-entry">
           <button className="context-entry-header" onClick={() => onToggle(resultKey)}>
@@ -170,7 +238,7 @@ function SubagentTabContent({ tab, expandedSet, onToggle }: {
 
 // ── Main component ──────────────────────────────────────
 
-export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
+export function ContextViewer({ metadata, subagents, onClose }: ContextViewerProps) {
   const blocks = metadata.capturedSystemBlocks;
   const text = metadata.capturedSystemPrompt;
   const messages = metadata.capturedMessages;
@@ -197,6 +265,18 @@ export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
     [messages],
   );
 
+  // Build a map from subagent tab id to its sidechain messages
+  const subagentMessageMap = useMemo(() => {
+    const map = new Map<string, SubagentMessage[]>();
+    if (!subagents) return map;
+    for (const sub of subagents) {
+      if (sub.messages.length > 0) {
+        map.set(sub.id, sub.messages);
+      }
+    }
+    return map;
+  }, [subagents]);
+
   // Ensure activeTab is valid
   const validTab = activeTab === "main" || subagentTabs.some(t => t.id === activeTab)
     ? activeTab
@@ -212,9 +292,13 @@ export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
     const tab = subagentTabs.find(t => t.id === validTab);
     if (!tab) return [];
     const keys = [`${tab.id}:prompt`];
+    const msgs = subagentMessageMap.get(tab.id);
+    if (msgs) {
+      for (let i = 0; i < msgs.length; i++) keys.push(`${tab.id}:msg-${i}`);
+    }
     if (tab.resultText != null) keys.push(`${tab.id}:result`);
     return keys;
-  }, [validTab, mainEntries, subagentTabs]);
+  }, [validTab, mainEntries, subagentTabs, subagentMessageMap]);
 
   const allExpanded = currentKeys.length > 0 && currentKeys.every(k => expandedSet.has(k));
 
@@ -361,6 +445,7 @@ export function ContextViewer({ metadata, onClose }: ContextViewerProps) {
               return tab ? (
                 <SubagentTabContent
                   tab={tab}
+                  messages={subagentMessageMap.get(tab.id)}
                   expandedSet={expandedSet}
                   onToggle={toggleEntry}
                 />

@@ -101,7 +101,21 @@ export class TapSubagentTracker {
 
       case "ConversationMessage": {
         // Track sidechain state for routing non-ConversationMessage events
+        const wasSidechain = this.sidechainActive;
         this.sidechainActive = event.isSidechain;
+        // [IN-30] Sidechain-exit fallback: if sidechain just ended and last active agent is still active,
+        // the parent is continuing so the subagent must have finished — mark idle immediately.
+        if (wasSidechain && !event.isSidechain && this.lastActiveAgent) {
+          const lastState = this.agentStates.get(this.lastActiveAgent);
+          if (lastState && isSubagentActive(lastState)) {
+            dlog("inspector", this.parentSessionId, `sidechain exit fallback: ${this.lastActiveAgent} ${lastState} → idle`, "DEBUG");
+            this.agentStates.set(this.lastActiveAgent, "idle");
+            actions.push({
+              type: "update", subagentId: this.lastActiveAgent,
+              updates: { state: "idle" as SessionState, currentToolName: null, currentAction: null, currentEventKind: null },
+            });
+          }
+        }
         // [IN-04] Subagent messages: isSidechain + agentId routing, late msg gating
         if (!event.isSidechain || !event.agentId) break;
 
@@ -190,8 +204,8 @@ export class TapSubagentTracker {
         // Accumulate messages
         const existing = this.subagentMsgs.get(agentId) || [];
         const allMsgs = [...existing, ...newMsgs];
-        const capped = allMsgs.length > 200 ? allMsgs.slice(-200) : allMsgs;
-        this.subagentMsgs.set(agentId, capped);
+
+        this.subagentMsgs.set(agentId, allMsgs);
 
         this.agentStates.set(agentId, state);
         actions.push({
@@ -200,7 +214,7 @@ export class TapSubagentTracker {
           updates: {
             state,
             currentAction: event.toolAction,
-            messages: capped,
+            messages: allMsgs,
           },
         });
         break;
@@ -333,21 +347,38 @@ export class TapSubagentTracker {
           event.input.command || event.input.file_path || event.input.pattern ||
           event.input.description || event.input.query || ""
         ).slice(0, 80);
-        actions.push({
-          type: "update", subagentId: tgt,
-          updates: { currentAction: `${event.toolName}: ${detail}` },
-        });
+
+        // Enrich the last tool message with structured input for rich rendering.
+        // Must create a new object (not mutate in place) so React.memo detects the change.
+        const existing = this.subagentMsgs.get(tgt) || [];
+        const lastIdx = existing.length - 1;
+        if (lastIdx >= 0 && existing[lastIdx].role === "tool" && !existing[lastIdx].toolInput && existing[lastIdx].toolName === event.toolName) {
+          const enriched = [...existing];
+          enriched[lastIdx] = { ...enriched[lastIdx], toolInput: event.input };
+          this.subagentMsgs.set(tgt, enriched);
+          actions.push({
+            type: "update", subagentId: tgt,
+            updates: { currentAction: `${event.toolName}: ${detail}`, messages: enriched },
+          });
+        } else {
+          actions.push({
+            type: "update", subagentId: tgt,
+            updates: { currentAction: `${event.toolName}: ${detail}` },
+          });
+        }
         break;
       }
 
+      // [IN-26] TurnEnd(end_turn) transitions active subagent to idle state
       case "TurnEnd": {
         if (!this.sidechainActive || !this.lastActiveAgent) break;
         const tgt = this.lastActiveAgent;
         if (!isSubagentActive(this.agentStates.get(tgt) ?? "dead")) break;
         if (event.stopReason === "end_turn") {
+          this.agentStates.set(tgt, "idle");
           actions.push({
             type: "update", subagentId: tgt,
-            updates: { currentToolName: null, currentAction: null, currentEventKind: "TurnEnd" },
+            updates: { state: "idle" as SessionState, currentToolName: null, currentAction: null, currentEventKind: "TurnEnd" },
           });
         }
         break;

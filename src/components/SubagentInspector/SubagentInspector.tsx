@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Subagent, SubagentMessage } from "../../types/session";
 import { isSubagentActive } from "../../types/session";
+import { splitFilePath } from "../../lib/diffParser";
 import "./SubagentInspector.css";
 
 interface SubagentInspectorProps {
@@ -13,6 +14,99 @@ function getToolPreview(text: string): string {
   const firstLine = text.split("\n").find(line => line.trim().length > 0) ?? "";
   const trimmed = firstLine.trim();
   return trimmed.length > 120 ? trimmed.slice(0, 120) + "\u2026" : trimmed;
+}
+
+// ── Tool-specific renderers ──
+
+function FileHeader({ toolName, filePath }: { toolName: string; filePath: string }) {
+  const { dir, name } = splitFilePath(filePath);
+  return (
+    <div className="inspector-tool-file-header">
+      <span className="inspector-tool-file-tool">{toolName}</span>
+      <span className="inspector-tool-file-path">
+        <span className="inspector-tool-file-dir">{dir}</span>
+        <span className="inspector-tool-file-name">{name}</span>
+      </span>
+    </div>
+  );
+}
+
+function EditRenderer({ msg }: { msg: SubagentMessage }) {
+  const input = msg.toolInput;
+  if (!input) return null;
+  const filePath = String(input.file_path || "");
+  const oldStr = String(input.old_string ?? "");
+  const newStr = String(input.new_string ?? "");
+  const oldLines = oldStr ? oldStr.replace(/\n$/, "").split("\n") : [];
+  const newLines = newStr ? newStr.replace(/\n$/, "").split("\n") : [];
+  const removed = oldLines.length;
+  const added = newLines.length;
+
+  return (
+    <div className="inspector-edit-block">
+      <FileHeader toolName="Edit" filePath={filePath} />
+      <div className="inspector-edit-summary">
+        {added > 0 && <span className="inspector-edit-added">+{added}</span>}
+        {removed > 0 && <span className="inspector-edit-removed">-{removed}</span>}
+      </div>
+      <div className="inspector-diff">
+        {oldStr && oldLines.map((line, i) => (
+          <div key={`d${i}`} className="inspector-diff-line inspector-diff-del">
+            <span className="inspector-diff-prefix">-</span>
+            <span className="inspector-diff-content">{line}</span>
+          </div>
+        ))}
+        {newStr && newLines.map((line, i) => (
+          <div key={`a${i}`} className="inspector-diff-line inspector-diff-add">
+            <span className="inspector-diff-prefix">+</span>
+            <span className="inspector-diff-content">{line}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BashRenderer({ msg }: { msg: SubagentMessage }) {
+  const input = msg.toolInput;
+  const command = input ? String(input.command || msg.text) : msg.text;
+  const description = input?.description ? String(input.description) : null;
+  return (
+    <div className="inspector-bash-block">
+      <FileHeader toolName="Bash" filePath={description || command.slice(0, 60)} />
+      <div className="inspector-bash-cmd">
+        <span className="inspector-bash-prompt">$</span>
+        <span className="inspector-bash-text">{command}</span>
+      </div>
+    </div>
+  );
+}
+
+function FileToolRenderer({ msg, toolName }: { msg: SubagentMessage; toolName: string }) {
+  const input = msg.toolInput;
+  const filePath = input ? String(input.file_path || input.pattern || msg.text) : msg.text;
+  return (
+    <div className="inspector-file-block">
+      <FileHeader toolName={toolName} filePath={filePath} />
+    </div>
+  );
+}
+
+function SearchRenderer({ msg, toolName }: { msg: SubagentMessage; toolName: string }) {
+  const input = msg.toolInput;
+  const pattern = input ? String(input.pattern || msg.text) : msg.text;
+  const path = input?.path ? String(input.path) : null;
+  return (
+    <div className="inspector-search-block">
+      <div className="inspector-tool-file-header">
+        <span className="inspector-tool-file-tool">{toolName}</span>
+        <span className="inspector-tool-file-path">
+          <span className="inspector-tool-file-name">{pattern}</span>
+          {path && <span className="inspector-tool-file-dir"> in {path}</span>}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 // [IN-08] [TR-12] Tool block collapse: React.memo, collapsed by default, click to expand
@@ -27,6 +121,16 @@ const MessageBlock = memo(function MessageBlock({ msg, defaultExpanded }: { msg:
     );
   }
 
+  // Tool-specific rendering when structured input is available
+  if (msg.toolInput) {
+    const tn = msg.toolName;
+    if (tn === "Edit") return <EditRenderer msg={msg} />;
+    if (tn === "Bash") return <BashRenderer msg={msg} />;
+    if (tn === "Read" || tn === "Write") return <FileToolRenderer msg={msg} toolName={tn} />;
+    if (tn === "Grep" || tn === "Glob") return <SearchRenderer msg={msg} toolName={tn} />;
+  }
+
+  // Fallback: collapsible text block
   const label = msg.toolName === "result"
     ? <span className="inspector-tool-result-label">result</span>
     : msg.toolName

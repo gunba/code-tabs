@@ -201,6 +201,21 @@ describe("classifyTapEntry — stringify (outgoing)", () => {
     }
   });
 
+  it("extracts multiline summary from queue-operation", () => {
+    const entry: TapEntry = {
+      ts: 2010, cat: "stringify", len: 300,
+      snap: JSON.stringify({
+        type: "queue-operation", operation: "enqueue",
+        content: '<task-notification><status>completed</status><summary>Line one\nLine two\nLine three</summary></task-notification>',
+      }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event?.kind).toBe("SubagentNotification");
+    if (event?.kind === "SubagentNotification") {
+      expect(event.summary).toBe("Line one\nLine two\nLine three");
+    }
+  });
+
   it("classifies scope:subagent_end → SubagentLifecycle end", () => {
     const entry: TapEntry = {
       ts: 2100, cat: "stringify", len: 97,
