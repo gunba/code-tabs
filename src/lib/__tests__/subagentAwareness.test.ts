@@ -199,20 +199,21 @@ describe("TapSubagentTracker SubagentNotification", () => {
 // ── TapMetadataAccumulator queryDepth filtering ──
 
 describe("TapMetadataAccumulator queryDepth filtering", () => {
-  it("accumulates tokens for queryDepth 0", () => {
+  it("accumulates tokens from SSE (TurnEnd), not ApiTelemetry", () => {
     const acc = new TapMetadataAccumulator();
+    // ApiTelemetry no longer accumulates tokens (only cost)
     const diff = acc.process({
       kind: "ApiTelemetry", ts: 1, model: "opus", costUSD: 0.01,
       inputTokens: 100, outputTokens: 50, cachedInputTokens: 0, uncachedInputTokens: 100,
       durationMs: 500, ttftMs: 100, queryChainId: null, queryDepth: 0, stopReason: "end_turn",
     } as TapEvent);
     expect(diff).not.toBeNull();
-    expect(diff!.inputTokens).toBe(100);
-    expect(diff!.outputTokens).toBe(50);
-    expect(diff!.costUsd).toBe(0.01);
+    expect(diff!.inputTokens).toBe(0); // tokens come from TurnEnd now
+    expect(diff!.outputTokens).toBe(0);
+    expect(diff!.costUsd).toBe(0.01); // cost still from ApiTelemetry
   });
 
-  it("does NOT accumulate tokens for queryDepth > 0", () => {
+  it("does NOT accumulate cost for queryDepth > 0", () => {
     const acc = new TapMetadataAccumulator();
     const diff = acc.process({
       kind: "ApiTelemetry", ts: 1, model: "haiku", costUSD: 0.001,
@@ -222,7 +223,7 @@ describe("TapMetadataAccumulator queryDepth filtering", () => {
     expect(diff).not.toBeNull();
     expect(diff!.inputTokens).toBe(0);
     expect(diff!.outputTokens).toBe(0);
-    expect(diff!.costUsd).toBe(0);
+    expect(diff!.costUsd).toBe(0); // queryDepth > 0 → no cost accumulation
   });
 
   it("does not let subagent TurnStart overwrite runtimeModel", () => {

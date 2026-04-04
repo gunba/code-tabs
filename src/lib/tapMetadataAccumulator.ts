@@ -102,8 +102,8 @@ export class TapMetadataAccumulator {
         // Only accumulate main-agent tokens/cost (subagent tokens tracked by TapSubagentTracker)
         if (event.queryDepth === 0) {
           this.costUsd += event.costUSD;
-          this.inputTokens += event.inputTokens + event.cachedInputTokens;
-          this.outputTokens += event.outputTokens;
+          // inputTokens/outputTokens accumulated from TurnEnd (SSE source) to avoid
+          // double-counting; ApiTelemetry classification doesn't match current CLI output.
           this.lastTurnCostUsd = event.costUSD;
           this.lastTurnTtftMs = event.ttftMs;
         }
@@ -192,6 +192,11 @@ export class TapMetadataAccumulator {
 
       case "TurnEnd":
         if (this.sidechainActive) break;
+        // Accumulate session totals from SSE events.
+        // TurnStart already captured lastTurnInputTokens/lastCacheRead/lastCacheCreation;
+        // accumulate at TurnEnd so each completed turn is counted exactly once.
+        this.inputTokens += this.lastTurnInputTokens + this.lastCacheRead + this.lastCacheCreation;
+        this.outputTokens += event.outputTokens;
         if (event.stopReason === "end_turn") {
           this.currentToolName = null;
           this.currentAction = null;
