@@ -327,6 +327,11 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
     };
   }
 
+  // PermissionPromptShown: CLI permission notification (notification_type path)
+  if (parsed.notification_type === "permission_prompt") {
+    return { kind: "PermissionPromptShown", ts, toolName: null };
+  }
+
   // IdlePrompt: CLI idle notification (authoritative idle signal)
   if (parsed.notification_type === "idle_prompt") {
     return { kind: "IdlePrompt", ts };

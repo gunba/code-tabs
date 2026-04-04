@@ -265,6 +265,26 @@ describe("reduceTapEvent", () => {
     expect(reduceTapEvent("toolUse", { kind: "IdlePrompt", ts: 0 })).toBe("idle");
   });
 
+  it("TurnDuration from toolUse → idle", () => {
+    expect(reduceTapEvent("toolUse", { kind: "TurnDuration", ts: 0, durationMs: 10000, messageCount: 5 })).toBe("idle");
+  });
+
+  it("TurnDuration from thinking → idle", () => {
+    expect(reduceTapEvent("thinking", { kind: "TurnDuration", ts: 0, durationMs: 10000, messageCount: 5 })).toBe("idle");
+  });
+
+  it("TurnDuration from idle → idle (no change)", () => {
+    expect(reduceTapEvent("idle", { kind: "TurnDuration", ts: 0, durationMs: 10000, messageCount: 5 })).toBe("idle");
+  });
+
+  it("TurnDuration from waitingPermission → waitingPermission (preserved)", () => {
+    expect(reduceTapEvent("waitingPermission", { kind: "TurnDuration", ts: 0, durationMs: 10000, messageCount: 5 })).toBe("waitingPermission");
+  });
+
+  it("TurnDuration from actionNeeded → actionNeeded (sticky guard)", () => {
+    expect(reduceTapEvent("actionNeeded", { kind: "TurnDuration", ts: 0, durationMs: 10000, messageCount: 5 })).toBe("actionNeeded");
+  });
+
   it("informational events don't change state", () => {
     expect(reduceTapEvent("idle", { kind: "ProcessHealth", ts: 0, rss: 100, heapUsed: 50, heapTotal: 60, uptime: 10, cpuPercent: 0 })).toBe("idle");
     expect(reduceTapEvent("thinking", { kind: "ApiTelemetry", ts: 0, model: "opus", costUSD: 0.01, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, uncachedInputTokens: 0, durationMs: 100, ttftMs: 50, queryChainId: null, queryDepth: 0, stopReason: null })).toBe("thinking");
@@ -334,6 +354,14 @@ describe("reduceTapBatch", () => {
       convMsg({ messageType: "user" }),
     ];
     expect(reduceTapBatch("actionNeeded", events)).toBe("thinking");
+  });
+
+  it("PermissionPromptShown + TurnDuration in same batch → waitingPermission wins", () => {
+    const events: TapEvent[] = [
+      { kind: "PermissionPromptShown", ts: 0, toolName: "Bash" },
+      { kind: "TurnDuration", ts: 1, durationMs: 10000, messageCount: 5 },
+    ];
+    expect(reduceTapBatch("toolUse", events)).toBe("waitingPermission");
   });
 });
 
@@ -466,6 +494,76 @@ describe("sequence replays", () => {
       expect(state, `after ${event.kind}`).toBe(expected);
     }
   });
+
+  it("004: Permission prompt during compound Bash command (d2b6535c pattern)", () => {
+    // Compound Bash command (cd && git commit) triggers a permission prompt.
+    // Multiple auto-approved Bash cycles, then final cycle hits permission.
+    // Without value-side notification_type detection in INSTALL_TAPS,
+    // PermissionPromptShown never fires and state stays toolUse for minutes.
+    const steps: Array<{ event: TapEvent; expected: string }> = [
+      // Auto-approved Bash cycle 1
+      { event: { kind: "TurnStart", ts: 1, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0 }, expected: "thinking" },
+      { event: { kind: "ToolCallStart", ts: 2, index: 0, toolName: "Bash", toolId: "t1" }, expected: "thinking" },
+      { event: { kind: "TurnEnd", ts: 3, stopReason: "tool_use", outputTokens: 50 }, expected: "toolUse" },
+      { event: convMsg({ stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls" }), expected: "toolUse" },
+      { event: convMsg({ messageType: "user" }), expected: "thinking" },
+      // Auto-approved Bash cycle 2
+      { event: { kind: "TurnStart", ts: 6, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0 }, expected: "thinking" },
+      { event: { kind: "ToolCallStart", ts: 7, index: 0, toolName: "Bash", toolId: "t2" }, expected: "thinking" },
+      { event: { kind: "TurnEnd", ts: 8, stopReason: "tool_use", outputTokens: 60 }, expected: "toolUse" },
+      { event: convMsg({ stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: git status" }), expected: "toolUse" },
+      { event: convMsg({ messageType: "user" }), expected: "thinking" },
+      // Final cycle: compound Bash command triggers permission prompt
+      { event: { kind: "TurnStart", ts: 11, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0 }, expected: "thinking" },
+      { event: { kind: "ToolCallStart", ts: 12, index: 0, toolName: "Bash", toolId: "t3" }, expected: "thinking" },
+      { event: { kind: "TurnEnd", ts: 13, stopReason: "tool_use", outputTokens: 80 }, expected: "toolUse" },
+      { event: convMsg({ stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: cd ... && git commit ..." }), expected: "toolUse" },
+      // Permission prompt shown (now detected via value-side notification_type)
+      { event: { kind: "PermissionPromptShown", ts: 14, toolName: null }, expected: "waitingPermission" },
+      // User approves → toolUse
+      { event: { kind: "PermissionApproved", ts: 15, toolName: "Bash" }, expected: "toolUse" },
+      // Tool result injected as user message
+      { event: convMsg({ messageType: "user" }), expected: "thinking" },
+      // Agent completes
+      { event: { kind: "TurnEnd", ts: 17, stopReason: "end_turn", outputTokens: 200 }, expected: "idle" },
+    ];
+
+    let state: SessionState = "idle";
+    for (const { event, expected } of steps) {
+      state = reduceTapEvent(state, event);
+      expect(state, `after ${event.kind}${("toolName" in event) ? `(${event.toolName})` : ""}`).toBe(expected);
+    }
+  });
+
+  it("005: TurnDuration as independent idle signal (b77703f6 pattern)", () => {
+    // Agent finishes work but primary idle signals (TurnEnd(end_turn),
+    // ConversationMessage(assistant, end_turn)) don't reach the reducer.
+    // Cause unknown — events exist in taps.jsonl but weren't processed.
+    // TurnDuration provides an independent recovery path to idle.
+    const steps: Array<{ event: TapEvent; expected: string }> = [
+      // Bash tool cycles — agent doing work
+      { event: { kind: "TurnStart", ts: 1, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0 }, expected: "thinking" },
+      { event: { kind: "ToolCallStart", ts: 2, index: 0, toolName: "Bash", toolId: "t1" }, expected: "thinking" },
+      { event: { kind: "TurnEnd", ts: 3, stopReason: "tool_use", outputTokens: 50 }, expected: "toolUse" },
+      { event: convMsg({ stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: git merge" }), expected: "toolUse" },
+      { event: convMsg({ messageType: "user" }), expected: "thinking" },
+      // Another Bash cycle
+      { event: { kind: "TurnStart", ts: 6, model: "opus", inputTokens: 0, outputTokens: 0, cacheRead: 0, cacheCreation: 0 }, expected: "thinking" },
+      { event: { kind: "ToolCallStart", ts: 7, index: 0, toolName: "Bash", toolId: "t2" }, expected: "thinking" },
+      { event: { kind: "TurnEnd", ts: 8, stopReason: "tool_use", outputTokens: 60 }, expected: "toolUse" },
+      { event: convMsg({ stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: git log" }), expected: "toolUse" },
+      // Primary idle signals absent — TurnEnd(end_turn) and ConversationMessage(assistant, end_turn)
+      // exist in taps.jsonl but never reached the reducer in the live session.
+      // TurnDuration fires as the final event of the completed turn → idle
+      { event: { kind: "TurnDuration", ts: 9, durationMs: 524421, messageCount: 277 }, expected: "idle" },
+    ];
+
+    let state: SessionState = "idle";
+    for (const { event, expected } of steps) {
+      state = reduceTapEvent(state, event);
+      expect(state, `after ${event.kind}`).toBe(expected);
+    }
+  });
 });
 
 describe("isCompletionEvent", () => {
@@ -514,5 +612,9 @@ describe("isCompletionEvent", () => {
 
   it("IdlePrompt is completion", () => {
     expect(isCompletionEvent({ kind: "IdlePrompt", ts: 0 })).toBe(true);
+  });
+
+  it("TurnDuration is NOT completion (queued input dispatch uses ConversationMessage/IdlePrompt)", () => {
+    expect(isCompletionEvent({ kind: "TurnDuration", ts: 0, durationMs: 10000, messageCount: 5 })).toBe(false);
   });
 });

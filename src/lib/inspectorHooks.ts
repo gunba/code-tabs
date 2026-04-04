@@ -617,6 +617,15 @@ export const INSTALL_TAPS = `(function() {
               vimMode: vm.mode || '',
             });
           }
+          // Detect permission_prompt — checks the VALUE, not the snap.
+          // Mirrors INSTALL_HOOK line 79. The snap may truncate notification_type away in large objects.
+          // Scoped to permission_prompt only — idle_prompt objects are small and always survive
+          // the regular 2000-char snap path. For permission_prompt: if the object is large (>2000 chars),
+          // this synthetic push is the only path that works; if small, both this and the regular push
+          // below will classify as PermissionPromptShown — harmless (reducer is idempotent at waitingPermission).
+          if (value && typeof value === 'object' && value.notification_type === 'permission_prompt') {
+            push('stringify', { len: result.length, snap: origStringify({ notification_type: value.notification_type }) });
+          }
           push('stringify', { len: result.length, snap: result.slice(0, 2000) });
         }
       } catch(e) {}

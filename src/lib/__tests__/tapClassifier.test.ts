@@ -304,6 +304,15 @@ describe("classifyTapEntry — stringify (outgoing)", () => {
     expect(event).toMatchObject({ kind: "IdlePrompt", ts: 2020 });
   });
 
+  it("classifies notification_type permission_prompt → PermissionPromptShown", () => {
+    const entry: TapEntry = {
+      ts: 2030, cat: "stringify", len: 60,
+      snap: JSON.stringify({ notification_type: "permission_prompt" }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toMatchObject({ kind: "PermissionPromptShown", ts: 2030, toolName: null });
+  });
+
   it("returns null for other notification_type values", () => {
     const entry: TapEntry = {
       ts: 2021, cat: "stringify", len: 50,

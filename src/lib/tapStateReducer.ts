@@ -85,6 +85,19 @@ export function reduceTapEvent(state: SessionState, event: TapEvent): SessionSta
     case "SessionEndEvent":
       return "dead";
 
+    case "TurnDuration":
+      // Fallback idle: TurnDuration fires as the final stringify event of every
+      // completed turn (the "Churned for Xm Ys" summary). Redundant with
+      // TurnEnd(end_turn) and ConversationMessage(assistant, end_turn), but
+      // provides an independent path to idle when those don't reach the reducer.
+      // Subagent risk: TurnDuration has no agentId field, so a subagent's
+      // TurnDuration could cause a transient false idle. This is the same
+      // accepted risk as TurnEnd(end_turn) — see replay 002 comment: the main
+      // agent's next TurnStart immediately corrects it, and tab flash debounce
+      // (2s) suppresses the UI notification.
+      if (state === "toolUse" || state === "thinking") return "idle";
+      return state;
+
     case "ConversationMessage":
       if (event.messageType === "user" && !event.isSidechain) return "thinking";
       if (event.messageType === "assistant" && !event.isSidechain) {
