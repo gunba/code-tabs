@@ -2,29 +2,98 @@
 
 .prompts-tab {
   display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
 }
 
-.prompts-sidebar {
-  width: 200px;
-  min-width: 200px;
+/* ── Sub-tab bar ───────────────────────────────────────── */
+
+.prompts-subtab-bar {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ── My Prompts layout ─────────────────────────────────── */
+
+.prompts-myprompts-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.prompts-myprompts-sidebar {
+  width: 220px;
+  min-width: 220px;
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
 }
 
-.prompts-section {
+/* ── Rules layout ──────────────────────────────────────── */
+
+.prompts-rules-layout {
   display: flex;
-  flex-direction: column;
   flex: 1;
   min-height: 0;
 }
 
-.prompts-section-observed {
+.prompts-rules-observed {
+  width: 280px;
+  min-width: 280px;
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.prompts-observed-list {
+  overflow-y: auto;
+  padding: 0 6px 6px;
+  flex-shrink: 0;
+  max-height: 200px;
+}
+
+.prompts-observed-list::-webkit-scrollbar { width: 4px; }
+.prompts-observed-list::-webkit-scrollbar-track { background: transparent; }
+.prompts-observed-list::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 2px; }
+
+.prompts-observed-detail {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 6px;
   border-top: 1px solid var(--border-subtle);
 }
+
+.prompts-rules-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.prompts-rules-cards {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prompts-rules-cards::-webkit-scrollbar { width: 4px; }
+.prompts-rules-cards::-webkit-scrollbar-track { background: transparent; }
+.prompts-rules-cards::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 2px; }
+
+/* ── Shared section elements ───────────────────────────── */
 
 .prompts-section-header {
   font-size: 10px;
@@ -119,13 +188,14 @@
   cursor: pointer;
   text-align: center;
   transition: background 0.1s;
+  flex-shrink: 0;
 }
 
 .prompts-add-btn:hover {
   background: var(--bg-hover);
 }
 
-/* Editor pane */
+/* ── Editor pane ───────────────────────────────────────── */
 
 .prompts-editor {
   flex: 1;
@@ -148,7 +218,6 @@
   font-weight: 600;
   color: var(--text-primary);
 }
-
 
 .prompts-name-input {
   flex: 1;
@@ -186,6 +255,11 @@
 
 .prompts-save-btn:hover {
   opacity: 0.85;
+}
+
+.prompts-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .prompts-delete-btn {
@@ -261,24 +335,88 @@
   font-style: italic;
 }
 
-/* ── Prompt Rules ──────────────────────────────────────────────────── */
+/* ── Rule cards ────────────────────────────────────────── */
 
-.prompts-section-rules {
+.prompts-rule-card {
+  background: var(--bg-surface, var(--bg-primary));
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  transition: border-color 0.15s;
+}
+
+.prompts-rule-card-active {
+  border-color: var(--accent);
+}
+
+.prompts-rule-card-disabled {
+  opacity: 0.55;
+}
+
+.prompts-rule-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: background 0.1s;
+  border-radius: 6px;
+}
+
+.prompts-rule-card-header:hover {
+  background: var(--bg-hover);
+}
+
+.prompts-rule-card-toggle {
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.prompts-rule-card-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 80px;
+  max-width: 200px;
+}
+
+.prompts-rule-card-pattern {
+  flex: 1;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.prompts-rule-card-actions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.prompts-rule-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 10px;
   border-top: 1px solid var(--border-subtle);
 }
 
-.prompts-list-item-disabled {
-  opacity: 0.5;
+.prompts-rule-card-save-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
 }
 
-.prompts-rule-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 4px;
-  flex: 1;
-  overflow-y: auto;
-}
+/* ── Rule field inputs (shared) ────────────────────────── */
 
 .prompts-rule-field {
   display: flex;
@@ -319,40 +457,12 @@
   font-family: var(--font-mono);
 }
 
-.prompts-rule-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-}
-
 .prompts-rule-field-flags {
   flex: 0 0 auto;
 }
 
 .prompts-rule-flags-input {
   width: 60px;
-}
-
-.prompts-rule-toggle {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-primary);
-  padding-bottom: 4px;
-}
-
-.prompts-rule-toggle input[type="checkbox"] {
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.prompts-rule-arrows {
-  display: flex;
-  gap: 2px;
-  margin-left: auto;
-  padding-bottom: 4px;
 }
 
 .prompts-rule-arrow-btn {

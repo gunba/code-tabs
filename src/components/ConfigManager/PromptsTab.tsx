@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSettingsStore } from "../../store/settings";
+import { PillGroup } from "../PillGroup/PillGroup";
 import { IconClose } from "../Icons/Icons";
 import { diffLines, applyRulesToText, generateRulesFromDiff } from "../../lib/promptDiff";
 import type { DiffLine } from "../../lib/promptDiff";
@@ -89,6 +90,101 @@ function RulePreview({
   );
 }
 
+/** Expanded editing area for a single rule card. Local state, save-on-demand. */
+function RuleCardExpanded({
+  rule,
+  onSave,
+}: {
+  rule: SystemPromptRule;
+  onSave: (id: string, updates: Partial<SystemPromptRule>) => void;
+}) {
+  const [name, setName] = useState(rule.name);
+  const [pattern, setPattern] = useState(rule.pattern);
+  const [replacement, setReplacement] = useState(rule.replacement);
+  const [flags, setFlags] = useState(rule.flags);
+
+  const patternError = validatePattern(pattern, flags);
+  const isDirty = name !== rule.name || pattern !== rule.pattern ||
+    replacement !== rule.replacement || flags !== rule.flags;
+
+  const doSave = useCallback(() => {
+    if (patternError || !isDirty) return;
+    onSave(rule.id, { name, pattern, replacement, flags });
+  }, [rule.id, name, pattern, replacement, flags, patternError, isDirty, onSave]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        if (isDirty && !patternError) {
+          e.preventDefault();
+          doSave();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isDirty, patternError, doSave]);
+
+  return (
+    <div className="prompts-rule-card-body" onClick={(e) => e.stopPropagation()}>
+      <label className="prompts-rule-field">
+        <span className="prompts-rule-label">Name</span>
+        <input
+          className="prompts-rule-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Rule name"
+          spellCheck={false}
+        />
+      </label>
+      <label className="prompts-rule-field">
+        <span className="prompts-rule-label">Pattern</span>
+        <input
+          className={`prompts-rule-input${patternError ? " prompts-rule-input-error" : ""}`}
+          value={pattern}
+          onChange={(e) => setPattern(e.target.value)}
+          placeholder="Regex pattern (e.g. Claude)"
+          spellCheck={false}
+        />
+        {patternError && <span className="prompts-rule-error">{patternError}</span>}
+      </label>
+      <label className="prompts-rule-field">
+        <span className="prompts-rule-label">Replacement</span>
+        <input
+          className="prompts-rule-input"
+          value={replacement}
+          onChange={(e) => setReplacement(e.target.value)}
+          placeholder="Replacement text (e.g. Assistant, supports $1)"
+          spellCheck={false}
+        />
+      </label>
+      <div className="prompts-rule-card-save-row">
+        <label className="prompts-rule-field prompts-rule-field-flags">
+          <span className="prompts-rule-label">Flags</span>
+          <input
+            className="prompts-rule-input prompts-rule-flags-input"
+            value={flags}
+            onChange={(e) => setFlags(e.target.value)}
+            placeholder="g"
+            spellCheck={false}
+          />
+        </label>
+        {isDirty && (
+          <button className="prompts-save-btn" onClick={doSave} disabled={!!patternError}>
+            Save
+          </button>
+        )}
+        {isDirty && <span className="prompts-unsaved">unsaved</span>}
+      </div>
+    </div>
+  );
+}
+
+const SUB_TABS: { value: "prompts" | "rules"; label: string }[] = [
+  { value: "prompts", label: "My Prompts" },
+  { value: "rules", label: "Rules" },
+];
+
 export function PromptsTab({ onStatus }: PromptsTabProps) {
   const savedPrompts = useSettingsStore((s) => s.savedPrompts);
   const observedPrompts = useSettingsStore((s) => s.observedPrompts);
@@ -102,108 +198,130 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
   const removeSystemPromptRule = useSettingsStore((s) => s.removeSystemPromptRule);
   const reorderSystemPromptRules = useSettingsStore((s) => s.reorderSystemPromptRules);
 
-  const [selectedType, setSelectedType] = useState<"saved" | "observed" | "rules" | "none">("none");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Sub-tab navigation
+  const [activeSubTab, setActiveSubTab] = useState<"prompts" | "rules">("prompts");
+
+  // My Prompts state
+  const [selectedSavedPromptId, setSelectedSavedPromptId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editText, setEditText] = useState("");
   const [dirty, setDirty] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Rule editor state
-  const [editPattern, setEditPattern] = useState("");
-  const [editReplacement, setEditReplacement] = useState("");
-  const [editFlags, setEditFlags] = useState("g");
-  const [editEnabled, setEditEnabled] = useState(true);
-  const [ruleDirty, setRuleDirty] = useState(false);
+  // Rules sub-tab state
+  const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null);
+  const [selectedObservedPromptId, setSelectedObservedPromptId] = useState<string | null>(null);
 
-  // Observed prompt edit state (for rule generation)
+  // Observed prompt edit state
   const [observedEditText, setObservedEditText] = useState("");
   const [pendingRules, setPendingRules] = useState<SystemPromptRule[] | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editBaseline, setEditBaseline] = useState("");
 
-  // Load selected prompt into editor
+  // Collapse expanded rule on tab switch
+  useEffect(() => { setExpandedRuleId(null); }, [activeSubTab]);
+
+  // Load saved prompt into editor
   useEffect(() => {
-    if (selectedType === "none" || !selectedId) {
+    if (!selectedSavedPromptId) {
       setEditName(""); setEditText(""); setDirty(false);
-      setEditPattern(""); setEditReplacement(""); setEditFlags("g"); setEditEnabled(true); setRuleDirty(false);
-      setObservedEditText(""); setPendingRules(null); setIsEditing(false); setEditBaseline("");
       return;
     }
-    if (selectedType === "saved") {
-      const prompt = savedPrompts.find((p) => p.id === selectedId);
-      if (prompt) {
-        setEditName(prompt.name); setEditText(prompt.text); setDirty(false);
-      } else {
-        setSelectedType("none"); setSelectedId(null);
-      }
-    } else if (selectedType === "observed") {
-      const prompt = observedPrompts.find((p) => p.id === selectedId);
-      if (prompt) {
-        setEditName(""); setEditText(prompt.text); setDirty(false);
-        setPendingRules(null); setIsEditing(false); setEditBaseline("");
-      } else {
-        setSelectedType("none"); setSelectedId(null);
-      }
-    } else if (selectedType === "rules") {
-      const rule = systemPromptRules.find((r) => r.id === selectedId);
-      if (rule) {
-        setEditName(rule.name); setEditPattern(rule.pattern);
-        setEditReplacement(rule.replacement); setEditFlags(rule.flags);
-        setEditEnabled(rule.enabled); setRuleDirty(false);
-      } else {
-        setSelectedType("none"); setSelectedId(null);
-      }
+    const prompt = savedPrompts.find((p) => p.id === selectedSavedPromptId);
+    if (prompt) {
+      setEditName(prompt.name); setEditText(prompt.text); setDirty(false);
+    } else {
+      setSelectedSavedPromptId(null);
     }
-  }, [selectedType, selectedId, savedPrompts, observedPrompts, systemPromptRules]);
+  }, [selectedSavedPromptId, savedPrompts]);
 
-  // Text with all enabled rules applied
-  const rulesAppliedText = useMemo((): string => {
-    if (selectedType !== "observed" || !editText) return editText;
-    const enabledRules = systemPromptRules.filter((r) => r.enabled && r.pattern);
-    if (enabledRules.length === 0) return editText;
-    return applyRulesToText(editText, enabledRules);
-  }, [selectedType, editText, systemPromptRules]);
-
-  // Sync observedEditText to rulesAppliedText when not editing
+  // Reset observed editing state on selection change
   useEffect(() => {
-    if (selectedType === "observed" && !isEditing) {
+    setPendingRules(null); setIsEditing(false); setEditBaseline("");
+  }, [selectedObservedPromptId]);
+
+  // Derive observed prompt data — self-heal if selected prompt aged out
+  const selectedObservedPrompt = observedPrompts.find((p) => p.id === selectedObservedPromptId);
+  useEffect(() => {
+    if (selectedObservedPromptId && !selectedObservedPrompt) {
+      setSelectedObservedPromptId(null);
+    }
+  }, [selectedObservedPromptId, selectedObservedPrompt]);
+  const observedRawText = selectedObservedPrompt?.text ?? "";
+
+  // [CM-26] PromptsTab previews observed prompt changes and generates candidate rules via promptDiff helpers.
+  // Rules-applied text
+  const rulesAppliedText = useMemo(() => {
+    if (!observedRawText) return "";
+    const enabledRules = systemPromptRules.filter((r) => r.enabled && r.pattern);
+    if (enabledRules.length === 0) return observedRawText;
+    return applyRulesToText(observedRawText, enabledRules);
+  }, [observedRawText, systemPromptRules]);
+
+  // Sync observedEditText when not editing; dismiss stale pending rules when baseline shifts
+  useEffect(() => {
+    if (selectedObservedPromptId && !isEditing) {
       setObservedEditText(rulesAppliedText);
       setEditBaseline(rulesAppliedText);
     }
-  }, [selectedType, rulesAppliedText, isEditing]);
+    setPendingRules(null);
+  }, [selectedObservedPromptId, rulesAppliedText, isEditing]);
 
-  // Inline diff: original → current state (rules applied + user edits)
+  // Diff: original → current state
   const observedDiff = useMemo((): DiffLine[] | null => {
-    if (selectedType !== "observed" || !editText) return null;
-    if (editText === observedEditText) return null;
-    return diffLines(editText, observedEditText);
-  }, [selectedType, editText, observedEditText]);
+    if (!observedRawText || observedRawText === observedEditText) return null;
+    return diffLines(observedRawText, observedEditText);
+  }, [observedRawText, observedEditText]);
 
-  // Check if user has edited beyond what rules produce
-  const observedEdited = selectedType === "observed" && observedEditText !== rulesAppliedText;
+  const observedEdited = !!selectedObservedPromptId && observedEditText !== rulesAppliedText;
+
+  // ── Saved prompt handlers ──────────────────────────────────────────
 
   const handleSave = useCallback(() => {
-    if (selectedType !== "saved" || !selectedId || !dirty) return;
-    updateSavedPrompt(selectedId, { name: editName, text: editText });
+    if (!selectedSavedPromptId || !dirty) return;
+    updateSavedPrompt(selectedSavedPromptId, { name: editName, text: editText });
     setDirty(false);
     onStatus({ type: "success", text: "Prompt saved" });
     setTimeout(() => onStatus(null), 2000);
-  }, [selectedType, selectedId, dirty, editName, editText, updateSavedPrompt, onStatus]);
+  }, [selectedSavedPromptId, dirty, editName, editText, updateSavedPrompt, onStatus]);
 
-  const handleRuleSave = useCallback(() => {
-    if (selectedType !== "rules" || !selectedId || !ruleDirty) return;
-    updateSystemPromptRule(selectedId, {
-      name: editName, pattern: editPattern, replacement: editReplacement,
-      flags: editFlags, enabled: editEnabled,
-    });
-    setRuleDirty(false);
+  const handleAdd = useCallback(() => {
+    addSavedPrompt("New Prompt", "");
+    const newest = useSettingsStore.getState().savedPrompts;
+    const last = newest[newest.length - 1];
+    if (last) setSelectedSavedPromptId(last.id);
+  }, [addSavedPrompt]);
+
+  const handleDelete = useCallback(() => {
+    if (!selectedSavedPromptId) return;
+    removeSavedPrompt(selectedSavedPromptId);
+    setSelectedSavedPromptId(null);
+  }, [selectedSavedPromptId, removeSavedPrompt]);
+
+  // ── Rule handlers ──────────────────────────────────────────────────
+
+  const handleRuleSave = useCallback((id: string, updates: Partial<SystemPromptRule>) => {
+    updateSystemPromptRule(id, updates);
     onStatus({ type: "success", text: "Rule saved" });
     setTimeout(() => onStatus(null), 2000);
-  }, [selectedType, selectedId, ruleDirty, editName, editPattern, editReplacement, editFlags, editEnabled, updateSystemPromptRule, onStatus]);
+  }, [updateSystemPromptRule, onStatus]);
+
+  const handleRuleDelete = useCallback((id: string) => {
+    removeSystemPromptRule(id);
+    if (expandedRuleId === id) setExpandedRuleId(null);
+  }, [removeSystemPromptRule, expandedRuleId]);
+
+  const handleAddRule = useCallback(() => {
+    addSystemPromptRule();
+    const newest = useSettingsStore.getState().systemPromptRules;
+    const last = newest[newest.length - 1];
+    if (last) setExpandedRuleId(last.id);
+  }, [addSystemPromptRule]);
+
+  // ── Observed prompt handlers ───────────────────────────────────────
 
   const handleGenerateRules = useCallback(() => {
-    if (selectedType !== "observed" || !observedEdited) return;
+    if (!observedEdited) return;
     const generated = generateRulesFromDiff(rulesAppliedText, observedEditText, systemPromptRules);
     if (generated.length === 0) {
       onStatus({ type: "error", text: "No rules could be generated from these changes" });
@@ -211,7 +329,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
       return;
     }
     setPendingRules(generated);
-  }, [selectedType, observedEdited, rulesAppliedText, observedEditText, systemPromptRules, onStatus]);
+  }, [observedEdited, rulesAppliedText, observedEditText, systemPromptRules, onStatus]);
 
   const handleConfirmRules = useCallback(() => {
     if (!pendingRules) return;
@@ -244,311 +362,250 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
 
   const handleDoneEditing = useCallback(() => {
     setIsEditing(false);
-    // If user didn't change anything, sync back to rules-applied text
     if (observedEditText === editBaseline) {
       setObservedEditText(rulesAppliedText);
     }
   }, [observedEditText, editBaseline, rulesAppliedText]);
 
-  const handleAdd = useCallback(() => {
-    addSavedPrompt("New Prompt", "");
-    const newest = useSettingsStore.getState().savedPrompts;
-    const last = newest[newest.length - 1];
-    if (last) { setSelectedType("saved"); setSelectedId(last.id); }
-  }, [addSavedPrompt]);
-
-  const handleAddRule = useCallback(() => {
-    addSystemPromptRule();
-    const newest = useSettingsStore.getState().systemPromptRules;
-    const last = newest[newest.length - 1];
-    if (last) { setSelectedType("rules"); setSelectedId(last.id); }
-  }, [addSystemPromptRule]);
-
-  const handleDelete = useCallback(() => {
-    if (selectedType !== "saved" || !selectedId) return;
-    removeSavedPrompt(selectedId);
-    setSelectedType("none"); setSelectedId(null);
-  }, [selectedType, selectedId, removeSavedPrompt]);
-
-  const handleRuleDelete = useCallback(() => {
-    if (selectedType !== "rules" || !selectedId) return;
-    removeSystemPromptRule(selectedId);
-    setSelectedType("none"); setSelectedId(null);
-  }, [selectedType, selectedId, removeSystemPromptRule]);
-
-  // Ctrl+S save
+  // Ctrl+S for saved prompts only
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        if (dirty && selectedType === "saved") {
+        if (dirty && activeSubTab === "prompts") {
           e.preventDefault();
           handleSave();
-        } else if (ruleDirty && selectedType === "rules") {
-          e.preventDefault();
-          handleRuleSave();
         }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [dirty, ruleDirty, selectedType, handleSave, handleRuleSave]);
-
-  const select = (type: "saved" | "observed" | "rules", id: string) => {
-    setSelectedType(type); setSelectedId(id);
-  };
-
-  const patternError = validatePattern(editPattern, editFlags);
+  }, [dirty, activeSubTab, handleSave]);
 
   return (
     <div className="prompts-tab">
-      {/* Sidebar */}
-      <div className="prompts-sidebar">
-        {/* Top: My Prompts */}
-        <div className="prompts-section">
-          <div className="prompts-section-header">My Prompts</div>
-          <div className="prompts-section-list">
-            {savedPrompts.map((p) => (
-              <button
-                key={p.id}
-                className={`prompts-list-item${selectedType === "saved" && selectedId === p.id ? " prompts-list-item-active" : ""}`}
-                onClick={() => select("saved", p.id)}
-              >
-                <span className="prompts-item-name">{p.name || "Untitled"}</span>
-                <span className="prompts-item-size">{p.text.length.toLocaleString()} chars</span>
-              </button>
-            ))}
-          </div>
-          <button className="prompts-add-btn" onClick={handleAdd}>+ Add Prompt</button>
-        </div>
+      <div className="prompts-subtab-bar">
+        <PillGroup
+          options={SUB_TABS}
+          selected={activeSubTab}
+          onChange={(v) => v && setActiveSubTab(v)}
+        />
+      </div>
 
-        {/* Middle: Prompt Rules */}
-        <div className="prompts-section prompts-section-rules">
-          <div className="prompts-section-header">
-            Prompt Rules
-            {systemPromptRules.length > 0 && (
-              <span className="prompts-observed-count">{systemPromptRules.filter((r) => r.enabled).length}/{systemPromptRules.length}</span>
-            )}
-          </div>
-          <div className="prompts-section-list">
-            {systemPromptRules.map((r) => (
-              <button
-                key={r.id}
-                className={`prompts-list-item${selectedType === "rules" && selectedId === r.id ? " prompts-list-item-active" : ""}${!r.enabled ? " prompts-list-item-disabled" : ""}`}
-                onClick={() => select("rules", r.id)}
-              >
-                <span className="prompts-item-name">{r.name || "Untitled"}</span>
-                <span className="prompts-item-size">
-                  {r.pattern ? (r.pattern.length > 30 ? r.pattern.slice(0, 30) + "..." : r.pattern) : "no pattern"}
-                </span>
-              </button>
-            ))}
-          </div>
-          <button className="prompts-add-btn" onClick={handleAddRule}>+ Add Rule</button>
-        </div>
-
-        {/* Bottom: Observed */}
-        <div className="prompts-section prompts-section-observed">
-          <div className="prompts-section-header">
-            Observed
-            {observedPrompts.length > 0 && (
-              <span className="prompts-observed-count">{observedPrompts.length}</span>
-            )}
-          </div>
-          <div className="prompts-section-list">
-            {observedPrompts.length === 0 ? (
-              <div className="prompts-observed-empty">No prompts captured yet</div>
-            ) : (
-              observedPrompts.map((p) => (
+      {activeSubTab === "prompts" ? (
+        /* ── My Prompts sub-tab ─────────────────────────────────────── */
+        <div className="prompts-myprompts-layout">
+          <div className="prompts-myprompts-sidebar">
+            <div className="prompts-section-header">My Prompts</div>
+            <div className="prompts-section-list">
+              {savedPrompts.map((p) => (
                 <button
                   key={p.id}
-                  className={`prompts-list-item${selectedType === "observed" && selectedId === p.id ? " prompts-list-item-active" : ""}`}
-                  onClick={() => select("observed", p.id)}
+                  className={`prompts-list-item${selectedSavedPromptId === p.id ? " prompts-list-item-active" : ""}`}
+                  onClick={() => setSelectedSavedPromptId(p.id)}
                 >
-                  <span className="prompts-item-name">{p.label}</span>
-                  <span className="prompts-item-size">{p.model} / {p.text.length.toLocaleString()}</span>
+                  <span className="prompts-item-name">{p.name || "Untitled"}</span>
+                  <span className="prompts-item-size">{p.text.length.toLocaleString()} chars</span>
                 </button>
-              ))
+              ))}
+            </div>
+            <button className="prompts-add-btn" onClick={handleAdd}>+ Add Prompt</button>
+          </div>
+
+          <div className="prompts-editor">
+            {!selectedSavedPromptId ? (
+              <div className="prompts-empty">
+                Select a prompt from the sidebar, or add a new one.
+              </div>
+            ) : (
+              <>
+                <div className="prompts-editor-header">
+                  <input
+                    className="prompts-name-input"
+                    value={editName}
+                    onChange={(e) => { setEditName(e.target.value); setDirty(true); }}
+                    placeholder="Prompt name"
+                    spellCheck={false}
+                  />
+                  <div className="prompts-editor-actions">
+                    {dirty && (
+                      <button className="prompts-save-btn" onClick={handleSave}>Save</button>
+                    )}
+                    <button className="prompts-delete-btn" onClick={handleDelete} title="Delete prompt">
+                      <IconClose size={12} />
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  className="prompts-textarea"
+                  value={editText}
+                  onChange={(e) => { setEditText(e.target.value); setDirty(true); }}
+                  ref={textareaRef}
+                  placeholder="Enter your system prompt..."
+                  spellCheck={false}
+                />
+                <div className="prompts-editor-footer">
+                  <span className="prompts-char-count">
+                    {editText.length.toLocaleString()} characters
+                  </span>
+                  {dirty && <span className="prompts-unsaved">unsaved</span>}
+                </div>
+              </>
             )}
           </div>
         </div>
-      </div>
-
-      {/* Editor */}
-      <div className="prompts-editor">
-        {selectedType === "none" ? (
-          <div className="prompts-empty">
-            Select a prompt from the sidebar, or add a new one.
-          </div>
-        ) : selectedType === "observed" ? (
-          <>
-            <div className="prompts-editor-header">
-              <span className="prompts-editor-title">Observed System Prompt</span>
-              <div className="prompts-editor-actions">
-                {observedEdited && !pendingRules && (
-                  <button className="prompts-save-btn" onClick={handleGenerateRules}>
-                    Generate Rules
-                  </button>
-                )}
-                {!pendingRules && (
-                  isEditing ? (
-                    <button className="prompts-edit-toggle" onClick={handleDoneEditing}>Done</button>
-                  ) : (
-                    <button className="prompts-edit-toggle" onClick={handleStartEditing}>Edit</button>
-                  )
-                )}
-              </div>
+      ) : (
+        /* ── Rules sub-tab ──────────────────────────────────────────── */
+        <div className="prompts-rules-layout">
+          {/* Left panel: Observed prompts */}
+          <div className="prompts-rules-observed">
+            <div className="prompts-section-header">
+              Observed
+              {observedPrompts.length > 0 && (
+                <span className="prompts-observed-count">{observedPrompts.length}</span>
+              )}
             </div>
 
-            <div className="prompts-observed-pane">
-              {pendingRules ? (
-                <RulePreview
-                  rules={pendingRules}
-                  onConfirm={handleConfirmRules}
-                  onCancel={() => setPendingRules(null)}
-                />
-              ) : isEditing ? (
-                <textarea
-                  className="prompts-textarea"
-                  value={observedEditText}
-                  onChange={(e) => setObservedEditText(e.target.value)}
-                  ref={textareaRef}
-                  spellCheck={false}
-                />
-              ) : observedDiff ? (
-                <InlineDiffView diff={observedDiff} />
+            <div className="prompts-observed-list">
+              {observedPrompts.length === 0 ? (
+                <div className="prompts-observed-empty">No prompts captured yet</div>
               ) : (
-                <pre className="prompts-inline-diff prompts-inline-diff-plain">{rulesAppliedText}</pre>
+                observedPrompts.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`prompts-list-item${selectedObservedPromptId === p.id ? " prompts-list-item-active" : ""}`}
+                    onClick={() => setSelectedObservedPromptId(p.id)}
+                  >
+                    <span className="prompts-item-name">{p.label}</span>
+                    <span className="prompts-item-size">{p.model} / {p.text.length.toLocaleString()}</span>
+                  </button>
+                ))
               )}
             </div>
 
-            <div className="prompts-editor-footer">
-              <span className="prompts-char-count">
-                {editText.length.toLocaleString()} characters
-              </span>
-              {observedEdited && <span className="prompts-unsaved">edited</span>}
-              {isEditing && editBaseline !== rulesAppliedText && (
-                <span className="prompts-unsaved">rules changed</span>
-              )}
-            </div>
-          </>
-        ) : selectedType === "rules" ? (
-          <>
-            <div className="prompts-editor-header">
-              <input
-                className="prompts-name-input"
-                value={editName}
-                onChange={(e) => { setEditName(e.target.value); setRuleDirty(true); }}
-                placeholder="Rule name"
-                spellCheck={false}
-              />
-              <div className="prompts-editor-actions">
-                {ruleDirty && !patternError && (
-                  <button className="prompts-save-btn" onClick={handleRuleSave}>
-                    Save
-                  </button>
-                )}
-                <button className="prompts-delete-btn" onClick={handleRuleDelete} title="Delete rule">
-                  <IconClose size={12} />
-                </button>
-              </div>
-            </div>
-            <div className="prompts-rule-fields">
-              <label className="prompts-rule-field">
-                <span className="prompts-rule-label">Pattern</span>
-                <input
-                  className={`prompts-rule-input${patternError ? " prompts-rule-input-error" : ""}`}
-                  value={editPattern}
-                  onChange={(e) => { setEditPattern(e.target.value); setRuleDirty(true); }}
-                  placeholder="Regex pattern (e.g. Claude)"
-                  spellCheck={false}
-                />
-                {patternError && <span className="prompts-rule-error">{patternError}</span>}
-              </label>
-              <label className="prompts-rule-field">
-                <span className="prompts-rule-label">Replacement</span>
-                <input
-                  className="prompts-rule-input"
-                  value={editReplacement}
-                  onChange={(e) => { setEditReplacement(e.target.value); setRuleDirty(true); }}
-                  placeholder="Replacement text (e.g. Assistant, supports $1)"
-                  spellCheck={false}
-                />
-              </label>
-              <div className="prompts-rule-row">
-                <label className="prompts-rule-field prompts-rule-field-flags">
-                  <span className="prompts-rule-label">Flags</span>
-                  <input
-                    className="prompts-rule-input prompts-rule-flags-input"
-                    value={editFlags}
-                    onChange={(e) => { setEditFlags(e.target.value); setRuleDirty(true); }}
-                    placeholder="g"
-                    spellCheck={false}
-                  />
-                </label>
-                <label className="prompts-rule-toggle">
-                  <input
-                    type="checkbox"
-                    checked={editEnabled}
-                    onChange={(e) => { setEditEnabled(e.target.checked); setRuleDirty(true); }}
-                  />
-                  <span>Enabled</span>
-                </label>
-                <div className="prompts-rule-arrows">
-                  <button
-                    className="prompts-rule-arrow-btn"
-                    onClick={() => selectedId && reorderSystemPromptRules(selectedId, -1)}
-                    title="Move up"
-                  >▲</button>
-                  <button
-                    className="prompts-rule-arrow-btn"
-                    onClick={() => selectedId && reorderSystemPromptRules(selectedId, 1)}
-                    title="Move down"
-                  >▼</button>
+            {selectedObservedPromptId && (
+              <div className="prompts-observed-detail">
+                <div className="prompts-editor-header">
+                  <span className="prompts-editor-title">Observed System Prompt</span>
+                  <div className="prompts-editor-actions">
+                    {observedEdited && !pendingRules && (
+                      <button className="prompts-save-btn" onClick={handleGenerateRules}>
+                        Generate Rules
+                      </button>
+                    )}
+                    {!pendingRules && (
+                      isEditing ? (
+                        <button className="prompts-edit-toggle" onClick={handleDoneEditing}>Done</button>
+                      ) : (
+                        <button className="prompts-edit-toggle" onClick={handleStartEditing}>Edit</button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                <div className="prompts-observed-pane">
+                  {pendingRules ? (
+                    <RulePreview
+                      rules={pendingRules}
+                      onConfirm={handleConfirmRules}
+                      onCancel={() => setPendingRules(null)}
+                    />
+                  ) : isEditing ? (
+                    <textarea
+                      className="prompts-textarea"
+                      value={observedEditText}
+                      onChange={(e) => setObservedEditText(e.target.value)}
+                      ref={textareaRef}
+                      spellCheck={false}
+                    />
+                  ) : observedDiff ? (
+                    <InlineDiffView diff={observedDiff} />
+                  ) : (
+                    <pre className="prompts-inline-diff prompts-inline-diff-plain">{rulesAppliedText}</pre>
+                  )}
+                </div>
+
+                <div className="prompts-editor-footer">
+                  <span className="prompts-char-count">
+                    {observedRawText.length.toLocaleString()} characters
+                  </span>
+                  {observedEdited && <span className="prompts-unsaved">edited</span>}
+                  {isEditing && editBaseline !== rulesAppliedText && (
+                    <span className="prompts-unsaved">rules changed</span>
+                  )}
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* Right panel: Rules list */}
+          <div className="prompts-rules-panel">
+            <div className="prompts-section-header">
+              Prompt Rules
+              {systemPromptRules.length > 0 && (
+                <span className="prompts-observed-count">
+                  {systemPromptRules.filter((r) => r.enabled).length}/{systemPromptRules.length}
+                </span>
+              )}
             </div>
-            <div className="prompts-editor-footer">
-              {ruleDirty && <span className="prompts-unsaved">unsaved</span>}
+
+            <div className="prompts-rules-cards">
+              {systemPromptRules.length === 0 ? (
+                <div className="prompts-observed-empty">No rules created yet</div>
+              ) : (
+                systemPromptRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className={`prompts-rule-card${expandedRuleId === rule.id ? " prompts-rule-card-active" : ""}${!rule.enabled ? " prompts-rule-card-disabled" : ""}`}
+                  >
+                    <div
+                      className="prompts-rule-card-header"
+                      onClick={() => setExpandedRuleId(expandedRuleId === rule.id ? null : rule.id)}
+                    >
+                      <input
+                        type="checkbox"
+                        className="prompts-rule-card-toggle"
+                        checked={rule.enabled}
+                        onChange={() => updateSystemPromptRule(rule.id, { enabled: !rule.enabled })}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <span className="prompts-rule-card-name">{rule.name || "Untitled"}</span>
+                      <span className="prompts-rule-card-pattern">
+                        {rule.pattern
+                          ? (rule.pattern.length > 40 ? rule.pattern.slice(0, 40) + "..." : rule.pattern)
+                          : "no pattern"}
+                      </span>
+                      <div className="prompts-rule-card-actions">
+                        <button
+                          className="prompts-rule-arrow-btn"
+                          onClick={(e) => { e.stopPropagation(); reorderSystemPromptRules(rule.id, -1); }}
+                          title="Move up"
+                        >▲</button>
+                        <button
+                          className="prompts-rule-arrow-btn"
+                          onClick={(e) => { e.stopPropagation(); reorderSystemPromptRules(rule.id, 1); }}
+                          title="Move down"
+                        >▼</button>
+                        <button
+                          className="prompts-delete-btn"
+                          onClick={(e) => { e.stopPropagation(); handleRuleDelete(rule.id); }}
+                          title="Delete rule"
+                        >
+                          <IconClose size={12} />
+                        </button>
+                      </div>
+                    </div>
+                    {expandedRuleId === rule.id && (
+                      <RuleCardExpanded rule={rule} onSave={handleRuleSave} />
+                    )}
+                  </div>
+                ))
+              )}
             </div>
-          </>
-        ) : (
-          <>
-            <div className="prompts-editor-header">
-              <input
-                className="prompts-name-input"
-                value={editName}
-                onChange={(e) => { setEditName(e.target.value); setDirty(true); }}
-                placeholder="Prompt name"
-                spellCheck={false}
-              />
-              <div className="prompts-editor-actions">
-                {dirty && (
-                  <button className="prompts-save-btn" onClick={handleSave}>
-                    Save
-                  </button>
-                )}
-                <button className="prompts-delete-btn" onClick={handleDelete} title="Delete prompt">
-                  <IconClose size={12} />
-                </button>
-              </div>
-            </div>
-            <textarea
-              className="prompts-textarea"
-              value={editText}
-              onChange={(e) => { setEditText(e.target.value); setDirty(true); }}
-              ref={textareaRef}
-              placeholder="Enter your system prompt..."
-              spellCheck={false}
-            />
-            <div className="prompts-editor-footer">
-              <span className="prompts-char-count">
-                {editText.length.toLocaleString()} characters
-              </span>
-              {dirty && <span className="prompts-unsaved">unsaved</span>}
-            </div>
-          </>
-        )}
-      </div>
+
+            <button className="prompts-add-btn" onClick={handleAddRule}>+ Add Rule</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
