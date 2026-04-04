@@ -194,6 +194,11 @@ export function useTapEventProcessor(
         const isSidechain = subTracker.isSidechainActive?.() ?? false;
         const agentId = isSidechain ? (subTracker.getLastActiveAgentId?.() ?? null) : null;
 
+        // Track user message boundary for Response mode
+        if ((event.kind === "UserInput" || event.kind === "SlashCommand") && !isSidechain) {
+          activityStore.markUserMessage(sid);
+        }
+
         if (event.kind === "TurnStart" && !isSidechain) {
           activityTurnCounter++;
           activityStore.startTurn(sid, `turn-${activityTurnCounter}`);
