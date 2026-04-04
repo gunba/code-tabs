@@ -180,8 +180,10 @@ function RuleCardExpanded({
   );
 }
 
-const SUB_TABS: { value: "prompts" | "rules"; label: string }[] = [
+// [CM-28] PromptsTab splits My Prompts, Observed Prompts, and Rules into separate subtabs; the observed editor can show a live diff while rules stay standalone.
+const SUB_TABS: { value: "prompts" | "observed" | "rules"; label: string }[] = [
   { value: "prompts", label: "My Prompts" },
+  { value: "observed", label: "Observed Prompts" },
   { value: "rules", label: "Rules" },
 ];
 
@@ -199,7 +201,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
   const reorderSystemPromptRules = useSettingsStore((s) => s.reorderSystemPromptRules);
 
   // Sub-tab navigation
-  const [activeSubTab, setActiveSubTab] = useState<"prompts" | "rules">("prompts");
+  const [activeSubTab, setActiveSubTab] = useState<"prompts" | "observed" | "rules">("prompts");
 
   // My Prompts state
   const [selectedSavedPromptId, setSelectedSavedPromptId] = useState<string | null>(null);
@@ -257,6 +259,14 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
     if (enabledRules.length === 0) return observedRawText;
     return applyRulesToText(observedRawText, enabledRules);
   }, [observedRawText, systemPromptRules]);
+
+  // Compute rules-applied text for an arbitrary prompt (used in click handler to avoid stale state flash)
+  const computeAppliedText = useCallback((rawText: string): string => {
+    if (!rawText) return "";
+    const enabledRules = systemPromptRules.filter((r) => r.enabled && r.pattern);
+    if (enabledRules.length === 0) return rawText;
+    return applyRulesToText(rawText, enabledRules);
+  }, [systemPromptRules]);
 
   // Sync observedEditText when not editing; dismiss stale pending rules when baseline shifts
   useEffect(() => {
@@ -453,19 +463,17 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
             )}
           </div>
         </div>
-      ) : (
-        /* ── Rules sub-tab ──────────────────────────────────────────── */
-        <div className="prompts-rules-layout">
-          {/* Left panel: Observed prompts */}
-          <div className="prompts-rules-observed">
+      ) : activeSubTab === "observed" ? (
+        /* ── Observed Prompts sub-tab ──────────────────────────────── */
+        <div className="prompts-myprompts-layout">
+          <div className="prompts-myprompts-sidebar">
             <div className="prompts-section-header">
               Observed
               {observedPrompts.length > 0 && (
                 <span className="prompts-observed-count">{observedPrompts.length}</span>
               )}
             </div>
-
-            <div className="prompts-observed-list">
+            <div className="prompts-section-list">
               {observedPrompts.length === 0 ? (
                 <div className="prompts-observed-empty">No prompts captured yet</div>
               ) : (
@@ -473,7 +481,15 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
                   <button
                     key={p.id}
                     className={`prompts-list-item${selectedObservedPromptId === p.id ? " prompts-list-item-active" : ""}`}
-                    onClick={() => setSelectedObservedPromptId(p.id)}
+                    onClick={() => {
+                      if (p.id === selectedObservedPromptId) return;
+                      setSelectedObservedPromptId(p.id);
+                      const applied = computeAppliedText(p.text);
+                      setObservedEditText(applied);
+                      setEditBaseline(applied);
+                      setIsEditing(false);
+                      setPendingRules(null);
+                    }}
                   >
                     <span className="prompts-item-name">{p.label}</span>
                     <span className="prompts-item-size">{p.model} / {p.text.length.toLocaleString()}</span>
@@ -481,9 +497,15 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
                 ))
               )}
             </div>
+          </div>
 
-            {selectedObservedPromptId && (
-              <div className="prompts-observed-detail">
+          <div className="prompts-editor">
+            {!selectedObservedPromptId ? (
+              <div className="prompts-empty">
+                Select an observed prompt from the sidebar to view its diff.
+              </div>
+            ) : (
+              <>
                 <div className="prompts-editor-header">
                   <span className="prompts-editor-title">Observed System Prompt</span>
                   <div className="prompts-editor-actions">
@@ -510,13 +532,21 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
                       onCancel={() => setPendingRules(null)}
                     />
                   ) : isEditing ? (
-                    <textarea
-                      className="prompts-textarea"
-                      value={observedEditText}
-                      onChange={(e) => setObservedEditText(e.target.value)}
-                      ref={textareaRef}
-                      spellCheck={false}
-                    />
+                    <div className="prompts-observed-split">
+                      <textarea
+                        className="prompts-textarea"
+                        value={observedEditText}
+                        onChange={(e) => setObservedEditText(e.target.value)}
+                        spellCheck={false}
+                      />
+                      <div className="prompts-observed-split-diff">
+                        {observedDiff ? (
+                          <InlineDiffView diff={observedDiff} />
+                        ) : (
+                          <div className="prompts-diff-empty">No changes from original prompt</div>
+                        )}
+                      </div>
+                    </div>
                   ) : observedDiff ? (
                     <InlineDiffView diff={observedDiff} />
                   ) : (
@@ -526,84 +556,84 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
 
                 <div className="prompts-editor-footer">
                   <span className="prompts-char-count">
-                    {observedRawText.length.toLocaleString()} characters
+                    {(isEditing ? observedEditText : observedRawText).length.toLocaleString()} characters
                   </span>
                   {observedEdited && <span className="prompts-unsaved">edited</span>}
                   {isEditing && editBaseline !== rulesAppliedText && (
                     <span className="prompts-unsaved">rules changed</span>
                   )}
                 </div>
-              </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* ── Rules sub-tab ──────────────────────────────────────────── */
+        <div className="prompts-rules-panel prompts-rules-standalone">
+          <div className="prompts-section-header">
+            Prompt Rules
+            {systemPromptRules.length > 0 && (
+              <span className="prompts-observed-count">
+                {systemPromptRules.filter((r) => r.enabled).length}/{systemPromptRules.length}
+              </span>
             )}
           </div>
 
-          {/* Right panel: Rules list */}
-          <div className="prompts-rules-panel">
-            <div className="prompts-section-header">
-              Prompt Rules
-              {systemPromptRules.length > 0 && (
-                <span className="prompts-observed-count">
-                  {systemPromptRules.filter((r) => r.enabled).length}/{systemPromptRules.length}
-                </span>
-              )}
-            </div>
-
-            <div className="prompts-rules-cards">
-              {systemPromptRules.length === 0 ? (
-                <div className="prompts-observed-empty">No rules created yet</div>
-              ) : (
-                systemPromptRules.map((rule) => (
+          <div className="prompts-rules-cards">
+            {systemPromptRules.length === 0 ? (
+              <div className="prompts-observed-empty">No rules created yet</div>
+            ) : (
+              systemPromptRules.map((rule) => (
+                <div
+                  key={rule.id}
+                  className={`prompts-rule-card${expandedRuleId === rule.id ? " prompts-rule-card-active" : ""}${!rule.enabled ? " prompts-rule-card-disabled" : ""}`}
+                >
                   <div
-                    key={rule.id}
-                    className={`prompts-rule-card${expandedRuleId === rule.id ? " prompts-rule-card-active" : ""}${!rule.enabled ? " prompts-rule-card-disabled" : ""}`}
+                    className="prompts-rule-card-header"
+                    onClick={() => setExpandedRuleId(expandedRuleId === rule.id ? null : rule.id)}
                   >
-                    <div
-                      className="prompts-rule-card-header"
-                      onClick={() => setExpandedRuleId(expandedRuleId === rule.id ? null : rule.id)}
-                    >
-                      <input
-                        type="checkbox"
-                        className="prompts-rule-card-toggle"
-                        checked={rule.enabled}
-                        onChange={() => updateSystemPromptRule(rule.id, { enabled: !rule.enabled })}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <span className="prompts-rule-card-name">{rule.name || "Untitled"}</span>
-                      <span className="prompts-rule-card-pattern">
-                        {rule.pattern
-                          ? (rule.pattern.length > 40 ? rule.pattern.slice(0, 40) + "..." : rule.pattern)
-                          : "no pattern"}
-                      </span>
-                      <div className="prompts-rule-card-actions">
-                        <button
-                          className="prompts-rule-arrow-btn"
-                          onClick={(e) => { e.stopPropagation(); reorderSystemPromptRules(rule.id, -1); }}
-                          title="Move up"
-                        >▲</button>
-                        <button
-                          className="prompts-rule-arrow-btn"
-                          onClick={(e) => { e.stopPropagation(); reorderSystemPromptRules(rule.id, 1); }}
-                          title="Move down"
-                        >▼</button>
-                        <button
-                          className="prompts-delete-btn"
-                          onClick={(e) => { e.stopPropagation(); handleRuleDelete(rule.id); }}
-                          title="Delete rule"
-                        >
-                          <IconClose size={12} />
-                        </button>
-                      </div>
+                    <input
+                      type="checkbox"
+                      className="prompts-rule-card-toggle"
+                      checked={rule.enabled}
+                      onChange={() => updateSystemPromptRule(rule.id, { enabled: !rule.enabled })}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span className="prompts-rule-card-name">{rule.name || "Untitled"}</span>
+                    <span className="prompts-rule-card-pattern">
+                      {rule.pattern
+                        ? (rule.pattern.length > 40 ? rule.pattern.slice(0, 40) + "..." : rule.pattern)
+                        : "no pattern"}
+                    </span>
+                    <div className="prompts-rule-card-actions">
+                      <button
+                        className="prompts-rule-arrow-btn"
+                        onClick={(e) => { e.stopPropagation(); reorderSystemPromptRules(rule.id, -1); }}
+                        title="Move up"
+                      >▲</button>
+                      <button
+                        className="prompts-rule-arrow-btn"
+                        onClick={(e) => { e.stopPropagation(); reorderSystemPromptRules(rule.id, 1); }}
+                        title="Move down"
+                      >▼</button>
+                      <button
+                        className="prompts-delete-btn"
+                        onClick={(e) => { e.stopPropagation(); handleRuleDelete(rule.id); }}
+                        title="Delete rule"
+                      >
+                        <IconClose size={12} />
+                      </button>
                     </div>
-                    {expandedRuleId === rule.id && (
-                      <RuleCardExpanded rule={rule} onSave={handleRuleSave} />
-                    )}
                   </div>
-                ))
-              )}
-            </div>
-
-            <button className="prompts-add-btn" onClick={handleAddRule}>+ Add Rule</button>
+                  {expandedRuleId === rule.id && (
+                    <RuleCardExpanded rule={rule} onSave={handleRuleSave} />
+                  )}
+                </div>
+              ))
+            )}
           </div>
+
+          <button className="prompts-add-btn" onClick={handleAddRule}>+ Add Rule</button>
         </div>
       )}
     </div>

@@ -36,40 +36,11 @@
 
 /* ── Rules layout ──────────────────────────────────────── */
 
-.prompts-rules-layout {
-  display: flex;
+/* [CM-28] PromptsTab keeps Observed Prompts in the shared sidebar/editor layout and renders Rules as a standalone panel. */
+
+.prompts-rules-standalone {
   flex: 1;
   min-height: 0;
-}
-
-.prompts-rules-observed {
-  width: 280px;
-  min-width: 280px;
-  border-right: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-primary);
-}
-
-.prompts-observed-list {
-  overflow-y: auto;
-  padding: 0 6px 6px;
-  flex-shrink: 0;
-  max-height: 200px;
-}
-
-.prompts-observed-list::-webkit-scrollbar { width: 4px; }
-.prompts-observed-list::-webkit-scrollbar-track { background: transparent; }
-.prompts-observed-list::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 2px; }
-
-.prompts-observed-detail {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
-  gap: 6px;
-  border-top: 1px solid var(--border-subtle);
 }
 
 .prompts-rules-panel {
@@ -490,6 +461,36 @@
   flex-direction: column;
   overflow: hidden;
 }
+
+.prompts-observed-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prompts-observed-split > .prompts-textarea {
+  flex: 1;
+  min-height: 80px;
+}
+
+.prompts-observed-split-diff {
+  flex: 1;
+  min-height: 80px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.prompts-observed-split-diff > .prompts-inline-diff {
+  border: none;
+  border-radius: 0;
+}
+
+.prompts-observed-split-diff::-webkit-scrollbar { width: 5px; }
+.prompts-observed-split-diff::-webkit-scrollbar-track { background: transparent; }
+.prompts-observed-split-diff::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
 
 .prompts-inline-diff {
   flex: 1;
