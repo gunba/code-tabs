@@ -1,7 +1,6 @@
 /* ============================================================
-   ActivityPanel — Agent file activity side panel
-   Follows DiffPanel conventions: bg-surface base, border-left
-   separator, 10-11px monospace, thin scrollbar.
+   ActivityPanel — Agent file explorer side panel
+   Hierarchical tree view showing files agents have visited.
    ============================================================ */
 
 /* -- Panel container -- */
@@ -38,39 +37,6 @@
   flex: 1;
 }
 
-.activity-panel-stats {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.activity-stat {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  font-family: var(--font-mono);
-}
-
-.activity-stat-modified {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-primary));
-}
-
-.activity-stat-created {
-  color: var(--success, #5cb85c);
-  background: color-mix(in srgb, var(--success, #5cb85c) 10%, var(--bg-primary));
-}
-
-.activity-stat-deleted {
-  color: var(--error, #d84b4b);
-  background: color-mix(in srgb, var(--error, #d84b4b) 10%, var(--bg-primary));
-}
-
-.activity-stat-tick {
-  display: inline-block;
-  animation: activity-stat-tick 0.4s ease-out;
-}
-
 .activity-panel-close {
   background: none;
   border: none;
@@ -83,6 +49,38 @@
 
 .activity-panel-close:hover {
   color: var(--text-primary);
+}
+
+/* -- Mode toggle -- */
+
+.activity-mode-toggle {
+  display: flex;
+  gap: 1px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.activity-mode-btn {
+  background: var(--bg-primary);
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  font-family: var(--font-mono);
+}
+
+.activity-mode-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-surface-hover);
+}
+
+.activity-mode-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 /* -- Body (scrollable) -- */
@@ -101,101 +99,51 @@
 .activity-panel-body::-webkit-scrollbar-track { background: transparent; }
 .activity-panel-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
 
-/* -- Turn section headers -- */
+/* -- File tree rows -- */
 
-.activity-turn-header {
+.file-tree-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border);
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  flex-shrink: 0;
-  user-select: none;
+  gap: 4px;
+  padding: 2px 8px;
   cursor: pointer;
+  transition: background 0.1s;
+  min-height: 24px;
+  user-select: none;
 }
 
-.activity-turn-header:hover {
+.file-tree-row:hover {
   background: var(--bg-surface-hover);
 }
 
-.activity-turn-chevron {
+/* Chevron for folder expand/collapse */
+.file-tree-chevron {
   font-size: 8px;
   color: var(--text-muted);
   width: 10px;
   flex-shrink: 0;
   transition: transform 0.15s;
   display: inline-block;
+  text-align: center;
 }
 
-.activity-turn-chevron.collapsed {
+.file-tree-chevron.collapsed {
   transform: rotate(-90deg);
 }
 
-.activity-turn-stats {
-  font-size: 9px;
+/* Icon slot: folder/document icon or mascot */
+.file-tree-icon-slot {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
-  font-weight: 400;
-  margin-left: auto;
 }
 
-/* -- File list items -- */
-
-.activity-file-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 12px;
-  cursor: pointer;
-  transition: background 0.1s;
-  min-height: 26px;
-}
-
-.activity-file-item:hover {
-  background: var(--bg-surface-hover);
-}
-
-.activity-file-item.denied {
-  opacity: 0.5;
-}
-
-.activity-file-item.denied .activity-file-name {
-  text-decoration: line-through;
-}
-
-/* Mascot container: fixed width slot left of the file path */
-.activity-mascot-slot {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Status badge (M/C/D/R) */
-.activity-file-status {
-  width: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.activity-file-status.status-M { color: var(--accent); }
-.activity-file-status.status-C { color: var(--success, #5cb85c); }
-.activity-file-status.status-D { color: var(--error, #d84b4b); }
-.activity-file-status.status-R { color: var(--text-muted); }
-
-/* File path: directory dimmed, filename bright */
-.activity-file-path {
+/* Name text */
+.file-tree-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -203,117 +151,25 @@
   white-space: nowrap;
 }
 
-.activity-file-dir {
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.activity-file-name {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-/* Badges */
-.activity-badge {
-  font-size: 9px;
-  padding: 0 4px;
-  border-radius: 4px;
-  font-weight: 500;
-  flex-shrink: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.activity-badge-external {
-  color: var(--warning, #b8860b);
-  background: color-mix(in srgb, var(--warning, #b8860b) 10%, var(--bg-primary));
-}
-
-.activity-badge-denied {
-  color: var(--error, #d84b4b);
-  background: color-mix(in srgb, var(--error, #d84b4b) 10%, var(--bg-primary));
-}
-
-.activity-badge-unconfirmed {
-  color: var(--text-muted);
-  background: var(--bg-primary);
-}
-
-.activity-badge-tool {
-  color: var(--accent-secondary);
-  background: color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-primary));
-}
-
-/* -- Diff button on hover -- */
-
-.activity-file-diff-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0 2px;
-  font-size: 12px;
-  line-height: 1;
-  opacity: 0;
-  transition: opacity 0.1s;
-  flex-shrink: 0;
-}
-
-.activity-file-item:hover .activity-file-diff-btn {
-  opacity: 1;
-}
-
-.activity-file-diff-btn:hover {
-  color: var(--accent);
-}
-
-/* -- Context section -- */
-
-.activity-context-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--bg-primary);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  font-size: 10px;
-  font-weight: 600;
+.file-tree-foldername {
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  user-select: none;
-  cursor: pointer;
+  font-weight: 500;
 }
 
-.activity-context-header:hover {
-  background: var(--bg-surface-hover);
-}
-
-.activity-context-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 12px;
-  font-size: 10px;
-}
-
-.activity-context-path {
+.file-tree-filename {
   color: var(--text-primary);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 400;
 }
 
-.activity-context-type {
+/* Multi-agent count badge */
+.file-tree-agent-count {
   font-size: 9px;
-  color: var(--accent-secondary);
-  background: color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-primary));
   padding: 0 4px;
   border-radius: 4px;
+  color: var(--accent-secondary);
+  background: color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-primary));
   flex-shrink: 0;
+  font-weight: 500;
 }
 
 /* -- Empty state -- */
@@ -323,41 +179,6 @@
   font-size: 11px;
   text-align: center;
   padding: 24px 12px;
-}
-
-/* -- Animations -- */
-
-@keyframes activity-file-enter {
-  0% {
-    opacity: 0;
-    transform: translateX(12px);
-    background: color-mix(in srgb, var(--accent-secondary) 20%, var(--bg-surface));
-  }
-  40% {
-    opacity: 1;
-    transform: translateX(0);
-    background: color-mix(in srgb, var(--accent-secondary) 20%, var(--bg-surface));
-  }
-  100% {
-    opacity: 1;
-    transform: translateX(0);
-    background: transparent;
-  }
-}
-
-.activity-file-enter {
-  animation: activity-file-enter 0.6s ease-out;
-}
-
-@keyframes activity-stat-tick {
-  0% {
-    transform: scale(1.15);
-    color: var(--text-primary);
-  }
-  100% {
-    transform: scale(1);
-    color: inherit;
-  }
 }
 
 /* ============================================================

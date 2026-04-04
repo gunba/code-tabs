@@ -32,6 +32,7 @@ interface ActivityState {
   ) => void;
   confirmFileChange: (sessionId: string, path: string) => void;
   markPermissionDenied: (sessionId: string, path: string) => void;
+  markUserMessage: (sessionId: string) => void;
   addContextFile: (sessionId: string, entry: ContextFileEntry) => void;
   clearSession: (sessionId: string) => void;
 }
@@ -56,9 +57,7 @@ function evictOldTurns(activity: SessionActivity): void {
   while (activity.turns.length > MAX_TURNS) {
     const evicted = activity.turns.shift()!;
     for (const f of evicted.files) {
-      if (f.kind !== "read") {
-        activity.allFiles[f.path] = f;
-      }
+      activity.allFiles[f.path] = f;
     }
   }
   // Evict oldest allFiles entries if over cap
@@ -68,6 +67,7 @@ function evictOldTurns(activity: SessionActivity): void {
     const toRemove = entries.length - MAX_ALL_FILES;
     for (let i = 0; i < toRemove; i++) {
       delete activity.allFiles[entries[i][0]];
+      activity.visitedPaths.delete(entries[i][0]);
     }
   }
 }
@@ -149,10 +149,9 @@ export const useActivityStore = create<ActivityState>()((set) => ({
           turn.files.push(entry);
         }
       }
-      // Also update allFiles for non-read operations
-      if (kind !== "read") {
-        activity.allFiles[path] = entry;
-      }
+      // Track in session-wide indices
+      activity.visitedPaths.add(path);
+      activity.allFiles[path] = entry;
       recomputeStats(activity);
       return { sessions };
     }),
@@ -193,6 +192,14 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       return { sessions };
     }),
 
+  markUserMessage: (sessionId) =>
+    set((state) => {
+      const sessions = { ...state.sessions };
+      const activity = ensureSession(sessions, sessionId);
+      activity.lastUserMessageAt = Date.now();
+      return { sessions };
+    }),
+
   addContextFile: (sessionId, entry) =>
     set((state) => {
       const sessions = { ...state.sessions };
@@ -200,6 +207,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       if (!activity.contextFiles.some((c) => c.path === entry.path)) {
         activity.contextFiles.push(entry);
       }
+      activity.visitedPaths.add(entry.path);
       return { sessions };
     }),
 

@@ -11,7 +11,7 @@ import {
   IconWarning, IconHook, IconCircleFilled, IconCircleOutline,
   IconGitBranch,
 } from "../Icons/Icons";
-import { useActivityStore } from "../../store/activity";
+
 import type { Session, PermissionMode } from "../../types/session";
 import { isSessionIdle } from "../../types/session";
 import { getEffectiveState } from "../../lib/claude";
@@ -284,11 +284,6 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const sidePanel = useSettingsStore((s) => s.sidePanel);
   const setSidePanel = useSettingsStore((s) => s.setSidePanel);
 
-  const activitySessions = useActivityStore((s) => s.sessions);
-  const activityStats = activeSession ? activitySessions[activeSession.id]?.stats : null;
-  const hasChanges = activityStats != null &&
-    (activityStats.filesModified + activityStats.filesCreated + activityStats.filesDeleted) > 0;
-
   useEffect(() => {
     const dirs = sessions
       .filter((s) => !s.isMetaAgent && s.state !== "dead")
@@ -335,16 +330,13 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
       )}
       {/* Far-right action buttons — always visible */}
       <div className="status-actions">
-        {hasChanges && (
+        {activeSession && activeSession.state !== "dead" && (
           <button
             className={`status-item status-hooks-btn${sidePanel === "activity" ? " status-active-btn" : ""}`}
             onClick={() => setSidePanel(sidePanel === "activity" ? null : "activity")}
             title="File activity (Ctrl+Shift+G)"
           >
-            {activityStats!.filesModified > 0 && <span style={{ color: "var(--accent)" }}>{activityStats!.filesModified}M</span>}
-            {activityStats!.filesCreated > 0 && <span style={{ color: "var(--success, #5cb85c)" }}>{activityStats!.filesCreated}C</span>}
-            {activityStats!.filesDeleted > 0 && <span style={{ color: "var(--error, #d84b4b)" }}>{activityStats!.filesDeleted}D</span>}
-            {" "}Activity
+            Activity
           </button>
         )}
         {activeSession?.metadata.capturedSystemPrompt && onOpenContextViewer && (

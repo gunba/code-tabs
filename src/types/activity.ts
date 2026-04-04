@@ -29,6 +29,10 @@ export interface TurnActivity {
 export interface SessionActivity {
   turns: TurnActivity[];
   allFiles: Record<string, FileActivity>;
+  /** Every unique file path the agent has touched this session (reads included). */
+  visitedPaths: Set<string>;
+  /** Timestamp of the last UserInput/SlashCommand event (for Response mode boundary). */
+  lastUserMessageAt: number;
   contextFiles: ContextFileEntry[];
   stats: ActivityStats;
 }
@@ -50,6 +54,8 @@ export function emptySessionActivity(): SessionActivity {
   return {
     turns: [],
     allFiles: {},
+    visitedPaths: new Set(),
+    lastUserMessageAt: 0,
     contextFiles: [],
     stats: { filesModified: 0, filesCreated: 0, filesDeleted: 0, filesRead: 0 },
   };

@@ -1,18 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useActivityStore } from "../../store/activity";
 import { useSessionStore } from "../../store/sessions";
 import { ClaudeMascot } from "./ClaudeMascot";
 import type { MascotState } from "./ClaudeMascot";
-import { IconClose } from "../Icons/Icons";
-import { splitFilePath } from "../../lib/diffParser";
+import { IconClose, IconFolder, IconDocument } from "../Icons/Icons";
 import { isSubagentActive } from "../../types/session";
-import type { FileActivity, TurnActivity } from "../../types/activity";
+import type { FileActivity, ContextFileEntry } from "../../types/activity";
+import { buildFileTree, flattenTree, allFolderPaths } from "../../lib/fileTree";
+import type { FileTreeNode } from "../../lib/fileTree";
 import "./ActivityPanel.css";
 
 interface ActivityPanelProps {
   onClose: () => void;
 }
+
+type ViewMode = "response" | "session";
 
 /* -- Helpers -- */
 
@@ -30,78 +33,10 @@ function toolToMascotState(toolName: string): MascotState {
   return "idle";
 }
 
-function kindToStatusChar(kind: string): string {
-  switch (kind) {
-    case "modified": return "M";
-    case "created": return "C";
-    case "deleted": return "D";
-    case "read": return "R";
-    case "renamed": return "R";
-    default: return "?";
-  }
-}
-
-function turnStatsLabel(turn: TurnActivity): string {
-  let r = 0, m = 0, c = 0, d = 0;
-  for (const f of turn.files) {
-    switch (f.kind) {
-      case "read": r++; break;
-      case "modified": m++; break;
-      case "created": c++; break;
-      case "deleted": d++; break;
-    }
-  }
-  const parts: string[] = [];
-  if (r > 0) parts.push(`R:${r}`);
-  if (m > 0) parts.push(`M:${m}`);
-  if (c > 0) parts.push(`C:${c}`);
-  if (d > 0) parts.push(`D:${d}`);
-  return parts.join(" ") || `${turn.files.length} files`;
-}
-
-/* -- File item component -- */
-
-function FileItem({
-  file,
-  agentInfo,
-  onClick,
-}: {
-  file: FileActivity;
-  agentInfo?: { toolName: string; isSubagent: boolean };
-  onClick: (path: string) => void;
-}) {
-  const { dir, name } = splitFilePath(file.path);
-  const statusChar = kindToStatusChar(file.kind);
-  const statusCls = `activity-file-status status-${statusChar}`;
-  const mascotState = agentInfo ? toolToMascotState(agentInfo.toolName) : null;
-
-  return (
-    <div
-      className={`activity-file-item${file.permissionDenied ? " denied" : ""}`}
-      onClick={() => onClick(file.path)}
-      title={file.path}
-    >
-      <span className="activity-mascot-slot">
-        {mascotState && (
-          <ClaudeMascot
-            state={mascotState}
-            isSubagent={agentInfo?.isSubagent}
-            size={20}
-          />
-        )}
-      </span>
-      <span className={statusCls}>{statusChar}</span>
-      <span className="activity-file-path">
-        {dir && <span className="activity-file-dir">{dir}</span>}
-        <span className="activity-file-name">{name}</span>
-      </span>
-      {file.isExternal && <span className="activity-badge activity-badge-external">ext</span>}
-      {file.permissionDenied && <span className="activity-badge activity-badge-denied">denied</span>}
-      {!file.confirmed && file.kind !== "read" && (
-        <span className="activity-badge activity-badge-unconfirmed">pending</span>
-      )}
-    </div>
-  );
+interface AgentOnFile {
+  toolName: string;
+  isSubagent: boolean;
+  agentId: string | null;
 }
 
 /* -- Empty panel -- */
@@ -121,6 +56,79 @@ function EmptyPanel({ onClose, message }: { onClose: () => void; message: string
   );
 }
 
+/* -- Tree row component -- */
+
+function FileTreeRow({
+  node,
+  depth,
+  isExpanded,
+  onToggle,
+  agents,
+  contextInfo,
+  onFileClick,
+}: {
+  node: FileTreeNode;
+  depth: number;
+  isExpanded: boolean;
+  onToggle: (path: string) => void;
+  agents: AgentOnFile[];
+  contextInfo: ContextFileEntry | null;
+  onFileClick: (path: string) => void;
+}) {
+  const indent = depth * 16;
+  const primaryMascot = agents.length > 0 ? agents[0] : null;
+  const extraAgentCount = agents.length > 1 ? agents.length - 1 : 0;
+  const mascotState = primaryMascot ? toolToMascotState(primaryMascot.toolName) : null;
+
+  const tooltip = contextInfo
+    ? `${node.fullPath}\nContext: ${contextInfo.memoryType} (${contextInfo.loadReason})`
+    : node.fullPath;
+
+  if (node.isFile) {
+    return (
+      <div
+        className="file-tree-row file-tree-file"
+        style={{ paddingLeft: indent + 4 }}
+        onClick={() => onFileClick(node.fullPath)}
+        title={tooltip}
+      >
+        <span className="file-tree-icon-slot">
+          {mascotState ? (
+            <ClaudeMascot
+              state={mascotState}
+              isSubagent={primaryMascot?.isSubagent}
+              size={16}
+            />
+          ) : (
+            <IconDocument size={14} />
+          )}
+        </span>
+        <span className="file-tree-name file-tree-filename">{node.name}</span>
+        {extraAgentCount > 0 && (
+          <span className="file-tree-agent-count">+{extraAgentCount}</span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="file-tree-row file-tree-folder"
+      style={{ paddingLeft: indent }}
+      onClick={() => onToggle(node.fullPath)}
+      title={node.fullPath}
+    >
+      <span className={`file-tree-chevron${isExpanded ? "" : " collapsed"}`}>
+        {"\u25BE"}
+      </span>
+      <span className="file-tree-icon-slot">
+        <IconFolder size={14} />
+      </span>
+      <span className="file-tree-name file-tree-foldername">{node.name}</span>
+    </div>
+  );
+}
+
 /* -- Main panel -- */
 
 export function ActivityPanel({ onClose }: ActivityPanelProps) {
@@ -129,43 +137,36 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
   const storeSubagents = useSessionStore((s) => s.subagents);
   const activeSession = sessions.find((s) => s.id === activeTabId);
 
-  const activitySessions = useActivityStore((s) => s.sessions);
-  const activity = activeTabId ? activitySessions[activeTabId] ?? null : null;
+  const activity = useActivityStore((s) => activeTabId ? s.sessions[activeTabId] ?? null : null);
 
-  const [collapsedTurns, setCollapsedTurns] = useState<Set<string>>(new Set());
-  const [contextCollapsed, setContextCollapsed] = useState(false);
+  const [mode, setMode] = useState<ViewMode>("response");
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
 
-  // Track previous stats for tick animation
-  const prevStatsRef = useRef({ modified: 0, created: 0, deleted: 0 });
-  const stats = activity?.stats ?? { filesModified: 0, filesCreated: 0, filesDeleted: 0, filesRead: 0 };
-  const modChanged = stats.filesModified !== prevStatsRef.current.modified;
-  const creChanged = stats.filesCreated !== prevStatsRef.current.created;
-  const delChanged = stats.filesDeleted !== prevStatsRef.current.deleted;
+  // Reset on session switch
   useEffect(() => {
-    prevStatsRef.current = {
-      modified: stats.filesModified,
-      created: stats.filesCreated,
-      deleted: stats.filesDeleted,
-    };
-  }, [stats.filesModified, stats.filesCreated, stats.filesDeleted]);
-
-  // Reset collapsed state on session switch
-  useEffect(() => {
-    setCollapsedTurns(new Set());
-    setContextCollapsed(false);
+    setExpandedPaths(new Set());
   }, [activeTabId]);
 
-  // Build map of file paths currently being worked on by agents
+  // Build map of file paths currently being worked on by agents (supports multiple per path)
   const activeAgentFiles = useMemo(() => {
-    const map = new Map<string, { toolName: string; isSubagent: boolean }>();
+    const map = new Map<string, AgentOnFile[]>();
     if (!activeSession) return map;
+
+    const pushAgent = (path: string, agent: AgentOnFile) => {
+      const existing = map.get(path);
+      if (existing) {
+        existing.push(agent);
+      } else {
+        map.set(path, [agent]);
+      }
+    };
 
     // Main agent
     const meta = activeSession.metadata;
     if (meta.currentAction && meta.currentToolName && FILE_TOOLS.has(meta.currentToolName)) {
       const path = extractPathFromAction(meta.currentAction);
       if (path) {
-        map.set(path, { toolName: meta.currentToolName, isSubagent: false });
+        pushAgent(path, { toolName: meta.currentToolName, isSubagent: false, agentId: null });
       }
     }
 
@@ -176,7 +177,7 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
       if (sub.currentAction && sub.currentToolName && FILE_TOOLS.has(sub.currentToolName)) {
         const path = extractPathFromAction(sub.currentAction);
         if (path) {
-          map.set(path, { toolName: sub.currentToolName, isSubagent: true });
+          pushAgent(path, { toolName: sub.currentToolName, isSubagent: true, agentId: sub.id });
         }
       }
     }
@@ -189,11 +190,84 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
     storeSubagents,
   ]);
 
-  const toggleTurn = useCallback((turnId: string) => {
-    setCollapsedTurns((prev) => {
+  // Build context file lookup by path
+  const contextFileMap = useMemo(() => {
+    const map = new Map<string, ContextFileEntry>();
+    if (!activity) return map;
+    for (const cf of activity.contextFiles) {
+      map.set(cf.path, cf);
+    }
+    return map;
+  }, [activity?.contextFiles]);
+
+  // Derive the file set based on mode
+  const fileMap = useMemo(() => {
+    const map = new Map<string, FileActivity>();
+    if (!activity) return map;
+
+    if (mode === "response") {
+      // Files from turns since the last user message.
+      // boundary=0 before first message → show all turns (session start).
+      // After first message: TurnStart fires after UserInput in the TAP event stream.
+      const boundary = activity.lastUserMessageAt;
+      for (const turn of activity.turns) {
+        if (turn.startedAt >= boundary) {
+          for (const f of turn.files) {
+            map.set(f.path, f);
+          }
+        }
+      }
+    } else {
+      // Session mode: all visited paths resolved against allFiles
+      for (const path of activity.visitedPaths) {
+        const entry = activity.allFiles[path];
+        if (entry) {
+          map.set(path, entry);
+        } else {
+          // Path was visited but evicted from allFiles — create a synthetic entry
+          map.set(path, {
+            path,
+            kind: "read",
+            agentId: null,
+            toolName: null,
+            timestamp: 0,
+            confirmed: true,
+            isExternal: false,
+            permissionDenied: false,
+            permissionMode: null,
+            toolInputData: null,
+          });
+        }
+      }
+    }
+
+    return map;
+  }, [activity, mode]);
+
+  // Build the tree
+  const tree = useMemo(() => buildFileTree(fileMap), [fileMap]);
+
+  // Auto-expand new folders when tree changes
+  useEffect(() => {
+    if (tree.length === 0) return;
+    const newFolders = allFolderPaths(tree);
+    setExpandedPaths((prev) => {
+      const merged = new Set(prev);
+      for (const path of newFolders) {
+        merged.add(path);
+      }
+      return merged;
+    });
+  }, [tree]);
+
+  // Flatten for rendering
+  const rows = useMemo(() => flattenTree(tree, expandedPaths), [tree, expandedPaths]);
+
+  const toggleFolder = useCallback((path: string) => {
+    setExpandedPaths((prev) => {
       const next = new Set(prev);
-      if (next.has(turnId)) next.delete(turnId);
-      else next.add(turnId);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
       return next;
     });
   }, []);
@@ -202,114 +276,51 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
     invoke("shell_open", { path: filePath }).catch(() => {});
   }, []);
 
-  // Reversed turns for display (most recent first)
-  const displayTurns = useMemo(() => {
-    if (!activity) return [];
-    return [...activity.turns].reverse();
-  }, [activity?.turns]);
-
   if (!activeSession) return <EmptyPanel onClose={onClose} message="No active session" />;
   if (activeSession.state === "dead") return <EmptyPanel onClose={onClose} message="Session ended" />;
-
-  const contextFiles = activity?.contextFiles ?? [];
-  const hasContent = displayTurns.length > 0 || contextFiles.length > 0;
 
   return (
     <div className="activity-panel">
       <div className="activity-panel-header">
         <span className="activity-panel-title">Activity</span>
-        <span className="activity-panel-spacer" />
-        <div className="activity-panel-stats">
-          {stats.filesModified > 0 && (
-            <span
-              className={`activity-stat activity-stat-modified${modChanged ? " activity-stat-tick" : ""}`}
-              key={`mod-${stats.filesModified}`}
-            >
-              {stats.filesModified}M
-            </span>
-          )}
-          {stats.filesCreated > 0 && (
-            <span
-              className={`activity-stat activity-stat-created${creChanged ? " activity-stat-tick" : ""}`}
-              key={`cre-${stats.filesCreated}`}
-            >
-              {stats.filesCreated}C
-            </span>
-          )}
-          {stats.filesDeleted > 0 && (
-            <span
-              className={`activity-stat activity-stat-deleted${delChanged ? " activity-stat-tick" : ""}`}
-              key={`del-${stats.filesDeleted}`}
-            >
-              {stats.filesDeleted}D
-            </span>
-          )}
+        <div className="activity-mode-toggle">
+          <button
+            className={`activity-mode-btn${mode === "response" ? " active" : ""}`}
+            onClick={() => setMode("response")}
+          >
+            Response
+          </button>
+          <button
+            className={`activity-mode-btn${mode === "session" ? " active" : ""}`}
+            onClick={() => setMode("session")}
+          >
+            Session
+          </button>
         </div>
+        <span className="activity-panel-spacer" />
         <button className="activity-panel-close" onClick={onClose} title="Close (Esc)">
           <IconClose size={14} />
         </button>
       </div>
 
       <div className="activity-panel-body">
-        {!hasContent ? (
-          <div className="activity-panel-empty">No activity yet</div>
+        {rows.length === 0 ? (
+          <div className="activity-panel-empty">
+            {mode === "response" ? "No activity yet" : "No files visited"}
+          </div>
         ) : (
-          <>
-            {displayTurns.map((turn, i) => {
-              const isLatest = i === 0;
-              const isCollapsed = collapsedTurns.has(turn.turnId);
-              const label = isLatest && !turn.endedAt
-                ? "Current Turn"
-                : `Turn ${displayTurns.length - i}`;
-
-              if (turn.files.length === 0) return null;
-
-              return (
-                <div key={turn.turnId}>
-                  <div className="activity-turn-header" onClick={() => toggleTurn(turn.turnId)}>
-                    <span className={`activity-turn-chevron${isCollapsed ? " collapsed" : ""}`}>
-                      {"\u25BE"}
-                    </span>
-                    {label}
-                    <span className="activity-turn-stats">{turnStatsLabel(turn)}</span>
-                  </div>
-                  {!isCollapsed &&
-                    turn.files.map((file) => (
-                      <FileItem
-                        key={`${file.path}-${file.timestamp}`}
-                        file={file}
-                        agentInfo={activeAgentFiles.get(file.path)}
-                        onClick={handleFileClick}
-                      />
-                    ))}
-                </div>
-              );
-            })}
-
-            {contextFiles.length > 0 && (
-              <>
-                <div
-                  className="activity-context-header"
-                  onClick={() => setContextCollapsed(!contextCollapsed)}
-                >
-                  <span className={`activity-turn-chevron${contextCollapsed ? " collapsed" : ""}`}>
-                    {"\u25BE"}
-                  </span>
-                  Context
-                  <span className="activity-turn-stats">{contextFiles.length}</span>
-                </div>
-                {!contextCollapsed &&
-                  contextFiles.map((cf) => (
-                    <div key={cf.path} className="activity-context-item">
-                      <span className="activity-context-path" title={cf.path}>
-                        {cf.path.split(/[/\\]/).pop() ?? cf.path}
-                      </span>
-                      <span className="activity-context-type">{cf.memoryType}</span>
-                    </div>
-                  ))}
-              </>
-            )}
-          </>
+          rows.map((row) => (
+            <FileTreeRow
+              key={row.key}
+              node={row.node}
+              depth={row.depth}
+              isExpanded={expandedPaths.has(row.node.fullPath)}
+              onToggle={toggleFolder}
+              agents={activeAgentFiles.get(row.node.fullPath) ?? []}
+              contextInfo={row.node.isFile ? contextFileMap.get(row.node.fullPath) ?? null : null}
+              onFileClick={handleFileClick}
+            />
+          ))
         )}
       </div>
     </div>
