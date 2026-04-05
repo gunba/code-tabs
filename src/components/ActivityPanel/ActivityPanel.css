@@ -11,7 +11,7 @@
   max-width: 55%;
   display: flex;
   flex-direction: column;
-  background: var(--bg-surface);
+  background: var(--bg-primary);
   border-left: 1px solid var(--border);
   overflow: hidden;
 }
@@ -93,6 +93,7 @@
   line-height: 1.4;
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) transparent;
+  background: var(--term-bg);
 }
 
 .activity-panel-body::-webkit-scrollbar { width: 5px; }
@@ -115,7 +116,7 @@
 }
 
 .file-tree-row:hover {
-  background: var(--bg-surface-hover);
+  background: color-mix(in srgb, var(--text-primary) 8%, var(--term-bg));
 }
 
 /* Chevron for folder expand/collapse */
@@ -158,6 +159,16 @@
   font-weight: 500;
 }
 
+/* Workspace root folder: accent-colored to distinguish from regular folders */
+.file-tree-workspace-root .file-tree-foldername {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.file-tree-workspace-root .file-tree-icon-slot {
+  color: var(--accent);
+}
+
 .file-tree-filename {
   color: var(--text-primary);
   font-weight: 400;
@@ -179,19 +190,38 @@
 .file-tree-kind-created  { color: var(--success) !important; }
 .file-tree-kind-modified { color: var(--warning) !important; }
 .file-tree-kind-deleted  { color: var(--error) !important; opacity: 0.7; text-decoration: line-through; }
+.file-tree-kind-read     { color: var(--text-secondary) !important; }
 
-/* -- Tree guide lines -- */
+/* Status badge (letter indicator: A/M/D/R) */
+.file-tree-status-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 0 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  line-height: 14px;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
 
-/* Horizontal connector stub for file nodes with guide lines */
-.file-tree-file.file-tree-guided::before {
-  content: "";
-  position: absolute;
-  left: calc(var(--guide-left, 0px) - 10px);
-  top: 50%;
-  width: 8px;
-  height: 1px;
-  background: var(--border);
-  pointer-events: none;
+.file-tree-badge-created {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+}
+
+.file-tree-badge-modified {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
+}
+
+.file-tree-badge-deleted {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+}
+
+.file-tree-badge-read {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
 }
 
 /* -- Floating mascot for travel animation -- */
@@ -244,7 +274,7 @@
   font-size: 8px;
   line-height: 1;
   pointer-events: none;
-  filter: drop-shadow(0 0 1px var(--bg-surface));
+  filter: drop-shadow(0 0 1px var(--term-bg));
 }
 
 /* -- Animation states -- */

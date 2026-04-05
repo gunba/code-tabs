@@ -6,7 +6,7 @@ import { ClaudeMascot } from "./ClaudeMascot";
 import type { MascotState } from "./ClaudeMascot";
 import { IconClose, IconFolder, IconDocument } from "../Icons/Icons";
 import { isSubagentActive } from "../../types/session";
-import type { FileActivity, ContextFileEntry } from "../../types/activity";
+import type { FileActivity, ContextFileEntry, FileChangeKind } from "../../types/activity";
 import { buildFileTree, flattenTree, allFolderPaths } from "../../lib/fileTree";
 import type { FileTreeNode } from "../../lib/fileTree";
 import { canonicalizePath } from "../../lib/paths";
@@ -19,9 +19,7 @@ interface ActivityPanelProps {
 type ViewMode = "response" | "session";
 
 const INDENT_STEP = 16;
-/** X-offset within each indent column where vertical guide lines are drawn. */
-const GUIDE_LINE_X = 6;
-// [AP-04] Floating mascot travels to active file; guide lines at INDENT_STEP=16/GUIDE_LINE_X=6
+// [AP-04] Floating mascot travels to active file; persists via lastMainAgentFile; indent at INDENT_STEP=16
 // [AP-05] Two view modes: Response (since lastUserMessageAt) and Session (all visited paths)
 
 /* -- Helpers -- */
@@ -46,13 +44,15 @@ interface AgentOnFile {
   agentId: string | null;
 }
 
-/**
- * Build a CSS repeating-linear-gradient string that draws vertical guide
- * lines at each indent level.
- */
-function guideGradient(depth: number): string | undefined {
-  if (depth <= 0) return undefined;
-  return `repeating-linear-gradient(to right, transparent 0px, transparent ${GUIDE_LINE_X}px, var(--border) ${GUIDE_LINE_X}px, var(--border) ${GUIDE_LINE_X + 1}px, transparent ${GUIDE_LINE_X + 1}px, transparent ${INDENT_STEP}px)`;
+function badgeLetter(kind: FileChangeKind): string {
+  switch (kind) {
+    case "created": return "A";
+    case "modified": return "M";
+    case "deleted": return "D";
+    case "read": return "R";
+    case "renamed": return "R";
+    default: return "";
+  }
 }
 
 /* -- Empty panel -- */
@@ -103,20 +103,13 @@ function FileTreeRow({
     ? `${node.fullPath}\nContext: ${contextInfo.memoryType} (${contextInfo.loadReason})`
     : node.fullPath;
 
-  // Guide line background
-  const bg = guideGradient(depth);
-  const guideStyle: React.CSSProperties = {
+  // Indent style (no guide lines)
+  const rowStyle: React.CSSProperties = {
     paddingLeft: indent + (node.isFile ? 4 : 0),
-    ...(bg && {
-      backgroundImage: bg,
-      backgroundSize: `${indent}px 100%`,
-      backgroundRepeat: "no-repeat",
-    }),
-    ...(node.isFile && depth > 0 && { "--guide-left": `${indent}px` } as React.CSSProperties),
   };
 
   // State indicator class for file kind
-  const kindClass = node.activity?.kind && node.activity.kind !== "read"
+  const kindClass = node.activity?.kind
     ? ` file-tree-kind-${node.activity.kind}`
     : "";
 
@@ -126,8 +119,8 @@ function FileTreeRow({
 
     return (
       <div
-        className={`file-tree-row file-tree-file${depth > 0 ? " file-tree-guided" : ""}`}
-        style={guideStyle}
+        className="file-tree-row file-tree-file"
+        style={rowStyle}
         onClick={() => onFileClick(node.fullPath)}
         title={tooltip}
         data-path={node.fullPath}
@@ -144,6 +137,11 @@ function FileTreeRow({
           )}
         </span>
         <span className={`file-tree-name file-tree-filename${kindClass}`}>{node.name}</span>
+        {node.activity?.kind && (
+          <span className={`file-tree-status-badge file-tree-badge-${node.activity.kind}`}>
+            {badgeLetter(node.activity.kind)}
+          </span>
+        )}
         {extraAgentCount > 0 && (
           <span className="file-tree-agent-count">+{extraAgentCount}</span>
         )}
@@ -151,10 +149,12 @@ function FileTreeRow({
     );
   }
 
+  const folderClasses = `file-tree-row file-tree-folder${node.isWorkspaceRoot ? " file-tree-workspace-root" : ""}`;
+
   return (
     <div
-      className="file-tree-row file-tree-folder"
-      style={guideStyle}
+      className={folderClasses}
+      style={rowStyle}
       onClick={() => onToggle(node.fullPath)}
       title={node.fullPath}
     >
@@ -196,13 +196,48 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mascot, setMascot] = useState<StickyMascot | null>(null);
 
-  // Reset on session switch
+  // Reset expanded paths on session switch (but NOT mascot — recomputed from activity)
   useEffect(() => {
     setExpandedPaths(new Set());
-    setMascot(null);
   }, [activeTabId]);
 
-  // Build map of file paths currently being worked on by agents
+  // Derive the last file the main agent touched from activity data
+  // This persists across tab switches and idle periods
+  const lastMainAgentFile = useMemo(() => {
+    if (!activity) return null;
+    // Search turns from newest to oldest for the most recent main-agent file
+    for (let i = activity.turns.length - 1; i >= 0; i--) {
+      const turn = activity.turns[i];
+      for (let j = turn.files.length - 1; j >= 0; j--) {
+        if (!turn.files[j].agentId) return turn.files[j];
+      }
+    }
+    // Fallback to allFiles
+    let latest: FileActivity | null = null;
+    for (const f of Object.values(activity.allFiles)) {
+      if (!f.agentId && (!latest || f.timestamp > latest.timestamp)) latest = f;
+    }
+    return latest;
+  }, [activity]);
+
+  // Derive per-subagent last-touched files (for persistent inline mascots)
+  const lastSubagentFiles = useMemo(() => {
+    const map = new Map<string, FileActivity>();
+    if (!activity) return map;
+    for (const turn of activity.turns) {
+      for (const f of turn.files) {
+        if (f.agentId) {
+          const existing = map.get(f.agentId);
+          if (!existing || f.timestamp > existing.timestamp) {
+            map.set(f.agentId, f);
+          }
+        }
+      }
+    }
+    return map;
+  }, [activity]);
+
+  // Build map of file paths with agent presence (active tool calls + persistent positions)
   const activeAgentFiles = useMemo(() => {
     const map = new Map<string, AgentOnFile[]>();
     if (!activeSession) return map;
@@ -210,13 +245,15 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
     const pushAgent = (path: string, agent: AgentOnFile) => {
       const existing = map.get(path);
       if (existing) {
+        // Don't add duplicate for same agent
+        if (existing.some((a) => a.agentId === agent.agentId)) return;
         existing.push(agent);
       } else {
         map.set(path, [agent]);
       }
     };
 
-    // Main agent
+    // Main agent — active tool call
     const meta = activeSession.metadata;
     if (meta.currentAction && meta.currentToolName && FILE_TOOLS.has(meta.currentToolName)) {
       const path = extractPathFromAction(meta.currentAction);
@@ -225,7 +262,7 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
       }
     }
 
-    // Subagents
+    // Subagents — active tool calls
     const subs = activeTabId ? storeSubagents.get(activeTabId) ?? [] : [];
     for (const sub of subs) {
       if (!isSubagentActive(sub.state)) continue;
@@ -237,12 +274,28 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
       }
     }
 
+    // Subagents — persistent positions from activity data (idle between tool calls)
+    for (const sub of subs) {
+      if (!isSubagentActive(sub.state)) continue;
+      const lastFile = lastSubagentFiles.get(sub.id);
+      if (lastFile) {
+        // Only add if this subagent doesn't already have an active position
+        const hasActive = [...map.values()].some((agents) =>
+          agents.some((a) => a.agentId === sub.id),
+        );
+        if (!hasActive) {
+          pushAgent(lastFile.path, { toolName: lastFile.toolName ?? "Read", isSubagent: true, agentId: sub.id });
+        }
+      }
+    }
+
     return map;
   }, [
     activeSession?.metadata.currentAction,
     activeSession?.metadata.currentToolName,
     activeTabId,
     storeSubagents,
+    lastSubagentFiles,
   ]);
 
   // Find the primary active file (main agent, not subagent)
@@ -335,38 +388,44 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
     return map;
   }, [rows]);
 
-  // Update floating mascot position when active file changes or persists at last position
+  // Update floating mascot position: driven by active tool call OR persisted from activity data
   useEffect(() => {
     if (!containerRef.current) return;
 
-    if (primaryActive) {
-      // Agent is actively working on a file — move mascot there with active animation
-      const rowEl = containerRef.current.querySelector<HTMLElement>(
-        `[data-path="${CSS.escape(primaryActive.path)}"]`,
-      );
-      if (!rowEl) {
-        // Target row not visible (e.g. folder collapsed) — clear stale mascot
-        setMascot(null);
-        return;
-      }
+    // Determine target: active tool call takes priority, then last-touched file from activity
+    const target = primaryActive
+      ? { path: primaryActive.path, state: toolToMascotState(primaryActive.agent.toolName) }
+      : lastMainAgentFile
+        ? { path: lastMainAgentFile.path, state: "idle" as MascotState }
+        : null;
 
-      const depth = depthByPath.get(primaryActive.path) ?? 0;
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const rowRect = rowEl.getBoundingClientRect();
-      const scrollTop = containerRef.current.scrollTop;
-
-      setMascot({
-        path: primaryActive.path,
-        state: toolToMascotState(primaryActive.agent.toolName),
-        isSubagent: false,
-        top: rowRect.top - containerRect.top + scrollTop + rowRect.height / 2 - 8,
-        left: 8 + depth * INDENT_STEP - INDENT_STEP + GUIDE_LINE_X - 3,
-      });
-    } else if (mascot) {
-      // No active tool call — keep mascot at last position but switch to idle
-      setMascot((prev) => prev ? { ...prev, state: "idle" } : null);
+    if (!target) {
+      setMascot(null);
+      return;
     }
-  }, [primaryActive, depthByPath]);
+
+    const rowEl = containerRef.current.querySelector<HTMLElement>(
+      `[data-path="${CSS.escape(target.path)}"]`,
+    );
+    if (!rowEl) {
+      // Target row not visible (folder collapsed or not in current view mode)
+      setMascot(null);
+      return;
+    }
+
+    const depth = depthByPath.get(target.path) ?? 0;
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const rowRect = rowEl.getBoundingClientRect();
+    const scrollTop = containerRef.current.scrollTop;
+
+    setMascot({
+      path: target.path,
+      state: target.state,
+      isSubagent: false,
+      top: rowRect.top - containerRect.top + scrollTop + rowRect.height / 2 - 8,
+      left: 8 + (depth - 1) * INDENT_STEP,
+    });
+  }, [primaryActive, lastMainAgentFile, depthByPath, rows]);
 
   const toggleFolder = useCallback((path: string) => {
     setExpandedPaths((prev) => {
