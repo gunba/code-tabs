@@ -260,10 +260,40 @@ export function ContextViewer({ metadata, subagents, onClose }: ContextViewerPro
     [displayBlocks, messages, lastCachedIdx],
   );
 
-  const subagentTabs = useMemo(
-    () => buildSubagentTabs(messages),
-    [messages],
-  );
+  const subagentTabs = useMemo(() => {
+    const completedTabs = buildSubagentTabs(messages);
+    if (!subagents || subagents.length === 0) return completedTabs;
+
+    // Merge TAP-only subagents not already represented by capturedMessages tabs
+    const matchedIds = new Set<string>();
+    for (const sub of subagents) {
+      for (const tab of completedTabs) {
+        if (tab.promptText && tab.promptText === sub.promptText) {
+          matchedIds.add(sub.id);
+          break;
+        }
+        const prefix = tab.label.replace(/\u2026$/, "");
+        if (sub.description.startsWith(prefix)) {
+          matchedIds.add(sub.id);
+          break;
+        }
+      }
+    }
+
+    const tapOnlyTabs: SubagentTab[] = [];
+    for (const sub of subagents) {
+      if (matchedIds.has(sub.id)) continue;
+      const desc = sub.description || "Agent";
+      tapOnlyTabs.push({
+        id: sub.id,
+        label: desc.length > 30 ? desc.slice(0, 30) + "\u2026" : desc,
+        promptText: sub.promptText || "",
+        resultText: sub.resultText || null,
+      });
+    }
+
+    return [...completedTabs, ...tapOnlyTabs];
+  }, [messages, subagents]);
 
   // Build a map from subagent tab id to its sidechain messages.
   // Also index by description prefix so capturedMessages tabs (keyed by tool_use.id)

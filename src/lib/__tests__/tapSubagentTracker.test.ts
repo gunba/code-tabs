@@ -714,6 +714,72 @@ describe("TapSubagentTracker", () => {
     });
   });
 
+  // ── Consumed spawn fingerprint blocking ──
+
+  describe("consumed spawn fingerprint blocking", () => {
+    it("blocks re-serialization of an already-consumed spawn", () => {
+      tracker.process(makeSpawn("Explore A", "find files"));
+      tracker.process(makeSidechainMsg("agent-a")); // consumes "Explore A"
+
+      // Stale CLI re-serialization of the same SubagentSpawn
+      tracker.process(makeSpawn("Explore A", "find files"));
+
+      // New agent should get default "Agent", not the stale "Explore A"
+      const actions = tracker.process(makeSidechainMsg("agent-b"));
+      expect(actions.find(a => a.type === "add")!.subagent!.description).toBe("Agent");
+    });
+
+    it("blocks re-serialization even after UserInput clears seenSpawnFingerprints", () => {
+      tracker.process(makeSpawn("Explore A", "find files"));
+      tracker.process(makeSidechainMsg("agent-a")); // consumes "Explore A"
+
+      // UserInput clears seenSpawnFingerprints but NOT consumedSpawnFingerprints
+      tracker.process({ kind: "UserInput", ts: 10, display: "next prompt", sessionId: "s" } as TapEvent);
+
+      // Stale re-serialization — seenSpawnFingerprints would allow it, but consumedSpawnFingerprints blocks it
+      tracker.process(makeSpawn("Explore A", "find files"));
+
+      // New agent should get default "Agent"
+      const actions = tracker.process(makeSidechainMsg("agent-b"));
+      expect(actions.find(a => a.type === "add")!.subagent!.description).toBe("Agent");
+    });
+
+    it("reproduces the exact bug: two consumed agents + UserInput + stale re-serialization + new agent", () => {
+      // Phase 1: Two agents spawn and are consumed correctly
+      tracker.process(makeSpawn("Explore scroll/resume behavior", "explore scroll"));
+      tracker.process(makeSpawn("Explore session restore flow", "explore restore"));
+      const addA = tracker.process(makeSidechainMsg("agent-a")).find(a => a.type === "add")!;
+      expect(addA.subagent!.description).toBe("Explore scroll/resume behavior");
+      const addB = tracker.process(makeSidechainMsg("agent-b")).find(a => a.type === "add")!;
+      expect(addB.subagent!.description).toBe("Explore session restore flow");
+
+      // Phase 2: UserInput clears seenSpawnFingerprints + pendingSpawns
+      tracker.process({ kind: "UserInput", ts: 100, display: "Use /recall...", sessionId: "s" } as TapEvent);
+
+      // Phase 3: CLI re-serializes old SubagentSpawn events (stale)
+      tracker.process(makeSpawn("Explore scroll/resume behavior", "explore scroll"));
+      tracker.process(makeSpawn("Explore session restore flow", "explore restore"));
+
+      // Phase 4: New genuine agent spawns
+      tracker.process(makeSpawn("Recall past scroll fix attempts", "recall stuff"));
+
+      // The recall agent should get its OWN description, not "Explore scroll/resume behavior"
+      const addRecall = tracker.process(makeSidechainMsg("agent-c")).find(a => a.type === "add")!;
+      expect(addRecall.subagent!.description).toBe("Recall past scroll fix attempts");
+    });
+
+    it("reset() clears consumedSpawnFingerprints so same spawn can re-queue", () => {
+      tracker.process(makeSpawn("Explore A", "find files"));
+      tracker.process(makeSidechainMsg("agent-a")); // consumes "Explore A"
+      tracker.reset();
+
+      // After reset, same fingerprint should be allowed again
+      tracker.process(makeSpawn("Explore A", "find files"));
+      const actions = tracker.process(makeSidechainMsg("agent-b"));
+      expect(actions.find(a => a.type === "add")!.subagent!.description).toBe("Explore A");
+    });
+  });
+
   // ── SubagentSpawn dedup ──
 
   describe("SubagentSpawn dedup", () => {

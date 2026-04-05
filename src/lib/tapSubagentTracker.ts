@@ -35,6 +35,7 @@ export class TapSubagentTracker {
   private lastActiveAgent: string | null = null;
   private sidechainActive = false;
   private seenSpawnFingerprints = new Set<string>(); // dedup re-serialized SubagentSpawn events
+  private consumedSpawnFingerprints = new Set<string>(); // block stale re-serializations after UserInput clears seenSpawnFingerprints
   private processedUuids = new Set<string>(); // dedup re-serialized ConversationMessage content
 
   constructor(parentSessionId: string) {
@@ -94,6 +95,14 @@ export class TapSubagentTracker {
         // Agent tool input with description + prompt → queue spawn data.
         // CLI re-serializes 2-3x per event; dedup by content fingerprint.
         const fingerprint = event.description + "|" + (event.prompt || "").slice(0, 200);
+        // Block stale re-serializations of already-consumed spawns.
+        // consumedSpawnFingerprints persists across UserInput/SlashCommand clears,
+        // so late re-serializations that arrive after seenSpawnFingerprints was cleared
+        // are still blocked.
+        if (this.consumedSpawnFingerprints.has(fingerprint)) {
+          dlog("inspector", this.parentSessionId, `subagent spawn blocked (already consumed) desc="${event.description.slice(0, 60)}"`, "DEBUG");
+          break;
+        }
         if (this.seenSpawnFingerprints.has(fingerprint)) {
           dlog("inspector", this.parentSessionId, `subagent spawn dedup skip desc="${event.description.slice(0, 60)}"`, "DEBUG");
           break;
@@ -137,6 +146,10 @@ export class TapSubagentTracker {
           this.agentStates.set(agentId, "starting");
           const spawn = this.pendingSpawns.shift();
           const desc = spawn?.description || "Agent";
+          if (spawn) {
+            const fp = spawn.description + "|" + (spawn.prompt || "").slice(0, 200);
+            this.consumedSpawnFingerprints.add(fp);
+          }
           this.subagentTokens.set(agentId, 0);
           this.subagentMsgs.set(agentId, []);
 
@@ -439,6 +452,7 @@ export class TapSubagentTracker {
     this.lastActiveAgent = null;
     this.sidechainActive = false;
     this.seenSpawnFingerprints.clear();
+    this.consumedSpawnFingerprints.clear();
     this.processedUuids.clear();
   }
 }
