@@ -396,7 +396,19 @@ export function useTapEventProcessor(
 
     const unsub = tapEventBus.subscribe(sessionId, handleEvent);
 
+    // Stale-agent sweep: mark orphaned active subagents as idle+completed
+    // when no events arrive for 30s (safety net for missing completion signals)
+    const sweepTimer = setInterval(() => {
+      const actions = subTracker.sweepStaleAgents(Date.now());
+      for (const action of actions) {
+        if (action.type === "update" && action.subagentId && action.updates) {
+          updateSubagent(sessionId, action.subagentId, action.updates);
+        }
+      }
+    }, 10_000);
+
     return () => {
+      clearInterval(sweepTimer);
       unsub();
       metaAcc.reset();
       subTracker.reset();
