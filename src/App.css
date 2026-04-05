@@ -660,10 +660,25 @@
   max-width: 420px;
 }
 .prune-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 8px;
+}
+.prune-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.prune-close:hover {
+  color: var(--text-primary);
 }
 .prune-body {
   font-size: 12px;

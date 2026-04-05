@@ -689,7 +689,12 @@ export default function App() {
       {pruneConfirm && (
         <ModalOverlay onClose={() => setPruneConfirm(null)}>
           <div className="prune-dialog">
-            <div className="prune-title">Close worktree session</div>
+            <div className="prune-title">
+              Close worktree session
+              <button className="prune-close" onClick={() => setPruneConfirm(null)} title="Close (Esc)">
+                <IconClose size={12} />
+              </button>
+            </div>
             <div className="prune-body">
               Prune worktree <strong>{pruneConfirm.worktreeName}</strong>?
             </div>
