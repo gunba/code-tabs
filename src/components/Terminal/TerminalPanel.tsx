@@ -140,10 +140,9 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const [queuedInput, setQueuedInput] = useState<string | null>(null);
   const lastHookChangeRef = useRef(hookChangeCounter);
 
-  // Hide loading spinner when inspector connects — but only for non-resume sessions.
-  // Resume sessions keep the spinner until the session reaches idle (buffer flush there).
+  // Hide loading spinner when inspector connects
   useEffect(() => {
-    if (loading && inspector.connected && !resumeLoadingRef.current) setLoading(false);
+    if (loading && inspector.connected) setLoading(false);
   }, [loading, inspector.connected]);
 
   // Sync Claude's internal session ID into config for persistence (plan-mode forks, compaction)
@@ -155,71 +154,11 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       prevClaudeSessionIdRef.current = null;
       return;
     }
-    const prev = prevClaudeSessionIdRef.current;
     prevClaudeSessionIdRef.current = tapProcessor.claudeSessionId;
-    // [TR-13] Clear terminal when session ID changes (context clear, plan approval, compaction).
-    // Skip during resume loading: JSONL replay surfaces stale session IDs from old
-    // compaction/plan transitions, causing spurious clears that wipe the conversation.
-    if (prev && prev !== tapProcessor.claudeSessionId && !resumeLoadingRef.current) {
-      bgBufferRef.current = [];
-      terminal.clear();
-    }
     if (tapProcessor.claudeSessionId !== session.config.sessionId) {
       updateConfig(session.id, { sessionId: tapProcessor.claudeSessionId });
     }
   }, [tapProcessor.claudeSessionId, session.id, session.config.sessionId, updateConfig]);
-
-  // Resume complete: flush buffered content atomically and dismiss spinner.
-  // After this, context-clear detection works normally for /clear, compaction, etc.
-  useEffect(() => {
-    if (!resumeLoadingRef.current) return;
-    if (!isSessionIdle(session.state) && session.state !== "dead" && session.state !== "error") return;
-
-    resumeLoadingRef.current = false;
-
-    // Flush all PTY data buffered during resume as a single write
-    const chunks = bgBufferRef.current;
-    dlog("terminal", session.id, `resume flush: state=${session.state} chunks=${chunks.length}`, "DEBUG");
-    if (chunks.length > 0) {
-      bgBufferRef.current = [];
-      let totalLen = 0;
-      for (const c of chunks) totalLen += c.length;
-      const merged = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const c of chunks) { merged.set(c, offset); offset += c.length; }
-      dlog("terminal", session.id, `resume flush: writing ${totalLen}B merged from ${chunks.length} chunks`, "DEBUG");
-
-      const term = terminal.termRef.current;
-      if (term) {
-        try {
-          term.write(merged, () => {
-            if (terminal.termRef.current !== term) return;
-            // fit() recalculates xterm.js viewport after the large buffer flush —
-            // without this, the viewport is stale and only shows one screenful.
-            terminal.fit();
-            // Apply deferred resize (handleResize defers when bgBuffer has data),
-            // or force a resize to current dimensions to trigger SIGWINCH so the
-            // TUI renderer fully redraws after the atomic buffer flush.
-            const deferred = deferredResizeRef.current;
-            if (deferred) {
-              deferredResizeRef.current = null;
-              pty.handle.current?.resize(deferred.cols, deferred.rows);
-              dlog("terminal", session.id, `resume flush: applied deferred resize ${deferred.cols}x${deferred.rows}`, "DEBUG");
-            } else {
-              const { cols, rows } = terminal.getDimensions();
-              pty.handle.current?.resize(cols, rows);
-              dlog("terminal", session.id, `resume flush: forced resize ${cols}x${rows}`, "DEBUG");
-            }
-            term.scrollToBottom();
-          });
-        } catch {}
-      }
-    } else {
-      dlog("terminal", session.id, "resume flush: no buffered data", "DEBUG");
-    }
-    setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.state]);
 
   // Cache session config when inspector connects (for resume picker fallback)
   useEffect(() => {
@@ -243,10 +182,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   visibleRef.current = visible;
 
   // Suppress context-clear detection during resume loading phase.
-  // JSONL replay can surface stale session IDs from old compaction/plan transitions,
-  // causing spurious terminal.clear() calls that wipe the just-loaded conversation.
-  // Set true in triggerRespawn when resuming; cleared on first idle state.
-  const resumeLoadingRef = useRef(false);
+
 
   // Detect "session already in use" errors in early PTY output
   const earlyOutputRef = useRef("");
@@ -276,10 +212,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           filtered = new TextEncoder().encode(cleaned);
         }
       }
-      // Write to terminal if visible and not buffering for resume; buffer otherwise.
-      // During resume loading, PTY data is buffered and flushed atomically when the
-      // session reaches idle — prevents content from "flooding in" during replay.
-      if (visibleRef.current && !resumeLoadingRef.current) {
+      // Write to terminal if visible; buffer otherwise.
+      if (visibleRef.current) {
         terminalRef.current?.writeBytes(filtered);
       } else {
         bgBufferRef.current.push(filtered);
@@ -383,8 +317,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     earlyOutputRef.current = "";
     sessionInUseRef.current = false;
     sessionInUseRetried.current = false;
-    // Suppress context-clear during resume: JSONL replay surfaces stale session IDs
-    resumeLoadingRef.current = !!newConfig.resumeSession;
     setExternalHolder(null);
     setInspectorPort(null);
 
