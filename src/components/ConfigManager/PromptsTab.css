@@ -302,7 +302,7 @@
 
 .prompts-unsaved {
   font-size: 10px;
-  color: var(--warning, var(--accent));
+  color: var(--warning);
   font-style: italic;
 }
 

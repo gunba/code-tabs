@@ -107,8 +107,8 @@
 }
 
 .providers-card-btn-danger:hover {
-  color: var(--error, #e55);
-  border-color: var(--error, #e55);
+  color: var(--error);
+  border-color: var(--error);
 }
 
 .providers-card-fields {
@@ -312,8 +312,8 @@
 }
 
 .providers-route-remove:hover {
-  color: var(--error, #e55);
-  border-color: var(--error, #e55);
+  color: var(--error);
+  border-color: var(--error);
 }
 
 .providers-route-hint {

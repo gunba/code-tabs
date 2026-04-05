@@ -181,11 +181,11 @@
 }
 
 .debug-line-warn {
-  color: var(--warning, #c47a20);
+  color: var(--warning);
 }
 
 .debug-line-err {
-  color: var(--error, #e05050);
+  color: var(--error);
 }
 
 .debug-line-debug {

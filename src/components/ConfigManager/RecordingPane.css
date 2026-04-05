@@ -11,7 +11,7 @@
 }
 
 .recording-section {
-  background: var(--bg-secondary);
+  background: var(--bg-surface);
   border-radius: 6px;
   padding: 10px;
 }
@@ -98,8 +98,8 @@
 
 .recording-cat-key {
   font-size: 9px;
-  font-family: var(--mono);
-  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  color: var(--text-muted);
   opacity: 0.6;
 }
 
@@ -163,7 +163,7 @@
   padding: 2px 8px;
   font-size: 11px;
   font-family: var(--font-mono, monospace);
-  border: 1px solid var(--border-primary);
+  border: 1px solid var(--border);
   border-radius: 10px;
   cursor: pointer;
   user-select: none;
@@ -175,7 +175,7 @@
   border-color: var(--text-secondary);
 }
 .event-filter-pill.active {
-  background: var(--bg-tertiary);
+  background: var(--bg-surface-hover);
   opacity: 0.5;
   text-decoration: line-through;
 }

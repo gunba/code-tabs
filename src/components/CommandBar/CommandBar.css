@@ -47,8 +47,8 @@
 }
 
 .command-history-item.skill-history-item.skill-failed {
-  border-color: color-mix(in srgb, var(--color-error) 40%, var(--border-subtle));
-  color: color-mix(in srgb, var(--color-error) 70%, var(--text-muted));
+  border-color: color-mix(in srgb, var(--error) 40%, var(--border-subtle));
+  color: color-mix(in srgb, var(--error) 70%, var(--text-muted));
 }
 
 /* ── Command Bar Chevron ─────────────────────────────────── */
@@ -95,7 +95,13 @@
   flex-wrap: wrap;
   max-height: 72px;      /* ~4 rows of command pills (16px each + gaps) */
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
+
+.command-bar-scroll::-webkit-scrollbar { width: 5px; }
+.command-bar-scroll::-webkit-scrollbar-track { background: transparent; }
+.command-bar-scroll::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
 
 .command-btn {
   padding: 2px 8px;

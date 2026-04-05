@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, canResumeSession, stripWorktreeFlags, formatTokenCount, eventKindColor, getActivityText } from "./lib/claude";
+import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, effortColor, canResumeSession, stripWorktreeFlags, formatTokenCount, eventKindColor, getActivityText } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
 
@@ -384,7 +384,7 @@ export default function App() {
                 metaSpans.push({ text: modelLabel(m) + ver, color: modelColor(m) });
               }
               const effort = session.metadata.effortLevel ?? session.config.effort;
-              if (effort) metaSpans.push({ text: effort.charAt(0).toUpperCase() + effort.slice(1), color: "var(--accent)" });
+              if (effort) metaSpans.push({ text: effort.charAt(0).toUpperCase() + effort.slice(1), color: effortColor(effort) });
               const subs = subagentMap.get(session.id) || [];
               const liveAgents = subs.filter((s) => isSubagentActive(s.state)).length;
               if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });

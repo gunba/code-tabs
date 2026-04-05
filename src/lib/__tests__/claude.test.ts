@@ -79,7 +79,7 @@ describe("modelColor", () => {
   });
 
   it("returns rare blue for haiku model", () => {
-    expect(modelColor("claude-haiku-4-5-20251001")).toBe("#4e9bff");
+    expect(modelColor("claude-haiku-4-5-20251001")).toBe("#0070dd");
   });
 
   it("returns muted color for unknown model", () => {
@@ -95,7 +95,7 @@ describe("modelColor", () => {
   });
 
   it("matches haiku substring anywhere in model string", () => {
-    expect(modelColor("claude-3-haiku-20240307")).toBe("#4e9bff");
+    expect(modelColor("claude-3-haiku-20240307")).toBe("#0070dd");
   });
 });
 
@@ -490,15 +490,15 @@ describe("findNearestLiveTab", () => {
 
 describe("toolCategoryColor", () => {
   it("returns mapped color for known tool (Bash)", () => {
-    expect(toolCategoryColor("Bash")).toBe("#ce9178");
+    expect(toolCategoryColor("Bash")).toBe("var(--warning)");
   });
 
   it("returns mapped color for known tool (Read)", () => {
-    expect(toolCategoryColor("Read")).toBe("#569cd6");
+    expect(toolCategoryColor("Read")).toBe("var(--accent)");
   });
 
   it("returns mapped color for known tool (Agent)", () => {
-    expect(toolCategoryColor("Agent")).toBe("#c586c0");
+    expect(toolCategoryColor("Agent")).toBe("var(--accent-tertiary)");
   });
 
   it("returns muted fallback for unknown/MCP tools", () => {

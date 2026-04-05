@@ -1,7 +1,7 @@
 .palette-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   justify-content: center;
   padding-top: 15vh;
@@ -9,9 +9,10 @@
 }
 
 .palette {
-  background: var(--bg-surface);
+  background: color-mix(in srgb, var(--bg-surface) 93%, transparent);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   width: 480px;
   max-height: 400px;
   display: flex;
@@ -38,7 +39,13 @@
 .palette-results {
   overflow-y: auto;
   flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
+
+.palette-results::-webkit-scrollbar { width: 6px; }
+.palette-results::-webkit-scrollbar-track { background: transparent; }
+.palette-results::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
 
 .palette-item {
   display: flex;

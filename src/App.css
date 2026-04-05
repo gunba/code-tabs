@@ -275,7 +275,7 @@
 }
 
 .tab-kill:hover {
-  background: var(--warning, #c47a20);
+  background: var(--warning);
   color: var(--text-primary);
 }
 
@@ -472,7 +472,7 @@
 }
 
 .tab-context-menu-item-danger:hover {
-  color: var(--error, #e55);
+  color: var(--error);
 }
 
 .tab-context-menu-item-disabled {
@@ -693,8 +693,8 @@
 }
 .prune-actions .prune-actions-danger {
   background: rgba(255, 80, 80, 0.15);
-  color: var(--error, #e55);
-  border-color: var(--error, #e55);
+  color: var(--error);
+  border-color: var(--error);
 }
 .prune-actions .prune-actions-danger:hover {
   background: rgba(255, 80, 80, 0.25);

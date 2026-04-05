@@ -57,7 +57,7 @@ export function getEffectiveState(state: SessionState, subagents: Subagent[]): S
 export const MODEL_FAMILIES: Array<{ keyword: string; label: string; color: string }> = [
   { keyword: "opus", label: "Opus", color: "#ff8000" },     // Legendary
   { keyword: "sonnet", label: "Sonnet", color: "#a335ee" },  // Epic
-  { keyword: "haiku", label: "Haiku", color: "#4e9bff" },    // Rare
+  { keyword: "haiku", label: "Haiku", color: "#0070dd" },    // Rare
 ];
 
 export function resolveModelFamily(model: string | null): (typeof MODEL_FAMILIES)[number] | null {
@@ -108,24 +108,31 @@ export function modelColor(model: string | null): string {
   return resolveModelFamily(model)?.color ?? "var(--text-muted)";
 }
 
+/** CSS color for effort level (WoW rarity hierarchy). */
+export function effortColor(effort: string | null): string {
+  switch (effort) {
+    case "high": return "var(--rarity-epic)";
+    case "max": return "var(--rarity-legendary)";
+    default: return "var(--text-muted)";
+  }
+}
+
 /** Tool name → category color for tab activity display. */ // [TA-01]
 export const TOOL_COLORS: Record<string, string> = {
-  // Search
-  Grep: "#4ec9b0", Glob: "#4ec9b0", WebSearch: "#4ec9b0",
-  // File ops
-  Read: "#569cd6", Write: "#569cd6", Edit: "#569cd6", NotebookEdit: "#569cd6",
+  // Search / retrieval
+  Grep: "var(--accent-secondary)", Glob: "var(--accent-secondary)", WebSearch: "var(--accent-secondary)", WebFetch: "var(--accent-secondary)",
+  // File operations
+  Read: "var(--accent)", Write: "var(--accent)", Edit: "var(--accent)", NotebookEdit: "var(--accent)",
   // Execution
-  Bash: "#ce9178",
-  // Agent
-  Agent: "#c586c0", Skill: "#c586c0", RemoteTrigger: "#c586c0",
-  // Network
-  WebFetch: "#4fc1ff",
+  Bash: "var(--warning)",
+  // Agent / skills
+  Agent: "var(--accent-tertiary)", Skill: "var(--accent-tertiary)", RemoteTrigger: "var(--accent-tertiary)",
   // LSP
-  LSP: "#9cdcfe",
+  LSP: "var(--text-secondary)",
   // Plan
-  EnterPlanMode: "#d4a0e0", ExitPlanMode: "#d4a0e0",
-  // System
-  AskUserQuestion: "#6a9955",
+  EnterPlanMode: "var(--accent-tertiary)", ExitPlanMode: "var(--accent-tertiary)",
+  // User interaction
+  AskUserQuestion: "var(--success)",
 };
 
 /** Color for a tool name. Falls back to muted for unknown/MCP tools. */
@@ -135,36 +142,28 @@ export function toolCategoryColor(toolName: string): string {
 
 /** Event kind → color for tab activity display. */
 export const EVENT_KIND_COLORS: Record<string, string> = {
-  // Turn lifecycle
-  TurnStart: "#6a9955", TurnEnd: "#6a9955",
-  // Thinking / text generation
-  ThinkingStart: "#d4a0e0", TextStart: "#dcdcaa",
-  // Tool lifecycle
-  ToolCallStart: "#c586c0", ToolInput: "#c586c0", ToolResult: "#4ec9b0",
+  // Session lifecycle
+  TurnStart: "var(--success)", TurnEnd: "var(--success)", SessionResume: "var(--success)", IdlePrompt: "var(--success)",
+  // Thinking / planning
+  ThinkingStart: "var(--accent-tertiary)", PlanModeEvent: "var(--accent-tertiary)", ModeChange: "var(--accent-tertiary)",
+  // Text generation
+  TextStart: "var(--text-secondary)", ConversationMessage: "var(--text-secondary)",
+  // Tool execution
+  ToolCallStart: "var(--accent-secondary)", ToolInput: "var(--accent-secondary)",
+  // Tool results
+  ToolResult: "var(--text-muted)",
   // Permission flow
-  PermissionPromptShown: "#e08b67", PermissionApproved: "#5cb85c", PermissionRejected: "#e06e9a",
+  PermissionPromptShown: "var(--permission)", PermissionApproved: "var(--success)", PermissionRejected: "var(--error)",
   // User interaction
-  UserInput: "#569cd6", SlashCommand: "#569cd6", UserInterruption: "#e06e9a",
-  // Conversation
-  ConversationMessage: "#dcdcaa",
-  // Errors / retries
-  ApiError: "#f44747", ApiStreamError: "#f44747", ApiRetry: "#e08b67", StreamStall: "#e08b67",
-  // Rate limit
-  RateLimit: "#e08b67",
-  // Hooks
-  HookProgress: "#9cdcfe", HookTelemetry: "#9cdcfe",
-  // Subprocess
-  SubprocessSpawn: "#ce9178",
-  // Subagents
-  SubagentSpawn: "#c586c0", SubagentNotification: "#c586c0", SubagentLifecycle: "#c586c0",
-  // Plan mode
-  PlanModeEvent: "#d4a0e0",
-  // Session
-  SessionResume: "#6a9955", ModeChange: "#d4a0e0",
-  // Skills
-  SkillInvocation: "#c586c0",
-  // Idle
-  IdlePrompt: "#6a9955",
+  UserInput: "var(--accent)", SlashCommand: "var(--accent)", UserInterruption: "var(--error)",
+  // Errors
+  ApiError: "var(--error)", ApiStreamError: "var(--error)",
+  // Warnings / retries
+  ApiRetry: "var(--warning)", StreamStall: "var(--warning)", RateLimit: "var(--warning)",
+  // System / hooks
+  HookProgress: "var(--text-muted)", HookTelemetry: "var(--text-muted)", SubprocessSpawn: "var(--text-muted)",
+  // Agents / skills
+  SubagentSpawn: "var(--accent-tertiary)", SubagentNotification: "var(--accent-tertiary)", SubagentLifecycle: "var(--accent-tertiary)", SkillInvocation: "var(--accent-tertiary)",
 };
 
 /** Color for an event kind. Falls back to muted for unknown kinds. */

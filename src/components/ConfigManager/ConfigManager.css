@@ -121,6 +121,8 @@
   min-height: 0;
   padding: 10px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
   display: flex;
   flex-direction: column;
 }
@@ -214,6 +216,8 @@
   resize: none;
   box-sizing: border-box;
   line-height: 1.5;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
 
 .pane-textarea-md {
@@ -673,14 +677,16 @@
 .sr-body {
   overflow-y: auto;
   padding: 0 6px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.sr-body::-webkit-scrollbar { width: 4px; }
+.sr-body::-webkit-scrollbar { width: 5px; }
 .sr-body::-webkit-scrollbar-track { background: transparent; }
-.sr-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 2px; }
+.sr-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
 
 .sr-empty {
   font-size: 10px;
@@ -789,7 +795,7 @@
 }
 
 .sr-validation-warn {
-  color: var(--warning, #f0c674);
+  color: var(--warning);
 }
 
 .sr-validation-error {

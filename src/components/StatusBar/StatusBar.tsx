@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
-import { effectiveModel, modelLabel, modelColor, formatTokenCount } from "../../lib/claude";
+import { effectiveModel, modelLabel, modelColor, effortColor, formatTokenCount } from "../../lib/claude";
 import { parseWorktreePath, worktreeAcronym } from "../../lib/paths";
 // [HM-10] All status bar icons are inline SVG components -- no emoji
 import {
@@ -95,7 +95,7 @@ function SessionStatus({
           {modelLabel(model)}
         </span>
         {effort && (
-          <span className="status-item" style={{ opacity: 0.6 }}>
+          <span className="status-item" style={{ color: effortColor(effort) }}>
             {effort.charAt(0).toUpperCase() + effort.slice(1)}
           </span>
         )}

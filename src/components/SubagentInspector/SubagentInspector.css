@@ -112,8 +112,12 @@
   flex-direction: column;
   gap: 4px;
   scrollbar-width: thin;
-  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
+
+.inspector-body::-webkit-scrollbar { width: 5px; }
+.inspector-body::-webkit-scrollbar-track { background: transparent; }
+.inspector-body::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
 
 /* ── Section dividers ── */
 
@@ -319,11 +323,11 @@
 }
 
 .inspector-diff-del {
-  background: color-mix(in srgb, var(--error, #d84b4b) 8%, var(--bg-primary));
+  background: color-mix(in srgb, var(--error) 8%, var(--bg-primary));
 }
 
 .inspector-diff-add {
-  background: color-mix(in srgb, var(--success, #5cb85c) 8%, var(--bg-primary));
+  background: color-mix(in srgb, var(--success) 8%, var(--bg-primary));
 }
 
 .inspector-diff-prefix {

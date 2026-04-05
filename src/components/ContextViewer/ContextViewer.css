@@ -143,7 +143,7 @@
 }
 
 .context-tab.active {
-  background: rgba(var(--accent-rgb, 100, 150, 255), 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 500;
@@ -155,6 +155,8 @@
   flex: 1;
   overflow-y: auto;
   padding: 8px 14px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
 
 .context-viewer-content::-webkit-scrollbar { width: 6px; }
@@ -180,7 +182,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  background: var(--bg-secondary);
+  background: var(--bg-surface);
   border: none;
   width: 100%;
   cursor: pointer;
@@ -219,7 +221,7 @@
 
 .context-role-user {
   color: var(--accent);
-  background: rgba(var(--accent-rgb, 100, 150, 255), 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .context-role-assistant {
@@ -306,7 +308,7 @@
   font-size: 9px;
   font-weight: 500;
   color: var(--accent);
-  background: rgba(var(--accent-rgb, 100, 150, 255), 0.12);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   border-radius: 8px;
   padding: 1px 6px;
 }

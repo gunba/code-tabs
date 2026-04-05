@@ -5,7 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { dlog } from "../../lib/debugLog";
-import { getResumeId, modelLabel, stripWorktreeFlags } from "../../lib/claude";
+import { getResumeId, modelLabel, stripWorktreeFlags, effortColor } from "../../lib/claude";
 import { dirToTabName, abbreviatePath, normalizeForFilter, parentDir } from "../../lib/paths";
 import { useCtrlKey } from "../../hooks/useCtrlKey";
 import {
@@ -531,7 +531,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
             const config = dead?.config ?? cached;
 
             // Build badges (all share base class + color modifier)
-            const badges: { label: string; mod: string }[] = [];
+            const badges: { label: string; mod: string; style?: React.CSSProperties }[] = [];
             if (!chain.dirExists) badges.push({ label: "Unavailable", mod: "resume-picker-badge-danger" });
             if (modelBadge) badges.push({ label: modelBadge, mod: "resume-picker-badge-model" });
             if (config?.dangerouslySkipPermissions) badges.push({ label: "Skip Perms", mod: "resume-picker-badge-danger" });
@@ -539,7 +539,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
               badges.push({ label: PERM_LABELS[config.permissionMode] || config.permissionMode, mod: "resume-picker-badge-perm" });
             }
             if (config?.effort && config.effort !== "medium") {
-              badges.push({ label: EFFORT_LABELS[config.effort] || config.effort, mod: "resume-picker-badge-effort" });
+              badges.push({ label: EFFORT_LABELS[config.effort] || config.effort, mod: "resume-picker-badge-effort", style: { "--badge-color": effortColor(config.effort) } as React.CSSProperties });
             }
             if (config?.agent) badges.push({ label: config.agent, mod: "resume-picker-badge-agent" });
 
@@ -599,7 +599,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                     {abbreviatePath(ps.directory)}
                   </span>
                   {badges.map((b) => (
-                    <span key={b.mod} className={`resume-picker-badge ${b.mod}`}>{b.label}</span>
+                    <span key={b.mod} className={`resume-picker-badge ${b.mod}`} style={b.style}>{b.label}</span>
                   ))}
                   {chain.chainLength > 1 && (
                     <span
