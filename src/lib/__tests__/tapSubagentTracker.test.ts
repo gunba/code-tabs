@@ -42,6 +42,7 @@ function makeSidechainMsg(
     cwd: null,
     hasToolError: false,
     toolErrorText: null,
+    toolResultSnippets: null,
     ...overrides,
   };
 }
@@ -350,7 +351,7 @@ describe("TapSubagentTracker", () => {
         kind: "ConversationMessage", ts: 20, messageType: "assistant",
         isSidechain: false, agentId: null, uuid: null, parentUuid: null,
         promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
-        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
       } as TapEvent);
       expect(actions.some(a => a.subagentId === "agent-1" && a.updates?.state === "idle")).toBe(true);
       expect(tracker.hasActiveAgents()).toBe(false);
@@ -555,7 +556,7 @@ describe("TapSubagentTracker", () => {
         kind: "ConversationMessage", ts: 11, messageType: "user",
         isSidechain: false, agentId: null, uuid: null, parentUuid: null,
         promptId: null, stopReason: null, toolNames: [], toolAction: null,
-        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
       } as TapEvent);
       expect(tracker.isSubagentInFlight()).toBe(false);
     });
@@ -613,7 +614,7 @@ describe("TapSubagentTracker", () => {
         kind: "ConversationMessage", ts: 21, messageType: "assistant",
         isSidechain: false, agentId: null, uuid: null, parentUuid: null,
         promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
-        textSnippet: "Done", cwd: null, hasToolError: false, toolErrorText: null,
+        textSnippet: "Done", cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
       } as TapEvent);
 
       // Now safe: all agents dead, sidechain cleared, no pending spawns
@@ -633,7 +634,7 @@ describe("TapSubagentTracker", () => {
         kind: "ConversationMessage", ts: 11, messageType: "user",
         isSidechain: false, agentId: null, uuid: null, parentUuid: null,
         promptId: null, stopReason: null, toolNames: [], toolAction: null,
-        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
       } as TapEvent);
       expect(tracker.isSubagentInFlight()).toBe(false);
     });
@@ -655,7 +656,7 @@ describe("TapSubagentTracker", () => {
         kind: "ConversationMessage", ts: 11, messageType: "user",
         isSidechain: false, agentId: null, uuid: null, parentUuid: null,
         promptId: null, stopReason: null, toolNames: [], toolAction: null,
-        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
       } as TapEvent);
       expect(tracker.isSubagentInFlight()).toBe(false);
     });
@@ -680,6 +681,215 @@ describe("TapSubagentTracker", () => {
       spawnAndActivate(tracker, "agent-b"); // now lastActiveAgent
       const actions = tracker.process(makeTelemetry(1, { inputTokens: 100, outputTokens: 50 }));
       expect(actions.find(a => a.type === "update")!.subagentId).toBe("agent-b");
+    });
+  });
+
+  // ── Sidechain-exit marks ALL active agents completed ──
+
+  describe("sidechain-exit completion (all agents)", () => {
+    it("marks ALL active agents as completed + idle on sidechain exit", () => {
+      tracker.process(makeSpawn("agent A"));
+      tracker.process(makeSpawn("agent B"));
+      tracker.process(makeSidechainMsg("agent-a"));
+      tracker.process(makeSidechainMsg("agent-b"));
+      expect(tracker.hasActiveAgents()).toBe(true);
+
+      // Parent resumes with non-sidechain message → sidechain exit
+      const actions = tracker.process({
+        kind: "ConversationMessage", ts: 20, messageType: "assistant",
+        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+        promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+        toolResultSnippets: null,
+      } as TapEvent);
+
+      const completedUpdates = actions.filter(a => a.updates?.completed === true);
+      expect(completedUpdates).toHaveLength(2);
+      expect(completedUpdates.map(a => a.subagentId).sort()).toEqual(["agent-a", "agent-b"]);
+      for (const u of completedUpdates) {
+        expect(u.updates!.state).toBe("idle");
+      }
+      expect(tracker.hasActiveAgents()).toBe(false);
+    });
+
+    it("does not mark already-dead agents as completed on sidechain exit", () => {
+      spawnAndActivate(tracker, "agent-a");
+      spawnAndActivate(tracker, "agent-b");
+      // Kill agent-a manually
+      tracker.process({ kind: "SubagentLifecycle", ts: 5, variant: "killed",
+        agentType: null, isAsync: null, model: null,
+        totalTokens: null, totalToolUses: null, durationMs: null, reason: null,
+      } as TapEvent);
+
+      // Sidechain exit
+      const actions = tracker.process({
+        kind: "ConversationMessage", ts: 20, messageType: "assistant",
+        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
+        promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
+        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+        toolResultSnippets: null,
+      } as TapEvent);
+
+      // Only non-dead agents should get completed
+      // (markAllActive("dead") from killed already moved both to dead)
+      const completedUpdates = actions.filter(a => a.updates?.completed === true);
+      expect(completedUpdates).toHaveLength(0); // both already dead
+    });
+  });
+
+  // ── SubagentSpawn dedup ──
+
+  describe("SubagentSpawn dedup", () => {
+    it("deduplicates identical spawn events", () => {
+      tracker.process(makeSpawn("my agent", "do the thing"));
+      tracker.process(makeSpawn("my agent", "do the thing")); // duplicate
+      tracker.process(makeSpawn("my agent", "do the thing")); // triplicate
+
+      // Only one should be queued — one agent gets the description
+      const actionsA = tracker.process(makeSidechainMsg("agent-a"));
+      expect(actionsA.find(a => a.type === "add")!.subagent!.description).toBe("my agent");
+
+      // Second should get default "Agent" since queue is empty
+      const actionsB = tracker.process(makeSidechainMsg("agent-b"));
+      expect(actionsB.find(a => a.type === "add")!.subagent!.description).toBe("Agent");
+    });
+
+    it("allows different descriptions to be queued", () => {
+      tracker.process(makeSpawn("agent one", "prompt one"));
+      tracker.process(makeSpawn("agent two", "prompt two"));
+
+      const actionsA = tracker.process(makeSidechainMsg("agent-a"));
+      expect(actionsA.find(a => a.type === "add")!.subagent!.description).toBe("agent one");
+
+      const actionsB = tracker.process(makeSidechainMsg("agent-b"));
+      expect(actionsB.find(a => a.type === "add")!.subagent!.description).toBe("agent two");
+    });
+
+    it("clears dedup set on UserInput so spawns can repeat next turn", () => {
+      tracker.process(makeSpawn("my agent", "do the thing"));
+      tracker.process({ kind: "UserInput", ts: 5, display: "next prompt", sessionId: "s" } as TapEvent);
+      // Same description should be queued again after UserInput
+      tracker.process(makeSpawn("my agent", "do the thing"));
+      const actions = tracker.process(makeSidechainMsg("agent-a"));
+      expect(actions.find(a => a.type === "add")!.subagent!.description).toBe("my agent");
+    });
+  });
+
+  // ── UUID-based message dedup ──
+
+  describe("UUID-based message dedup", () => {
+    it("deduplicates messages with same UUID", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process(makeSidechainMsg("agent-1", {
+        uuid: "uuid-1", textSnippet: "hello", toolAction: null, toolNames: [],
+      }));
+      // Re-serialized duplicate with same UUID
+      tracker.process(makeSidechainMsg("agent-1", {
+        uuid: "uuid-1", textSnippet: "hello", toolAction: null, toolNames: [],
+      }));
+
+      // Check accumulated messages — should only have one text message
+      const lastActions = tracker.process(makeSidechainMsg("agent-1", {
+        uuid: "uuid-2", textSnippet: "world", toolAction: null, toolNames: [],
+      }));
+      const msgs = lastActions.find(a => a.updates?.messages)!.updates!.messages!;
+      const textMsgs = msgs.filter(m => m.role === "assistant");
+      expect(textMsgs).toHaveLength(2); // "hello" (once) + "world"
+    });
+
+    it("allows messages with different UUIDs", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process(makeSidechainMsg("agent-1", {
+        uuid: "uuid-1", textSnippet: "first", toolAction: null, toolNames: [],
+      }));
+      const actions = tracker.process(makeSidechainMsg("agent-1", {
+        uuid: "uuid-2", textSnippet: "second", toolAction: null, toolNames: [],
+      }));
+      const msgs = actions.find(a => a.updates?.messages)!.updates!.messages!;
+      const textMsgs = msgs.filter(m => m.role === "assistant");
+      expect(textMsgs).toHaveLength(2);
+    });
+
+    it("allows messages with null UUID (no dedup)", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process(makeSidechainMsg("agent-1", {
+        uuid: null, textSnippet: "first", toolAction: null, toolNames: [],
+      }));
+      const actions = tracker.process(makeSidechainMsg("agent-1", {
+        uuid: null, textSnippet: "second", toolAction: null, toolNames: [],
+      }));
+      const msgs = actions.find(a => a.updates?.messages)!.updates!.messages!;
+      const textMsgs = msgs.filter(m => m.role === "assistant");
+      expect(textMsgs).toHaveLength(2);
+    });
+  });
+
+  // ── Tool result snippets ──
+
+  describe("tool result snippets", () => {
+    it("creates tool messages from sidechain user toolResultSnippets", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process(makeSidechainMsg("agent-1", {
+        messageType: "user",
+        uuid: "uuid-result",
+        toolResultSnippets: [
+          { toolUseId: "tool-1", content: "file contents here", isError: false },
+          { toolUseId: "tool-2", content: "another result", isError: false },
+        ],
+        toolAction: null,
+        toolNames: [],
+        textSnippet: null,
+      }));
+      const msgs = actions.find(a => a.updates?.messages)!.updates!.messages!;
+      const resultMsgs = msgs.filter(m => m.toolName === "result");
+      expect(resultMsgs).toHaveLength(2);
+      expect(resultMsgs[0].text).toBe("file contents here");
+      expect(resultMsgs[1].text).toBe("another result");
+      expect(resultMsgs[0].role).toBe("tool");
+    });
+
+    it("skips empty content in toolResultSnippets", () => {
+      spawnAndActivate(tracker, "agent-1");
+      const actions = tracker.process(makeSidechainMsg("agent-1", {
+        messageType: "user",
+        uuid: "uuid-result",
+        toolResultSnippets: [
+          { toolUseId: "tool-1", content: "", isError: false },
+          { toolUseId: "tool-2", content: "valid", isError: false },
+        ],
+        toolAction: null,
+        toolNames: [],
+        textSnippet: null,
+      }));
+      const msgs = actions.find(a => a.updates?.messages)!.updates!.messages!;
+      const resultMsgs = msgs.filter(m => m.toolName === "result");
+      expect(resultMsgs).toHaveLength(1);
+      expect(resultMsgs[0].text).toBe("valid");
+    });
+
+    it("deduplicates tool result messages by UUID", () => {
+      spawnAndActivate(tracker, "agent-1");
+      tracker.process(makeSidechainMsg("agent-1", {
+        messageType: "user",
+        uuid: "uuid-result",
+        toolResultSnippets: [{ toolUseId: "t1", content: "result", isError: false }],
+        toolAction: null, toolNames: [], textSnippet: null,
+      }));
+      // Re-serialized duplicate
+      tracker.process(makeSidechainMsg("agent-1", {
+        messageType: "user",
+        uuid: "uuid-result",
+        toolResultSnippets: [{ toolUseId: "t1", content: "result", isError: false }],
+        toolAction: null, toolNames: [], textSnippet: null,
+      }));
+
+      // Trigger final action to get accumulated messages
+      const actions = tracker.process(makeSidechainMsg("agent-1", {
+        uuid: "uuid-next", textSnippet: "continuing", toolAction: null, toolNames: [],
+      }));
+      const msgs = actions.find(a => a.updates?.messages)!.updates!.messages!;
+      const resultMsgs = msgs.filter(m => m.toolName === "result");
+      expect(resultMsgs).toHaveLength(1); // only one, not two
     });
   });
 });

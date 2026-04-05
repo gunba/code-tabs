@@ -10,6 +10,7 @@ function convMsg(overrides: Partial<Extract<TapEvent, { kind: "ConversationMessa
     isSidechain: false, agentId: null, uuid: null, parentUuid: null,
     promptId: null, stopReason: null, toolNames: [], toolAction: null,
     textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+    toolResultSnippets: null,
     ...overrides,
   };
 }
@@ -141,7 +142,7 @@ describe("reduceTapEvent", () => {
       kind: "ConversationMessage", ts: 0, messageType: "assistant",
       isSidechain: false, agentId: null, uuid: null, parentUuid: null,
       promptId: null, stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     })).toBe("actionNeeded");
   });
 
@@ -171,7 +172,7 @@ describe("reduceTapEvent", () => {
       kind: "ConversationMessage", ts: 0, messageType: "user",
       isSidechain: false, agentId: null, uuid: null, parentUuid: null,
       promptId: null, stopReason: null, toolNames: [], toolAction: null,
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     })).toBe("thinking");
   });
 
@@ -180,7 +181,7 @@ describe("reduceTapEvent", () => {
       kind: "ConversationMessage", ts: 0, messageType: "user",
       isSidechain: true, agentId: "sub-1", uuid: null, parentUuid: null,
       promptId: null, stopReason: null, toolNames: [], toolAction: null,
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     })).toBe("actionNeeded");
   });
 
@@ -231,7 +232,7 @@ describe("reduceTapEvent", () => {
       isSidechain: false, agentId: null, uuid: null, parentUuid: null,
       promptId: null, stopReason: "tool_use", toolNames: [], toolAction: null,
       textSnippet: "Here is my plan:\n\n1. Read the file\n2. Make changes\n3. Run tests",
-      cwd: null, hasToolError: false, toolErrorText: null,
+      cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     })).toBe("toolUse");
   });
 
@@ -242,7 +243,7 @@ describe("reduceTapEvent", () => {
       isSidechain: false, agentId: null, uuid: null, parentUuid: null,
       promptId: null, stopReason: "tool_use", toolNames: [], toolAction: null,
       textSnippet: "Step 1. Do something",
-      cwd: null, hasToolError: false, toolErrorText: null,
+      cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     })).toBe("toolUse");
   });
 
@@ -253,7 +254,7 @@ describe("reduceTapEvent", () => {
       isSidechain: false, agentId: null, uuid: null, parentUuid: null,
       promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
       textSnippet: "Here are the steps:\n1. First thing\n2. Second thing",
-      cwd: null, hasToolError: false, toolErrorText: null,
+      cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     })).toBe("idle");
   });
 

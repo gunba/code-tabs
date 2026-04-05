@@ -76,7 +76,7 @@ describe("TapSubagentTracker.hasActiveAgents", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
       stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
     expect(actions.some(a => a.type === "add")).toBe(true);
     expect(tracker.hasActiveAgents()).toBe(true);
@@ -89,7 +89,7 @@ describe("TapSubagentTracker.hasActiveAgents", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
       stopReason: "end_turn", toolNames: [], toolAction: null,
-      textSnippet: "done", cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: "done", cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
     expect(tracker.hasActiveAgents()).toBe(false);
   });
@@ -105,7 +105,7 @@ describe("TapSubagentTracker stale cleanup", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
       stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
     expect(tracker.hasActiveAgents()).toBe(true);
 
@@ -126,7 +126,7 @@ describe("TapSubagentTracker SubagentLifecycle", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId, uuid: null, parentUuid: null, promptId: null,
       stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
   }
 
@@ -184,7 +184,7 @@ describe("TapSubagentTracker SubagentNotification", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
       stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
     expect(tracker.hasActiveAgents()).toBe(true);
 
@@ -259,7 +259,7 @@ describe("TapSubagentTracker tool name prefix stripping", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
       stopReason: "tool_use", toolNames: ["Read"], toolAction: "Read: /path/to/file",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
     const update = actions.find(a => a.type === "update" && a.updates?.messages);
     const msgs = update!.updates!.messages!;
@@ -275,7 +275,7 @@ describe("TapSubagentTracker tool name prefix stripping", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
       stopReason: "tool_use", toolNames: ["CustomTool"], toolAction: "some other format",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
     const update = actions.find(a => a.type === "update" && a.updates?.messages);
     const toolMsg = update!.updates!.messages!.find(m => m.role === "tool");
@@ -289,7 +289,7 @@ describe("TapSubagentTracker tool name prefix stripping", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
       stopReason: "tool_use", toolNames: ["Agent"], toolAction: "Agent",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
     const update = actions.find(a => a.type === "update" && a.updates?.messages);
     const toolMsg = update!.updates!.messages!.find(m => m.role === "tool");
@@ -308,7 +308,7 @@ describe("TapSubagentTracker costUsd accumulation", () => {
       kind: "ConversationMessage", ts: 2, messageType: "assistant",
       isSidechain: true, agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
       stopReason: "tool_use", toolNames: ["Bash"], toolAction: "Bash: ls",
-      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
+      textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     } as TapEvent);
 
     const actions1 = tracker.process({

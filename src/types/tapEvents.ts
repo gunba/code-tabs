@@ -86,6 +86,7 @@ export interface ConversationMessage extends TapEventBase {
   cwd: string | null;
   hasToolError: boolean;
   toolErrorText: string | null;
+  toolResultSnippets: Array<{ toolUseId: string; content: string; isError: boolean }> | null;
 }
 
 export interface ApiTelemetry extends TapEventBase {

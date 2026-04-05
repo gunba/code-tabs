@@ -34,6 +34,8 @@ export class TapSubagentTracker {
   private agentStates = new Map<string, SessionState>();
   private lastActiveAgent: string | null = null;
   private sidechainActive = false;
+  private seenSpawnFingerprints = new Set<string>(); // dedup re-serialized SubagentSpawn events
+  private processedUuids = new Set<string>(); // dedup re-serialized ConversationMessage content
 
   constructor(parentSessionId: string) {
     this.parentSessionId = parentSessionId;
@@ -88,8 +90,15 @@ export class TapSubagentTracker {
     const actions: SubagentAction[] = [];
 
     switch (event.kind) {
-      case "SubagentSpawn":
-        // Agent tool input with description + prompt → queue spawn data
+      case "SubagentSpawn": {
+        // Agent tool input with description + prompt → queue spawn data.
+        // CLI re-serializes 2-3x per event; dedup by content fingerprint.
+        const fingerprint = event.description + "|" + (event.prompt || "").slice(0, 200);
+        if (this.seenSpawnFingerprints.has(fingerprint)) {
+          dlog("inspector", this.parentSessionId, `subagent spawn dedup skip desc="${event.description.slice(0, 60)}"`, "DEBUG");
+          break;
+        }
+        this.seenSpawnFingerprints.add(fingerprint);
         this.pendingSpawns.push({
           description: event.description,
           prompt: event.prompt,
@@ -98,22 +107,26 @@ export class TapSubagentTracker {
         });
         dlog("inspector", this.parentSessionId, `subagent spawn queued desc="${event.description.slice(0, 60)}"`, "DEBUG");
         break;
+      }
 
       case "ConversationMessage": {
         // Track sidechain state for routing non-ConversationMessage events
         const wasSidechain = this.sidechainActive;
         this.sidechainActive = event.isSidechain;
-        // [IN-30] Sidechain-exit fallback: if sidechain just ended and last active agent is still active,
-        // the parent is continuing so the subagent must have finished — mark idle immediately.
-        if (wasSidechain && !event.isSidechain && this.lastActiveAgent) {
-          const lastState = this.agentStates.get(this.lastActiveAgent);
-          if (lastState && isSubagentActive(lastState)) {
-            dlog("inspector", this.parentSessionId, `sidechain exit fallback: ${this.lastActiveAgent} ${lastState} → idle`, "DEBUG");
-            this.agentStates.set(this.lastActiveAgent, "idle");
-            actions.push({
-              type: "update", subagentId: this.lastActiveAgent,
-              updates: { state: "idle" as SessionState, currentToolName: null, currentAction: null, currentEventKind: null },
-            });
+        // [IN-30] Sidechain-exit fallback: if sidechain just ended, ALL active agents
+        // must have finished — mark completed. SubagentNotification/SubagentLifecycle end
+        // events don't fire for most Agent subagents, so this is the primary completion signal.
+        if (wasSidechain && !event.isSidechain) {
+          for (const agentId of this.knownIds) {
+            const agentState = this.agentStates.get(agentId);
+            if (agentState && isSubagentActive(agentState)) {
+              dlog("inspector", this.parentSessionId, `sidechain exit: ${agentId} ${agentState} → idle+completed`, "DEBUG");
+              this.agentStates.set(agentId, "idle");
+              actions.push({
+                type: "update", subagentId: agentId,
+                updates: { state: "idle" as SessionState, completed: true, currentToolName: null, currentAction: null, currentEventKind: null },
+              });
+            }
           }
         }
         // [IN-04] Subagent messages: isSidechain + agentId routing, late msg gating
@@ -159,11 +172,13 @@ export class TapSubagentTracker {
           dlog("inspector", this.parentSessionId, `subagent ${agentId} created desc="${desc}" (${this.pendingSpawns.length} pending spawns remain)`, "DEBUG");
         }
 
-        // Route messages
+        // Route messages — dedup by UUID to prevent 2-3x re-serialized duplicates
         const newMsgs: SubagentMessage[] = [];
         const now = Date.now();
+        const isNewUuid = !event.uuid || !this.processedUuids.has(event.uuid);
+        if (event.uuid) this.processedUuids.add(event.uuid);
 
-        if (event.messageType === "assistant") {
+        if (isNewUuid && event.messageType === "assistant") {
           // Extract text and tool messages from assistant content
           if (event.textSnippet) {
             newMsgs.push({ role: "assistant", text: event.textSnippet, timestamp: now });
@@ -182,6 +197,15 @@ export class TapSubagentTracker {
               if (tn === "Agent" && event.toolAction.startsWith("Agent: ")) {
                 this.pendingSpawns.push({ description: event.toolAction.slice(7).slice(0, 100) });
               }
+            }
+          }
+        }
+
+        // Extract tool result content from sidechain user messages
+        if (isNewUuid && event.messageType === "user" && event.toolResultSnippets) {
+          for (const snippet of event.toolResultSnippets) {
+            if (snippet.content) {
+              newMsgs.push({ role: "tool", text: snippet.content, toolName: "result", timestamp: now });
             }
           }
         }
@@ -323,6 +347,8 @@ export class TapSubagentTracker {
       case "SlashCommand":
         this.sidechainActive = false;
         this.pendingSpawns = [];
+        this.seenSpawnFingerprints.clear();
+        this.processedUuids.clear();
         // New user prompt → previous turn's agents are done; mark stale active agents idle
         actions.push(...this.markAllActive("idle"));
         break;
@@ -410,5 +436,7 @@ export class TapSubagentTracker {
     this.agentStates.clear();
     this.lastActiveAgent = null;
     this.sidechainActive = false;
+    this.seenSpawnFingerprints.clear();
+    this.processedUuids.clear();
   }
 }

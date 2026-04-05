@@ -309,7 +309,7 @@ describe("TapMetadataAccumulator", () => {
       isSidechain: false, agentId: null, uuid: null, parentUuid: null,
       promptId: null, stopReason: "end_turn", toolNames: ["Agent"],
       toolAction: "Agent: explore", textSnippet: null, cwd: null,
-      hasToolError: false, toolErrorText: null,
+      hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     });
     // Sidechain message (entering subagent)
     acc.process({
@@ -317,7 +317,7 @@ describe("TapMetadataAccumulator", () => {
       isSidechain: true, agentId: "sub1", uuid: null, parentUuid: null,
       promptId: null, stopReason: null, toolNames: [],
       toolAction: null, textSnippet: "explore the codebase", cwd: null,
-      hasToolError: false, toolErrorText: null,
+      hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     });
     // Subagent TurnStart — no diff produced (all transient updates gated by sidechainActive)
     const diff = acc.process({
@@ -332,7 +332,7 @@ describe("TapMetadataAccumulator", () => {
       isSidechain: false, agentId: null, uuid: null, parentUuid: null,
       promptId: null, stopReason: "end_turn", toolNames: [],
       toolAction: null, textSnippet: null, cwd: null,
-      hasToolError: false, toolErrorText: null,
+      hasToolError: false, toolErrorText: null, toolResultSnippets: null,
     });
     const diff2 = acc.process({
       kind: "TurnStart", ts: 5, model: "opus",

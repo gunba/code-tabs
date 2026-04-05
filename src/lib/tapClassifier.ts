@@ -400,14 +400,24 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
     // Tool error extraction: scan user message content for is_error tool_result blocks
     let hasToolError = false;
     let toolErrorText: string | null = null;
+    let toolResultSnippets: Array<{ toolUseId: string; content: string; isError: boolean }> | null = null;
     if (parsed.type === "user" && Array.isArray(parsed.message?.content || parsed.message)) {
       const blocks = Array.isArray(parsed.message?.content) ? parsed.message.content : [];
       for (const block of blocks) {
-        if (block?.type === "tool_result" && block.is_error) {
-          hasToolError = true;
-          toolErrorText = typeof block.content === "string" ? block.content.slice(0, 200) :
-            Array.isArray(block.content) ? block.content.map((c: { text?: string }) => c.text || "").join("").slice(0, 200) : null;
-          break;
+        if (block?.type === "tool_result") {
+          // Extract tool result content for sidechain messages (SubagentInspector)
+          const resultText = typeof block.content === "string" ? block.content :
+            Array.isArray(block.content) ? block.content.map((c: { text?: string }) => c.text || "").join("") : "";
+          if (!toolResultSnippets) toolResultSnippets = [];
+          toolResultSnippets.push({
+            toolUseId: block.tool_use_id || "",
+            content: resultText.slice(0, 2000),
+            isError: !!block.is_error,
+          });
+          if (block.is_error && !hasToolError) {
+            hasToolError = true;
+            toolErrorText = resultText.slice(0, 200);
+          }
         }
       }
     }
@@ -427,6 +437,7 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
       cwd: parsed.cwd || null,
       hasToolError,
       toolErrorText,
+      toolResultSnippets,
     };
   }
 

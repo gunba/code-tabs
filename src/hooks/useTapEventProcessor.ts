@@ -8,6 +8,7 @@ import { TapMetadataAccumulator } from "../lib/tapMetadataAccumulator";
 import { TapSubagentTracker } from "../lib/tapSubagentTracker";
 import { normalizePath, canonicalizePath } from "../lib/paths";
 import { getResumeId, resolveModelFamily } from "../lib/claude";
+import { buildSubagentTabs } from "../lib/contextProjection";
 import { useSettingsStore } from "../store/settings";
 import { dlog } from "../lib/debugLog";
 import { getNoisyEventKinds } from "../lib/noisyEventKinds";
@@ -307,6 +308,27 @@ export function useTapEventProcessor(
       // SystemPromptCapture → collect all unique observed prompts
       if (event.kind === "SystemPromptCapture") {
         useSettingsStore.getState().addObservedPrompt(event.text, event.model);
+
+        // Bridge resultText from capturedMessages to TAP-derived subagents.
+        // capturedMessages pair Agent tool_use with tool_result blocks authoritatively,
+        // but TAP subagents never get resultText because SubagentNotification doesn't fire.
+        if (event.messages) {
+          const tabs = buildSubagentTabs(event.messages);
+          const subagents = useSessionStore.getState().subagents.get(sid) || [];
+          for (const tab of tabs) {
+            if (!tab.resultText) continue;
+            const labelPrefix = tab.label.endsWith("\u2026") ? tab.label.slice(0, -1) : tab.label;
+            if (labelPrefix.length < 3) continue;
+            // Match by description prefix + prompt text to avoid ambiguous collisions
+            const candidates = subagents.filter(sub => sub.description.startsWith(labelPrefix));
+            const matched = candidates.length === 1
+              ? candidates[0]
+              : candidates.find(sub => sub.promptText && sub.promptText === tab.promptText) ?? null;
+            if (matched && !matched.resultText) {
+              updateSubagent(sid, matched.id, { resultText: tab.resultText, completed: true });
+            }
+          }
+        }
       }
 
       // ProcessHealth → store (throttled to ~every 5s)

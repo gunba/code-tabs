@@ -1,5 +1,5 @@
 // [TA-04] ContextViewer: conversation context viewer — unified list with per-subagent tabs
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
 import { formatTokenCount } from "../../lib/claude";
 import { buildMainTabEntries, buildSubagentTabs } from "../../lib/contextProjection";
@@ -265,17 +265,35 @@ export function ContextViewer({ metadata, subagents, onClose }: ContextViewerPro
     [messages],
   );
 
-  // Build a map from subagent tab id to its sidechain messages
+  // Build a map from subagent tab id to its sidechain messages.
+  // Also index by description prefix so capturedMessages tabs (keyed by tool_use.id)
+  // can find TAP subagents (keyed by agentId) — the IDs use different namespaces.
   const subagentMessageMap = useMemo(() => {
     const map = new Map<string, SubagentMessage[]>();
     if (!subagents) return map;
     for (const sub of subagents) {
       if (sub.messages.length > 0) {
         map.set(sub.id, sub.messages);
+        // Description-based bridge key for cross-namespace matching
+        map.set("desc:" + sub.description, sub.messages);
       }
     }
     return map;
   }, [subagents]);
+
+  /** Look up sidechain messages for a subagent tab: try by ID first, then by description+prompt. */
+  const getTabMessages = useCallback((tab: SubagentTab): SubagentMessage[] | undefined => {
+    // Direct ID match (same namespace)
+    const byId = subagentMessageMap.get(tab.id);
+    if (byId) return byId;
+    // Cross-namespace: description prefix match, disambiguated by prompt text
+    const byDesc = subagentMessageMap.get("desc:" + tab.label.replace(/\u2026$/, ""));
+    if (byDesc) return byDesc;
+    const prefix = tab.label.replace(/\u2026$/, "");
+    const candidates = (subagents ?? []).filter(sub => sub.description.startsWith(prefix) && sub.messages.length > 0);
+    if (candidates.length === 1) return candidates[0].messages;
+    return candidates.find(sub => sub.promptText && sub.promptText === tab.promptText)?.messages;
+  }, [subagentMessageMap, subagents]);
 
   // Ensure activeTab is valid
   const validTab = activeTab === "main" || subagentTabs.some(t => t.id === activeTab)
@@ -292,13 +310,13 @@ export function ContextViewer({ metadata, subagents, onClose }: ContextViewerPro
     const tab = subagentTabs.find(t => t.id === validTab);
     if (!tab) return [];
     const keys = [`${tab.id}:prompt`];
-    const msgs = subagentMessageMap.get(tab.id);
+    const msgs = getTabMessages(tab);
     if (msgs) {
       for (let i = 0; i < msgs.length; i++) keys.push(`${tab.id}:msg-${i}`);
     }
     if (tab.resultText != null) keys.push(`${tab.id}:result`);
     return keys;
-  }, [validTab, mainEntries, subagentTabs, subagentMessageMap]);
+  }, [validTab, mainEntries, subagentTabs, getTabMessages]);
 
   const allExpanded = currentKeys.length > 0 && currentKeys.every(k => expandedSet.has(k));
 
@@ -445,7 +463,7 @@ export function ContextViewer({ metadata, subagents, onClose }: ContextViewerPro
               return tab ? (
                 <SubagentTabContent
                   tab={tab}
-                  messages={subagentMessageMap.get(tab.id)}
+                  messages={getTabMessages(tab)}
                   expandedSet={expandedSet}
                   onToggle={toggleEntry}
                 />
