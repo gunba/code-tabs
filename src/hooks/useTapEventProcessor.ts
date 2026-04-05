@@ -211,8 +211,20 @@ export function useTapEventProcessor(
         }
 
         if (event.kind === "ToolInput") {
+          // Suppress phantom Read events during subagent context re-serialization.
+          // When a subagent is in flight but sidechainActive is false and the last
+          // main-agent tool was Agent, ToolInput(Read) events are re-serialized
+          // conversation context, not genuine tool executions.
+          const isPhantomRead = event.toolName === "Read"
+            && subTracker.isSubagentInFlight()
+            && !isSidechain
+            && subTracker.getLastMainToolCall?.() === "Agent";
+          if (isPhantomRead) {
+            dlog("tap", sid, `phantom Read suppressed: ${event.input.file_path}`, "DEBUG");
+          }
+
           const rawFilePath = event.input.file_path;
-          if (typeof rawFilePath === "string") {
+          if (typeof rawFilePath === "string" && !isPhantomRead) {
             const filePath = canonicalizePath(rawFilePath);
             const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
             const workDir = session?.config.workingDir ?? "";

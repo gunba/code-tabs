@@ -6,7 +6,7 @@ import { ClaudeMascot } from "./ClaudeMascot";
 import type { MascotState } from "./ClaudeMascot";
 import { IconClose, IconFolder, IconDocument } from "../Icons/Icons";
 import { isSubagentActive } from "../../types/session";
-import type { FileActivity, ContextFileEntry, FileChangeKind } from "../../types/activity";
+import type { FileActivity, ContextFileEntry } from "../../types/activity";
 import { buildFileTree, flattenTree, allFolderPaths } from "../../lib/fileTree";
 import type { FileTreeNode } from "../../lib/fileTree";
 import { canonicalizePath } from "../../lib/paths";
@@ -19,7 +19,7 @@ interface ActivityPanelProps {
 type ViewMode = "response" | "session";
 
 const INDENT_STEP = 16;
-// [AP-04] Floating mascot travels to active file; persists via lastMainAgentFile; indent at INDENT_STEP=16
+// [AP-04] Floating mascot tracks the main agent; subagent inline mascots persist by last-touched file, and completed subagents stay dimmed at their last-touched file; indent at INDENT_STEP=16
 // [AP-05] Two view modes: Response (since lastUserMessageAt) and Session (all visited paths)
 
 /* -- Helpers -- */
@@ -42,18 +42,9 @@ interface AgentOnFile {
   toolName: string;
   isSubagent: boolean;
   agentId: string | null;
+  isCompleted?: boolean;
 }
 
-function badgeLetter(kind: FileChangeKind): string {
-  switch (kind) {
-    case "created": return "A";
-    case "modified": return "M";
-    case "deleted": return "D";
-    case "read": return "R";
-    case "renamed": return "R";
-    default: return "";
-  }
-}
 
 /* -- Empty panel -- */
 
@@ -130,6 +121,7 @@ function FileTreeRow({
             <ClaudeMascot
               state={mascotState!}
               isSubagent={primaryMascot!.isSubagent}
+              isCompleted={primaryMascot!.isCompleted}
               size={16}
             />
           ) : (
@@ -137,11 +129,6 @@ function FileTreeRow({
           )}
         </span>
         <span className={`file-tree-name file-tree-filename${kindClass}`}>{node.name}</span>
-        {node.activity?.kind && (
-          <span className={`file-tree-status-badge file-tree-badge-${node.activity.kind}`}>
-            {badgeLetter(node.activity.kind)}
-          </span>
-        )}
         {extraAgentCount > 0 && (
           <span className="file-tree-agent-count">+{extraAgentCount}</span>
         )}
@@ -289,6 +276,25 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
       }
     }
 
+    // Completed subagents — dimmed mascot at last-touched file
+    for (const sub of subs) {
+      if (isSubagentActive(sub.state)) continue; // already handled above
+      const lastFile = lastSubagentFiles.get(sub.id);
+      if (lastFile) {
+        const hasEntry = [...map.values()].some((agents) =>
+          agents.some((a) => a.agentId === sub.id),
+        );
+        if (!hasEntry) {
+          pushAgent(lastFile.path, {
+            toolName: lastFile.toolName ?? "Read",
+            isSubagent: true,
+            agentId: sub.id,
+            isCompleted: true,
+          });
+        }
+      }
+    }
+
     return map;
   }, [
     activeSession?.metadata.currentAction,
@@ -325,8 +331,8 @@ export function ActivityPanel({ onClose }: ActivityPanelProps) {
     if (mode === "response") {
       const boundary = activity.lastUserMessageAt;
       for (const turn of activity.turns) {
-        if (turn.startedAt >= boundary) {
-          for (const f of turn.files) {
+        for (const f of turn.files) {
+          if (f.timestamp >= boundary) {
             map.set(f.path, f);
           }
         }

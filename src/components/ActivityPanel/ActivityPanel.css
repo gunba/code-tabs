@@ -192,37 +192,6 @@
 .file-tree-kind-deleted  { color: var(--error) !important; opacity: 0.7; text-decoration: line-through; }
 .file-tree-kind-read     { color: var(--text-secondary) !important; }
 
-/* Status badge (letter indicator: A/M/D/R) */
-.file-tree-status-badge {
-  font-size: 9px;
-  font-weight: 600;
-  padding: 0 3px;
-  border-radius: 2px;
-  flex-shrink: 0;
-  line-height: 14px;
-  text-transform: uppercase;
-  font-family: var(--font-mono);
-}
-
-.file-tree-badge-created {
-  color: var(--success);
-  background: color-mix(in srgb, var(--success) 15%, transparent);
-}
-
-.file-tree-badge-modified {
-  color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 15%, transparent);
-}
-
-.file-tree-badge-deleted {
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 15%, transparent);
-}
-
-.file-tree-badge-read {
-  color: var(--text-muted);
-  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
-}
 
 /* -- Floating mascot for travel animation -- */
 
@@ -315,4 +284,13 @@
 /* Subagent: blue tint via CSS filter */
 .claude-mascot-subagent .claude-mascot-img {
   filter: hue-rotate(190deg) saturate(1.3) brightness(0.95);
+}
+
+/* Completed agent: dimmed to indicate no longer active */
+.claude-mascot-completed {
+  opacity: 0.4;
+}
+
+.claude-mascot-completed .claude-mascot-img {
+  animation: none;
 }
