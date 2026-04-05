@@ -197,6 +197,14 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
     };
   }
 
+  // [IN-10] PermissionPromptShown: addRules array (Bash permission prompt); extracts toolName from rules[0].toolName
+  if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.type === "addRules") {
+    return {
+      kind: "PermissionPromptShown", ts,
+      toolName: parsed[0].rules?.[0]?.toolName ?? null,
+    };
+  }
+
   // PermissionPromptShown (telemetry): tengu_tool_use_show_permission_request shape
   if (parsed.toolName && parsed.decisionReasonType !== undefined && parsed.sandboxEnabled !== undefined) {
     return {

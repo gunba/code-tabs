@@ -463,6 +463,22 @@ describe("classifyTapEntry — permission events", () => {
     expect(event).toMatchObject({ kind: "PermissionPromptShown", ts: 4701, toolName: "Bash" });
   });
 
+  it("classifies addRules array → PermissionPromptShown with toolName", () => {
+    const entry: TapEntry = {
+      ts: 4702, cat: "stringify", len: 322,
+      snap: JSON.stringify([{
+        type: "addRules",
+        rules: [
+          { toolName: "Bash", ruleContent: "rm -rf /tmp/test" },
+          { toolName: "Bash", ruleContent: "mkdir -p /tmp/test" },
+        ],
+        behavior: "allow", destination: "localSettings",
+      }]),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toMatchObject({ kind: "PermissionPromptShown", ts: 4702, toolName: "Bash" });
+  });
+
   it("classifies accept telemetry → PermissionApproved", () => {
     const entry: TapEntry = {
       ts: 4702, cat: "stringify", len: 200,
