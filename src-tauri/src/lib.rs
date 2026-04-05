@@ -1,6 +1,5 @@
 mod commands;
 mod file_watcher;
-mod output_filter;
 mod path_utils;
 mod proxy;
 mod pty;
@@ -164,7 +163,6 @@ pub fn run() {
             commands::save_event_kinds,
             commands::list_agents,
             commands::list_skills,
-            commands::get_tui_mode,
             commands::register_active_pid,
             commands::unregister_active_pid,
             commands::kill_process_tree,

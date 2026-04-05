@@ -13,8 +13,6 @@ use tauri::async_runtime::{Mutex, RwLock};
 
 use tauri::ipc::Response;
 
-use crate::output_filter::OutputFilter;
-
 #[cfg(windows)]
 pub mod conpty;
 #[cfg(unix)]
@@ -38,7 +36,6 @@ struct Session {
 
     writer: Mutex<Box<dyn std::io::Write + Send>>,
     output_rx: Mutex<std::sync::mpsc::Receiver<Vec<u8>>>,
-    output_filter: Mutex<OutputFilter>,
     cols: AtomicU16,
     rows: AtomicU16,
     process_id: u32,
@@ -78,8 +75,6 @@ pub async fn pty_spawn(
 
     let handler = state.session_id.fetch_add(1, Ordering::Relaxed);
 
-    let tui_mode = std::env::var("CLAUDE_CODE_NO_FLICKER").is_ok();
-
     let session = Arc::new(Session {
         #[cfg(windows)]
         conpty: result.handle,
@@ -88,7 +83,6 @@ pub async fn pty_spawn(
 
         writer: Mutex::new(Box::new(result.writer)),
         output_rx: Mutex::new(result.output_rx),
-        output_filter: Mutex::new(OutputFilter::new(tui_mode)),
         cols: AtomicU16::new(cols),
         rows: AtomicU16::new(rows),
         process_id: result.process_id,
@@ -121,10 +115,10 @@ pub async fn pty_write(
     Ok(())
 }
 
-/// [PT-16] Read filtered output from a PTY session.
+/// [PT-16] Read output from a PTY session.
 ///
 /// Pipeline: ConPTY/PTY pipe -> background reader thread -> channel ->
-/// OutputFilter (scrollback fix + security) -> IPC response (raw binary).
+/// IPC response (raw binary).
 ///
 /// Returns `tauri::ipc::Response` for zero-copy binary transfer —
 /// bypasses JSON serialization (Vec<u8> would serialize as number[]).
@@ -143,12 +137,10 @@ pub async fn pty_read(
 
     tauri::async_runtime::spawn_blocking(move || {
         let output_rx = session.output_rx.blocking_lock();
-        let mut output_filter = session.output_filter.blocking_lock();
 
         // Block until first chunk arrives (or channel disconnects = EOF).
         let data = output_rx.recv().map_err(|_| "EOF".to_string())?;
-        let filtered = output_filter.filter(&data);
-        Ok(Response::new(filtered.to_vec()))
+        Ok(Response::new(data))
     })
     .await
     .map_err(|e| e.to_string())?

@@ -15,7 +15,6 @@ import { useFileWatcher } from "../../hooks/useFileWatcher";
 import { useSettingsStore } from "../../store/settings";
 import { IconSearch } from "../Icons/Icons";
 import { normalizePath } from "../../lib/paths";
-import { isTuiMode } from "../../lib/tuiMode";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
 import { isSessionIdle } from "../../types/session";
 import "./TerminalPanel.css";
@@ -181,6 +180,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
     // Flush all PTY data buffered during resume as a single write
     const chunks = bgBufferRef.current;
+    dlog("terminal", session.id, `resume flush: state=${session.state} chunks=${chunks.length}`, "DEBUG");
     if (chunks.length > 0) {
       bgBufferRef.current = [];
       let totalLen = 0;
@@ -188,18 +188,35 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       const merged = new Uint8Array(totalLen);
       let offset = 0;
       for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+      dlog("terminal", session.id, `resume flush: writing ${totalLen}B merged from ${chunks.length} chunks`, "DEBUG");
 
       const term = terminal.termRef.current;
       if (term) {
         try {
           term.write(merged, () => {
-            // Scroll after write is fully processed — avoids race where
-            // scrollToBottom fires before the buffer knows its full extent.
-            // Guard: ensure terminal hasn't been disposed/respawned between write and callback.
-            if (terminal.termRef.current === term) term.scrollToBottom();
+            if (terminal.termRef.current !== term) return;
+            // fit() recalculates xterm.js viewport after the large buffer flush —
+            // without this, the viewport is stale and only shows one screenful.
+            terminal.fit();
+            // Apply deferred resize (handleResize defers when bgBuffer has data),
+            // or force a resize to current dimensions to trigger SIGWINCH so the
+            // TUI renderer fully redraws after the atomic buffer flush.
+            const deferred = deferredResizeRef.current;
+            if (deferred) {
+              deferredResizeRef.current = null;
+              pty.handle.current?.resize(deferred.cols, deferred.rows);
+              dlog("terminal", session.id, `resume flush: applied deferred resize ${deferred.cols}x${deferred.rows}`, "DEBUG");
+            } else {
+              const { cols, rows } = terminal.getDimensions();
+              pty.handle.current?.resize(cols, rows);
+              dlog("terminal", session.id, `resume flush: forced resize ${cols}x${rows}`, "DEBUG");
+            }
+            term.scrollToBottom();
           });
         } catch {}
       }
+    } else {
+      dlog("terminal", session.id, "resume flush: no buffered data", "DEBUG");
     }
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -406,14 +423,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       lastPtyDimsRef.current = { cols, rows };
       if (!visibleRef.current || bgBufferRef.current.length > 0) {
         deferredResizeRef.current = { cols, rows };
+        dlog("terminal", session.id, `resize deferred ${cols}x${rows} (visible=${visibleRef.current} bgBuf=${bgBufferRef.current.length})`, "DEBUG");
         return;
       }
       pty.handle.current?.resize(cols, rows);
-      // Send focus-in after resize: Claude Code's Ink renderer marks new columns as
-      // dirty after SIGWINCH and fills them lazily on the next focus event. Sending
-      // the focus-in sequence immediately triggers that fill without waiting for the
-      // user to click away and back. [PT-22] Skip in TUI mode — TUI handles resize natively.
-      if (!isTuiMode()) writeToPty(session.id, '\x1b[I');
     },
     // pty.handle and bgBufferRef are stable refs — omitted from deps intentionally
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -609,12 +622,11 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
     terminal.fit();
 
-    // [PT-20] Send deferred PTY resize now that the buffer has been flushed
+    // Send deferred PTY resize now that the buffer has been flushed
     const deferred = deferredResizeRef.current;
     if (deferred) {
       deferredResizeRef.current = null;
       pty.handle.current?.resize(deferred.cols, deferred.rows);
-      if (!isTuiMode()) writeToPty(session.id, '\x1b[I');
     }
 
     if (!hasBuffer && term) {

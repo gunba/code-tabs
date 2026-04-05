@@ -5,7 +5,6 @@ import { trace, traceAsync } from "../lib/perfTrace";
 import { assignSessionColor, releaseSessionColor, findNearestLiveTab } from "../lib/claude";
 import { useActivityStore } from "./activity";
 import { dlog, removeDebugLogSession } from "../lib/debugLog";
-import { initTuiMode } from "../lib/tuiMode";
 import type {
   Session,
   SessionConfig,
@@ -121,10 +120,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
           ).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`); })
            .catch((e) => dlog("session", null, `orphan cleanup failed: ${e}`, "ERR"))
         : Promise.resolve(),
-      // [PT-22] Detect TUI renderer (CLAUDE_CODE_NO_FLICKER env var)
-      invoke<boolean>("get_tui_mode")
-        .then((tui) => { initTuiMode(tui); if (tui) trace("init: TUI mode detected"); })
-        .catch(() => {}),
       // [PS-06] Proxy lifecycle: start API proxy, store port, listen for route events
       traceAsync("init: start_api_proxy", () => {
         const { providerConfig } = useSettingsStore.getState();
