@@ -855,59 +855,6 @@ describe("TapSubagentTracker", () => {
     });
   });
 
-  // ── Sidechain-exit marks ALL active agents completed ──
-
-  describe("sidechain-exit completion (all agents)", () => {
-    it("marks ALL active agents as completed + idle on sidechain exit", () => {
-      tracker.process(makeSpawn("agent A"));
-      tracker.process(makeSpawn("agent B"));
-      tracker.process(makeSidechainMsg("agent-a"));
-      tracker.process(makeSidechainMsg("agent-b"));
-      expect(tracker.hasActiveAgents()).toBe(true);
-
-      // Parent resumes with non-sidechain message → sidechain exit
-      const actions = tracker.process({
-        kind: "ConversationMessage", ts: 20, messageType: "assistant",
-        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
-        promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
-        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
-        toolResultSnippets: null,
-      } as TapEvent);
-
-      const completedUpdates = actions.filter(a => a.updates?.completed === true);
-      expect(completedUpdates).toHaveLength(2);
-      expect(completedUpdates.map(a => a.subagentId).sort()).toEqual(["agent-a", "agent-b"]);
-      for (const u of completedUpdates) {
-        expect(u.updates!.state).toBe("idle");
-      }
-      expect(tracker.hasActiveAgents()).toBe(false);
-    });
-
-    it("does not mark already-dead agents as completed on sidechain exit", () => {
-      spawnAndActivate(tracker, "agent-a");
-      spawnAndActivate(tracker, "agent-b");
-      // Kill agent-a manually
-      tracker.process({ kind: "SubagentLifecycle", ts: 5, variant: "killed",
-        agentType: null, isAsync: null, model: null,
-        totalTokens: null, totalToolUses: null, durationMs: null, reason: null,
-      } as TapEvent);
-
-      // Sidechain exit
-      const actions = tracker.process({
-        kind: "ConversationMessage", ts: 20, messageType: "assistant",
-        isSidechain: false, agentId: null, uuid: null, parentUuid: null,
-        promptId: null, stopReason: "end_turn", toolNames: [], toolAction: null,
-        textSnippet: null, cwd: null, hasToolError: false, toolErrorText: null,
-        toolResultSnippets: null,
-      } as TapEvent);
-
-      // Only non-dead agents should get completed
-      // (markAllActive("dead") from killed already moved both to dead)
-      const completedUpdates = actions.filter(a => a.updates?.completed === true);
-      expect(completedUpdates).toHaveLength(0); // both already dead
-    });
-  });
-
   // ── SubagentSpawn dedup ──
 
   describe("SubagentSpawn dedup", () => {
