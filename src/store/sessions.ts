@@ -55,6 +55,7 @@ interface SessionsState {
   stopTrafficLog: (id: string) => void;
   addSubagent: (sessionId: string, subagent: Subagent) => void;
   updateSubagent: (sessionId: string, subagentId: string, updates: Partial<Subagent>) => void;
+  removeSubagent: (sessionId: string, subagentId: string) => void;
   addSkillInvocation: (sessionId: string, invocation: SkillInvocation) => void;
   removeSkillInvocation: (sessionId: string, invocationId: string) => void;
   addCommandHistory: (sessionId: string, command: string, ts: number) => void;
@@ -383,6 +384,18 @@ export const useSessionStore = create<SessionsState>((set) => ({
         sa.id === subagentId ? { ...sa, ...updates } : sa
       );
       map.set(sessionId, updated);
+      return { subagents: map };
+    });
+  },
+
+  removeSubagent: (sessionId, subagentId) => {
+    set((s) => {
+      const map = new Map(s.subagents);
+      const list = map.get(sessionId);
+      if (!list) return s;
+      const filtered = list.filter((sa) => sa.id !== subagentId);
+      if (filtered.length === list.length) return s;
+      map.set(sessionId, filtered);
       return { subagents: map };
     });
   },

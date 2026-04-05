@@ -352,7 +352,11 @@ export default function App() {
   type BarItem = { type: "subagent"; subagent: Subagent; ts: number };
   const barItems = useMemo<BarItem[]>(() => {
     const items: BarItem[] = [];
-    for (const sub of allSubs) items.push({ type: "subagent", subagent: sub, ts: sub.createdAt || 0 });
+    for (const sub of allSubs) {
+      // Skip CLI-internal sidechains that may have leaked through
+      if (sub.id.startsWith("aside_question")) continue;
+      items.push({ type: "subagent", subagent: sub, ts: sub.createdAt || 0 });
+    }
     items.sort((a, b) => b.ts - a.ts);
     return items;
   }, [subagentMap, activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
