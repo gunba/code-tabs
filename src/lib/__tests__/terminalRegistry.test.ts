@@ -3,9 +3,6 @@ import {
   registerBufferReader,
   unregisterBufferReader,
   getSessionTranscript,
-  registerTailReader,
-  unregisterTailReader,
-  getSessionBufferTail,
   registerTerminal,
   unregisterTerminal,
   highlightMatch,
@@ -33,8 +30,6 @@ describe("terminalRegistry", () => {
   beforeEach(() => {
     unregisterBufferReader(SID);
     unregisterBufferReader(SID2);
-    unregisterTailReader(SID);
-    unregisterTailReader(SID2);
     unregisterTerminal(SID);
     unregisterTerminal(SID2);
     unregisterScrollToLine(SID);
@@ -77,36 +72,6 @@ describe("terminalRegistry", () => {
     });
   });
 
-  // ── Tail reader ──
-
-  describe("tailReader", () => {
-    it("returns null for unregistered session", () => {
-      expect(getSessionBufferTail("nonexistent", 10)).toBeNull();
-    });
-
-    it("returns tail from registered reader", () => {
-      registerTailReader(SID, (n) => `last ${n} lines`);
-      expect(getSessionBufferTail(SID, 5)).toBe("last 5 lines");
-    });
-
-    it("passes line count through to reader function", () => {
-      const reader = vi.fn().mockReturnValue("data");
-      registerTailReader(SID, reader);
-      getSessionBufferTail(SID, 42);
-      expect(reader).toHaveBeenCalledWith(42);
-    });
-
-    it("returns null after unregistering", () => {
-      registerTailReader(SID, () => "data");
-      unregisterTailReader(SID);
-      expect(getSessionBufferTail(SID, 10)).toBeNull();
-    });
-
-    it("unregistering a non-existent session does not throw", () => {
-      expect(() => unregisterTailReader("nonexistent")).not.toThrow();
-    });
-  });
-
   // ── Terminal (highlight/clearHighlight) ──
 
   describe("highlightMatch", () => {
@@ -118,7 +83,6 @@ describe("terminalRegistry", () => {
     });
 
     it("is a no-op for unregistered session", () => {
-      // Should not throw
       expect(() => highlightMatch("nonexistent", 0, 0, 5)).not.toThrow();
     });
 

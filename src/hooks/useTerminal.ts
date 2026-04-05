@@ -9,28 +9,6 @@ import { dlog } from "../lib/debugLog";
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
 const PROMPT_MARKER_NEW = ">\u00A0"; // > + NBSP — current Claude Code prompt
-const PROMPT_MARKER_OLD = "\u276F"; // ❯ — legacy Claude Code prompt
-// [PT-08] 2-line tolerance for near-bottom snap detection
-const BOTTOM_TOLERANCE = 2;
-
-// Minimal buffer type for findPromptLine (structural typing)
-interface BufferLike {
-  getLine(y: number): { translateToString(trimRight?: boolean): string } | undefined;
-}
-
-// [TR-08] Scan buffer backward for Claude Code prompt markers
-function findPromptLine(buf: BufferLike, fromLine: number): number {
-  const stop = Math.max(0, fromLine - 50_000);
-  for (let i = fromLine; i >= stop; i--) {
-    const line = buf.getLine(i);
-    if (!line) continue;
-    const text = line.translateToString(true);
-    if (text.includes(PROMPT_MARKER_NEW) || text.includes(PROMPT_MARKER_OLD)) {
-      return i;
-    }
-  }
-  return -1;
-}
 
 interface UseTerminalOptions {
   onData?: (data: string) => void;
@@ -44,14 +22,6 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const attachedRef = useRef(false);
   const pendingElRef = useRef<HTMLDivElement | null>(null);
 
-  // Write batching — accumulate PTY chunks and flush via queueMicrotask.
-  // ConPTY fragments Ink's redraws into many small chunks; batching
-  // coalesces them so DEC 2026 sync blocks (BSU+content+ESU) arrive
-  // in a single term.write() call.
-  const writeBatchRef = useRef<Uint8Array[]>([]);
-  // Tracks whether a queueMicrotask flush is pending (not cancellable,
-  // so we use a boolean to skip the flush if clearPending was called in between).
-  const flushPendingRef = useRef(false);
   const webglRef = useRef<WebglAddon | null>(null);
 
   // Helper: open terminal in a DOM element (called once fonts + element are both ready)
@@ -251,67 +221,14 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     try { term.write(data); } catch {}
   }, []);
 
-  // Flush all accumulated write chunks as a single write.
-  // Coalescing ensures DEC 2026 sync blocks (BSU+content+ESU) that arrive
-  // in separate ConPTY pipe reads are written atomically.
-  const flushWrites = useCallback(() => {
-    const term = termRef.current;
-    if (!term) return;
-
-    const chunks = writeBatchRef.current;
-    writeBatchRef.current = [];
-
-    if (chunks.length === 0) return;
-
-    let merged: Uint8Array;
-    if (chunks.length === 1) {
-      merged = chunks[0];
-    } else {
-      let totalLen = 0;
-      for (const c of chunks) totalLen += c.length;
-      merged = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const c of chunks) {
-        merged.set(c, offset);
-        offset += c.length;
-      }
-    }
-
-    // [PT-20] Detect scrollback clear (baseY shrinkage) and scroll to bottom.
-    // The check must happen inside the write callback — term.write() is async,
-    // so baseY won't have changed until the data is actually processed.
-    // Re-read buffer.active inside the callback to handle alternate screen switches.
-    const baseYBefore = term.buffer.active.baseY;
-
-    try {
-      term.write(merged, () => {
-        const t = termRef.current;
-        if (t) {
-          const buf = t.buffer.active;
-          if (buf.baseY < baseYBefore) t.scrollToBottom();
-        }
-      });
-    } catch (err) {
-      dlog("terminal", null, `term.write error: ${err}`, "ERR");
-    }
-  }, []);
-
-  // [PT-16] [DF-03] writeBytes: queueMicrotask-batched PTY data handler.
-  // Coalesces ConPTY fragments within the same microtask — no artificial delay.
+  // [PT-16] [DF-03] Write raw bytes to terminal.
   const writeBytes = useCallback((data: Uint8Array) => {
     const term = termRef.current;
     if (!term) return;
-
-    writeBatchRef.current.push(data);
-
-    if (!flushPendingRef.current) {
-      flushPendingRef.current = true;
-      queueMicrotask(() => {
-        flushPendingRef.current = false;
-        flushWrites();
-      });
+    try { term.write(data); } catch (err) {
+      dlog("terminal", null, `term.write error: ${err}`, "ERR");
     }
-  }, [flushWrites]);
+  }, []);
 
   const clear = useCallback(() => {
     termRef.current?.clear();
@@ -333,38 +250,12 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     termRef.current?.scrollToLine(line);
   }, []);
 
-  const scrollToLastUserMessage = useCallback(() => {
-    const term = termRef.current;
-    if (!term) return;
-    const buf = term.buffer.active;
-
-    // xterm.js: viewportY is absolute position, baseY is scrollback lines
-    const atBottom = buf.baseY - buf.viewportY <= BOTTOM_TOLERANCE;
-
-    if (atBottom) {
-      const line = findPromptLine(buf, buf.length - 1);
-      if (line >= 0) {
-        term.scrollToLine(Math.max(0, line - 1));
-      } else {
-        term.scrollToTop();
-      }
-    } else {
-      // Step back: find prompt above current viewport top
-      // xterm.js: viewportY IS the absolute line index of viewport top
-      const viewportTopAbs = buf.viewportY;
-      const line = findPromptLine(buf, viewportTopAbs - 1);
-      if (line >= 0) {
-        term.scrollToLine(Math.max(0, line - 1));
-      } else {
-        term.scrollToTop();
-      }
-    }
-  }, []);
+  // [PT-08] 2-line tolerance for near-bottom snap detection
+  const BOTTOM_TOLERANCE = 2;
 
   const isAtBottom = useCallback(() => {
     const term = termRef.current;
     if (!term) return true;
-    // xterm.js: viewportY is absolute position, baseY is scrollback lines
     const buf = term.buffer.active;
     return buf.baseY - buf.viewportY <= BOTTOM_TOLERANCE;
   }, []);
@@ -372,7 +263,6 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const isAtTop = useCallback(() => {
     const term = termRef.current;
     if (!term) return true;
-    // At top when viewport is at buffer start
     return term.buffer.active.viewportY <= 0;
   }, []);
 
@@ -409,22 +299,6 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     return lines.join("\n");
   }, []);
 
-  const getBufferTail = useCallback((lineCount: number) => {
-    const term = termRef.current;
-    if (!term) return "";
-    const buf = term.buffer.active;
-    const start = Math.max(0, buf.length - lineCount);
-    const lines: string[] = [];
-    for (let i = start; i < buf.length; i++) {
-      const line = buf.getLine(i);
-      if (line) lines.push(line.translateToString(true));
-    }
-    while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
-      lines.pop();
-    }
-    return lines.join("\n");
-  }, []);
-
   // Read current input from terminal buffer — authoritative, immediate,
   // independent of PTY input tracking. Strips the prompt prefix.
   const getCurrentInput = useCallback((): string => {
@@ -436,23 +310,12 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     const line = buf.getLine(y);
     if (!line) return "";
     const text = line.translateToString(true);
-    // Try current prompt first ("> " with NBSP), then legacy (❯ + space)
-    let promptIdx = text.lastIndexOf(PROMPT_MARKER_NEW);
-    if (promptIdx < 0) promptIdx = text.lastIndexOf(PROMPT_MARKER_OLD);
+    const promptIdx = text.lastIndexOf(PROMPT_MARKER_NEW);
     if (promptIdx >= 0) {
-      // Both markers are 2 chars (new: "> " NBSP, old: "❯" + space after)
       // Strip focus event remnants ([I = focus in, [O = focus out) that leak into buffer text
       return text.slice(promptIdx + 2).replace(/\[[OI]/g, "").trimEnd();
     }
     return "";
-  }, []);
-
-  // [PT-11] Discard pending write-batch chunks and cancel flush.
-  // Called during respawn to prevent stale PTY data from being flushed
-  // after the terminal reset (\x1bc).
-  const clearPending = useCallback(() => {
-    writeBatchRef.current = [];
-    flushPendingRef.current = false;
   }, []);
 
 
@@ -465,14 +328,11 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     scrollToBottom,
     scrollToTop,
     scrollToLine,
-    scrollToLastUserMessage,
     isAtBottom,
     isAtTop,
     fit,
-    clearPending,
     getDimensions,
     getBufferText,
-    getBufferTail,
     getCurrentInput,
     termRef,
     webglRef,

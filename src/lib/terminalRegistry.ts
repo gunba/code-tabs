@@ -3,7 +3,6 @@
 import type { Terminal } from "@xterm/xterm";
 
 const bufferReaders = new Map<string, () => string>();
-const tailReaders = new Map<string, (lines: number) => string>();
 const terminals = new Map<string, Terminal>();
 const scrollFns = new Map<string, (line: number) => void>();
 
@@ -18,19 +17,6 @@ export function unregisterBufferReader(sessionId: string): void {
 export function getSessionTranscript(sessionId: string): string | null {
   const reader = bufferReaders.get(sessionId);
   return reader ? reader() : null;
-}
-
-export function registerTailReader(sessionId: string, reader: (lines: number) => string): void {
-  tailReaders.set(sessionId, reader);
-}
-
-export function unregisterTailReader(sessionId: string): void {
-  tailReaders.delete(sessionId);
-}
-
-export function getSessionBufferTail(sessionId: string, lines: number): string | null {
-  const reader = tailReaders.get(sessionId);
-  return reader ? reader(lines) : null;
 }
 
 export function registerTerminal(sessionId: string, term: Terminal): void {

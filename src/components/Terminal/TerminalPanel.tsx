@@ -10,7 +10,7 @@ import { useInspectorConnection } from "../../hooks/useInspectorConnection";
 import { useTapPipeline } from "../../hooks/useTapPipeline";
 import { useTapEventProcessor } from "../../hooks/useTapEventProcessor";
 import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyKill, registerPtyHandleId, unregisterPtyHandleId, writeToPty } from "../../lib/ptyRegistry";
-import { registerBufferReader, unregisterBufferReader, registerTailReader, unregisterTailReader, registerTerminal, unregisterTerminal, registerScrollToLine, unregisterScrollToLine } from "../../lib/terminalRegistry";
+import { registerBufferReader, unregisterBufferReader, registerTerminal, unregisterTerminal, registerScrollToLine, unregisterScrollToLine } from "../../lib/terminalRegistry";
 import { useFileWatcher } from "../../hooks/useFileWatcher";
 import { useSettingsStore } from "../../store/settings";
 import { IconSearch } from "../Icons/Icons";
@@ -162,7 +162,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // compaction/plan transitions, causing spurious clears that wipe the conversation.
     if (prev && prev !== tapProcessor.claudeSessionId && !resumeLoadingRef.current) {
       bgBufferRef.current = [];
-      terminal.clearPending();
       terminal.clear();
     }
     if (tapProcessor.claudeSessionId !== session.config.sessionId) {
@@ -372,15 +371,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     updateConfig(session.id, newConfig);
     if (name) renameSession(session.id, name);
 
-    // [PT-11] Clear stale buffers before terminal reset
-    // 4. Visual feedback + loading spinner for resumed sessions
     // [PT-11] [RS-09] Clear stale buffers then terminal reset (ANSI RIS \x1bc)
     bgBufferRef.current = [];
     deferredResizeRef.current = null;
-    terminal.clearPending();
-    terminalRef.current?.write("\x1bc");  // [RS-09] RIS: full terminal reset + fit
     terminal.fit();
-    terminalRef.current?.write("\x1b[90m[Resuming...]\x1b[0m\r\n");
     setLoading(!!newConfig.resumeSession);
 
     // 5. Reset internal state (inspector port allocated in doSpawn)
@@ -528,13 +522,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // Register terminal buffer readers, search addon, and scroll function
   useEffect(() => {
     registerBufferReader(session.id, terminal.getBufferText);
-    registerTailReader(session.id, terminal.getBufferTail);
     registerScrollToLine(session.id, terminal.scrollToLine);
     if (terminal.termRef.current) {
       registerTerminal(session.id, terminal.termRef.current);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.id, terminal.getBufferText, terminal.getBufferTail, terminal.scrollToLine]);
+  }, [session.id, terminal.getBufferText, terminal.scrollToLine]);
 
   // Cleanup PTY and registries on unmount
   useEffect(() => {
@@ -546,7 +539,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       unregisterPtyKill(id);
       unregisterPtyHandleId(id);
       unregisterBufferReader(id);
-      unregisterTailReader(id);
       unregisterTerminal(id);
       unregisterScrollToLine(id);
       unregisterInspectorPort(id);
@@ -764,20 +756,11 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         else terminal.scrollToTop();
       }
     };
-    const onMouseDown = (ev: MouseEvent) => {
-      if (ev.button === 1 && ev.ctrlKey) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        terminal.scrollToLastUserMessage();
-      }
-    };
     el.addEventListener("wheel", onWheel, { capture: true, passive: false });
-    el.addEventListener("mousedown", onMouseDown, { capture: true });
     return () => {
       el.removeEventListener("wheel", onWheel, { capture: true });
-      el.removeEventListener("mousedown", onMouseDown, { capture: true });
     };
-  }, [visible, terminal.scrollToTop, terminal.scrollToBottom, terminal.scrollToLastUserMessage]);
+  }, [visible, terminal.scrollToTop, terminal.scrollToBottom]);
 
   // [TR-05] Hidden tabs use CSS display:none — never unmount/remount xterm.js
   return (
@@ -807,20 +790,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="7" y1="12" x2="7" y2="3" />
                 <polyline points="3 6 7 2 11 6" />
-              </svg>
-            </button>
-            <div className="bar-spacer" />
-            <button
-              className="bar-btn"
-              style={{ visibility: showScrollTopBtn ? "visible" : "hidden" }}
-              onClick={() => terminal.scrollToLastUserMessage()}
-              title="Scroll to last user message (Ctrl+Middle-click)"
-              aria-label="Scroll to last user message"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 5 7 1 11 5" />
-                <line x1="7" y1="1" x2="7" y2="10" />
-                <line x1="3" y1="13" x2="11" y2="13" />
               </svg>
             </button>
             <div className="bar-spacer" />
