@@ -146,6 +146,30 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     if (loading && inspector.connected && !resumeLoadingRef.current) setLoading(false);
   }, [loading, inspector.connected]);
 
+  // Fallback viewport fix: when loading spinner is dismissed (any path),
+  // force xterm.js ScrollableElement to recalculate scroll dimensions via
+  // resize cycle. Covers edge cases where data streamed through writeBytes
+  // instead of the atomic flush path (which has its own resize cycle).
+  const wasLoadingRef = useRef(false);
+  useEffect(() => {
+    const wasLoading = wasLoadingRef.current;
+    wasLoadingRef.current = loading;
+    if (!wasLoading || loading || !visible) return;
+    const term = terminal.termRef.current;
+    if (!term) return;
+    const { cols, rows } = terminal.getDimensions();
+    if (rows > 1) {
+      term.resize(cols, rows - 1);
+      term.resize(cols, rows);
+    }
+    requestAnimationFrame(() => {
+      if (terminal.termRef.current === term) {
+        term.scrollToBottom();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, visible]);
+
   // Sync Claude's internal session ID into config for persistence (plan-mode forks, compaction)
   const prevClaudeSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -218,10 +242,18 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
               pty.handle.current?.resize(cols, rows);
               dlog("terminal", session.id, `resume flush: forced resize ${cols}x${rows}`, "DEBUG");
             }
-            // Defer scrollToBottom to next animation frame. xterm.js syncs viewport
-            // scroll dimensions via _innerRefresh() -> _sync() in a rAF scheduled
-            // during write processing. That rAF fires before this one (registration
-            // order), so scroll dimensions are current by the time we scroll.
+            // Force xterm.js ScrollableElement to recalculate scroll dimensions.
+            // After a large atomic write, the custom scroll (xterm.js 6) may not
+            // properly update until a resize triggers a full viewport re-layout.
+            // Resize cycle bypasses the same-dimensions guard.
+            const dims = terminal.getDimensions();
+            if (dims.rows > 1) {
+              term.resize(dims.cols, dims.rows - 1);
+              term.resize(dims.cols, dims.rows);
+            }
+            // Defer scrollToBottom to next frame: resize-triggered queueSync()
+            // schedules _sync() via addRefreshCallback, which fires before this
+            // rAF (registration order). Scroll dimensions are current by then.
             requestAnimationFrame(() => {
               if (terminal.termRef.current !== term) return;
               term.scrollToBottom();
