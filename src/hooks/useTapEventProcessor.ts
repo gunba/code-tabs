@@ -280,10 +280,16 @@ export function useTapEventProcessor(
         }
 
         if (event.kind === "InstructionsLoadedEvent") {
+          const ctxPath = canonicalizePath(event.filePath);
           activityStore.addContextFile(sid, {
-            path: canonicalizePath(event.filePath),
+            path: ctxPath,
             memoryType: event.memoryType,
             loadReason: event.loadReason,
+          });
+          // Also record as a read so context files appear in Response mode and the file tree
+          activityStore.addFileActivity(sid, ctxPath, "read", {
+            agentId,
+            toolName: "context",
           });
         }
       }
