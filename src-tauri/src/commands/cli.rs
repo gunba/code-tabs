@@ -927,13 +927,6 @@ pub async fn plugin_disable(name: String) -> Result<String, String> {
         .await.map_err(|e| e.to_string())?
 }
 
-/// Check if the TUI renderer is active (CLAUDE_CODE_NO_FLICKER env var).
-/// Called once at app startup — when set, frontend skips Ink-specific workarounds.
-#[tauri::command]
-pub fn get_tui_mode() -> bool {
-    std::env::var("CLAUDE_CODE_NO_FLICKER").is_ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

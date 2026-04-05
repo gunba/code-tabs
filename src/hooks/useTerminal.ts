@@ -5,7 +5,6 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { getTerminalTheme } from "../lib/theme";
 import { dlog } from "../lib/debugLog";
-import { isTuiMode } from "../lib/tuiMode";
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
@@ -45,16 +44,14 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const attachedRef = useRef(false);
   const pendingElRef = useRef<HTMLDivElement | null>(null);
 
-  // Write batching — accumulate PTY chunks and flush via debounce.
+  // Write batching — accumulate PTY chunks and flush via queueMicrotask.
   // ConPTY fragments Ink's redraws into many small chunks; batching
   // coalesces them so DEC 2026 sync blocks (BSU+content+ESU) arrive
   // in a single term.write() call.
   const writeBatchRef = useRef<Uint8Array[]>([]);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debounceStartRef = useRef(0);
-  // [PT-22] TUI mode: tracks whether a queueMicrotask flush is pending (not cancellable,
+  // Tracks whether a queueMicrotask flush is pending (not cancellable,
   // so we use a boolean to skip the flush if clearPending was called in between).
-  const tuiFlushPendingRef = useRef(false);
+  const flushPendingRef = useRef(false);
   const webglRef = useRef<WebglAddon | null>(null);
 
   // Helper: open terminal in a DOM element (called once fonts + element are both ready)
@@ -206,7 +203,6 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
 
     return () => {
       cancelled = true;
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       observerRef.current?.disconnect();
       webglRef.current?.dispose();
       webglRef.current = null;
@@ -264,11 +260,6 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
 
     const chunks = writeBatchRef.current;
     writeBatchRef.current = [];
-    debounceStartRef.current = 0;
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
 
     if (chunks.length === 0) return;
 
@@ -305,39 +296,20 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     }
   }, []);
 
-  // [PT-16] Debounced write: accumulates ConPTY chunks and flushes after 4ms of
-  // quiet or 50ms max latency. Coalesces BSU+content+ESU into single writes
-  // so DEC 2026 sync rendering works correctly.
-  // [DF-03] writeBytes: debounce-batched (4ms/50ms) PTY data handler
-  // [PT-22] TUI mode: flush via queueMicrotask (same-tick coalescing, no artificial delay)
+  // [PT-16] [DF-03] writeBytes: queueMicrotask-batched PTY data handler.
+  // Coalesces ConPTY fragments within the same microtask — no artificial delay.
   const writeBytes = useCallback((data: Uint8Array) => {
     const term = termRef.current;
     if (!term) return;
 
     writeBatchRef.current.push(data);
 
-    if (isTuiMode()) {
-      // TUI renderer: coalesce within the same microtask but no timer delay
-      if (!tuiFlushPendingRef.current) {
-        tuiFlushPendingRef.current = true;
-        queueMicrotask(() => {
-          tuiFlushPendingRef.current = false;
-          flushWrites();
-        });
-      }
-      return;
-    }
-
-    if (debounceStartRef.current === 0) {
-      debounceStartRef.current = performance.now();
-    }
-
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-
-    if (performance.now() - debounceStartRef.current >= 50) {
-      flushWrites();
-    } else {
-      debounceTimerRef.current = setTimeout(flushWrites, 4);
+    if (!flushPendingRef.current) {
+      flushPendingRef.current = true;
+      queueMicrotask(() => {
+        flushPendingRef.current = false;
+        flushWrites();
+      });
     }
   }, [flushWrites]);
 
@@ -475,17 +447,12 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     return "";
   }, []);
 
-  // [PT-11] Discard pending write-batch chunks and cancel debounce timer.
+  // [PT-11] Discard pending write-batch chunks and cancel flush.
   // Called during respawn to prevent stale PTY data from being flushed
   // after the terminal reset (\x1bc).
   const clearPending = useCallback(() => {
     writeBatchRef.current = [];
-    debounceStartRef.current = 0;
-    tuiFlushPendingRef.current = false;
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-      debounceTimerRef.current = null;
-    }
+    flushPendingRef.current = false;
   }, []);
 
 
