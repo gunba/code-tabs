@@ -60,6 +60,7 @@ export function useTapEventProcessor(
   const updateConfig = useSessionStore((s) => s.updateConfig);
   const addSubagent = useSessionStore((s) => s.addSubagent);
   const updateSubagent = useSessionStore((s) => s.updateSubagent);
+  const removeSubagent = useSessionStore((s) => s.removeSubagent);
   const addSkillInvocation = useSessionStore((s) => s.addSkillInvocation);
   const addCommandHistory = useSessionStore((s) => s.addCommandHistory);
   const updateProcessHealth = useSessionStore((s) => s.updateProcessHealth);
@@ -328,6 +329,33 @@ export function useTapEventProcessor(
               updateSubagent(sid, matched.id, { resultText: tab.resultText, completed: true });
             }
           }
+
+          // Prune phantom subagents that don't correspond to any Agent tool_use
+          // in capturedMessages (e.g. CLI-internal aside_question sidechains).
+          // Match by exact promptText (precise) with description prefix fallback.
+          // Guard: never prune agents that already have resultText — they were
+          // previously validated against capturedMessages and may have been
+          // compacted away since.
+          if (tabs.length > 0 && subagents.length > tabs.length) {
+            const tabPrompts = new Set(tabs.map(t => t.promptText).filter(Boolean));
+            for (const sub of subagents) {
+              // Exact prompt match (precise)
+              if (sub.promptText && tabPrompts.has(sub.promptText)) continue;
+              // Description prefix fallback (for agents without promptText)
+              const matchesByDesc = tabs.some(tab => {
+                const prefix = tab.label.endsWith("\u2026") ? tab.label.slice(0, -1) : tab.label;
+                return prefix.length >= 3 && sub.description.startsWith(prefix);
+              });
+              if (matchesByDesc) continue;
+              // Only prune completed phantoms without resultText.
+              // Agents with resultText were previously validated and are safe
+              // from compaction-induced false positives.
+              if (sub.completed && !sub.resultText) {
+                dlog("inspector", sid, `pruning phantom subagent ${sub.id} desc="${sub.description}"`, "DEBUG");
+                removeSubagent(sid, sub.id);
+              }
+            }
+          }
         }
       }
 
@@ -396,26 +424,14 @@ export function useTapEventProcessor(
 
     const unsub = tapEventBus.subscribe(sessionId, handleEvent);
 
-    // Stale-agent sweep: mark orphaned active subagents as idle+completed
-    // when no events arrive for 30s (safety net for missing completion signals)
-    const sweepTimer = setInterval(() => {
-      const actions = subTracker.sweepStaleAgents(Date.now());
-      for (const action of actions) {
-        if (action.type === "update" && action.subagentId && action.updates) {
-          updateSubagent(sessionId, action.subagentId, action.updates);
-        }
-      }
-    }, 10_000);
-
     return () => {
-      clearInterval(sweepTimer);
       unsub();
       metaAcc.reset();
       subTracker.reset();
       metaAccRef.current = null;
       subTrackerRef.current = null;
     };
-  }, [sessionId, updateState, updateMetadata, updateConfig, addSubagent, updateSubagent, addSkillInvocation, addCommandHistory, updateProcessHealth]);
+  }, [sessionId, updateState, updateMetadata, updateConfig, addSubagent, updateSubagent, removeSubagent, addSkillInvocation, addCommandHistory, updateProcessHealth]);
 
   return { completionCount, claudeSessionId, userPrompt };
 }

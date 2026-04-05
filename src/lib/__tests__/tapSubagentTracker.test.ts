@@ -3,7 +3,7 @@
  *
  * subagentAwareness.test.ts already covers:
  *   - hasActiveAgents (empty, active, after idle)
- *   - stale cleanup on UserInput
+ *   - cleanup on UserInput
  *   - SubagentLifecycle end/killed marks dead, enriches metadata
  *   - SubagentNotification marks dead
  *   - tool name prefix stripping (known, unknown, bare)
@@ -288,10 +288,10 @@ describe("TapSubagentTracker", () => {
       expect(stateUpdate!.updates!.completed).toBe(true);
     });
 
-    it("SubagentNotification still updates swept-idle agents to dead", () => {
-      // Agent is swept idle by stale timer, then real completion arrives
+    it("SubagentNotification updates idle agents to dead", () => {
       spawnAndActivate(tracker, "agent-1");
-      tracker.sweepStaleAgents(Date.now() + 31_000); // sweep marks idle
+      // Mark idle via result message
+      tracker.process(makeSidechainMsg("agent-1", { messageType: "result", ts: 5 }));
       expect(tracker.hasActiveAgents()).toBe(false);
 
       const actions = tracker.process({
@@ -299,7 +299,7 @@ describe("TapSubagentTracker", () => {
       } as TapEvent);
       // resultText still captured (not gated by active state)
       expect(actions.some(a => a.updates?.resultText === "Done")).toBe(true);
-      // State transitions from idle to dead (not blocked by sweep)
+      // State transitions from idle to dead (not blocked)
       expect(actions.some(a => a.updates?.state === "dead")).toBe(true);
     });
 
@@ -376,146 +376,8 @@ describe("TapSubagentTracker", () => {
     });
   });
 
-  // ── Stale-agent sweep ──
-
-  describe("sweepStaleAgents", () => {
-    it("marks agents active >30s as idle+completed", () => {
-      tracker.process(makeSpawn("agent A"));
-      tracker.process(makeSpawn("agent B"));
-      tracker.process(makeSidechainMsg("agent-a", { ts: 1000 }));
-      tracker.process(makeSidechainMsg("agent-b", { ts: 1000 }));
-      expect(tracker.hasActiveAgents()).toBe(true);
-
-      const actions = tracker.sweepStaleAgents(1000 + 31_000);
-      expect(actions).toHaveLength(2);
-      expect(actions.every(a => a.updates?.state === "idle")).toBe(true);
-      expect(actions.every(a => a.updates?.completed === true)).toBe(true);
-      expect(tracker.hasActiveAgents()).toBe(false);
-    });
-
-    it("skips agents with recent events", () => {
-      tracker.process(makeSpawn("stale"));
-      tracker.process(makeSpawn("fresh"));
-      tracker.process(makeSidechainMsg("agent-stale", { ts: 1000 }));
-      tracker.process(makeSidechainMsg("agent-fresh", { ts: 25_000 }));
-
-      const actions = tracker.sweepStaleAgents(31_500);
-      expect(actions).toHaveLength(1);
-      expect(actions[0].subagentId).toBe("agent-stale");
-      expect(tracker.hasActiveAgents()).toBe(true); // agent-fresh still active
-    });
-
-    it("skips already-idle agents", () => {
-      spawnAndActivate(tracker, "agent-1");
-      // Mark idle via result
-      tracker.process(makeSidechainMsg("agent-1", { messageType: "result", ts: 1000 }));
-      expect(tracker.hasActiveAgents()).toBe(false);
-
-      const actions = tracker.sweepStaleAgents(1000 + 31_000);
-      expect(actions).toEqual([]);
-    });
-
-    it("skips dead agents", () => {
-      spawnAndActivate(tracker, "agent-1");
-      tracker.process({ kind: "SubagentNotification", ts: 5, status: "completed", summary: "" } as TapEvent);
-      expect(tracker.hasActiveAgents()).toBe(false);
-
-      const actions = tracker.sweepStaleAgents(5 + 31_000);
-      expect(actions).toEqual([]);
-    });
-
-    it("is a no-op with no agents", () => {
-      const actions = tracker.sweepStaleAgents(Date.now());
-      expect(actions).toEqual([]);
-    });
-
-    it("clears currentToolName/currentAction/currentEventKind on sweep", () => {
-      spawnAndActivate(tracker, "agent-1");
-      // Route a tool event to set currentToolName
-      tracker.process({ kind: "ToolCallStart", ts: 1000, index: 0, toolName: "Bash", toolId: "t1" } as TapEvent);
-
-      const actions = tracker.sweepStaleAgents(1000 + 31_000);
-      expect(actions[0].updates!.currentToolName).toBeNull();
-      expect(actions[0].updates!.currentAction).toBeNull();
-      expect(actions[0].updates!.currentEventKind).toBeNull();
-    });
-
-    it("respects timestamp updates from ToolCallStart", () => {
-      spawnAndActivate(tracker, "agent-1");
-      // Initial sidechain msg at t=1000
-      // Then a ToolCallStart at t=25000 refreshes the timestamp
-      tracker.process({ kind: "ToolCallStart", ts: 25_000, index: 0, toolName: "Bash", toolId: "t1" } as TapEvent);
-
-      // At t=31500, only 6.5s since last event — not stale
-      const actions = tracker.sweepStaleAgents(31_500);
-      expect(actions).toEqual([]);
-
-      // At t=56000, 31s since last event — now stale
-      const actions2 = tracker.sweepStaleAgents(56_000);
-      expect(actions2).toHaveLength(1);
-    });
-  });
-
   // ── Bug 006 integration: orphaned subagents + getEffectiveState ──
 
-  describe("Bug 006: orphaned subagents with no completion signals", () => {
-    it("sweep resolves getEffectiveState to idle when parent is idle", async () => {
-      const { getEffectiveState } = await import("../../lib/claude");
-      const { isSubagentActive } = await import("../../types/session");
-
-      // Spawn 6 agents (two batches of 3 Explore agents)
-      for (let i = 0; i < 6; i++) {
-        tracker.process(makeSpawn(`Explore agent ${i}`));
-      }
-      for (let i = 0; i < 6; i++) {
-        tracker.process(makeSidechainMsg(`agent-${i}`, { ts: 1000 + i * 10 }));
-      }
-
-      // Agents work — more sidechain messages
-      for (let i = 0; i < 6; i++) {
-        tracker.process(makeSidechainMsg(`agent-${i}`, {
-          ts: 2000 + i * 100,
-          stopReason: "tool_use",
-          toolNames: ["Read"],
-          toolAction: "Read: file.ts",
-        }));
-      }
-
-      // NO SubagentNotification, NO SubagentLifecycle, NO ConversationMessage(result)
-      // All 6 agents still active
-      expect(tracker.hasActiveAgents()).toBe(true);
-
-      // Build subagent array matching what getEffectiveState receives
-      const subagents = Array.from({ length: 6 }, (_, i) => ({
-        id: `agent-${i}`,
-        parentSessionId: "session-1",
-        state: "toolUse" as const,
-        description: `Explore agent ${i}`,
-        tokenCount: 0,
-        currentAction: null,
-        currentToolName: null,
-        currentEventKind: null,
-        messages: [],
-        createdAt: 1000 + i * 10,
-      }));
-
-      // Parent is idle, but subagents are active → getEffectiveState returns "toolUse"
-      expect(getEffectiveState("idle", subagents)).toBe("toolUse");
-
-      // Sweep at 31s after last event marks all stale agents idle+completed
-      const lastEventTime = 2000 + 5 * 100; // agent-5's last event
-      const actions = tracker.sweepStaleAgents(lastEventTime + 31_000);
-      expect(actions).toHaveLength(6);
-      expect(actions.every(a => a.updates?.state === "idle")).toBe(true);
-      expect(actions.every(a => a.updates?.completed === true)).toBe(true);
-      expect(tracker.hasActiveAgents()).toBe(false);
-
-      // After sweep, getEffectiveState returns "idle"
-      const idleSubagents = subagents.map(s => ({ ...s, state: "idle" as const }));
-      expect(getEffectiveState("idle", idleSubagents)).toBe("idle");
-      expect(idleSubagents.every(s => !isSubagentActive(s.state))).toBe(true);
-    });
-  });
 
   // ── ToolInput enrichment ──
 
@@ -687,16 +549,13 @@ describe("TapSubagentTracker", () => {
       expect(actions).toEqual([]);
     });
 
-    it("clears lastEventTs so sweep has no stale data", () => {
+    it("clears all state after reset", () => {
       spawnAndActivate(tracker, "agent-1");
       tracker.reset();
       // Re-spawn fresh agent with a known timestamp
-      const now = Date.now();
       tracker.process(makeSpawn("fresh"));
-      tracker.process(makeSidechainMsg("agent-2", { ts: now }));
-      // Sweep at now+5s — should not trigger since agent-2 has recent event
-      const actions = tracker.sweepStaleAgents(now + 5000);
-      expect(actions).toEqual([]);
+      tracker.process(makeSidechainMsg("agent-2", { ts: Date.now() }));
+      expect(tracker.hasActiveAgents()).toBe(true);
     });
   });
 

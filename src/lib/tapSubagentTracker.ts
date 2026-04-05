@@ -127,6 +127,12 @@ export class TapSubagentTracker {
 
         // First message from a new subagent → create it
         if (!this.knownIds.has(agentId)) {
+          // [IN-03] Skip CLI-internal sidechains (aside_question replays parent context,
+          // creating a phantom entry that duplicates a real agent)
+          if (agentId.startsWith("aside_question")) {
+            dlog("inspector", this.parentSessionId, `skipping CLI-internal sidechain agentId=${agentId}`, "DEBUG");
+            break;
+          }
           this.knownIds.add(agentId);
           this.agentStates.set(agentId, "starting");
           const spawn = this.pendingSpawns.shift();
@@ -418,34 +424,6 @@ export class TapSubagentTracker {
         break;
     }
 
-    return actions;
-  }
-
-  private static STALE_THRESHOLD_MS = 30_000;
-
-  /** Sweep agents stuck in active state with no events for 30s. Returns update actions. */
-  sweepStaleAgents(now: number): SubagentAction[] {
-    const actions: SubagentAction[] = [];
-    for (const agentId of this.knownIds) {
-      const state = this.agentStates.get(agentId);
-      if (!state || !isSubagentActive(state)) continue;
-      const lastTs = this.lastEventTs.get(agentId) ?? 0;
-      if (now - lastTs >= TapSubagentTracker.STALE_THRESHOLD_MS) {
-        dlog("inspector", this.parentSessionId,
-          `stale agent sweep: ${agentId} ${state} → idle (${now - lastTs}ms since last event)`, "DEBUG");
-        this.agentStates.set(agentId, "idle");
-        actions.push({
-          type: "update", subagentId: agentId,
-          updates: {
-            state: "idle" as SessionState,
-            completed: true,
-            currentToolName: null,
-            currentAction: null,
-            currentEventKind: null,
-          },
-        });
-      }
-    }
     return actions;
   }
 
