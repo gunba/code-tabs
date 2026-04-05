@@ -188,6 +188,13 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
     prevResultRef.current = subagent.resultText;
   }, [subagent.resultText]);
 
+  // Scroll to bottom on open
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, []);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
