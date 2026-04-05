@@ -104,6 +104,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
         files: [],
       });
       evictOldTurns(activity);
+      sessions[sessionId] = { ...activity };
       return { sessions };
     }),
 
@@ -117,6 +118,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
         turn.endedAt = Date.now();
       }
       recomputeStats(activity);
+      sessions[sessionId] = { ...activity };
       return { sessions };
     }),
 
@@ -162,6 +164,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       }
       activity.allFiles[path] = entry;
       recomputeStats(activity);
+      sessions[sessionId] = { ...activity };
       return { sessions };
     }),
 
@@ -184,6 +187,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       if (idx >= 0) {
         turn.files[idx] = { ...turn.files[idx], confirmed: true };
       }
+      sessions[sessionId] = { ...activity };
       return { sessions };
     }),
 
@@ -198,6 +202,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       if (idx >= 0) {
         turn.files[idx] = { ...turn.files[idx], permissionDenied: true };
       }
+      sessions[sessionId] = { ...activity };
       return { sessions };
     }),
 
@@ -206,6 +211,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       const sessions = { ...state.sessions };
       const activity = ensureSession(sessions, sessionId);
       activity.lastUserMessageAt = Date.now();
+      sessions[sessionId] = { ...activity };
       return { sessions };
     }),
 
@@ -217,6 +223,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
         activity.contextFiles.push(entry);
       }
       activity.visitedPaths.add(entry.path);
+      sessions[sessionId] = { ...activity };
       return { sessions };
     }),
 
