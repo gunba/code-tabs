@@ -103,8 +103,6 @@ export function useTerminal({ sessionId = null, onData, onResize }: UseTerminalO
       try {
         const f = fitRef.current;
         if (!f) return;
-        const dims = f.proposeDimensions();
-        if (!dims || dims.rows <= 1) return;
         f.fit();
       } catch {}
     });
