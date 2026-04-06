@@ -1,7 +1,7 @@
 # Claude Tabs
 
 IMPORTANT: Working with an external application means we are developing around a moving target. Do not guess or assume how it works.
-- The Claude Code source itself (4/1/2026) is available here [C:\Users\jorda\PycharmProjects\claude_tabs]. 
+- The Claude Code source itself (4/1/2026) is available here [C:\Users\jorda\PycharmProjects\claude_code\src]. 
 - For anything else, ask the user to log some test data. Logs are at [AppData\Local\claude-tabs\sessions], depending on what logging the user has enabled.
 
 Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust backend + React/TypeScript frontend. No API key — uses the Claude Code CLI directly.
@@ -35,6 +35,10 @@ Performance spans are logged as `event = "perf.span"`. Check `data.name`, `data.
 
 Preferred log viewer: `lnav`. Open the app log and the affected session log together so timestamps line up:
 - `lnav "$env:LOCALAPPDATA\\claude-tabs\\observability\\app.jsonl" "$env:LOCALAPPDATA\\claude-tabs\\sessions\\<sessionId>\\observability.jsonl"`
+
+Debug panel timing aids:
+- The debug build exposes manual marker buttons (`1`-`4`) in the Debug Panel. These emit `event = "debug.marker"` with `data.markerId`, `data.markerIndex`, and `data.targetSessionId`.
+- Markers usually go to the active session log, but if no session is targeted they can land in `app.jsonl`. Always open both the app log and the session log before deciding a marker is missing.
 
 Basic debugging order:
 1. Find the exact failure window by `tsIso`.

@@ -39,6 +39,12 @@ function matchesFilter(
   return false;
 }
 
+function shouldShowSessionCard(ps: PastSession, deadSessionIds = new Set<string>()): boolean {
+  if (deadSessionIds.has(ps.id)) return true;
+  if (ps.firstMessage && !ps.firstMessage.startsWith('Summarize: [{"')) return true;
+  return false;
+}
+
 // ── Name resolution logic (mirrors ResumePicker resumeById, line 274) ──
 
 function resolveResumeName(
@@ -128,6 +134,16 @@ describe("ResumePicker filter: name-search", () => {
     const names = { "sess-1": "update config.json schema" };
     expect(matchesFilter(session, "config", names)).toBe(true);
     expect(matchesFilter(session, "json", names)).toBe(true);
+  });
+});
+
+describe("ResumePicker filter: resumable visibility", () => {
+  it("keeps short first messages so short conversations remain resumable", () => {
+    expect(shouldShowSessionCard(mkPastSession({ firstMessage: "Test" }))).toBe(true);
+  });
+
+  it("still suppresses summarize placeholder sessions", () => {
+    expect(shouldShowSessionCard(mkPastSession({ firstMessage: 'Summarize: [{"role":"user"}]' }))).toBe(false);
   });
 });
 

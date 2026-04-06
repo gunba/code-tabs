@@ -2,13 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from "../../store/sessions";
 import { sessionColor } from "../../lib/claude";
 import { dirToTabName } from "../../lib/paths";
-import { getDebugLog, getDebugLogForSession, getDebugLogGeneration, clearDebugLog, type DebugLogEntry, type DebugLogSource } from "../../lib/debugLog";
+import { dlog, getDebugLog, getDebugLogForSession, getDebugLogGeneration, clearDebugLog, type DebugLogEntry, type DebugLogSource } from "../../lib/debugLog";
+import { nudgeTerminalResize } from "../../lib/terminalRegistry";
 import { IconClose } from "../Icons/Icons";
 import "./DebugPanel.css";
 
 interface DebugPanelProps {
   onClose: () => void;
 }
+
+const MARKERS = [
+  { id: 1, label: "1", color: "var(--accent)" },
+  { id: 2, label: "2", color: "#e0a34a" },
+  { id: 3, label: "3", color: "#d76c6c" },
+  { id: 4, label: "4", color: "#6fbf8f" },
+] as const;
 
 function formatTs(ts: number): string {
   const d = new Date(ts);
@@ -64,6 +72,7 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
   const autoScrollRef = useRef(true);
   const prevGenRef = useRef(0);
   const prevLenRef = useRef(0);
+  const markerCounterRef = useRef(0);
 
   const sessions = useSessionStore((s) => s.sessions);
   const activeTabId = useSessionStore((s) => s.activeTabId);
@@ -128,6 +137,10 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
     return map;
   }, [sessionIds, sessions]);
 
+  const selectedSessionId = sessionFilter !== "all" && sessionFilter !== "global"
+    ? sessionFilter
+    : activeTabId;
+
   // Filtering pipeline
   const filtered = useMemo(() => {
     let result = logs;
@@ -177,6 +190,33 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
     setLogs([]);
   }, []);
 
+  const handleMarker = useCallback((markerId: number) => {
+    markerCounterRef.current += 1;
+    dlog("observability", selectedSessionId ?? null, `manual marker ${markerId}`, "LOG", {
+      event: "debug.marker",
+      data: {
+        markerId,
+        markerIndex: markerCounterRef.current,
+        targetSessionId: selectedSessionId ?? null,
+        sessionFilter,
+      },
+    });
+  }, [selectedSessionId, sessionFilter]);
+
+  const handleResizeNudge = useCallback(() => {
+    if (!selectedSessionId) {
+      dlog("terminal", null, "debug resize nudge requested without a target session", "WARN", {
+        event: "terminal.debug_resize_nudge_missing_target",
+        data: {
+          activeTabId,
+          sessionFilter,
+        },
+      });
+      return;
+    }
+    nudgeTerminalResize(selectedSessionId);
+  }, [activeTabId, selectedSessionId, sessionFilter]);
+
   const toggleModule = useCallback((mod: string) => {
     setModuleFilter((prev) => {
       const next = new Set(prev);
@@ -224,6 +264,30 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
         </button>
         <button className="debug-panel-close" onClick={onClose} title="Close (Esc)">
           <IconClose size={14} />
+        </button>
+      </div>
+
+      <div className="debug-panel-tools">
+        <div className="debug-panel-markers" title="Add a manual timing marker to the debug log">
+          {MARKERS.map((marker) => (
+            <button
+              key={marker.id}
+              className="debug-marker-btn"
+              style={{ ["--marker-color" as string]: marker.color }}
+              onClick={() => handleMarker(marker.id)}
+              title={`Add marker ${marker.id}`}
+            >
+              ⚑ {marker.label}
+            </button>
+          ))}
+        </div>
+        <button
+          className="debug-panel-btn"
+          onClick={handleResizeNudge}
+          disabled={!selectedSessionId}
+          title={selectedSessionId ? `Nudge terminal size for ${selectedSessionId}` : "Select a session or open a tab first"}
+        >
+          Nudge Resize
         </button>
       </div>
 

@@ -48,6 +48,11 @@
   color: var(--text-primary);
 }
 
+.debug-panel-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .debug-panel-btn-active {
   background: var(--accent);
   color: var(--bg-primary);
@@ -69,6 +74,41 @@
 
 .debug-panel-close:hover {
   color: var(--text-primary);
+}
+
+.debug-panel-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.debug-panel-markers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.debug-marker-btn {
+  --marker-color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--marker-color) 65%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--marker-color) 18%, var(--bg-primary));
+  color: var(--text-primary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.debug-marker-btn:hover {
+  background: color-mix(in srgb, var(--marker-color) 28%, var(--bg-primary));
 }
 
 /* Filter chip rows */

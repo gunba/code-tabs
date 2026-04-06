@@ -426,11 +426,14 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
 /// Extract user message text from a JSONL event, filtering out commands.
 fn extract_user_text(parsed: &serde_json::Value) -> Option<String> {
     let truncate = |s: &str| -> Option<String> {
-        if s.len() > 20 && !s.contains("command-name") && !s.contains("local-command") {
-            Some(s.chars().take(150).collect())
-        } else {
-            None
+        let normalized = s.split_whitespace().collect::<Vec<_>>().join(" ");
+        if normalized.is_empty()
+            || normalized.contains("command-name")
+            || normalized.contains("local-command")
+        {
+            return None;
         }
+        Some(normalized.chars().take(150).collect())
     };
     let content = &parsed["message"]["content"];
     if let Some(text) = content.as_str() {
@@ -601,6 +604,36 @@ fn search_session_content_sync(query: &str) -> Result<Vec<serde_json::Value>, St
     }
 
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_user_text;
+    use serde_json::json;
+
+    #[test]
+    fn extract_user_text_keeps_short_plain_messages() {
+        let parsed = json!({
+            "type": "user",
+            "message": {
+                "content": "Test"
+            }
+        });
+
+        assert_eq!(extract_user_text(&parsed), Some("Test".to_string()));
+    }
+
+    #[test]
+    fn extract_user_text_skips_command_payloads() {
+        let parsed = json!({
+            "type": "user",
+            "message": {
+                "content": "local-command command-name"
+            }
+        });
+
+        assert_eq!(extract_user_text(&parsed), None);
+    }
 }
 
 #[tauri::command]

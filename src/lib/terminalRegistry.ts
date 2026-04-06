@@ -1,9 +1,11 @@
 // [TR-16] Terminal buffer reader, SearchAddon, and scrollToLine registry
 
 import type { Terminal } from "@xterm/xterm";
+import { dlog } from "./debugLog";
 
 const bufferReaders = new Map<string, () => string>();
 const terminals = new Map<string, Terminal>();
+const terminalResizeNudgers = new Map<string, (reason: string) => boolean>();
 const scrollFns = new Map<string, (line: number) => void>();
 
 export function registerBufferReader(sessionId: string, getBufferText: () => string): void {
@@ -23,8 +25,47 @@ export function registerTerminal(sessionId: string, term: Terminal): void {
   terminals.set(sessionId, term);
 }
 
+export function registerTerminalResizeNudger(sessionId: string, nudge: (reason: string) => boolean): void {
+  terminalResizeNudgers.set(sessionId, nudge);
+}
+
+export function unregisterTerminalResizeNudger(sessionId: string): void {
+  terminalResizeNudgers.delete(sessionId);
+}
+
 export function unregisterTerminal(sessionId: string): void {
   terminals.delete(sessionId);
+}
+
+export function nudgeTerminalResize(sessionId: string): boolean {
+  const nudge = terminalResizeNudgers.get(sessionId);
+  if (!nudge) {
+    dlog("terminal", sessionId, "debug resize nudge requested without registered terminal", "WARN", {
+      event: "terminal.debug_resize_nudge_missing",
+      data: {
+        sessionId,
+        hasTerminal: terminals.has(sessionId),
+      },
+    });
+    return false;
+  }
+
+  dlog("terminal", sessionId, "debug resize nudge requested", "LOG", {
+    event: "terminal.debug_resize_nudge",
+    data: {
+      sessionId,
+      hasTerminal: terminals.has(sessionId),
+    },
+  });
+  const dispatched = nudge("debug_resize_nudge");
+  dlog("terminal", sessionId, dispatched ? "debug resize nudge dispatched" : "debug resize nudge skipped", dispatched ? "LOG" : "WARN", {
+    event: dispatched ? "terminal.debug_resize_nudge_dispatched" : "terminal.debug_resize_nudge_skipped",
+    data: {
+      sessionId,
+      hasTerminal: terminals.has(sessionId),
+    },
+  });
+  return dispatched;
 }
 
 /** Highlight a match in a session's terminal via selection API. */
