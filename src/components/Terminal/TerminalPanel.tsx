@@ -85,7 +85,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const clearRespawnRequest = useSessionStore((s) => s.clearRespawnRequest);
   const killRequest = useSessionStore((s) => s.killRequest);
   const clearKillRequest = useSessionStore((s) => s.clearKillRequest);
-  const hookChangeCounter = useSessionStore((s) => s.hookChangeCounter);
   const spawnedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [respawnCounter, setRespawnCounter] = useState(0);
@@ -155,7 +154,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [showScrollTopBtn, setShowScrollTopBtn] = useState(false);
   const [queuedInput, setQueuedInput] = useState<string | null>(null);
-  const lastHookChangeRef = useRef(hookChangeCounter);
 
   // Hide loading spinner when inspector connects
   useEffect(() => {
@@ -193,8 +191,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const terminalRef = useRef<ReturnType<typeof useTerminal> | null>(null);
 
   // Suppress context-clear detection during resume loading phase.
-
-
   // Detect "session already in use" errors in early PTY output
   const earlyOutputRef = useRef("");
   const sessionInUseRef = useRef(false);
@@ -364,11 +360,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   );
 
   const lastPtyDimsRef = useRef<{ cols: number; rows: number } | null>(null);
-  // [PT-13] Same-dimension gate — skip redundant pty.resize() calls
   const handleResize = useCallback(
     (cols: number, rows: number) => {
-      const last = lastPtyDimsRef.current;
-      if (last && last.cols === cols && last.rows === rows) return;
       lastPtyDimsRef.current = { cols, rows };
       pty.handle.current?.resize(cols, rows);
     },
@@ -433,9 +426,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           dlog("terminal", session.id, `tap server failed: ${err}`, "WARN");
         }
 
-        // [PT-12] Pre-spawn fit + post-spawn rAF dimension verification
         const args = await buildClaudeArgs(session.config);
-        terminal.fit();
         const { cols, rows } = terminal.getDimensions();
         const cwd = normalizePath(session.config.workingDir);
         // Pass BUN_INSPECT env for inspector-based hook injection,
@@ -480,22 +471,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         });
         updateState(session.id, "idle");
 
-        // Post-spawn dimension verification
-        // or WebGL renderer weren't ready during the initial fit.
-        requestAnimationFrame(() => {
-          terminal.fit();
-          const { cols: c, rows: r } = terminal.getDimensions();
-          if (c !== cols || r !== rows) {
-            dlog("terminal", session.id, "post-spawn terminal dimensions changed", "DEBUG", {
-              event: "session.post_spawn_resize",
-              data: {
-                before: { cols, rows },
-                after: { cols: c, rows: r },
-              },
-            });
-            handle.resize(c, r);
-          }
-        });
         spawnSpan.end({
           inspectorPort: inspPort,
           tapPort,
@@ -592,26 +567,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, session.id]);
 
-  // [DF-07] Visibility change handler: clears texture atlas and redraws on OS wake / tab restore (fixes GPU corruption after sleep)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState !== "visible" || !visible) return;
-      dlog("terminal", session.id, "document visibility restored for visible panel", "DEBUG", {
-        event: "terminal.visibility_restore",
-        data: {
-          visibilityState: document.visibilityState,
-        },
-      });
-      terminalRef.current?.webglRef.current?.clearTextureAtlas();
-      terminal.fit();
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    // terminal is NOT in deps — useTerminal returns a new object each render.
-    // visible is needed to re-capture its value in the closure.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
-
   // Queue input handler: read from terminal buffer (authoritative), or cancel if already queued
   const handleQueueInput = useCallback(() => {
     if (queuedInput) {
@@ -657,24 +612,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // pty.handle is a stable ref — omitted from deps intentionally
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tapProcessor.completionCount, queuedInput, session.state]);
-
-  // Auto-restart session when hooks change, same timing as queued input
-  useEffect(() => {
-    if (hookChangeCounter <= lastHookChangeRef.current) return;
-    if (session.state === "dead") { lastHookChangeRef.current = hookChangeCounter; return; }
-    if (!isSessionIdle(session.state)) return;
-    const timer = setTimeout(() => {
-      lastHookChangeRef.current = hookChangeCounter;
-      dlog("terminal", session.id, "restarting session after hook change", "LOG", {
-        event: "session.restart_for_hook_change",
-        data: {
-          hookChangeCounter,
-        },
-      });
-      triggerRespawnRef.current();
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [session.state, hookChangeCounter]);
 
   // Poll scroll position to show/hide scroll-to-bottom button
   useEffect(() => {

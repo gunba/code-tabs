@@ -52,7 +52,7 @@ export function useTerminal({ sessionId = null, onData, onResize }: UseTerminalO
   const webglRef = useRef<WebglAddon | null>(null);
 
   // Helper: open terminal in a DOM element (called once fonts + element are both ready)
-  const openTerminal = useCallback((term: Terminal, fit: FitAddon, el: HTMLDivElement) => {
+  const openTerminal = useCallback((term: Terminal, el: HTMLDivElement) => {
     if (attachedRef.current) return;
 
     term.open(el);
@@ -98,19 +98,16 @@ export function useTerminal({ sessionId = null, onData, onResize }: UseTerminalO
       e.stopPropagation();
     }, true); // Capture phase — intercept before xterm.js
 
-    try {
-      const dims = fit.proposeDimensions();
-      if (dims && dims.rows > 1) fit.fit();
-    } catch {}
-
     // Observe container size changes
     const observer = new ResizeObserver(() => {
       try {
-        const dims = fit.proposeDimensions();
+        const f = fitRef.current;
+        if (!f) return;
+        const dims = f.proposeDimensions();
         if (!dims || dims.rows <= 1) return;
-        fit.fit();
+        f.fit();
       } catch {}
-      });
+    });
     observer.observe(el);
     observerRef.current = observer;
   }, []);
@@ -260,7 +257,7 @@ export function useTerminal({ sessionId = null, onData, onResize }: UseTerminalO
 
       // If attach was called before WASM was ready, open now
       if (pendingElRef.current) {
-        openTerminal(term, fit, pendingElRef.current);
+        openTerminal(term, pendingElRef.current);
       }
     })();
 
@@ -330,9 +327,8 @@ export function useTerminal({ sessionId = null, onData, onResize }: UseTerminalO
     });
 
     const term = termRef.current;
-    const fit = fitRef.current;
-    if (term && fit && !attachedRef.current) {
-      openTerminal(term, fit, el);
+    if (term && !attachedRef.current) {
+      openTerminal(term, el);
     }
     // If term isn't ready yet, openTerminal will be called from the useEffect above
   }, [openTerminal]);
@@ -512,22 +508,18 @@ export function useTerminal({ sessionId = null, onData, onResize }: UseTerminalO
         const term = termRef.current;
         if (!f || !term) return;
         const dims = f.proposeDimensions();
-        if (!dims || dims.rows <= 1) return;
         const before = { cols: term.cols, rows: term.rows };
         f.fit();
         const after = { cols: term.cols, rows: term.rows };
-        const prev = lastFitDimsRef.current;
-        if (!prev || prev.cols !== after.cols || prev.rows !== after.rows || before.cols !== after.cols || before.rows !== after.rows) {
-          lastFitDimsRef.current = after;
-          dlog("terminal", sessionIdRef.current, "terminal fit", "DEBUG", {
-            event: "terminal.fit",
-            data: {
-              before,
-              after,
-              proposed: dims,
-            },
-          });
-        }
+	  lastFitDimsRef.current = after;
+	  dlog("terminal", sessionIdRef.current, "terminal fit", "DEBUG", {
+		event: "terminal.fit",
+		data: {
+		  before,
+		  after,
+		  proposed: dims,
+		},
+	  });
       } catch {}
     }, {
       module: "terminal",
