@@ -8,6 +8,7 @@ import type {
   ToolInputDiffData,
 } from "../types/activity";
 import { emptySessionActivity, computeStats } from "../types/activity";
+import { traceSync } from "../lib/perfTrace";
 
 const MAX_TURNS = 50;
 const MAX_ALL_FILES = 500;
@@ -89,7 +90,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
   sessions: {},
 
   startTurn: (sessionId, turnId) =>
-    set((state) => {
+    set((state) => traceSync("activity.start_turn", () => {
       const sessions = { ...state.sessions };
       const activity = ensureSession(sessions, sessionId);
       // End previous turn if still open
@@ -106,10 +107,16 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       evictOldTurns(activity);
       sessions[sessionId] = { ...activity };
       return { sessions };
-    }),
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.start_turn",
+      warnAboveMs: 8,
+      data: { turnId },
+    })),
 
   endTurn: (sessionId) =>
-    set((state) => {
+    set((state) => traceSync("activity.end_turn", () => {
       const sessions = { ...state.sessions };
       const activity = sessions[sessionId];
       if (!activity) return state;
@@ -120,10 +127,16 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       recomputeStats(activity);
       sessions[sessionId] = { ...activity };
       return { sessions };
-    }),
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.end_turn",
+      warnAboveMs: 8,
+      data: {},
+    })),
 
   addFileActivity: (sessionId, path, kind, opts) =>
-    set((state) => {
+    set((state) => traceSync("activity.add_file", () => {
       const sessions = { ...state.sessions };
       const activity = ensureSession(sessions, sessionId);
       const entry: FileActivity = {
@@ -166,10 +179,22 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       recomputeStats(activity);
       sessions[sessionId] = { ...activity };
       return { sessions };
-    }),
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.add_file",
+      warnAboveMs: 8,
+      data: {
+        path,
+        kind,
+        toolName: opts?.toolName ?? null,
+        agentId: opts?.agentId ?? null,
+        isExternal: opts?.isExternal ?? false,
+      },
+    })),
 
   confirmFileChange: (sessionId, path) =>
-    set((state) => {
+    set((state) => traceSync("activity.confirm_file_change", () => {
       const sessions = { ...state.sessions };
       const activity = sessions[sessionId];
       if (!activity) return state;
@@ -189,10 +214,16 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       }
       sessions[sessionId] = { ...activity };
       return { sessions };
-    }),
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.confirm_file_change",
+      warnAboveMs: 8,
+      data: { path },
+    })),
 
   markPermissionDenied: (sessionId, path) =>
-    set((state) => {
+    set((state) => traceSync("activity.permission_denied", () => {
       const sessions = { ...state.sessions };
       const activity = sessions[sessionId];
       if (!activity) return state;
@@ -204,19 +235,31 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       }
       sessions[sessionId] = { ...activity };
       return { sessions };
-    }),
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.permission_denied",
+      warnAboveMs: 8,
+      data: { path },
+    })),
 
   markUserMessage: (sessionId) =>
-    set((state) => {
+    set((state) => traceSync("activity.mark_user_message", () => {
       const sessions = { ...state.sessions };
       const activity = ensureSession(sessions, sessionId);
       activity.lastUserMessageAt = Date.now();
       sessions[sessionId] = { ...activity };
       return { sessions };
-    }),
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.mark_user_message",
+      warnAboveMs: 8,
+      data: {},
+    })),
 
   addContextFile: (sessionId, entry) =>
-    set((state) => {
+    set((state) => traceSync("activity.add_context_file", () => {
       const sessions = { ...state.sessions };
       const activity = ensureSession(sessions, sessionId);
       if (!activity.contextFiles.some((c) => c.path === entry.path)) {
@@ -225,12 +268,28 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       activity.visitedPaths.add(entry.path);
       sessions[sessionId] = { ...activity };
       return { sessions };
-    }),
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.add_context_file",
+      warnAboveMs: 8,
+      data: {
+        path: entry.path,
+        memoryType: entry.memoryType,
+        loadReason: entry.loadReason,
+      },
+    })),
 
   clearSession: (sessionId) =>
-    set((state) => {
+    set((state) => traceSync("activity.clear_session", () => {
       const sessions = { ...state.sessions };
       delete sessions[sessionId];
       return { sessions };
-    }),
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.clear_session",
+      warnAboveMs: 8,
+      data: {},
+    })),
 }));

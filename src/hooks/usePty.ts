@@ -10,11 +10,12 @@ export interface PtyHandle {
 }
 
 interface UsePtyOptions {
+  sessionId?: string | null;
   onData: (data: Uint8Array) => void;
   onExit?: (info: { exitCode: number; signal?: number }) => void;
 }
 
-export function usePty({ onData, onExit }: UsePtyOptions) {
+export function usePty({ sessionId = null, onData, onExit }: UsePtyOptions) {
   const ptyRef = useRef<PtyProcess | null>(null);
   const handleRef = useRef<PtyHandle | null>(null);
 
@@ -31,20 +32,34 @@ export function usePty({ onData, onExit }: UsePtyOptions) {
         cwd,
         cols,
         rows,
+        sessionId,
         ...(env ? { env } : {}),
       });
 
-      dlog("pty", null, `spawn success pid=${pty.pid} cwd=${cwd}`);
+      dlog("pty", sessionId, `spawn success pid=${pty.pid} cwd=${cwd}`, "LOG", {
+        event: "pty.spawn_success",
+        data: { pid: pty.pid, cwd, cols, rows },
+      });
       ptyRef.current = pty;
 
       pty.onData(onData);
-      pty.onExit((info) => onExit?.(info));
+      pty.onExit((info) => {
+        dlog("pty", sessionId, "PTY onExit callback invoked", "DEBUG", {
+          event: "pty.exit_callback",
+          data: { pid: pty.pid, info },
+        });
+        onExit?.(info);
+      });
 
       const handle: PtyHandle = {
         pid: pty.pid,
         write: (data: string) => pty.write(data),
         resize: (cols: number, rows: number) => pty.resize(cols, rows),
         kill: async () => {
+          dlog("pty", sessionId, "PTY handle kill invoked", "LOG", {
+            event: "pty.handle_kill",
+            data: { pid: pty.pid },
+          });
           await pty.kill();
           ptyRef.current = null;
         },
@@ -53,13 +68,17 @@ export function usePty({ onData, onExit }: UsePtyOptions) {
       handleRef.current = handle;
       return handle;
     },
-    [onData, onExit]
+    [onData, onExit, sessionId]
   );
 
   const cleanup = useCallback(() => {
+    dlog("pty", sessionId, "PTY cleanup requested", "DEBUG", {
+      event: "pty.cleanup",
+      data: { hasHandle: !!handleRef.current },
+    });
     handleRef.current?.kill();
     handleRef.current = null;
-  }, []);
+  }, [sessionId]);
 
   return { spawn, cleanup, handle: handleRef };
 }

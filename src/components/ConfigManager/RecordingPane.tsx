@@ -4,71 +4,13 @@ import { useSettingsStore } from "../../store/settings";
 import { useSessionStore } from "../../store/sessions";
 import seedEventKinds from "../../types/eventKinds.json";
 import type { StatusMessage } from "../../lib/settingsSchema";
+import { TAP_CATEGORY_GROUPS } from "../../lib/tapCatalog";
+import { useRuntimeStore } from "../../store/runtime";
 import "./RecordingPane.css";
 
 interface RecordingPaneProps {
   onStatus: (msg: StatusMessage | null) => void;
 }
-
-interface CategoryGroup {
-  label: string;
-  categories: { key: string; label: string; locked?: boolean }[];
-}
-
-const CATEGORY_GROUPS: CategoryGroup[] = [
-  {
-    label: "Core (always on)",
-    categories: [
-      { key: "parse", label: "JSON.parse (SSE)", locked: true },
-      { key: "stringify", label: "JSON.stringify (requests)", locked: true },
-    ],
-  },
-  {
-    label: "Process I/O",
-    categories: [
-      { key: "console", label: "console.*" },
-      { key: "stdout", label: "stdout" },
-      { key: "stderr", label: "stderr" },
-    ],
-  },
-  {
-    label: "File System",
-    categories: [
-      { key: "fs", label: "fs (sync)" },
-      { key: "fspromises", label: "fs.promises (async)" },
-      { key: "bunfile", label: "Bun.file()" },
-      { key: "fswatch", label: "fs.watch" },
-    ],
-  },
-  {
-    label: "Network",
-    categories: [
-      { key: "fetch", label: "fetch" },
-      { key: "websocket", label: "WebSocket" },
-      { key: "net", label: "TCP/TLS" },
-      { key: "stream", label: "stream.pipe" },
-      { key: "textdecoder", label: "TextDecoder (SSE)" },
-      { key: "abort", label: "AbortController" },
-    ],
-  },
-  {
-    label: "Process Lifecycle",
-    categories: [
-      { key: "spawn", label: "child_process" },
-      { key: "exit", label: "process.exit" },
-      { key: "timer", label: "setTimeout" },
-      { key: "require", label: "require" },
-      { key: "bun", label: "Bun.*" },
-    ],
-  },
-  {
-    label: "Internals",
-    categories: [
-      { key: "events", label: "EventEmitter" },
-      { key: "envproxy", label: "process.env" },
-    ],
-  },
-];
 
 const seedSet = new Set(seedEventKinds as string[]);
 
@@ -77,6 +19,7 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
   const setRecordingConfig = useSettingsStore((s) => s.setRecordingConfig);
   const toggleNoisyEventKind = useSettingsStore((s) => s.toggleNoisyEventKind);
   const seenEventKinds = useSessionStore((s) => s.seenEventKinds);
+  const globalLogPath = useRuntimeStore((s) => s.observabilityInfo.globalLogPath);
   const [cleaning, setCleaning] = useState(false);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevSeenCountRef = useRef(0);
@@ -184,10 +127,33 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
     }
   }, [onStatus]);
 
+  const openAppLog = useCallback(async () => {
+    try {
+      await invoke("open_observability_log", { sessionId: null });
+    } catch {
+      onStatus({ type: "error", text: "Could not open app observability log" });
+    }
+  }, [onStatus]);
+
   const discoveredCount = allKinds.filter((k) => !seedSet.has(k)).length;
 
   return (
     <div className="recording-pane">
+      <div className="recording-section">
+        <div className="recording-section-title">Debug Build Observability</div>
+        <span className="recording-hint">
+          This panel is only available in debug builds. Frontend and backend events are written to structured JSONL with ISO timestamps.
+        </span>
+        <div className="recording-data-row">
+          <button className="recording-btn" onClick={openAppLog}>
+            Open App Log
+          </button>
+          {globalLogPath && (
+            <span className="recording-hint">{globalLogPath}</span>
+          )}
+        </div>
+      </div>
+
       {/* TAP Recording */}
       <div className="recording-section">
         <label className="recording-master-toggle">
@@ -201,7 +167,7 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
         </label>
 
         <div className={`recording-categories${!recordingConfig.taps.enabled ? " recording-disabled" : ""}`}>
-          {CATEGORY_GROUPS.map((group) => (
+          {TAP_CATEGORY_GROUPS.map((group) => (
             <div key={group.label} className="recording-group">
               <div className="recording-group-label">{group.label}</div>
               <div className="recording-group-items">
@@ -213,9 +179,10 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
                       onChange={() => !cat.locked && toggleCategory(cat.key)}
                       disabled={cat.locked || !recordingConfig.taps.enabled}
                     />
-                    <span>{cat.label}</span>
-                    {/* [CM-27] Show the persisted TAP category key beside the friendly label. */}
-                    <span className="recording-cat-key">{cat.key}</span>
+                    <span className="recording-category-copy">
+                      <span className="recording-category-label">{cat.label}</span>
+                      <span className="recording-category-source">{cat.hookSource}</span>
+                    </span>
                   </label>
                 ))}
               </div>
@@ -278,8 +245,8 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
             checked={recordingConfig.debugCapture}
             onChange={() => setRecordingConfig({ debugCapture: !recordingConfig.debugCapture })}
           />
-          <span className="recording-section-title">Debug Capture</span>
-          <span className="recording-hint">Capture DEBUG-level entries in the debug log buffer</span>
+          <span className="recording-section-title">Verbose App Logs</span>
+          <span className="recording-hint">Capture DEBUG-level frontend/backend observability entries</span>
         </label>
       </div>
 

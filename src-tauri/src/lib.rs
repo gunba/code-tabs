@@ -1,5 +1,6 @@
 mod commands;
 mod file_watcher;
+mod observability;
 mod path_utils;
 mod proxy;
 mod pty;
@@ -12,6 +13,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
 use file_watcher::FileWatcherState;
+use observability::record_backend_event;
 use proxy::ProxyState;
 use session::SessionManager;
 use tap_server::TapServerState;
@@ -102,6 +104,19 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            record_backend_event(
+                &app.handle(),
+                "LOG",
+                "app",
+                None,
+                "app.startup",
+                "Tauri application setup",
+                serde_json::json!({
+                    "debugBuild": cfg!(debug_assertions),
+                    "platform": std::env::consts::OS,
+                    "arch": std::env::consts::ARCH,
+                }),
+            );
             #[cfg(target_os = "windows")]
             {
                 use tauri::Manager;
@@ -192,6 +207,10 @@ pub fn run() {
             commands::add_watch_path,
             commands::compute_file_diff,
             commands::read_file_for_snapshot,
+            observability::append_observability_data,
+            observability::get_observability_info,
+            observability::open_observability_log,
+            observability::open_main_devtools,
             tap_server::start_tap_server,
             tap_server::stop_tap_server,
             proxy::start_api_proxy,
@@ -213,6 +232,15 @@ pub fn run() {
         .expect("error while building Claude Tabs")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                record_backend_event(
+                    &app_handle,
+                    "LOG",
+                    "app",
+                    None,
+                    "app.exit",
+                    "Application exit requested",
+                    serde_json::json!({}),
+                );
                 // Flush traffic logs and stop API proxy (single lock acquisition)
                 let proxy_state = app_handle.state::<ProxyState>();
                 if let Ok(mut s) = proxy_state.0.lock() {

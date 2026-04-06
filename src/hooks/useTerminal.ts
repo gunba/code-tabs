@@ -5,22 +5,49 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { getTerminalTheme } from "../lib/theme";
 import { dlog } from "../lib/debugLog";
+import { startTraceSpan, traceSync } from "../lib/perfTrace";
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
 const PROMPT_MARKER_NEW = ">\u00A0"; // > + NBSP — current Claude Code prompt
 
 interface UseTerminalOptions {
+  sessionId?: string | null;
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
 }
 
-export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
+function escapePreview(text: string): string {
+  return text
+    .replace(/\x1b/g, "\\x1b")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n")
+    .replace(/\t/g, "\\t")
+    .slice(0, 240);
+}
+
+function captureBufferState(term: Terminal) {
+  const buf = term.buffer.active;
+  return {
+    cols: term.cols,
+    rows: term.rows,
+    cursorX: buf.cursorX,
+    cursorY: buf.baseY + buf.cursorY,
+    viewportY: buf.viewportY,
+    baseY: buf.baseY,
+    length: buf.length,
+  };
+}
+
+export function useTerminal({ sessionId = null, onData, onResize }: UseTerminalOptions = {}) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const attachedRef = useRef(false);
   const pendingElRef = useRef<HTMLDivElement | null>(null);
+  const sessionIdRef = useRef<string | null>(sessionId);
+  sessionIdRef.current = sessionId;
+  const lastFitDimsRef = useRef<{ cols: number; rows: number } | null>(null);
 
   const webglRef = useRef<WebglAddon | null>(null);
 
@@ -30,18 +57,36 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
 
     term.open(el);
     attachedRef.current = true;
+    dlog("terminal", sessionIdRef.current, "terminal opened", "LOG", {
+      event: "terminal.open",
+      data: {
+        ...captureBufferState(term),
+      },
+    });
 
     // [DF-06] WebGL renderer — if context is lost, fall back to canvas (no retry)
     try {
       const webgl = new WebglAddon();
       webgl.onContextLoss(() => {
+        dlog("terminal", sessionIdRef.current, "webgl context lost", "WARN", {
+          event: "terminal.webgl_context_lost",
+          data: {},
+        });
         webgl.dispose();
         webglRef.current = null;
       });
       term.loadAddon(webgl);
       webglRef.current = webgl;
+      dlog("terminal", sessionIdRef.current, "webgl renderer enabled", "DEBUG", {
+        event: "terminal.webgl_enabled",
+        data: {},
+      });
     } catch {
       // WebGL not available — canvas fallback is automatic
+      dlog("terminal", sessionIdRef.current, "webgl renderer unavailable; using canvas fallback", "DEBUG", {
+        event: "terminal.webgl_unavailable",
+        data: {},
+      });
     }
 
     // Block xterm.js native paste handler — our custom Ctrl+V handler
@@ -65,7 +110,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
         if (!dims || dims.rows <= 1) return;
         fit.fit();
       } catch {}
-    });
+      });
     observer.observe(el);
     observerRef.current = observer;
   }, []);
@@ -74,6 +119,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   useEffect(() => {
     let cancelled = false;
     let term: Terminal | null = null;
+    const lifecycleDisposables: { dispose(): void }[] = [];
 
     (async () => {
       // Wait for fonts so xterm.js measures correct cell dimensions at open()
@@ -90,6 +136,42 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
         scrollback: 1_000_000,
       });
 
+      lifecycleDisposables.push(
+        term.onRender((range) => {
+          dlog("terminal", sessionIdRef.current, "terminal render", "DEBUG", {
+            event: "terminal.render",
+            data: {
+              start: range.start,
+              end: range.end,
+              buffer: captureBufferState(term!),
+            },
+          });
+        }),
+      );
+      lifecycleDisposables.push(
+        term.onScroll((viewportY) => {
+          dlog("terminal", sessionIdRef.current, "terminal scroll", "DEBUG", {
+            event: "terminal.scroll",
+            data: {
+              viewportY,
+              buffer: captureBufferState(term!),
+            },
+          });
+        }),
+      );
+      lifecycleDisposables.push(
+        term.onResize(({ cols, rows }) => {
+          dlog("terminal", sessionIdRef.current, "xterm resize", "DEBUG", {
+            event: "terminal.xterm_resize",
+            data: {
+              cols,
+              rows,
+              buffer: captureBufferState(term!),
+            },
+          });
+        }),
+      );
+
       const fit = new FitAddon();
       term.loadAddon(fit);
 
@@ -103,7 +185,15 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
         }
         if (ev.ctrlKey && ev.key === "c" && ev.type === "keydown") {
           if (term!.hasSelection()) {
-            navigator.clipboard.writeText(term!.getSelection());
+            const selection = term!.getSelection();
+            dlog("terminal", sessionIdRef.current, "terminal selection copied", "DEBUG", {
+              event: "terminal.copy_selection",
+              data: {
+                length: selection.length,
+                text: selection,
+              },
+            });
+            navigator.clipboard.writeText(selection);
             term!.clearSelection();
             return false; // We handled it — don't send to PTY
           }
@@ -111,8 +201,20 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
         // Handle Ctrl+V paste — read clipboard and insert into terminal
         if (ev.ctrlKey && ev.key === "v" && ev.type === "keydown") {
           navigator.clipboard.readText().then((text) => {
+            dlog("terminal", sessionIdRef.current, "terminal paste requested", "DEBUG", {
+              event: "terminal.paste",
+              data: {
+                length: text.length,
+                text,
+              },
+            });
             if (text) term!.paste(text);
-          }).catch(() => {});
+          }).catch((err) => {
+            dlog("terminal", sessionIdRef.current, `clipboard paste failed: ${err}`, "WARN", {
+              event: "terminal.paste_failed",
+              data: { error: String(err) },
+            });
+          });
           return false; // We handled it
         }
         // [TR-03] Ctrl+Home: scroll to top
@@ -143,7 +245,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
             return false;
           }
           if (ev.ctrlKey && ev.shiftKey && !ev.altKey &&
-              (ev.key === "D" || ev.key === "F" || ev.key === "G" || ev.key === "R")) {
+              (ev.key === "D" || ev.key === "F" || ev.key === "G" || ev.key === "I" || ev.key === "R")) {
             return false;
           }
           if (ev.key === "Escape") {
@@ -165,6 +267,7 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     return () => {
       cancelled = true;
       observerRef.current?.disconnect();
+      lifecycleDisposables.forEach((d) => d.dispose());
       webglRef.current?.dispose();
       webglRef.current = null;
       term?.dispose();
@@ -184,10 +287,30 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
     const disposables: { dispose(): void }[] = [];
 
     if (onData) {
-      disposables.push(term.onData(onData));
+      disposables.push(term.onData((data) => {
+        dlog("terminal", sessionIdRef.current, "terminal input", "DEBUG", {
+          event: "terminal.input",
+          data: {
+            length: data.length,
+            text: data,
+            preview: escapePreview(data),
+          },
+        });
+        onData(data);
+      }));
     }
     if (onResize) {
-      disposables.push(term.onResize(({ cols, rows }) => onResize(cols, rows)));
+      disposables.push(term.onResize(({ cols, rows }) => {
+        dlog("terminal", sessionIdRef.current, "terminal resize callback", "DEBUG", {
+          event: "terminal.resize_callback",
+          data: {
+            cols,
+            rows,
+            buffer: captureBufferState(term),
+          },
+        });
+        onResize(cols, rows);
+      }));
     }
 
     return () => disposables.forEach((d) => d.dispose());
@@ -197,6 +320,14 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const attach = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
     pendingElRef.current = el;
+    dlog("terminal", sessionIdRef.current, "terminal attach requested", "DEBUG", {
+      event: "terminal.attach",
+      data: {
+        alreadyAttached: attachedRef.current,
+        elementWidth: el.clientWidth,
+        elementHeight: el.clientHeight,
+      },
+    });
 
     const term = termRef.current;
     const fit = fitRef.current;
@@ -209,35 +340,151 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
   const write = useCallback((data: string) => {
     const term = termRef.current;
     if (!term) return;
-    try { term.write(data); } catch {}
+    const before = captureBufferState(term);
+    const span = startTraceSpan("terminal.write_text_apply", {
+      module: "terminal",
+      sessionId: sessionIdRef.current,
+      event: "terminal.write_text_perf",
+      emitStart: false,
+      warnAboveMs: 16,
+      data: {
+        length: data.length,
+        preview: escapePreview(data),
+      },
+    });
+    dlog("terminal", sessionIdRef.current, "terminal write(text)", "DEBUG", {
+      event: "terminal.write_text",
+      data: {
+        length: data.length,
+        text: data,
+        preview: escapePreview(data),
+        before,
+      },
+    });
+    try {
+      term.write(data, () => {
+        span.end({
+          after: captureBufferState(term),
+        });
+        dlog("terminal", sessionIdRef.current, "terminal write(text) applied", "DEBUG", {
+          event: "terminal.write_text_applied",
+          data: {
+            length: data.length,
+            after: captureBufferState(term),
+          },
+        });
+      });
+    } catch (err) {
+      span.fail(err);
+    }
   }, []);
 
   // [PT-16] [DF-03] Write raw bytes to terminal.
   const writeBytes = useCallback((data: Uint8Array) => {
     const term = termRef.current;
     if (!term) return;
-    try { term.write(data); } catch (err) {
-      dlog("terminal", null, `term.write error: ${err}`, "ERR");
+    const text = new TextDecoder().decode(data);
+    const before = captureBufferState(term);
+    const span = startTraceSpan("terminal.write_bytes_apply", {
+      module: "terminal",
+      sessionId: sessionIdRef.current,
+      event: "terminal.write_bytes_perf",
+      emitStart: false,
+      warnAboveMs: 16,
+      data: {
+        byteLength: data.byteLength,
+        preview: escapePreview(text),
+      },
+    });
+    dlog("terminal", sessionIdRef.current, "terminal write(bytes)", "DEBUG", {
+      event: "terminal.write_bytes",
+      data: {
+        byteLength: data.byteLength,
+        containsEscape: text.includes("\x1b"),
+        containsCR: text.includes("\r"),
+        containsLF: text.includes("\n"),
+        text,
+        preview: escapePreview(text),
+        before,
+      },
+    });
+    try {
+      term.write(data, () => {
+        span.end({
+          after: captureBufferState(term),
+        });
+        dlog("terminal", sessionIdRef.current, "terminal write(bytes) applied", "DEBUG", {
+          event: "terminal.write_bytes_applied",
+          data: {
+            byteLength: data.byteLength,
+            after: captureBufferState(term),
+          },
+        });
+      });
+    } catch (err) {
+      span.fail(err);
+      dlog("terminal", sessionIdRef.current, `term.write error: ${err}`, "ERR");
     }
   }, []);
 
   const clear = useCallback(() => {
+    if (termRef.current) {
+      dlog("terminal", sessionIdRef.current, "terminal clear", "DEBUG", {
+        event: "terminal.clear",
+        data: {
+          before: captureBufferState(termRef.current),
+        },
+      });
+    }
     termRef.current?.clear();
   }, []);
 
   const focus = useCallback(() => {
+    if (termRef.current) {
+      dlog("terminal", sessionIdRef.current, "terminal focus", "DEBUG", {
+        event: "terminal.focus",
+        data: {
+          buffer: captureBufferState(termRef.current),
+        },
+      });
+    }
     termRef.current?.focus();
   }, []);
 
   const scrollToBottom = useCallback(() => {
+    if (termRef.current) {
+      dlog("terminal", sessionIdRef.current, "scroll to bottom", "DEBUG", {
+        event: "terminal.scroll_to_bottom",
+        data: {
+          before: captureBufferState(termRef.current),
+        },
+      });
+    }
     termRef.current?.scrollToBottom();
   }, []);
 
   const scrollToTop = useCallback(() => {
+    if (termRef.current) {
+      dlog("terminal", sessionIdRef.current, "scroll to top", "DEBUG", {
+        event: "terminal.scroll_to_top",
+        data: {
+          before: captureBufferState(termRef.current),
+        },
+      });
+    }
     termRef.current?.scrollToTop();
   }, []);
 
   const scrollToLine = useCallback((line: number) => {
+    if (termRef.current) {
+      dlog("terminal", sessionIdRef.current, "scroll to line", "DEBUG", {
+        event: "terminal.scroll_to_line",
+        data: {
+          line,
+          before: captureBufferState(termRef.current),
+        },
+      });
+    }
     termRef.current?.scrollToLine(line);
   }, []);
 
@@ -259,13 +506,36 @@ export function useTerminal({ onData, onResize }: UseTerminalOptions = {}) {
 
   // [PT-09] FitAddon dimension guard — skip fit if rows <= 1 (not laid out)
   const fit = useCallback(() => {
-    try {
-      const f = fitRef.current;
-      if (!f) return;
-      const dims = f.proposeDimensions();
-      if (!dims || dims.rows <= 1) return;
-      f.fit();
-    } catch {}
+    traceSync("terminal.fit_apply", () => {
+      try {
+        const f = fitRef.current;
+        const term = termRef.current;
+        if (!f || !term) return;
+        const dims = f.proposeDimensions();
+        if (!dims || dims.rows <= 1) return;
+        const before = { cols: term.cols, rows: term.rows };
+        f.fit();
+        const after = { cols: term.cols, rows: term.rows };
+        const prev = lastFitDimsRef.current;
+        if (!prev || prev.cols !== after.cols || prev.rows !== after.rows || before.cols !== after.cols || before.rows !== after.rows) {
+          lastFitDimsRef.current = after;
+          dlog("terminal", sessionIdRef.current, "terminal fit", "DEBUG", {
+            event: "terminal.fit",
+            data: {
+              before,
+              after,
+              proposed: dims,
+            },
+          });
+        }
+      } catch {}
+    }, {
+      module: "terminal",
+      sessionId: sessionIdRef.current,
+      event: "terminal.fit_perf",
+      warnAboveMs: 8,
+      data: {},
+    });
   }, []);
 
   const getDimensions = useCallback(() => {

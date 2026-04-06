@@ -52,6 +52,10 @@ export const useUiConfigStore = create<UiConfigState>((set) => ({
 
   loadConfig: async () => {
     try {
+      dlog("discovery", null, "UI config load started", "DEBUG", {
+        event: "discovery.ui_config_started",
+        data: {},
+      });
       const content = await invoke<string>("read_ui_config");
       if (content) {
         const parsed = JSON.parse(content);
@@ -60,11 +64,24 @@ export const useUiConfigStore = create<UiConfigState>((set) => ({
           parsed as Record<string, unknown>,
         ) as unknown as UiConfig;
         set({ config: merged, loaded: true });
+        dlog("discovery", null, "UI config loaded from disk", "LOG", {
+          event: "discovery.ui_config_loaded",
+          data: {
+            version: merged.version,
+            contentLength: content.length,
+          },
+        });
       } else {
         await invoke("write_ui_config", {
           configJson: JSON.stringify(DEFAULT_UI_CONFIG, null, 2),
         });
         set({ config: DEFAULT_UI_CONFIG, loaded: true });
+        dlog("discovery", null, "UI config initialized from defaults", "LOG", {
+          event: "discovery.ui_config_defaulted",
+          data: {
+            version: DEFAULT_UI_CONFIG.version,
+          },
+        });
       }
     } catch (err) {
       dlog("config", null, `uiConfig load failed: ${err}`, "ERR");

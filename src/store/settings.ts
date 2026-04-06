@@ -7,7 +7,8 @@ import { normalizePath, parseWorktreePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import type { EnvVarEntry } from "../lib/envVars";
 import type { ModelRegistryEntry } from "../lib/claude";
-import { setDebugCaptureEnabled } from "../lib/debugLog";
+import { dlog, setDebugCaptureEnabled } from "../lib/debugLog";
+import { traceAsync } from "../lib/perfTrace";
 import { useSessionStore } from "./sessions";
 
 export interface RecordingConfig {
@@ -329,7 +330,16 @@ export const useSettingsStore = create<SettingsState>()(
       setSidePanel: (panel) => set({ sidePanel: panel }),
       bootstrapCommandUsage: async () => {
         try {
-          const scanned = await invoke<Record<string, number>>("scan_command_usage");
+          dlog("discovery", null, "command-usage bootstrap started", "DEBUG", {
+            event: "discovery.command_usage_started",
+            data: {},
+          });
+          const scanned = await traceAsync("discovery.scan_command_usage", () => invoke<Record<string, number>>("scan_command_usage"), {
+            module: "discovery",
+            event: "discovery.command_usage_perf",
+            warnAboveMs: 500,
+            data: {},
+          });
           set((s) => {
             const merged = { ...s.commandUsage };
             for (const [cmd, count] of Object.entries(scanned)) {
@@ -337,8 +347,19 @@ export const useSettingsStore = create<SettingsState>()(
             }
             return { commandUsage: merged };
           });
-        } catch {
+          dlog("discovery", null, "command-usage bootstrap completed", "LOG", {
+            event: "discovery.command_usage_loaded",
+            data: {
+              uniqueCommands: Object.keys(scanned).length,
+              commands: scanned,
+            },
+          });
+        } catch (err) {
           // scan failed — no problem, in-app counts still work
+          dlog("discovery", null, `command-usage bootstrap failed: ${err}`, "WARN", {
+            event: "discovery.command_usage_failed",
+            data: { error: String(err) },
+          });
         }
       },
       triggerCommandRefresh: () =>
@@ -380,7 +401,16 @@ export const useSettingsStore = create<SettingsState>()(
       loadPastSessions: async () => {
         set({ pastSessionsLoading: true });
         try {
-          const sessions = await invoke<PastSession[]>("list_past_sessions");
+          dlog("discovery", null, "past-session discovery started", "LOG", {
+            event: "discovery.past_sessions_started",
+            data: {},
+          });
+          const sessions = await traceAsync("discovery.list_past_sessions", () => invoke<PastSession[]>("list_past_sessions"), {
+            module: "discovery",
+            event: "discovery.past_sessions_perf",
+            warnAboveMs: 1000,
+            data: {},
+          });
           // Prune sessionNames and sessionConfigs to only IDs present in loaded sessions
           const idSet = new Set(sessions.map((s) => s.id));
           set((prev) => {
@@ -394,35 +424,112 @@ export const useSettingsStore = create<SettingsState>()(
             }
             return { pastSessions: sessions, pastSessionsLoading: false, sessionNames: names, sessionConfigs: configs };
           });
-        } catch {
+          dlog("discovery", null, "past-session discovery completed", "LOG", {
+            event: "discovery.past_sessions_loaded",
+            data: {
+              count: sessions.length,
+              sessionIds: sessions.map((session) => session.id),
+            },
+          });
+        } catch (err) {
           set({ pastSessionsLoading: false });
+          dlog("discovery", null, `past-session discovery failed: ${err}`, "WARN", {
+            event: "discovery.past_sessions_failed",
+            data: { error: String(err) },
+          });
         }
       },
       loadBinarySettingsSchema: async () => {
         try {
           const claudePath = useSessionStore.getState().claudePath;
-          const fields = await invoke<BinarySettingField[]>("discover_settings_schema", { cliPath: claudePath });
+          dlog("discovery", null, "binary settings-schema discovery started", "DEBUG", {
+            event: "discovery.settings_schema_started",
+            data: { claudePath },
+          });
+          const fields = await traceAsync("discovery.discover_settings_schema", () => invoke<BinarySettingField[]>("discover_settings_schema", { cliPath: claudePath }), {
+            module: "discovery",
+            event: "discovery.settings_schema_perf",
+            warnAboveMs: 1000,
+            data: { claudePath },
+          });
           set({ binarySettingsSchema: fields });
-        } catch {
+          dlog("discovery", null, "binary settings-schema discovery completed", "LOG", {
+            event: "discovery.settings_schema_loaded",
+            data: {
+              count: fields.length,
+              keys: fields.map((field) => field.key),
+              claudePath,
+            },
+          });
+        } catch (err) {
           // Binary scan failed — no problem, CLI help + static fields still work
+          dlog("discovery", null, `binary settings-schema discovery failed: ${err}`, "WARN", {
+            event: "discovery.settings_schema_failed",
+            data: { error: String(err) },
+          });
         }
       },
       loadSettingsJsonSchema: async () => {
         try {
-          const raw = await invoke<string>("fetch_settings_schema");
+          dlog("discovery", null, "remote settings schema fetch started", "DEBUG", {
+            event: "discovery.settings_json_schema_started",
+            data: {},
+          });
+          const raw = await traceAsync("discovery.fetch_settings_schema", () => invoke<string>("fetch_settings_schema"), {
+            module: "discovery",
+            event: "discovery.settings_json_schema_perf",
+            warnAboveMs: 1000,
+            data: {},
+          });
           const schema = JSON.parse(raw) as JsonSchema;
           set({ settingsJsonSchema: schema });
-        } catch {
+          const schemaTitle = "title" in (schema as Record<string, unknown>)
+            ? ((schema as Record<string, unknown>).title as string | undefined) ?? null
+            : null;
+          dlog("discovery", null, "remote settings schema fetch completed", "LOG", {
+            event: "discovery.settings_json_schema_loaded",
+            data: {
+              title: schemaTitle,
+              hasProperties: !!schema.properties,
+              topLevelPropertyCount: schema.properties ? Object.keys(schema.properties).length : 0,
+            },
+          });
+        } catch (err) {
           // Network fetch failed — Zustand persistence provides offline fallback
+          dlog("discovery", null, `remote settings schema fetch failed: ${err}`, "WARN", {
+            event: "discovery.settings_json_schema_failed",
+            data: { error: String(err) },
+          });
         }
       },
       loadKnownEnvVars: async (cliPath) => {
         try {
           const path = cliPath ?? useSessionStore.getState().claudePath;
-          const vars = await invoke<EnvVarEntry[]>("discover_env_vars", { cliPath: path ?? null });
+          dlog("discovery", null, "environment-variable discovery started", "DEBUG", {
+            event: "discovery.env_vars_started",
+            data: { cliPath: path ?? null },
+          });
+          const vars = await traceAsync("discovery.discover_env_vars", () => invoke<EnvVarEntry[]>("discover_env_vars", { cliPath: path ?? null }), {
+            module: "discovery",
+            event: "discovery.env_vars_perf",
+            warnAboveMs: 1000,
+            data: { cliPath: path ?? null },
+          });
           set({ knownEnvVars: vars });
-        } catch {
+          dlog("discovery", null, "environment-variable discovery completed", "LOG", {
+            event: "discovery.env_vars_loaded",
+            data: {
+              count: vars.length,
+              names: vars.map((variable) => variable.name),
+              cliPath: path ?? null,
+            },
+          });
+        } catch (err) {
           // Binary scan failed — no problem, UI just shows empty env vars panel
+          dlog("discovery", null, `environment-variable discovery failed: ${err}`, "WARN", {
+            event: "discovery.env_vars_failed",
+            data: { error: String(err) },
+          });
         }
       },
 

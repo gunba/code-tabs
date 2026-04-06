@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from "../../store/sessions";
 import { sessionColor } from "../../lib/claude";
 import { dirToTabName } from "../../lib/paths";
-import { getDebugLog, getDebugLogForSession, getDebugLogGeneration, clearDebugLog, type DebugLogEntry } from "../../lib/debugLog";
+import { getDebugLog, getDebugLogForSession, getDebugLogGeneration, clearDebugLog, type DebugLogEntry, type DebugLogSource } from "../../lib/debugLog";
 import { IconClose } from "../Icons/Icons";
 import "./DebugPanel.css";
 
@@ -19,6 +19,30 @@ function formatTs(ts: number): string {
   return `${hh}:${mm}:${ss}.${ms}`;
 }
 
+function formatData(data: unknown): string {
+  if (data == null) return "";
+  try {
+    const json = JSON.stringify(data);
+    return json === "{}" || json === "[]" ? "" : json;
+  } catch {
+    return "";
+  }
+}
+
+function buildSearchText(entry: DebugLogEntry): string {
+  const parts = [
+    entry.tsIso,
+    entry.level,
+    entry.source,
+    entry.module,
+    entry.event,
+    entry.message,
+  ];
+  const data = formatData(entry.data);
+  if (data) parts.push(data);
+  return parts.join(" ").toLowerCase();
+}
+
 // [DP-09] Color-coded by severity: LOG=default, WARN=warning, ERR=error
 function levelClass(level: string): string {
   if (level === "WARN") return "debug-line debug-line-warn";
@@ -33,6 +57,8 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
   const [textFilter, setTextFilter] = useState("");
   const [sessionFilter, setSessionFilter] = useState<string | "all" | "global">("all");
   const [moduleFilter, setModuleFilter] = useState<Set<string>>(new Set());
+  const [sourceFilter, setSourceFilter] = useState<Set<DebugLogSource>>(new Set());
+  const [levelFilter, setLevelFilter] = useState<Set<DebugLogEntry["level"]>>(new Set());
   const [showDebug, setShowDebug] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
@@ -119,19 +145,29 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
     if (moduleFilter.size > 0) {
       result = result.filter((e) => moduleFilter.has(e.module));
     }
+    // Source filter (empty = show all)
+    if (sourceFilter.size > 0) {
+      result = result.filter((e) => sourceFilter.has(e.source));
+    }
+    // Level filter (empty = show all currently visible levels)
+    if (levelFilter.size > 0) {
+      result = result.filter((e) => levelFilter.has(e.level));
+    }
     // Text search
     if (textFilter) {
       const lower = textFilter.toLowerCase();
-      result = result.filter(
-        (e) => e.message.toLowerCase().includes(lower) || e.module.toLowerCase().includes(lower),
-      );
+      result = result.filter((e) => buildSearchText(e).includes(lower));
     }
     return result;
-  }, [logs, sessionFilter, moduleFilter, textFilter, showDebug]);
+  }, [logs, sessionFilter, moduleFilter, sourceFilter, levelFilter, textFilter, showDebug]);
 
   const handleCopy = useCallback(() => {
     const text = filtered
-      .map((e) => `[${formatTs(e.ts)}] [${e.level}] [${e.module}] ${e.message}`)
+      .map((e) => {
+        const data = formatData(e.data);
+        const suffix = data ? ` ${data}` : "";
+        return `[${e.tsIso}] [${e.level}] [${e.source}] [${e.module}:${e.event}] ${e.message}${suffix}`;
+      })
       .join("\n");
     navigator.clipboard.writeText(text);
   }, [filtered]);
@@ -146,6 +182,24 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
       const next = new Set(prev);
       if (next.has(mod)) next.delete(mod);
       else next.add(mod);
+      return next;
+    });
+  }, []);
+
+  const toggleSource = useCallback((source: DebugLogSource) => {
+    setSourceFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(source)) next.delete(source);
+      else next.add(source);
+      return next;
+    });
+  }, []);
+
+  const toggleLevel = useCallback((level: DebugLogEntry["level"]) => {
+    setLevelFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(level)) next.delete(level);
+      else next.add(level);
       return next;
     });
   }, []);
@@ -214,6 +268,27 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
           })}
       </div>
 
+      <div className="debug-panel-filters">
+        {(["frontend", "backend"] as DebugLogSource[]).map((source) => (
+          <button
+            key={source}
+            className={`debug-filter-chip${sourceFilter.has(source) ? " active" : ""}`}
+            onClick={() => toggleSource(source)}
+          >
+            {source}
+          </button>
+        ))}
+        {(["LOG", "WARN", "ERR", "DEBUG"] as DebugLogEntry["level"][]).map((level) => (
+          <button
+            key={level}
+            className={`debug-filter-chip${levelFilter.has(level) ? " active" : ""}`}
+            onClick={() => toggleLevel(level)}
+          >
+            {level}
+          </button>
+        ))}
+      </div>
+
       {/* Module filter chips */}
       {modules.length > 0 && (
         <div className="debug-panel-filters">
@@ -253,10 +328,14 @@ export function DebugPanel({ onClose }: DebugPanelProps) {
                 key={i}
                 className={levelClass(entry.level)}
                 style={{ borderLeftColor: borderColor }}
+                title={entry.tsIso}
               >
                 <span className="debug-ts">{formatTs(entry.ts)}</span>
-                <span className="debug-mod">[{entry.module}]</span>
+                <span className="debug-mod">[{entry.source}/{entry.module}:{entry.event}]</span>
                 {" "}{entry.message}
+                {formatData(entry.data) && (
+                  <span className="debug-data"> {" "}{formatData(entry.data)}</span>
+                )}
               </div>
             );
           })

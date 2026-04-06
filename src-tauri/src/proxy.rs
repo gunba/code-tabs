@@ -8,6 +8,12 @@ use tokio::sync::oneshot;
 use tauri::{Emitter, State};
 
 use crate::session::types::{ModelProvider, ModelRoute, ProviderConfig, SystemPromptRule};
+use crate::observability::{
+    record_backend_event,
+    record_backend_perf_end,
+    record_backend_perf_fail,
+    record_backend_perf_start,
+};
 
 // ── Proxy state ──────────────────────────────────────────────────────
 
@@ -80,124 +86,381 @@ pub async fn start_api_proxy(
     app: tauri::AppHandle,
 ) -> Result<u16, String> {
     let inner = proxy_state.0.clone();
+    let span_start = std::time::Instant::now();
+    let span_data = serde_json::json!({
+        "providerCount": config.providers.len(),
+        "routeCount": config.routes.len(),
+    });
+    record_backend_perf_start(&app, "proxy", None, "proxy.start_api_proxy", span_data.clone());
 
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .map_err(|e| format!("Proxy bind failed: {e}"))?;
-    let port = listener.local_addr().map_err(|e| format!("{e}"))?.port();
+    let result: Result<u16, String> = async {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .map_err(|e| format!("Proxy bind failed: {e}"))?;
+        let port = listener.local_addr().map_err(|e| format!("{e}"))?.port();
 
-    let clients = build_client_map(&config)?;
-    let default_client = build_plain_client();
+        let clients = build_client_map(&config)?;
+        let default_client = build_plain_client();
 
-    let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+        let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
 
-    {
-        let mut s = inner.lock().map_err(|e| e.to_string())?;
-        s.config = config;
-        s.port = Some(port);
-        s.shutdown_tx = Some(shutdown_tx);
-        s.clients = clients;
-        s.default_client = default_client.clone();
-    }
+        {
+            let mut s = inner.lock().map_err(|e| e.to_string())?;
+            s.config = config;
+            s.port = Some(port);
+            s.shutdown_tx = Some(shutdown_tx);
+            s.clients = clients;
+            s.default_client = default_client.clone();
+        }
 
-    let state = inner.clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                result = listener.accept() => {
-                    match result {
-                        Ok((stream, _)) => {
-                            let (config, clients, default_client, rules) = match state.lock() {
-                                Ok(s) => (s.config.clone(), s.clients.clone(), s.default_client.clone(), s.rules.clone()),
-                                Err(_) => continue,
-                            };
-                            let a = app.clone();
-                            let st = state.clone();
-                            tokio::spawn(async move {
-                                if let Err(e) = handle_connection(stream, config, clients, default_client, rules, a, st).await {
-                                    log::debug!("proxy connection error: {e}");
-                                }
-                            });
-                        }
-                        Err(e) => {
-                            log::warn!("proxy accept error: {e}");
-                            break;
+        record_backend_event(
+            &app,
+            "LOG",
+            "proxy",
+            None,
+            "proxy.started",
+            "API proxy started",
+            serde_json::json!({
+                "port": port,
+            }),
+        );
+
+        let state = inner.clone();
+        let app_for_loop = app.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    result = listener.accept() => {
+                        match result {
+                            Ok((stream, addr)) => {
+                                record_backend_event(
+                                    &app_for_loop,
+                                    "DEBUG",
+                                    "proxy",
+                                    None,
+                                    "proxy.connection_accepted",
+                                    "Accepted proxy client connection",
+                                    serde_json::json!({
+                                        "remoteAddr": addr.to_string(),
+                                    }),
+                                );
+                                let (config, clients, default_client, rules) = match state.lock() {
+                                    Ok(s) => (s.config.clone(), s.clients.clone(), s.default_client.clone(), s.rules.clone()),
+                                    Err(_) => continue,
+                                };
+                                let a = app_for_loop.clone();
+                                let st = state.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = handle_connection(stream, config, clients, default_client, rules, a, st).await {
+                                        log::debug!("proxy connection error: {e}");
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                log::warn!("proxy accept error: {e}");
+                                record_backend_event(
+                                    &app_for_loop,
+                                    "WARN",
+                                    "proxy",
+                                    None,
+                                    "proxy.accept_failed",
+                                    "Proxy accept failed",
+                                    serde_json::json!({
+                                        "error": e.to_string(),
+                                    }),
+                                );
+                                break;
+                            }
                         }
                     }
-                }
-                _ = &mut shutdown_rx => {
-                    break;
+                    _ = &mut shutdown_rx => {
+                        record_backend_event(
+                            &app_for_loop,
+                            "LOG",
+                            "proxy",
+                            None,
+                            "proxy.shutdown_requested",
+                            "Proxy shutdown requested",
+                            serde_json::json!({}),
+                        );
+                        break;
+                    }
                 }
             }
-        }
-    });
+        });
 
-    Ok(port)
+        Ok(port)
+    }.await;
+
+    match result {
+        Ok(port) => {
+            record_backend_perf_end(
+                &app,
+                "proxy",
+                None,
+                "proxy.start_api_proxy",
+                span_start,
+                250,
+                span_data,
+                serde_json::json!({ "port": port }),
+            );
+            Ok(port)
+        }
+        Err(err) => {
+            record_backend_perf_fail(
+                &app,
+                "proxy",
+                None,
+                "proxy.start_api_proxy",
+                span_start,
+                span_data,
+                serde_json::json!({}),
+                &err,
+            );
+            Err(err)
+        }
+    }
 }
 
 #[tauri::command]
 pub fn update_provider_config(
     config: ProviderConfig,
     proxy_state: State<'_, ProxyState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
-    let clients = build_client_map(&config)?;
-    let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
-    s.config = config;
-    s.clients = clients;
-    Ok(())
+    let span_start = std::time::Instant::now();
+    let span_data = serde_json::json!({
+        "providerCount": config.providers.len(),
+        "routeCount": config.routes.len(),
+    });
+    record_backend_perf_start(&app, "proxy", None, "proxy.update_provider_config", span_data.clone());
+    let result = (|| -> Result<(), String> {
+        let clients = build_client_map(&config)?;
+        let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
+        s.config = config;
+        s.clients = clients;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
+            record_backend_event(
+                &app,
+                "LOG",
+                "proxy",
+                None,
+                "proxy.provider_config_updated",
+                "Updated proxy provider config",
+                serde_json::json!({}),
+            );
+            record_backend_perf_end(
+                &app,
+                "proxy",
+                None,
+                "proxy.update_provider_config",
+                span_start,
+                250,
+                span_data,
+                serde_json::json!({}),
+            );
+            Ok(())
+        }
+        Err(err) => {
+            record_backend_perf_fail(
+                &app,
+                "proxy",
+                None,
+                "proxy.update_provider_config",
+                span_start,
+                span_data,
+                serde_json::json!({}),
+                &err,
+            );
+            Err(err)
+        }
+    }
 }
 
 #[tauri::command]
 pub fn update_system_prompt_rules(
     rules: Vec<SystemPromptRule>,
     proxy_state: State<'_, ProxyState>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
-    // Validate all enabled rule patterns at config time
-    for rule in &rules {
-        if rule.enabled && !rule.pattern.is_empty() {
-            let inline_flags: String = rule.flags.chars().filter(|c| *c != 'g').collect();
-            let pattern = if inline_flags.is_empty() {
-                rule.pattern.clone()
-            } else {
-                format!("(?{}){}", inline_flags, rule.pattern)
-            };
-            let _ = regex::Regex::new(&pattern)
-                .map_err(|e| format!("Invalid regex '{}': {}", rule.pattern, e))?;
+    let span_start = std::time::Instant::now();
+    let span_data = serde_json::json!({
+        "ruleCount": rules.len(),
+        "enabledRuleCount": rules.iter().filter(|rule| rule.enabled).count(),
+    });
+    record_backend_perf_start(&app, "proxy", None, "proxy.update_system_prompt_rules", span_data.clone());
+    let result = (|| -> Result<(), String> {
+        // Validate all enabled rule patterns at config time
+        for rule in &rules {
+            if rule.enabled && !rule.pattern.is_empty() {
+                let inline_flags: String = rule.flags.chars().filter(|c| *c != 'g').collect();
+                let pattern = if inline_flags.is_empty() {
+                    rule.pattern.clone()
+                } else {
+                    format!("(?{}){}", inline_flags, rule.pattern)
+                };
+                let _ = regex::Regex::new(&pattern)
+                    .map_err(|e| format!("Invalid regex '{}': {}", rule.pattern, e))?;
+            }
+        }
+        let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
+        s.rules = rules;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
+            record_backend_event(
+                &app,
+                "LOG",
+                "proxy",
+                None,
+                "proxy.system_prompt_rules_updated",
+                "Updated system prompt rewrite rules",
+                serde_json::json!({}),
+            );
+            record_backend_perf_end(
+                &app,
+                "proxy",
+                None,
+                "proxy.update_system_prompt_rules",
+                span_start,
+                250,
+                span_data,
+                serde_json::json!({}),
+            );
+            Ok(())
+        }
+        Err(err) => {
+            record_backend_perf_fail(
+                &app,
+                "proxy",
+                None,
+                "proxy.update_system_prompt_rules",
+                span_start,
+                span_data,
+                serde_json::json!({}),
+                &err,
+            );
+            Err(err)
         }
     }
-    let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
-    s.rules = rules;
-    Ok(())
 }
 
 // ── Traffic logging commands ─────────────────────────────────────────
 
 #[tauri::command]
-pub fn start_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>) -> Result<String, String> {
-    let dir = crate::commands::get_session_data_dir(&session_id)?;
-    let path = dir.join("traffic.jsonl");
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|e| format!("Failed to create traffic log: {}", e))?;
-    let writer = std::io::BufWriter::new(file);
-    let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
-    s.traffic_log_files.insert(session_id.clone(), writer);
-    s.traffic_log_paths.insert(session_id, path.clone());
-    Ok(path.to_string_lossy().to_string())
+pub fn start_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>, app: tauri::AppHandle) -> Result<String, String> {
+    let span_start = std::time::Instant::now();
+    let span_data = serde_json::json!({ "sessionId": session_id });
+    record_backend_perf_start(&app, "traffic", Some(&session_id), "traffic.start_log", span_data.clone());
+    let result = (|| -> Result<String, String> {
+        let dir = crate::commands::get_session_data_dir(&session_id)?;
+        let path = dir.join("traffic.jsonl");
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| format!("Failed to create traffic log: {}", e))?;
+        let writer = std::io::BufWriter::new(file);
+        let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
+        s.traffic_log_files.insert(session_id.clone(), writer);
+        s.traffic_log_paths.insert(session_id.clone(), path.clone());
+        Ok(path.to_string_lossy().to_string())
+    })();
+    match result {
+        Ok(path) => {
+            record_backend_event(
+                &app,
+                "LOG",
+                "traffic",
+                Some(&session_id),
+                "traffic.log_started",
+                "Started traffic log",
+                serde_json::json!({ "path": path }),
+            );
+            record_backend_perf_end(
+                &app,
+                "traffic",
+                Some(&session_id),
+                "traffic.start_log",
+                span_start,
+                250,
+                span_data,
+                serde_json::json!({ "path": path }),
+            );
+            Ok(path)
+        }
+        Err(err) => {
+            record_backend_perf_fail(
+                &app,
+                "traffic",
+                Some(&session_id),
+                "traffic.start_log",
+                span_start,
+                span_data,
+                serde_json::json!({}),
+                &err,
+            );
+            Err(err)
+        }
+    }
 }
 
 #[tauri::command]
-pub fn stop_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>) -> Result<(), String> {
-    let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(ref mut writer) = s.traffic_log_files.get_mut(&session_id) {
-        use std::io::Write;
-        let _ = writer.flush();
+pub fn stop_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>, app: tauri::AppHandle) -> Result<(), String> {
+    let span_start = std::time::Instant::now();
+    let span_data = serde_json::json!({ "sessionId": session_id });
+    record_backend_perf_start(&app, "traffic", Some(&session_id), "traffic.stop_log", span_data.clone());
+    let result = (|| -> Result<(), String> {
+        let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(ref mut writer) = s.traffic_log_files.get_mut(&session_id) {
+            use std::io::Write;
+            let _ = writer.flush();
+        }
+        s.traffic_log_files.remove(&session_id);
+        s.traffic_log_paths.remove(&session_id);
+        Ok(())
+    })();
+    match result {
+        Ok(()) => {
+            record_backend_event(
+                &app,
+                "LOG",
+                "traffic",
+                Some(&session_id),
+                "traffic.log_stopped",
+                "Stopped traffic log",
+                serde_json::json!({}),
+            );
+            record_backend_perf_end(
+                &app,
+                "traffic",
+                Some(&session_id),
+                "traffic.stop_log",
+                span_start,
+                250,
+                span_data,
+                serde_json::json!({}),
+            );
+            Ok(())
+        }
+        Err(err) => {
+            record_backend_perf_fail(
+                &app,
+                "traffic",
+                Some(&session_id),
+                "traffic.stop_log",
+                span_start,
+                span_data,
+                serde_json::json!({}),
+                &err,
+            );
+            Err(err)
+        }
     }
-    s.traffic_log_files.remove(&session_id);
-    s.traffic_log_paths.remove(&session_id);
-    Ok(())
 }
 
 // cleanup_traffic_logs removed — unified cleanup via commands::cleanup_session_data
@@ -321,12 +584,28 @@ async fn handle_connection(
     let log_path = path.clone();
     let log_session_id = session_id.clone();
 
+    record_backend_perf_start(
+        &app,
+        "proxy",
+        log_session_id.as_deref(),
+        "proxy.route_request",
+        serde_json::json!({
+            "method": log_method,
+            "path": log_path,
+            "model": log_model,
+            "provider": log_provider,
+            "rewrite": log_rewrite,
+            "shouldLogTraffic": should_log,
+        }),
+    );
+
     req = req.body(final_body);
 
     // Send upstream request
     let mut resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
+            let error_message = e.to_string();
             if should_log {
                 write_traffic_entry(
                     &proxy_state, &log_session_id, req_ts, req_start,
@@ -334,6 +613,23 @@ async fn handle_connection(
                     &final_body_for_log, 502, b"",
                 );
             }
+            record_backend_event(
+                &app,
+                "WARN",
+                "proxy",
+                log_session_id.as_deref(),
+                "proxy.request_failed",
+                "Upstream proxy request failed",
+                serde_json::json!({
+                    "durationMs": req_start.elapsed().as_millis() as u64,
+                    "method": log_method,
+                    "path": log_path,
+                    "model": log_model,
+                    "provider": log_provider,
+                    "rewrite": log_rewrite,
+                    "error": error_message,
+                }),
+            );
             send_error(&mut stream, 502, &format!("Upstream error: {e}")).await;
             return Ok(());
         }
@@ -373,6 +669,43 @@ async fn handle_connection(
             &final_body_for_log, status_code, &resp_bytes,
         );
     }
+
+    record_backend_perf_end(
+        &app,
+        "proxy",
+        log_session_id.as_deref(),
+        "proxy.route_request",
+        req_start,
+        1000,
+        serde_json::json!({
+            "method": log_method,
+            "path": log_path,
+            "model": log_model,
+            "provider": log_provider,
+            "rewrite": log_rewrite,
+            "shouldLogTraffic": should_log,
+        }),
+        serde_json::json!({
+            "status": status_code,
+        }),
+    );
+    record_backend_event(
+        &app,
+        "LOG",
+        "proxy",
+        log_session_id.as_deref(),
+        "proxy.request_completed",
+        "Proxy request completed",
+        serde_json::json!({
+            "durationMs": req_start.elapsed().as_millis() as u64,
+            "method": log_method,
+            "path": log_path,
+            "model": log_model,
+            "provider": log_provider,
+            "rewrite": log_rewrite,
+            "status": status_code,
+        }),
+    );
 
     Ok(())
 }

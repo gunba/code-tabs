@@ -4,6 +4,8 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // by resetting the module registry.
 let trace: typeof import("../perfTrace").trace;
 let traceAsync: typeof import("../perfTrace").traceAsync;
+let traceSync: typeof import("../perfTrace").traceSync;
+let startTraceSpan: typeof import("../perfTrace").startTraceSpan;
 let dumpTraces: typeof import("../perfTrace").dumpTraces;
 
 beforeEach(async () => {
@@ -11,6 +13,8 @@ beforeEach(async () => {
   const mod = await import("../perfTrace");
   trace = mod.trace;
   traceAsync = mod.traceAsync;
+  traceSync = mod.traceSync;
+  startTraceSpan = mod.startTraceSpan;
   dumpTraces = mod.dumpTraces;
 });
 
@@ -134,6 +138,38 @@ describe("traceAsync", () => {
     expect(doneLine).toBeDefined();
     // Either no duration suffix (0ms case) or a valid duration suffix
     expect(doneLine).toMatch(/\[done\](\s\(\d+ms\))?$/);
+  });
+});
+
+describe("traceSync", () => {
+  it("returns the wrapped result", () => {
+    const result = traceSync("sync-op", () => 123);
+    expect(result).toBe(123);
+  });
+
+  it("records a done event", () => {
+    traceSync("sync-op", () => "ok");
+    const dump = dumpTraces();
+    expect(dump).toContain("sync-op [done]");
+  });
+
+  it("records a fail event on throw", () => {
+    expect(() => traceSync("sync-op", () => {
+      throw new Error("boom");
+    })).toThrow("boom");
+    const dump = dumpTraces();
+    expect(dump).toContain("sync-op [FAIL]");
+  });
+});
+
+describe("startTraceSpan", () => {
+  it("records start and done events", async () => {
+    const span = startTraceSpan("manual-op");
+    await new Promise((r) => setTimeout(r, 5));
+    span.end({ ok: true });
+    const dump = dumpTraces();
+    expect(dump).toContain("manual-op [start]");
+    expect(dump).toContain("manual-op [done]");
   });
 });
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
@@ -17,6 +17,7 @@ import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconL
 import { RecordingPane } from "./RecordingPane";
 import { parseWorktreePath } from "../../lib/paths";
 import type { StatusMessage } from "../../lib/settingsSchema";
+import { useRuntimeStore } from "../../store/runtime";
 import "./ConfigManager.css";
 
 type Tab = "settings" | "envvars" | "claudemd" | "hooks" | "plugins" | "mcp" | "agents" | "prompts" | "skills" | "providers" | "recording";
@@ -32,7 +33,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "prompts", label: "Prompts", icon: <IconDocument size={11} /> },
   { id: "skills", label: "Skills", icon: <IconSkill size={11} /> },
   { id: "providers", label: "Providers", icon: <IconLightning size={11} /> },
-  { id: "recording", label: "Recording", icon: <IconCircleFilled size={11} /> },
+  { id: "recording", label: "Observability", icon: <IconCircleFilled size={11} /> },
 ];
 
 // [CM-11] 11-tab config modal (84vw, max 1500px, 78vh), store-controlled active tab
@@ -44,17 +45,34 @@ export function ConfigManager() {
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const showConfigManager = useSettingsStore((s) => s.showConfigManager);
   const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
+  const debugBuild = useRuntimeStore((s) => s.observabilityInfo.debugBuild);
   const [tab, setTab] = useState<Tab>((showConfigManager || "settings") as Tab);
   const [projectDir, setProjectDir] = useState("");
   const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
+  const prevRequestedTabRef = useRef<typeof showConfigManager>(showConfigManager);
+  const visibleTabs = useMemo(
+    () => TABS.filter((t) => debugBuild || t.id !== "recording"),
+    [debugBuild],
+  );
 
   // Sync tab from store when opened with a specific tab
   useEffect(() => {
-    if (showConfigManager && showConfigManager !== tab) {
-      const valid = TABS.some((t) => t.id === showConfigManager);
+    const requestedTabChanged = prevRequestedTabRef.current !== showConfigManager;
+    prevRequestedTabRef.current = showConfigManager;
+
+    if (showConfigManager && requestedTabChanged) {
+      const valid = visibleTabs.some((t) => t.id === showConfigManager);
       if (valid) setTab(showConfigManager as Tab);
+      else if (showConfigManager === "recording") setTab("settings");
     }
-  }, [showConfigManager]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showConfigManager, visibleTabs]);
+
+  // If the active tab becomes unavailable (release build hides observability), fall back.
+  useEffect(() => {
+    if (!visibleTabs.some((t) => t.id === tab)) {
+      setTab("settings");
+    }
+  }, [tab, visibleTabs]);
 
   // Unique project dirs from sessions — resolve worktrees to their project root
   const projectDirs = useMemo(() => Array.from(
@@ -91,7 +109,7 @@ export function ConfigManager() {
       <div className="config-header">
         <span className="config-title">Config</span>
         <div className="config-tabs">
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <button
               key={t.id}
               className={`config-tab${tab === t.id ? " config-tab-active" : ""}`}
@@ -149,7 +167,7 @@ export function ConfigManager() {
           <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} onStatus={setStatusMsg} tabId="skills" scopes={["user", "project"]} />
         )}
         <ProvidersPane visible={tab === "providers"} onStatus={setStatusMsg} />
-        {tab === "recording" && (
+        {debugBuild && tab === "recording" && (
           <RecordingPane onStatus={setStatusMsg} />
         )}
       </div>

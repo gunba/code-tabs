@@ -33,11 +33,24 @@ export function useInspectorConnection(
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
+  const summarizeExpression = (expression: unknown): string => {
+    if (typeof expression !== "string") return "";
+    return expression.replace(/\s+/g, " ").slice(0, 180);
+  };
+
   // Send a WebSocket message with auto-incrementing id
   const wsSend = useCallback((method: string, params?: Record<string, unknown>): number => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return -1;
     const id = msgIdRef.current++;
+    dlog("inspector", sessionIdRef.current, `ws send ${method}#${id}`, "DEBUG", {
+      event: "inspector.ws_send",
+      data: {
+        id,
+        method,
+        expression: summarizeExpression(params?.expression),
+      },
+    });
     ws.send(JSON.stringify({ id, method, params }));
     return id;
   }, []);
@@ -50,7 +63,10 @@ export function useInspectorConnection(
     wsRef.current = ws;
 
     ws.onopen = () => {
-      dlog("inspector", sessionIdRef.current, `connected port=${wsPort}`);
+      dlog("inspector", sessionIdRef.current, `connected port=${wsPort}`, "LOG", {
+        event: "inspector.connected",
+        data: { port: wsPort },
+      });
       retryCountRef.current = 0;
       everConnectedRef.current = true;
       setConnected(true);
@@ -62,13 +78,21 @@ export function useInspectorConnection(
 
         // Log Runtime.evaluate exceptions
         if (msg.result?.exceptionDetails) {
-          dlog("inspector", sessionIdRef.current, `evaluation error: ${msg.result.exceptionDetails.text || msg.result.exceptionDetails.exception?.description}`, "WARN");
+          dlog("inspector", sessionIdRef.current, `evaluation error: ${msg.result.exceptionDetails.text || msg.result.exceptionDetails.exception?.description}`, "WARN", {
+            event: "inspector.evaluate_error",
+            data: {
+              id: msg.id ?? null,
+            },
+          });
         }
 
         // Log Runtime.evaluate results that contain diagnostic info (tap TCP connection state)
         const val = msg.result?.result?.value;
         if (typeof val === "string" && val.includes('"connected"')) {
-          dlog("inspector", sessionIdRef.current, `tap-diag: ${val}`);
+          dlog("inspector", sessionIdRef.current, `tap-diag: ${val}`, "LOG", {
+            event: "inspector.tap_diag",
+            data: { value: val },
+          });
         }
       } catch {
         // Invalid message — skip
@@ -90,16 +114,25 @@ export function useInspectorConnection(
             if (sessionIdRef.current) connectRef.current(wsPort);
           }, INITIAL_RETRY_MS);
         } else {
-          dlog("inspector", sessionIdRef.current, `gave up connecting after ${MAX_INITIAL_RETRIES} attempts`, "WARN");
+          dlog("inspector", sessionIdRef.current, `gave up connecting after ${MAX_INITIAL_RETRIES} attempts`, "WARN", {
+            event: "inspector.connect_give_up",
+            data: { attempts: MAX_INITIAL_RETRIES, port: wsPort },
+          });
         }
       } else {
         // Reconnection after established connection dropped — backoff
-        dlog("inspector", sessionIdRef.current, `disconnected port=${wsPort}`);
+        dlog("inspector", sessionIdRef.current, `disconnected port=${wsPort}`, "LOG", {
+          event: "inspector.disconnected",
+          data: { port: wsPort },
+        });
         const maxReconnect = RECONNECT_DELAYS.length;
         if (retryCountRef.current < maxReconnect) {
           const delay = RECONNECT_DELAYS[retryCountRef.current];
           retryCountRef.current++;
-          dlog("inspector", sessionIdRef.current, `reconnecting attempt=${retryCountRef.current}/${maxReconnect} delay=${delay}ms`, "DEBUG");
+          dlog("inspector", sessionIdRef.current, `reconnecting attempt=${retryCountRef.current}/${maxReconnect} delay=${delay}ms`, "DEBUG", {
+            event: "inspector.reconnect_scheduled",
+            data: { attempt: retryCountRef.current, maxReconnect, delayMs: delay, port: wsPort },
+          });
           retryTimerRef.current = setTimeout(() => {
             retryTimerRef.current = null;
             if (sessionIdRef.current) connectRef.current(wsPort);

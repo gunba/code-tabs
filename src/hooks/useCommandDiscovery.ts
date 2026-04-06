@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { trace, traceAsync } from "../lib/perfTrace";
+import { dlog } from "../lib/debugLog";
 import type { SlashCommand } from "../store/settings";
 
 function mergeCommands(...lists: SlashCommand[][]): SlashCommand[] {
@@ -30,19 +31,75 @@ async function discover() {
   ];
 
   const claudePath = useSessionStore.getState().claudePath;
+  dlog("discovery", null, "slash command discovery started", "LOG", {
+    event: "discovery.slash_commands_started",
+    data: {
+      claudePath,
+      projectDirs,
+    },
+  });
   const builtinPromise = traceAsync("commandDiscovery: discover_builtin_commands", () =>
     invoke<Array<{ cmd: string; desc: string }>>("discover_builtin_commands", { cliPath: claudePath })
-  ).catch(() => [] as Array<{ cmd: string; desc: string }>);
+  , {
+    module: "discovery",
+    event: "discovery.builtin_commands_perf",
+    warnAboveMs: 500,
+    data: { claudePath },
+  }).then((commands) => {
+    dlog("discovery", null, "builtin slash command discovery completed", "LOG", {
+      event: "discovery.builtin_commands_loaded",
+      data: {
+        count: commands.length,
+        commands: commands.map((command) => command.cmd),
+      },
+    });
+    return commands;
+  }).catch((err) => {
+    dlog("discovery", null, `builtin slash command discovery failed: ${err}`, "WARN", {
+      event: "discovery.builtin_commands_failed",
+      data: { error: String(err) },
+    });
+    return [] as Array<{ cmd: string; desc: string }>;
+  });
 
   const pluginPromise = traceAsync("commandDiscovery: discover_plugin_commands", () =>
     invoke<Array<{ cmd: string; desc: string }>>("discover_plugin_commands", { extraDirs: projectDirs })
-  ).catch(() => [] as Array<{ cmd: string; desc: string }>);
+  , {
+    module: "discovery",
+    event: "discovery.plugin_commands_perf",
+    warnAboveMs: 500,
+    data: { projectDirs },
+  }).then((commands) => {
+    dlog("discovery", null, "plugin slash command discovery completed", "LOG", {
+      event: "discovery.plugin_commands_loaded",
+      data: {
+        count: commands.length,
+        commands: commands.map((command) => command.cmd),
+        projectDirs,
+      },
+    });
+    return commands;
+  }).catch((err) => {
+    dlog("discovery", null, `plugin slash command discovery failed: ${err}`, "WARN", {
+      event: "discovery.plugin_commands_failed",
+      data: {
+        error: String(err),
+        projectDirs,
+      },
+    });
+    return [] as Array<{ cmd: string; desc: string }>;
+  });
 
   // Fallback: parse --help output for slash commands when binary scan fails
   // (binary may not exist on machines without admin or on first install)
   const helpPromise = traceAsync("commandDiscovery: get_cli_help", () =>
     invoke<string>("get_cli_help")
-  ).then((help) => {
+  , {
+    module: "discovery",
+    event: "discovery.help_commands_perf",
+    warnAboveMs: 500,
+    data: {},
+  }).then((help) => {
     const cmds: Array<{ cmd: string; desc: string }> = [];
     // Match lines like "  /command    Description text"
     const re = /^\s+(\/[\w-]+)\s{2,}(.+)$/gm;
@@ -50,8 +107,21 @@ async function discover() {
     while ((m = re.exec(help)) !== null) {
       cmds.push({ cmd: m[1], desc: m[2].trim() });
     }
+    dlog("discovery", null, "help-based slash command discovery completed", "DEBUG", {
+      event: "discovery.help_commands_loaded",
+      data: {
+        count: cmds.length,
+        commands: cmds.map((command) => command.cmd),
+      },
+    });
     return cmds;
-  }).catch(() => [] as Array<{ cmd: string; desc: string }>);
+  }).catch((err) => {
+    dlog("discovery", null, `help-based slash command discovery failed: ${err}`, "WARN", {
+      event: "discovery.help_commands_failed",
+      data: { error: String(err) },
+    });
+    return [] as Array<{ cmd: string; desc: string }>;
+  });
 
   const [builtins, plugins, helpCmds] = await Promise.all([builtinPromise, pluginPromise, helpPromise]);
 
@@ -61,6 +131,16 @@ async function discover() {
   // Merge all sources — binary scan has best descriptions, --help is fallback
   const merged = mergeCommands(toSlash(builtins), toSlash(helpCmds), toSlash(plugins));
   useSettingsStore.getState().setSlashCommands(merged);
+  dlog("discovery", null, "slash command discovery merged", "LOG", {
+    event: "discovery.slash_commands_merged",
+    data: {
+      builtinCount: builtins.length,
+      helpCount: helpCmds.length,
+      pluginCount: plugins.length,
+      mergedCount: merged.length,
+      commands: merged.map((command) => command.cmd),
+    },
+  });
 
   // Scan command usage from JSONL history (refreshed each launch)
   useSettingsStore.getState().bootstrapCommandUsage();

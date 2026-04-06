@@ -86,7 +86,12 @@ export const useSessionStore = create<SessionsState>((set) => ({
     try {
       sessions = await traceAsync("init: load_persisted_sessions", () =>
         invoke<Session[]>("load_persisted_sessions")
-      );
+      , {
+        module: "session",
+        event: "session.init.load_persisted_sessions",
+        warnAboveMs: 500,
+        data: {},
+      });
       // Filter out empty dead sessions (no conversation to resume)
       sessions = sessions.filter(
         (s) => s.state !== "dead"
@@ -118,7 +123,12 @@ export const useSessionStore = create<SessionsState>((set) => ({
       sessionIds.size > 0
         ? traceAsync("init: kill_orphan_sessions", () =>
             invoke<number>("kill_orphan_sessions", { sessionIds: [...sessionIds] })
-          ).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`); })
+          , {
+            module: "session",
+            event: "session.init.kill_orphan_sessions",
+            warnAboveMs: 500,
+            data: { sessionIdCount: sessionIds.size },
+          }).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`, { module: "session", event: "session.init.orphans_killed", data: { count: n } }); })
            .catch((e) => dlog("session", null, `orphan cleanup failed: ${e}`, "ERR"))
         : Promise.resolve(),
       // [PS-06] Proxy lifecycle: start API proxy, store port, listen for route events
@@ -127,7 +137,11 @@ export const useSessionStore = create<SessionsState>((set) => ({
         return invoke<number>("start_api_proxy", { config: providerConfig })
           .then((port) => {
             useSettingsStore.getState().setProxyPort(port);
-            trace(`init: proxy started on port ${port}`);
+            trace(`init: proxy started on port ${port}`, {
+              module: "proxy",
+              event: "proxy.started",
+              data: { port },
+            });
             // Sync system prompt rules to proxy
             const rules = useSettingsStore.getState().systemPromptRules;
             if (rules.length > 0) {
@@ -144,16 +158,34 @@ export const useSessionStore = create<SessionsState>((set) => ({
             );
           })
           .catch((e) => dlog("session", null, `proxy start failed: ${e}`, "ERR"));
+      }, {
+        module: "proxy",
+        event: "session.init.start_api_proxy",
+        warnAboveMs: 500,
+        data: {},
       }),
     ]);
     if (claudePath) {
       set({ claudePath });
-      trace("init: claudePath set");
+      trace("init: claudePath set", {
+        module: "session",
+        event: "session.init.claude_path_set",
+        data: { claudePath },
+      });
     }
   },
 
   createSession: async (name, config, opts = {}) => {
-    const session = await invoke<Session>("create_session", { name, config });
+    const session = await traceAsync("session.create", () => invoke<Session>("create_session", { name, config }), {
+      module: "session",
+      event: "session.create",
+      warnAboveMs: 250,
+      data: {
+        name,
+        workingDir: config.workingDir,
+        resumeSession: config.resumeSession,
+      },
+    });
     const tagged = {
       ...session,
       isMetaAgent: opts.isMetaAgent ?? false,
@@ -277,8 +309,15 @@ export const useSessionStore = create<SessionsState>((set) => ({
       createdAt: s.createdAt,
       lastActive: s.lastActive,
     }));
-    await invoke("persist_sessions_json", {
+    await traceAsync("session.persist", () => invoke("persist_sessions_json", {
       json: JSON.stringify(snapshots, null, 2),
+    }), {
+      module: "session",
+      event: "session.persist",
+      warnAboveMs: 250,
+      data: {
+        count: snapshots.length,
+      },
     });
   },
 

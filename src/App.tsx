@@ -27,17 +27,22 @@ import { useUiConfigStore } from "./lib/uiConfig";
 import { killAllActivePtys } from "./lib/ptyProcess";
 import { killPty, writeToPty } from "./lib/ptyRegistry";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
-import { dlog } from "./lib/debugLog";
+import { dlog, flushDebugLog } from "./lib/debugLog";
 import { IconStop, IconClose, IconReturn, IconGear } from "./components/Icons/Icons";
 import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
 import type { Subagent, SessionState } from "./types/session";
 import { isSessionIdle, isSubagentActive } from "./types/session";
 import { getEffectiveState } from "./lib/claude";
+import { useRuntimeStore } from "./store/runtime";
 import "./App.css";
 
 // [DF-04] React re-renders from Zustand store: tab state dots, status bar, subagent cards
 export default function App() {
   const init = useSessionStore((s) => s.init);
+  const loadRuntimeInfo = useRuntimeStore((s) => s.loadRuntimeInfo);
+  const debugBuild = useRuntimeStore((s) => s.observabilityInfo.debugBuild);
+  const devtoolsAvailable = useRuntimeStore((s) => s.observabilityInfo.devtoolsAvailable);
+  const openMainDevtools = useRuntimeStore((s) => s.openMainDevtools);
   const sessions = useSessionStore((s) => s.sessions);
   const initialized = useSessionStore((s) => s.initialized);
   const activeTabId = useSessionStore((s) => s.activeTabId);
@@ -141,15 +146,18 @@ export default function App() {
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
-    init();
-    useUiConfigStore.getState().loadConfig();
-    useSettingsStore.getState().loadPastSessions();
-    useSettingsStore.getState().pruneRecentDirs();
-    invoke("migrate_legacy_data").catch(() => {});
-    // [HM-11] Startup intentionally does not install or mutate Claude hook
-    // settings; hook changes are user-managed via the Hooks UI only.
-    invoke("cleanup_session_data", { maxAgeHours: 72 }).catch(() => {});
-  }, [init]);
+    void (async () => {
+      await loadRuntimeInfo();
+      await init();
+      useUiConfigStore.getState().loadConfig();
+      useSettingsStore.getState().loadPastSessions();
+      useSettingsStore.getState().pruneRecentDirs();
+      invoke("migrate_legacy_data").catch(() => {});
+      // [HM-11] Startup intentionally does not install or mutate Claude hook
+      // settings; hook changes are user-managed via the Hooks UI only.
+      invoke("cleanup_session_data", { maxAgeHours: 72 }).catch(() => {});
+    })();
+  }, [init, loadRuntimeInfo]);
 
   // [SL-02] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T, uses saved defaults or last config
   const quickLaunch = useCallback(async () => {
@@ -184,6 +192,7 @@ export default function App() {
   useEffect(() => {
     const handler = () => {
       killAllActivePtys();
+      void flushDebugLog();
       persist();
     };
     window.addEventListener("beforeunload", handler);
@@ -273,9 +282,14 @@ export default function App() {
       }
 
       // [DP-02] Ctrl+Shift+D: toggle debug panel
-      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+      if (debugBuild && e.ctrlKey && e.shiftKey && e.key === "D") {
         e.preventDefault();
         setSidePanel(sidePanel === "debug" ? null : "debug");
+      }
+
+      if (devtoolsAvailable && e.ctrlKey && e.shiftKey && e.key === "I") {
+        e.preventDefault();
+        openMainDevtools().catch(() => {});
       }
 
       if (e.ctrlKey && e.shiftKey && e.key === "G") {
@@ -334,7 +348,7 @@ export default function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showContextViewer, sidePanel, inspectedSubagent, tabContextMenu, quickLaunch]);
+  }, [activeTabId, sessions, setActiveTab, closeSession, handleCloseSession, setShowLauncher, showPalette, showLauncher, showResumePicker, showConfigManager, setShowConfigManager, showContextViewer, sidePanel, inspectedSubagent, tabContextMenu, quickLaunch, debugBuild, devtoolsAvailable, openMainDevtools]);
 
   const regularSessions = useMemo(() => sessions.filter((s) => !s.isMetaAgent), [sessions]);
   const groups = useMemo(() => groupSessionsByDir(regularSessions), [regularSessions]);
@@ -658,7 +672,7 @@ export default function App() {
             </div>
           )}
         </div>
-        {sidePanel === "debug" && (
+        {debugBuild && sidePanel === "debug" && (
           <DebugPanel onClose={() => setSidePanel(null)} />
         )}
         {sidePanel === "activity" && (
@@ -812,25 +826,38 @@ export default function App() {
                       )}
                     </>
                   )}
-                  <div className="tab-context-menu-label">Recording</div>
-                  <button
-                    className="tab-context-menu-item"
-                    onClick={() => {
-                      invoke("open_session_data_dir", { sessionId: ctxSession.id });
-                      setTabContextMenu(null);
-                    }}
-                  >
-                    Open Session Data
-                  </button>
-                  <button
-                    className="tab-context-menu-item"
-                    onClick={() => {
-                      invoke("open_tap_log", { sessionId: ctxSession.id });
-                      setTabContextMenu(null);
-                    }}
-                  >
-                    Open Tap Log
-                  </button>
+                  {debugBuild && (
+                    <>
+                      <div className="tab-context-menu-label">Observability</div>
+                      <button
+                        className="tab-context-menu-item"
+                        onClick={() => {
+                          invoke("open_session_data_dir", { sessionId: ctxSession.id });
+                          setTabContextMenu(null);
+                        }}
+                      >
+                        Open Session Data
+                      </button>
+                      <button
+                        className="tab-context-menu-item"
+                        onClick={() => {
+                          invoke("open_tap_log", { sessionId: ctxSession.id });
+                          setTabContextMenu(null);
+                        }}
+                      >
+                        Open Tap Log
+                      </button>
+                      <button
+                        className="tab-context-menu-item"
+                        onClick={() => {
+                          invoke("open_observability_log", { sessionId: ctxSession.id });
+                          setTabContextMenu(null);
+                        }}
+                      >
+                        Open Observability Log
+                      </button>
+                    </>
+                  )}
                   {isDead && (
                     <button
                       className="tab-context-menu-item"

@@ -13,16 +13,26 @@ import { registerPtyWriter, unregisterPtyWriter, registerPtyKill, unregisterPtyK
 import { registerBufferReader, unregisterBufferReader, registerTerminal, unregisterTerminal, registerScrollToLine, unregisterScrollToLine } from "../../lib/terminalRegistry";
 import { useFileWatcher } from "../../hooks/useFileWatcher";
 import { useSettingsStore } from "../../store/settings";
+import { useRuntimeStore } from "../../store/runtime";
 import { IconSearch } from "../Icons/Icons";
 import { normalizePath } from "../../lib/paths";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
 import { isSessionIdle } from "../../types/session";
+import { startTraceSpan, traceAsync } from "../../lib/perfTrace";
 import "./TerminalPanel.css";
 
 
 interface TerminalPanelProps {
   session: Session;
   visible: boolean;
+}
+
+function escapeChunkPreview(text: string): string {
+  return text
+    .replace(/\x1b/g, "\\x1b")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n")
+    .slice(0, 240);
 }
 
 // ── Duration Timer (active time only) ────────────────────────────────────
@@ -98,6 +108,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
   // Auto-start traffic logging when recording config enables it
   const trafficEnabled = useSettingsStore((s) => s.recordingConfig.traffic.enabled);
+  const observabilityEnabled = useRuntimeStore((s) => s.observabilityInfo.observabilityEnabled);
   const startTrafficLog = useSessionStore((s) => s.startTrafficLog);
   const trafficStartedRef = useRef(false);
   useEffect(() => {
@@ -105,13 +116,19 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       trafficStartedRef.current = false;
       return;
     }
-    if (trafficEnabled && !trafficStartedRef.current) {
+    if (observabilityEnabled && trafficEnabled && !trafficStartedRef.current) {
       trafficStartedRef.current = true;
-      invoke<string>("start_traffic_log", { sessionId: session.id })
+      traceAsync("traffic.start_auto_log", () => invoke<string>("start_traffic_log", { sessionId: session.id }), {
+        module: "traffic",
+        sessionId: session.id,
+        event: "traffic.start_auto_log",
+        warnAboveMs: 250,
+        data: {},
+      })
         .then((path) => startTrafficLog(session.id, path))
         .catch((e) => dlog("traffic", session.id, `auto-start failed: ${e}`, "WARN"));
     }
-  }, [inspector.connected, trafficEnabled, session.id, session.state, startTrafficLog]);
+  }, [inspector.connected, observabilityEnabled, trafficEnabled, session.id, session.state, startTrafficLog]);
 
   // Tap event processor: sole source of state, metadata, subagent data
   const tapProcessor = useTapEventProcessor(
@@ -174,11 +191,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // handlePtyData needs terminal, terminal needs handleTermData, which needs pty,
   // and pty needs handlePtyData. We use terminalRef to avoid forward-referencing.
   const terminalRef = useRef<ReturnType<typeof useTerminal> | null>(null);
-  // [BF-01] Buffer PTY data for background tabs — skip terminal writes when not visible,
-  // flush in one write when the tab becomes visible. Saves O(1) rendering cost while hidden.
-  // [BF-02] visibleRef tracks tab visibility
-  const visibleRef = useRef(visible);
-  visibleRef.current = visible;
 
   // Suppress context-clear detection during resume loading phase.
 
@@ -190,11 +202,26 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
   const handlePtyData = useCallback(
     (data: Uint8Array) => {
+      const text = new TextDecoder().decode(data);
+      dlog("pty", session.id, "PTY output received", "DEBUG", {
+        event: "pty.output",
+        data: {
+          byteLength: data.byteLength,
+          containsEscape: text.includes("\x1b"),
+          text,
+          preview: escapeChunkPreview(text),
+        },
+      });
       // Accumulate early output for error detection (first ~4KB)
       if (earlyOutputRef.current.length < 4096) {
-        const text = new TextDecoder().decode(data);
         earlyOutputRef.current += text;
         if (/already in use/i.test(earlyOutputRef.current)) {
+          dlog("terminal", session.id, "session-in-use marker detected in PTY output", "WARN", {
+            event: "session.session_in_use_detected",
+            data: {
+              preview: escapeChunkPreview(earlyOutputRef.current),
+            },
+          });
           sessionInUseRef.current = true;
         }
       }
@@ -208,7 +235,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
   const handlePtyExit = useCallback(
     (info: { exitCode: number }) => {
-      dlog("terminal", session.id, `exit code=${info.exitCode}`);
+      dlog("terminal", session.id, `exit code=${info.exitCode}`, "LOG", {
+        event: "session.exit",
+        data: { exitCode: info.exitCode },
+      });
       // Stop TCP tap server immediately (before any early-return paths)
       invoke("stop_tap_server", { sessionId: session.id }).catch(() => {});
       // [DS-07] [RS-06] Session-in-use auto-recovery: kill own orphans, retry; show overlay for external
@@ -222,10 +252,24 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           .then((result) => {
             if (result.external.length > 0 && result.killed === 0) {
               // Held by external process — ask user before killing
+              dlog("terminal", session.id, "session held by external process", "WARN", {
+                event: "session.external_holder_detected",
+                data: {
+                  externalPids: result.external,
+                  killedOwnedPids: result.killed,
+                },
+              });
               setExternalHolder(result.external);
               updateState(session.id, "dead");
             } else {
               // Killed our own orphans (or mixed) — retry
+              dlog("terminal", session.id, "retrying after killing stale holder", "LOG", {
+                event: "session.retry_after_holder_cleanup",
+                data: {
+                  externalPids: result.external,
+                  killedOwnedPids: result.killed,
+                },
+              });
               terminalRef.current?.write(
                 "\r\n\x1b[90m[Killed stale session, retrying...]\x1b[0m\r\n"
               );
@@ -255,14 +299,20 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     [session.id, session.config.resumeSession, session.config.sessionId, updateState]
   );
 
-  const pty = usePty({ onData: handlePtyData, onExit: handlePtyExit });
+  const pty = usePty({ sessionId: session.id, onData: handlePtyData, onExit: handlePtyExit });
 
   // ── In-tab respawn ────────────────────────────────────────────────────
   const triggerRespawnRef = useRef<(config?: SessionConfig, name?: string) => void>(() => {});
   // Stable ref so callbacks can call triggerRespawn without stale closures
   // [RS-01] triggerRespawn: cleanup old PTY/watchers/inspector, allocate port, increment respawnCounter
   triggerRespawnRef.current = (config?: SessionConfig, name?: string) => {
-    dlog("terminal", session.id, "respawn triggered");
+    dlog("terminal", session.id, "respawn triggered", "LOG", {
+      event: "session.respawn_triggered",
+      data: {
+        name: name ?? null,
+        requestedConfig: config ?? null,
+      },
+    });
     // 1. Clean up old PTY, watchers, inspector, and tap server
     pty.cleanup();
     inspector.disconnect();
@@ -327,6 +377,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   );
 
   const terminal = useTerminal({
+    sessionId: session.id,
     onData: handleTermData,
     onResize: handleResize,
   });
@@ -347,17 +398,37 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
     const doSpawn = async () => {
       spawnedRef.current = true;
+      const spawnSpan = startTraceSpan("session.spawn_sequence", {
+        module: "terminal",
+        sessionId: session.id,
+        event: "session.spawn_sequence",
+        warnAboveMs: 1000,
+        data: {
+          claudePath,
+          workingDir: session.config.workingDir,
+          resumeSession: session.config.resumeSession,
+          continueSession: session.config.continueSession,
+        },
+      });
       try {
         // Allocate a verified-free inspector port before spawning.
         // Register immediately so concurrent allocations (multi-tab restore) skip it.
         const inspPort = await allocateInspectorPort();
         registerInspectorPort(session.id, inspPort);
         setInspectorPort(inspPort);
+        dlog("terminal", session.id, "allocated inspector port", "DEBUG", {
+          event: "session.inspector_port_allocated",
+          data: { inspectorPort: inspPort },
+        });
 
         // Start TCP tap server for this session (before PTY spawn so port is ready)
         let tapPort: number | null = null;
         try {
           tapPort = await invoke<number>("start_tap_server", { sessionId: session.id });
+          dlog("terminal", session.id, "tap server started", "DEBUG", {
+            event: "session.tap_server_started",
+            data: { tapPort },
+          });
         } catch (err) {
           dlog("terminal", session.id, `tap server failed: ${err}`, "WARN");
         }
@@ -376,11 +447,37 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         if (proxyPort) {
           env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}/s/${session.id}`;
         }
+        dlog("terminal", session.id, "launching Claude session", "LOG", {
+          event: "session.launch",
+          data: {
+            claudePath,
+            args,
+            cwd,
+            cols,
+            rows,
+            inspectorPort: inspPort,
+            tapPort,
+            env,
+            resumeSession: session.config.resumeSession,
+            continueSession: session.config.continueSession,
+            permissionMode: session.config.permissionMode,
+            model: session.config.model,
+          },
+        });
         const handle = await pty.spawn(claudePath, args, cwd, cols, rows, env);
         registerPtyWriter(session.id, handle.write);
         registerPtyKill(session.id, () => handle.kill());
         registerPtyHandleId(session.id, handle.pid);
-        dlog("terminal", session.id, `spawned pid=${handle.pid} port=${inspPort} tapPort=${tapPort} cols=${cols} rows=${rows}`);
+        dlog("terminal", session.id, `spawned pid=${handle.pid} port=${inspPort} tapPort=${tapPort} cols=${cols} rows=${rows}`, "LOG", {
+          event: "session.spawned",
+          data: {
+            ptyHandle: handle.pid,
+            inspectorPort: inspPort,
+            tapPort,
+            cols,
+            rows,
+          },
+        });
         updateState(session.id, "idle");
 
         // Post-spawn dimension verification
@@ -389,10 +486,25 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           terminal.fit();
           const { cols: c, rows: r } = terminal.getDimensions();
           if (c !== cols || r !== rows) {
+            dlog("terminal", session.id, "post-spawn terminal dimensions changed", "DEBUG", {
+              event: "session.post_spawn_resize",
+              data: {
+                before: { cols, rows },
+                after: { cols: c, rows: r },
+              },
+            });
             handle.resize(c, r);
           }
         });
+        spawnSpan.end({
+          inspectorPort: inspPort,
+          tapPort,
+          ptyHandle: handle.pid,
+          cols,
+          rows,
+        });
       } catch (err) {
+        spawnSpan.fail(err);
         dlog("terminal", session.id, `spawn failed: ${err}`, "ERR");
         updateState(session.id, "error");
         terminal.write(
@@ -441,6 +553,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       unregisterScrollToLine(id);
       unregisterInspectorPort(id);
       unregisterInspectorCallbacks(id);
+      dlog("terminal", id, "terminal panel unmount cleanup", "DEBUG", {
+        event: "terminal.unmount_cleanup",
+        data: { sessionId: id },
+      });
       pty.cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -467,6 +583,10 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // [TR-10] fit() on tab switch via useLayoutEffect
   useLayoutEffect(() => {
     if (!visible) return;
+    dlog("terminal", session.id, "panel became visible", "DEBUG", {
+      event: "terminal.visible",
+      data: { visible },
+    });
     terminal.fit();
     terminal.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -476,6 +596,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState !== "visible" || !visible) return;
+      dlog("terminal", session.id, "document visibility restored for visible panel", "DEBUG", {
+        event: "terminal.visibility_restore",
+        data: {
+          visibilityState: document.visibilityState,
+        },
+      });
       terminalRef.current?.webglRef.current?.clearTextureAtlas();
       terminal.fit();
     };
@@ -489,12 +615,22 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // Queue input handler: read from terminal buffer (authoritative), or cancel if already queued
   const handleQueueInput = useCallback(() => {
     if (queuedInput) {
+      dlog("terminal", session.id, "queued input cleared", "DEBUG", {
+        event: "terminal.queue_input_cleared",
+        data: { queuedInput },
+      });
       setQueuedInput(null);
       return;
     }
     const text = terminalRef.current?.getCurrentInput() ?? "";
     if (!text) return;
     writeToPty(session.id, "\x15"); // Clear terminal input line
+    dlog("terminal", session.id, "queued current input", "DEBUG", {
+      event: "terminal.queue_input",
+      data: {
+        text,
+      },
+    });
     setQueuedInput(text);
     // pty.handle and terminalRef are stable refs — omitted from deps intentionally
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -507,6 +643,13 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     if (session.state === "dead") { setQueuedInput(null); return; }
     const timer = setTimeout(() => {
       if (!isSessionIdle(session.state)) return; // Belt-and-suspenders: verify still idle
+      dlog("terminal", session.id, "sending queued input", "LOG", {
+        event: "terminal.queue_input_sent",
+        data: {
+          text: queuedInput,
+          completionCount: tapProcessor.completionCount,
+        },
+      });
       writeToPty(session.id, queuedInput + "\r");
       setQueuedInput(null);
     }, 300);
@@ -522,6 +665,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     if (!isSessionIdle(session.state)) return;
     const timer = setTimeout(() => {
       lastHookChangeRef.current = hookChangeCounter;
+      dlog("terminal", session.id, "restarting session after hook change", "LOG", {
+        event: "session.restart_for_hook_change",
+        data: {
+          hookChangeCounter,
+        },
+      });
       triggerRespawnRef.current();
     }, 800);
     return () => clearTimeout(timer);
@@ -568,7 +717,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const showDeadOverlay = session.state === "dead" && visible;
   const showButtonBar = visible && session.state !== "dead";
 
-  // [TR-09] Ctrl+wheel snaps to top/bottom, [TR-08] Ctrl+middle-click scrolls to last user message
+  // [TR-09] Ctrl+wheel snaps to top/bottom
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !visible) return;

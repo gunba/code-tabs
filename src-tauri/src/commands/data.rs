@@ -24,6 +24,41 @@ pub(crate) fn get_session_data_dir(session_id: &str) -> Result<std::path::PathBu
     Ok(dir)
 }
 
+pub(crate) fn open_path(path: &std::path::Path) -> Result<(), String> {
+    open::that_detached(path)
+        .map_err(|e| format!("Failed to open {}: {}", path.display(), e))
+}
+
+pub(crate) fn reveal_path(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer.exe")
+            .arg("/select,")
+            .arg(path)
+            .creation_flags(0x08000000)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal {}: {}", path.display(), e))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to reveal {}: {}", path.display(), e))?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let target = path.parent().unwrap_or(path);
+        return open_path(target);
+    }
+}
+
 /// Return the absolute path to a session's data directory.
 #[tauri::command]
 pub fn get_session_data_path(session_id: String) -> Result<String, String> {
@@ -55,16 +90,14 @@ pub fn open_tap_log(session_id: String) -> Result<(), String> {
     if !path.exists() {
         return Err("No tap log exists for this session".into());
     }
-    open::that_detached(&path)
-        .map_err(|e| format!("Failed to open tap log: {}", e))
+    reveal_path(&path)
 }
 
 /// Open a session's data directory in the system file manager.
 #[tauri::command]
 pub fn open_session_data_dir(session_id: String) -> Result<(), String> {
     let dir = get_session_data_dir(&session_id)?;
-    open::that_detached(&dir)
-        .map_err(|e| format!("Failed to open session data dir: {}", e))
+    open_path(&dir)
 }
 
 /// Delete session data directories older than max_age_hours.
@@ -572,7 +605,12 @@ fn search_session_content_sync(query: &str) -> Result<Vec<serde_json::Value>, St
 
 #[tauri::command]
 pub fn shell_open(path: String) -> Result<(), String> {
-    open::that_detached(&path).map_err(|e| format!("shell_open failed for {path}: {e}"))
+    if path.starts_with("http://") || path.starts_with("https://") || path.starts_with("ws://") || path.starts_with("wss://") {
+        open::that_detached(&path).map_err(|e| format!("shell_open failed for {path}: {e}"))
+    } else {
+        open_path(std::path::Path::new(&path))
+            .map_err(|e| format!("shell_open failed for {path}: {e}"))
+    }
 }
 
 /// [SL-19] [SL-20] Check whether a path exists and is a directory.

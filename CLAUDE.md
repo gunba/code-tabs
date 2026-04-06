@@ -12,6 +12,40 @@ The user launches with `claude -w` for isolated worktrees. A SessionStart hook a
 
 The user will run `/r`, `/j`, `/b` when ready. Do not run these automatically.
 
+# Debug Observability
+
+Observability is debug-build only. If a bug report needs logs, have the user reproduce it in the debug build rather than the release build.
+
+Primary log locations:
+- `%LOCALAPPDATA%\claude-tabs\observability\app.jsonl` — app-wide frontend/backend timeline
+- `%LOCALAPPDATA%\claude-tabs\sessions\<sessionId>\observability.jsonl` — session-specific terminal/session/discovery timeline
+- `%LOCALAPPDATA%\claude-tabs\sessions\<sessionId>\taps.jsonl` — raw TAP hook output
+- `%LOCALAPPDATA%\claude-tabs\sessions\<sessionId>\traffic.jsonl` — API proxy request/response traffic
+
+Use `observability.jsonl` first. It is the main correlated timeline and every row includes:
+- `ts` and `tsIso` — machine and human timestamps
+- `level` — `DEBUG` / `LOG` / `WARN` / `ERR`
+- `source` — `frontend` or `backend`
+- `module` — subsystem such as `terminal`, `pty`, `proxy`, `tap`, `traffic`, `settings`
+- `sessionId` — join key when correlating multiple files
+- `event` and `message` — stable filter target plus readable summary
+- `data` — structured payload; do not ignore it
+
+Performance spans are logged as `event = "perf.span"`. Check `data.name`, `data.status`, `data.durationMs`, `data.spanData`, `data.extraData`, and `data.error`. Use these to find slow functions and to distinguish start/done/fail for the same operation.
+
+Preferred log viewer: `lnav`. Open the app log and the affected session log together so timestamps line up:
+- `lnav "$env:LOCALAPPDATA\\claude-tabs\\observability\\app.jsonl" "$env:LOCALAPPDATA\\claude-tabs\\sessions\\<sessionId>\\observability.jsonl"`
+
+Basic debugging order:
+1. Find the exact failure window by `tsIso`.
+2. Filter by `sessionId`.
+3. Read `WARN`, `ERR`, and `event = "perf.span"` first.
+4. Narrow by `module` and `event` before opening `taps.jsonl` or `traffic.jsonl`.
+5. Use `taps.jsonl` to answer "what did Claude Code emit?" and `traffic.jsonl` to answer "what hit the proxy/network?".
+6. When terminal behavior looks wrong, inspect terminal/pty/session spawn events before assuming a Claude Code regression.
+
+Do not pre-emptively discard noisy rows. The logs are intentionally verbose; filter by `sessionId`, `module`, `event`, `level`, and `data` instead of asking for a smaller capture unless the log volume itself is the bug.
+
 # Planning
 
 When in plan mode, after you have drafted your plan but before presenting it to the user: ask whether plan critique should run via the Claude `plan-critic` agent, a Codex subprocess, or both.

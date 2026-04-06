@@ -1,15 +1,61 @@
 use crate::session::types::SessionConfig;
+use crate::observability::record_backend_event;
+use serde_json::json;
+use tauri::AppHandle;
+
+struct ClaudeBinaryRead {
+    content: String,
+    source: &'static str,
+    path: Option<String>,
+}
+
+fn log_discovery(app: &AppHandle, level: &str, event: &str, message: &str, data: serde_json::Value) {
+    record_backend_event(app, level, "discovery", None, event, message, data);
+}
+
+fn command_names(values: &[serde_json::Value], key: &str) -> Vec<String> {
+    values.iter()
+        .filter_map(|value| value.get(key).and_then(|entry| entry.as_str()))
+        .map(|value| value.to_string())
+        .collect()
+}
 
 // [RC-05] CLI discovery: detect_claude_cli / check_cli_version / get_cli_help
 #[tauri::command]
-pub async fn detect_claude_cli() -> Result<String, String> {
+pub async fn detect_claude_cli(app: AppHandle) -> Result<String, String> {
     // Run on a background thread so the WebView event loop isn't blocked
-    tokio::task::spawn_blocking(|| {
-        detect_claude_cli_sync()
-    }).await.map_err(|e| e.to_string())?
+    let result = tokio::task::spawn_blocking(detect_claude_cli_details_sync)
+        .await
+        .map_err(|e| e.to_string())?;
+    match &result {
+        Ok((path, source)) => log_discovery(
+            &app,
+            "LOG",
+            "discovery.claude_cli_detected",
+            "Detected Claude CLI",
+            json!({
+                "path": path,
+                "source": source,
+            }),
+        ),
+        Err(err) => log_discovery(
+            &app,
+            "WARN",
+            "discovery.claude_cli_detection_failed",
+            "Failed to detect Claude CLI",
+            json!({
+                "error": err,
+            }),
+        ),
+    }
+    result.map(|(path, _)| path)
 }
 
 fn detect_claude_cli_sync() -> Result<String, String> {
+    detect_claude_cli_details_sync().map(|(path, _)| path)
+}
+
+fn detect_claude_cli_details_sync() -> Result<(String, &'static str), String> {
     let which_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
     let mut cmd = std::process::Command::new(which_cmd);
     cmd.arg("claude");
@@ -29,7 +75,7 @@ fn detect_claude_cli_sync() -> Result<String, String> {
             .trim()
             .to_string();
         if !path.is_empty() {
-            return Ok(path);
+            return Ok((path, "path_lookup"));
         }
     }
 
@@ -57,7 +103,7 @@ fn detect_claude_cli_sync() -> Result<String, String> {
 
     for candidate in &candidates {
         if candidate.exists() {
-            return Ok(candidate.to_string_lossy().to_string());
+            return Ok((candidate.to_string_lossy().to_string(), "fallback_candidate"));
         }
     }
 
@@ -90,15 +136,25 @@ fn run_claude_cli(args: &[&str], label: &str) -> Result<String, String> {
 
 /// Run `claude --version` — async to avoid blocking the WebView.
 #[tauri::command]
-pub async fn check_cli_version() -> Result<String, String> {
-    tokio::task::spawn_blocking(|| run_claude_cli(&["--version"], "claude --version"))
-        .await.map_err(|e| e.to_string())?
+pub async fn check_cli_version(app: AppHandle) -> Result<String, String> {
+    let version = tokio::task::spawn_blocking(|| run_claude_cli(&["--version"], "claude --version"))
+        .await.map_err(|e| e.to_string())??;
+    log_discovery(
+        &app,
+        "LOG",
+        "discovery.cli_version_loaded",
+        "Loaded Claude CLI version",
+        json!({
+            "version": version,
+        }),
+    );
+    Ok(version)
 }
 
 /// Run `claude --help` — async to avoid blocking the WebView.
 #[tauri::command]
-pub async fn get_cli_help() -> Result<String, String> {
-    tokio::task::spawn_blocking(|| {
+pub async fn get_cli_help(app: AppHandle) -> Result<String, String> {
+    let help = tokio::task::spawn_blocking(|| {
         let cli_path = detect_claude_cli_sync()?;
         let mut cmd = std::process::Command::new(&cli_path);
         cmd.arg("--help");
@@ -110,19 +166,29 @@ pub async fn get_cli_help() -> Result<String, String> {
         let output = cmd.output()
             .map_err(|e| format!("Failed to run claude --help: {}", e))?;
         if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            Ok::<String, String>(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            if !stderr.is_empty() { Ok(stderr) }
-            else { Err("claude --help failed".into()) }
+            if !stderr.is_empty() { Ok::<String, String>(stderr) }
+            else { Err("claude --help failed".to_string()) }
         }
-    }).await.map_err(|e| e.to_string())?
+    }).await.map_err(|e| e.to_string())??;
+    log_discovery(
+        &app,
+        "LOG",
+        "discovery.cli_help_loaded",
+        "Loaded Claude CLI help text",
+        json!({
+            "length": help.len(),
+        }),
+    );
+    Ok(help)
 }
 
 // [RC-16] 5-step binary resolution: .cmd shim -> direct -> sibling node_modules -> legacy versions -> npm root -g
 /// Read the Claude Code binary content for pattern scanning.
 /// Resolution chain: direct CLI path -> .cmd shim -> sibling node_modules -> legacy versions dir -> npm root -g.
-fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
+fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, String> {
     // Helper: read a file if it exists and is under 500MB, return lossy UTF-8
     let read_if_exists = |p: &std::path::Path| -> Option<String> {
         let meta = std::fs::metadata(p).ok()?;
@@ -151,7 +217,11 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
                             let js_path = std::path::Path::new(segment);
                             if let Some(content) = read_if_exists(js_path) {
                                 if is_claude_content(&content) {
-                                    return Ok(content);
+                                    return Ok(ClaudeBinaryRead {
+                                        content,
+                                        source: "cmd_shim_js",
+                                        path: Some(js_path.to_string_lossy().to_string()),
+                                    });
                                 }
                             }
                         }
@@ -166,7 +236,11 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
             if let Ok(resolved) = std::fs::canonicalize(path) {
                 if let Some(content) = read_if_exists(&resolved) {
                     if is_claude_content(&content) {
-                        return Ok(content);
+                        return Ok(ClaudeBinaryRead {
+                            content,
+                            source: "symlink_target",
+                            path: Some(resolved.to_string_lossy().to_string()),
+                        });
                     }
                 }
             }
@@ -176,7 +250,11 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
         if path.exists() {
             if let Some(content) = read_if_exists(path) {
                 if is_claude_content(&content) {
-                    return Ok(content);
+                    return Ok(ClaudeBinaryRead {
+                        content,
+                        source: "direct_cli_path",
+                        path: Some(path.to_string_lossy().to_string()),
+                    });
                 }
             }
         }
@@ -187,7 +265,11 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
                 .join("@anthropic-ai").join("claude-code").join("cli.js");
             if let Some(content) = read_if_exists(&sibling) {
                 if is_claude_content(&content) {
-                    return Ok(content);
+                    return Ok(ClaudeBinaryRead {
+                        content,
+                        source: "sibling_node_modules",
+                        path: Some(sibling.to_string_lossy().to_string()),
+                    });
                 }
             }
         }
@@ -205,7 +287,11 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
                 let binary_path = versions_dir.join(v);
                 if let Some(content) = read_if_exists(&binary_path) {
                     if is_claude_content(&content) {
-                        return Ok(content);
+                        return Ok(ClaudeBinaryRead {
+                            content,
+                            source: "legacy_versions_dir",
+                            path: Some(binary_path.to_string_lossy().to_string()),
+                        });
                     }
                 }
             }
@@ -227,7 +313,11 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
                 .join("@anthropic-ai").join("claude-code").join("cli.js");
             if let Some(content) = read_if_exists(&npm_cli) {
                 if is_claude_content(&content) {
-                    return Ok(content);
+                    return Ok(ClaudeBinaryRead {
+                        content,
+                        source: "npm_root_global",
+                        path: Some(npm_cli.to_string_lossy().to_string()),
+                    });
                 }
             }
         }
@@ -241,15 +331,40 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<String, String> {
 /// Two-step scan: finds name:"..." positions, then searches a brace-depth-bounded
 /// window for descriptions (literal, reversed, computed/ternary, template literal).
 #[tauri::command]
-pub async fn discover_builtin_commands(cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
-    tokio::task::spawn_blocking(move || discover_builtin_commands_sync(cli_path.as_deref()))
+pub async fn discover_builtin_commands(app: AppHandle, cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
+    let cli_path_for_log = cli_path.clone();
+    let commands = tokio::task::spawn_blocking(move || discover_builtin_commands_sync(cli_path.as_deref()))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    let binary_info = if cfg!(debug_assertions) {
+        read_claude_binary(cli_path_for_log.as_deref())
+            .ok()
+            .map(|binary| json!({
+                "binarySource": binary.source,
+                "binaryPath": binary.path,
+            }))
+            .unwrap_or_else(|| json!({}))
+    } else {
+        json!({})
+    };
+    log_discovery(
+        &app,
+        "LOG",
+        "discovery.builtin_commands_loaded",
+        "Discovered built-in slash commands",
+        json!({
+            "cliPathArg": cli_path_for_log,
+            "count": commands.len(),
+            "commands": command_names(&commands, "cmd"),
+            "binary": binary_info,
+        }),
+    );
+    Ok(commands)
 }
 
 fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_json::Value>, String> {
     let content = match read_claude_binary(cli_path) {
-        Ok(c) => c,
+        Ok(c) => c.content,
         Err(_) => return Ok(Vec::new()),
     };
 
@@ -371,15 +486,40 @@ fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_js
 /// Extracts Zod schema patterns: keyName:u.type().optional().describe("...")
 /// Returns discovered settings with key, type, description, choices.
 #[tauri::command]
-pub async fn discover_settings_schema(cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
-    tokio::task::spawn_blocking(move || discover_settings_schema_sync(cli_path.as_deref()))
+pub async fn discover_settings_schema(app: AppHandle, cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
+    let cli_path_for_log = cli_path.clone();
+    let fields = tokio::task::spawn_blocking(move || discover_settings_schema_sync(cli_path.as_deref()))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    let binary_info = if cfg!(debug_assertions) {
+        read_claude_binary(cli_path_for_log.as_deref())
+            .ok()
+            .map(|binary| json!({
+                "binarySource": binary.source,
+                "binaryPath": binary.path,
+            }))
+            .unwrap_or_else(|| json!({}))
+    } else {
+        json!({})
+    };
+    log_discovery(
+        &app,
+        "LOG",
+        "discovery.settings_schema_loaded",
+        "Discovered binary settings schema",
+        json!({
+            "cliPathArg": cli_path_for_log,
+            "count": fields.len(),
+            "keys": command_names(&fields, "key"),
+            "binary": binary_info,
+        }),
+    );
+    Ok(fields)
 }
 
 fn discover_settings_schema_sync(cli_path: Option<&str>) -> Result<Vec<serde_json::Value>, String> {
     let content = match read_claude_binary(cli_path) {
-        Ok(c) => c,
+        Ok(c) => c.content,
         Err(_) => return Ok(Vec::new()),
     };
 
@@ -497,10 +637,35 @@ pub struct DiscoveredEnvVar {
 /// Mine the Claude CLI binary for environment variable names used via process.env.
 /// Returns the hardcoded catalog merged with any additional names found in the binary.
 #[tauri::command]
-pub async fn discover_env_vars(cli_path: Option<String>) -> Result<Vec<DiscoveredEnvVar>, String> {
-    tokio::task::spawn_blocking(move || discover_env_vars_sync(cli_path.as_deref()))
+pub async fn discover_env_vars(app: AppHandle, cli_path: Option<String>) -> Result<Vec<DiscoveredEnvVar>, String> {
+    let cli_path_for_log = cli_path.clone();
+    let vars = tokio::task::spawn_blocking(move || discover_env_vars_sync(cli_path.as_deref()))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    let binary_info = if cfg!(debug_assertions) {
+        read_claude_binary(cli_path_for_log.as_deref())
+            .ok()
+            .map(|binary| json!({
+                "binarySource": binary.source,
+                "binaryPath": binary.path,
+            }))
+            .unwrap_or_else(|| json!({}))
+    } else {
+        json!({})
+    };
+    log_discovery(
+        &app,
+        "LOG",
+        "discovery.env_vars_loaded",
+        "Discovered environment variables",
+        json!({
+            "cliPathArg": cli_path_for_log,
+            "count": vars.len(),
+            "names": vars.iter().map(|var| var.name.clone()).collect::<Vec<_>>(),
+            "binary": binary_info,
+        }),
+    );
+    Ok(vars)
 }
 
 fn env_var_catalog() -> Vec<DiscoveredEnvVar> {
@@ -545,7 +710,7 @@ fn discover_env_vars_sync(cli_path: Option<&str>) -> Result<Vec<DiscoveredEnvVar
         let env_re = regex::Regex::new(r"process\.env\.([A-Z][A-Z0-9_]{2,})").unwrap();
         let mut seen: std::collections::HashSet<String> = catalog_names;
 
-        for cap in env_re.captures_iter(&content) {
+        for cap in env_re.captures_iter(&content.content) {
             let name = cap[1].to_string();
             if seen.insert(name.clone()) {
                 result.push(DiscoveredEnvVar {
@@ -572,8 +737,8 @@ fn discover_env_vars_sync(cli_path: Option<&str>) -> Result<Vec<DiscoveredEnvVar
 /// Fetch the Claude Code JSON Schema from schemastore.org.
 /// Done server-side to avoid CORS restrictions in the WebView.
 #[tauri::command]
-pub async fn fetch_settings_schema() -> Result<String, String> {
-    tokio::task::spawn_blocking(|| {
+pub async fn fetch_settings_schema(app: AppHandle) -> Result<String, String> {
+    let schema = tokio::task::spawn_blocking(|| {
         let url = "https://json.schemastore.org/claude-code-settings.json";
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
@@ -586,12 +751,23 @@ pub async fn fetch_settings_schema() -> Result<String, String> {
             .map_err(|e| format!("Failed to fetch settings schema: {}", e))
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())??;
+    log_discovery(
+        &app,
+        "LOG",
+        "discovery.settings_json_schema_loaded",
+        "Fetched remote settings schema",
+        json!({
+            "length": schema.len(),
+            "url": "https://json.schemastore.org/claude-code-settings.json",
+        }),
+    );
+    Ok(schema)
 }
 
 /// Scan for plugin/custom command files in multiple locations.
 #[tauri::command]
-pub fn discover_plugin_commands(extra_dirs: Vec<String>) -> Result<Vec<serde_json::Value>, String> {
+pub fn discover_plugin_commands(app: AppHandle, extra_dirs: Vec<String>) -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let mut commands = Vec::new();
 
@@ -684,6 +860,18 @@ pub fn discover_plugin_commands(extra_dirs: Vec<String>) -> Result<Vec<serde_jso
         let name = c["cmd"].as_str().unwrap_or("").to_string();
         seen.insert(name)
     });
+
+    log_discovery(
+        &app,
+        "LOG",
+        "discovery.plugin_commands_loaded",
+        "Discovered plugin and custom slash commands",
+        json!({
+            "extraDirs": extra_dirs,
+            "count": commands.len(),
+            "commands": command_names(&commands, "cmd"),
+        }),
+    );
 
     Ok(commands)
 }
@@ -835,10 +1023,21 @@ pub fn build_claude_args(config: SessionConfig) -> Result<Vec<String>, String> {
 /// Walks ~/.claude/projects/*/*.jsonl, caps at 200 most recent files by mtime,
 /// and counts `<command-name>X</command-name>` patterns.
 #[tauri::command]
-pub async fn scan_command_usage() -> Result<std::collections::HashMap<String, u64>, String> {
-    tokio::task::spawn_blocking(scan_command_usage_sync)
+pub async fn scan_command_usage(app: AppHandle) -> Result<std::collections::HashMap<String, u64>, String> {
+    let counts = tokio::task::spawn_blocking(scan_command_usage_sync)
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    log_discovery(
+        &app,
+        "LOG",
+        "discovery.command_usage_loaded",
+        "Scanned historical slash-command usage",
+        json!({
+            "uniqueCommands": counts.len(),
+            "commands": counts,
+        }),
+    );
+    Ok(counts)
 }
 
 fn scan_command_usage_sync() -> Result<std::collections::HashMap<String, u64>, String> {
@@ -953,7 +1152,9 @@ mod tests {
         assert!(result.is_ok(), "should read valid JS file directly");
         let returned = result.unwrap();
         // Verify the content came from our temp file, not a system fallback
-        assert!(returned.contains(TEST_MARKER), "should return content from the given path");
+        assert!(returned.content.contains(TEST_MARKER), "should return content from the given path");
+        assert_eq!(returned.source, "direct_cli_path");
+        assert_eq!(returned.path.as_deref(), Some(js_path.to_str().unwrap()));
     }
 
     #[test]
@@ -971,7 +1172,7 @@ mod tests {
         match result {
             Ok(content) => {
                 // If fallback succeeded, verify it did NOT return our invalid content
-                assert!(!content.contains(TEST_MARKER),
+                assert!(!content.content.contains(TEST_MARKER),
                     "invalid content should be skipped; fallback returned system binary");
             }
             Err(_) => {
@@ -1000,8 +1201,11 @@ mod tests {
 
         let result = read_claude_binary(Some(cmd_path.to_str().unwrap()));
         assert!(result.is_ok(), "should resolve .cmd shim to JS file: {:?}", result.err());
-        assert!(result.unwrap().contains(TEST_MARKER),
+        let returned = result.unwrap();
+        assert!(returned.content.contains(TEST_MARKER),
             "should return content from the .cmd shim's JS target");
+        assert_eq!(returned.source, "cmd_shim_js");
+        assert_eq!(returned.path.as_deref(), Some(js_path.to_str().unwrap()));
     }
 
     #[test]
@@ -1024,7 +1228,7 @@ mod tests {
         let result = read_claude_binary(Some(cmd_path.to_str().unwrap()));
         match result {
             Ok(content) => {
-                assert!(!content.contains(TEST_MARKER),
+                assert!(!content.content.contains(TEST_MARKER),
                     "invalid JS content via shim should not be returned");
             }
             Err(_) => {
@@ -1072,8 +1276,11 @@ mod tests {
 
         let result = read_claude_binary(Some(fake_bin.to_str().unwrap()));
         assert!(result.is_ok(), "should fall through to sibling node_modules: {:?}", result.err());
-        assert!(result.unwrap().contains(TEST_MARKER),
+        let returned = result.unwrap();
+        assert!(returned.content.contains(TEST_MARKER),
             "should return content from sibling node_modules");
+        assert_eq!(returned.source, "sibling_node_modules");
+        assert!(returned.path.as_deref().unwrap_or("").ends_with("node_modules/@anthropic-ai/claude-code/cli.js"));
     }
 
     #[test]

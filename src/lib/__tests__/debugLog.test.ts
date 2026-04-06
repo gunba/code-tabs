@@ -1,10 +1,26 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { dlog, getDebugLog, getDebugLogForSession, clearDebugLog, removeDebugLogSession, getDebugLogGeneration, setDebugCaptureEnabled } from "../debugLog";
+import { dlog, getDebugLog, getDebugLogForSession, clearDebugLog, removeDebugLogSession, getDebugLogGeneration, setDebugCaptureEnabled, configureObservability } from "../debugLog";
 import type { DebugLogEntry } from "../debugLog";
+
+const MAX_BUFFER_ENTRIES = 15000;
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(() => Promise.resolve(0)),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
 
 describe("debugLog", () => {
   beforeEach(() => {
     clearDebugLog();
+    configureObservability({
+      debugBuild: true,
+      observabilityEnabled: true,
+      devtoolsAvailable: true,
+      globalLogPath: null,
+    });
     setDebugCaptureEnabled(true);
     vi.restoreAllMocks();
   });
@@ -19,6 +35,9 @@ describe("debugLog", () => {
     expect(buf[0].message).toBe("spawned pid=42");
     expect(buf[0].level).toBe("LOG");
     expect(buf[0].ts).toBeGreaterThan(0);
+    expect(buf[0].tsIso).toContain("T");
+    expect(buf[0].source).toBe("frontend");
+    expect(buf[0].event).toBe("message");
   });
 
   it("defaults level to LOG", () => {
@@ -68,13 +87,13 @@ describe("debugLog", () => {
 
   it("evicts oldest entries at MAX_ENTRIES per session", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
-    for (let i = 0; i < 5001; i++) {
+    for (let i = 0; i < MAX_BUFFER_ENTRIES + 1; i++) {
       dlog("m", "sess-a", `msg-${i}`);
     }
     const buf = getDebugLogForSession("sess-a");
-    expect(buf).toHaveLength(5000);
+    expect(buf).toHaveLength(MAX_BUFFER_ENTRIES);
     expect(buf[0].message).toBe("msg-1");
-    expect(buf[buf.length - 1].message).toBe("msg-5000");
+    expect(buf[buf.length - 1].message).toBe(`msg-${MAX_BUFFER_ENTRIES}`);
   });
 
   it("clearDebugLog empties all buffers", () => {
@@ -118,13 +137,13 @@ describe("debugLog", () => {
   it("per-session eviction does not affect other sessions", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     // Fill session A past capacity
-    for (let i = 0; i < 5001; i++) {
+    for (let i = 0; i < MAX_BUFFER_ENTRIES + 1; i++) {
       dlog("m", "a", `a-${i}`);
     }
     // Session B has 1 entry
     dlog("m", "b", "b-only");
 
-    expect(getDebugLogForSession("a")).toHaveLength(5000);
+    expect(getDebugLogForSession("a")).toHaveLength(MAX_BUFFER_ENTRIES);
     expect(getDebugLogForSession("b")).toHaveLength(1);
     expect(getDebugLogForSession("b")[0].message).toBe("b-only");
   });
@@ -187,5 +206,17 @@ describe("debugLog", () => {
     dlog("m", null, "visible", "DEBUG");
     expect(getDebugLog()).toHaveLength(1);
     expect(getDebugLog()[0].message).toBe("visible");
+  });
+
+  it("does not capture non-error logs when observability is disabled", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    configureObservability({
+      debugBuild: false,
+      observabilityEnabled: false,
+      devtoolsAvailable: false,
+      globalLogPath: null,
+    });
+    dlog("m", null, "hidden");
+    expect(getDebugLog()).toHaveLength(0);
   });
 });

@@ -8,6 +8,8 @@ import { tapEventBus } from "../lib/tapEventBus";
 import { dlog } from "../lib/debugLog";
 import { useSettingsStore } from "../store/settings";
 import type { TapEntry } from "../types/tapEvents";
+import { annotateTapEntry, getTapCategoryLabel, type RecordedTapEntry } from "../lib/tapCatalog";
+import { useRuntimeStore } from "../store/runtime";
 
 const FLUSH_INTERVAL_MS = 2000;
 const FLUSH_THRESHOLD = 50;
@@ -37,14 +39,15 @@ export function useTapPipeline({
 }: TapPipelineOptions): void {
   const tapsInstalledRef = useRef(false);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingRef = useRef<TapEntry[]>([]);
+  const pendingRef = useRef<RecordedTapEntry[]>([]);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
   const prevCatsRef = useRef<Set<string>>(new Set());
 
   // Read recording config from settings store
   const recordingConfig = useSettingsStore((s) => s.recordingConfig);
-  const recordingEnabled = recordingConfig.taps.enabled;
+  const observabilityEnabled = useRuntimeStore((s) => s.observabilityInfo.observabilityEnabled);
+  const recordingEnabled = observabilityEnabled && recordingConfig.taps.enabled;
 
   // Derive active categories from global config
   const activeCats = useRef(new Set<string>());
@@ -64,6 +67,10 @@ export function useTapPipeline({
       await invoke("append_tap_data", {
         sessionId: sessionIdRef.current,
         lines,
+      });
+      dlog("tap", sessionIdRef.current, `flushed ${entries.length} TAP entries`, "DEBUG", {
+        event: "tap.flush",
+        data: { count: entries.length },
       });
     } catch (e) {
       dlog("tap", sessionIdRef.current, `flush error: ${e}`, "WARN");
@@ -106,14 +113,17 @@ export function useTapPipeline({
           const cat = entry.cat;
           const isCoreCat = cat === "parse" || cat === "stringify";
           if (isCoreCat || activeCats.current.has(cat)) {
-            pendingRef.current.push(entry);
+            pendingRef.current.push(annotateTapEntry(entry));
             if (pendingRef.current.length >= FLUSH_THRESHOLD) {
               flush();
             }
           }
         }
       } catch {
-        // Invalid JSON line — skip
+        dlog("tap", sid, "invalid TAP JSON line dropped", "WARN", {
+          event: "tap.invalid_json",
+          data: { preview: line.slice(0, 240) },
+        });
       }
     });
 
@@ -132,7 +142,12 @@ export function useTapPipeline({
     if (!tapsInstalledRef.current) {
       wsSend("Runtime.evaluate", { expression: INSTALL_TAPS, returnByValue: true });
       tapsInstalledRef.current = true;
-      dlog("tap", sessionId, "taps installed (parse+stringify always-on)");
+      dlog("tap", sessionId, "taps installed (parse+stringify always-on)", "LOG", {
+        event: "tap.install",
+        data: {
+          coreCategories: ["parse", "stringify"],
+        },
+      });
 
       // Diagnostic: check TCP connection state after a short delay
       const diagSid = sessionId;
@@ -156,17 +171,33 @@ export function useTapPipeline({
           expression: tapToggleExpr(cat, shouldBeOn),
           returnByValue: true,
         });
+        dlog("tap", sessionId, `${getTapCategoryLabel(cat)} ${shouldBeOn ? "enabled" : "disabled"}`, "DEBUG", {
+          event: "tap.category_toggle",
+          data: {
+            category: getTapCategoryLabel(cat),
+            enabled: shouldBeOn,
+          },
+        });
       }
     }
 
     // Start or stop disk flush timer based on recording state
     if (recordingEnabled && !flushTimerRef.current) {
       startFlushTimer();
-      dlog("tap", sessionId, `tap recording: ${[...next].join(",")}`);
+      const categoryLabels = [...next].map((cat) => getTapCategoryLabel(cat));
+      dlog("tap", sessionId, `tap recording: ${categoryLabels.join(", ")}`, "LOG", {
+        event: "tap.recording_started",
+        data: {
+          categories: categoryLabels,
+        },
+      });
     } else if (!recordingEnabled && flushTimerRef.current) {
       stopFlushTimer();
       flush();
-      dlog("tap", sessionId, "tap recording stopped");
+      dlog("tap", sessionId, "tap recording stopped", "LOG", {
+        event: "tap.recording_stopped",
+        data: {},
+      });
     }
 
     // Track effective state: only categories that are both configured AND recording is enabled

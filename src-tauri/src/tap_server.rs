@@ -5,6 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
+use crate::observability::record_backend_event;
+
 pub struct TapServerState {
     active: HashMap<String, bool>, // session_id -> should_stop
 }
@@ -52,7 +54,19 @@ pub fn start_tap_server(
         s.active.insert(sid.clone(), false);
     }
 
+    record_backend_event(
+        &app,
+        "LOG",
+        "tap-server",
+        Some(&sid),
+        "tap.server.start",
+        "Tap TCP server started",
+        serde_json::json!({ "port": port }),
+    );
+
     let event_name = format!("tap-entry-{sid}");
+    let sid_for_thread = sid.clone();
+    let app_for_thread = app.clone();
 
     std::thread::spawn(move || {
         // Accept loop — one connection at a time, re-accept on disconnect
@@ -67,7 +81,15 @@ pub fn start_tap_server(
             // Non-blocking accept
             match listener.accept() {
                 Ok((stream, addr)) => {
-                    eprintln!("[tap_server] connection from {} for session {}", addr, sid);
+                    record_backend_event(
+                        &app_for_thread,
+                        "LOG",
+                        "tap-server",
+                        Some(&sid_for_thread),
+                        "tap.server.client_connected",
+                        "Tap client connected",
+                        serde_json::json!({ "remoteAddr": addr.to_string() }),
+                    );
                     // Set blocking with read timeout for the data stream
                     stream.set_nonblocking(false).ok();
                     stream
@@ -102,15 +124,45 @@ pub fn start_tap_server(
                                 line.clear();
                                 continue;
                             }
-                            Err(_) => break, // Connection error — re-accept
+                            Err(err) => {
+                                record_backend_event(
+                                    &app_for_thread,
+                                    "WARN",
+                                    "tap-server",
+                                    Some(&sid_for_thread),
+                                    "tap.server.read_error",
+                                    "Tap client read error",
+                                    serde_json::json!({ "error": err.to_string() }),
+                                );
+                                break; // Connection error — re-accept
+                            }
                         }
                     }
+
+                    record_backend_event(
+                        &app_for_thread,
+                        "LOG",
+                        "tap-server",
+                        Some(&sid_for_thread),
+                        "tap.server.client_disconnected",
+                        "Tap client disconnected",
+                        serde_json::json!({}),
+                    );
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     // No connection yet — sleep and retry
                     std::thread::sleep(Duration::from_millis(100));
                 }
                 Err(_) => {
+                    record_backend_event(
+                        &app_for_thread,
+                        "ERR",
+                        "tap-server",
+                        Some(&sid_for_thread),
+                        "tap.server.accept_error",
+                        "Tap listener accept failed",
+                        serde_json::json!({}),
+                    );
                     // Listener error — exit thread
                     break;
                 }
@@ -119,8 +171,17 @@ pub fn start_tap_server(
 
         // Cleanup
         if let Ok(mut s) = state.lock() {
-            s.active.remove(&sid);
+            s.active.remove(&sid_for_thread);
         }
+        record_backend_event(
+            &app_for_thread,
+            "LOG",
+            "tap-server",
+            Some(&sid_for_thread),
+            "tap.server.stop",
+            "Tap TCP server stopped",
+            serde_json::json!({}),
+        );
     });
 
     Ok(port)
@@ -129,6 +190,7 @@ pub fn start_tap_server(
 /// Signal a session's TCP server thread to stop.
 #[tauri::command]
 pub fn stop_tap_server(
+    app: AppHandle,
     session_id: String,
     tap_state: tauri::State<'_, Arc<Mutex<TapServerState>>>,
 ) {
@@ -137,4 +199,13 @@ pub fn stop_tap_server(
             *flag = true;
         }
     }
+    record_backend_event(
+        &app,
+        "DEBUG",
+        "tap-server",
+        Some(&session_id),
+        "tap.server.stop_requested",
+        "Tap TCP server stop requested",
+        serde_json::json!({}),
+    );
 }

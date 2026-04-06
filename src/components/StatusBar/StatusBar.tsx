@@ -15,6 +15,7 @@ import {
 import type { Session, PermissionMode } from "../../types/session";
 import { isSessionIdle } from "../../types/session";
 import { getEffectiveState } from "../../lib/claude";
+import { useRuntimeStore } from "../../store/runtime";
 import "./StatusBar.css";
 
 function formatDuration(secs: number): string {
@@ -63,6 +64,7 @@ function SessionStatus({
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
   const tapEnabled = useSettingsStore((s) => s.recordingConfig.taps.enabled);
+  const observabilityEnabled = useRuntimeStore((s) => s.observabilityInfo.observabilityEnabled);
   const health = useSessionStore((s) => s.processHealth.get(session.id));
   const apiIp = useSettingsStore((s) => s.apiIp);
   const model = effectiveModel(session);
@@ -187,7 +189,7 @@ function SessionStatus({
             <IconCircleOutline size={12} /> Inspector off
           </span>
         )}
-        {tapEnabled && (
+        {observabilityEnabled && tapEnabled && (
           <span className="status-item" title="Tap recording active — right-click tab to stop" style={{ color: "var(--accent)" }}>
             <IconCircleFilled size={10} /> TAP
           </span>
@@ -289,6 +291,9 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
   const sidePanel = useSettingsStore((s) => s.sidePanel);
   const setSidePanel = useSettingsStore((s) => s.setSidePanel);
+  const debugBuild = useRuntimeStore((s) => s.observabilityInfo.debugBuild);
+  const devtoolsAvailable = useRuntimeStore((s) => s.observabilityInfo.devtoolsAvailable);
+  const openMainDevtools = useRuntimeStore((s) => s.openMainDevtools);
 
   useEffect(() => {
     const dirs = sessions
@@ -354,13 +359,24 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
             Context
           </button>
         )}
-        <button
-          className={`status-item status-hooks-btn${sidePanel === "debug" ? " status-active-btn" : ""}`}
-          onClick={() => setSidePanel(sidePanel === "debug" ? null : "debug")}
-          title="Debug panel (Ctrl+Shift+D)"
-        >
-          Debug
-        </button>
+        {debugBuild && (
+          <button
+            className={`status-item status-hooks-btn${sidePanel === "debug" ? " status-active-btn" : ""}`}
+            onClick={() => setSidePanel(sidePanel === "debug" ? null : "debug")}
+            title="Observability panel (Ctrl+Shift+D)"
+          >
+            Debug
+          </button>
+        )}
+        {devtoolsAvailable && (
+          <button
+            className="status-item status-hooks-btn"
+            onClick={() => openMainDevtools().catch(() => {})}
+            title="Open app devtools (Ctrl+Shift+I)"
+          >
+            DevTools
+          </button>
+        )}
         <button // [CM-17] Hooks button opens config manager directly to Hooks tab
           className="status-item status-hooks status-hooks-btn"
           onClick={() => setShowConfigManager("hooks")}

@@ -97,6 +97,10 @@
   overflow: hidden;
 }
 
+.debug-panel-filters:first-of-type .debug-filter-chip {
+  text-transform: uppercase;
+}
+
 .chip-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -208,6 +212,10 @@
 .debug-mod {
   color: var(--accent-secondary, #6ea8e0);
   margin-right: 2px;
+}
+
+.debug-data {
+  color: var(--text-muted);
 }
 
 .debug-panel-empty {

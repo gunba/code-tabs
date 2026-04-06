@@ -5,6 +5,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter};
+use crate::observability::record_backend_event;
 
 const IGNORED_DIRS: &[&str] = &[
     ".git",
@@ -122,6 +123,19 @@ pub fn start_watcher(
         .watch(&root_dir, RecursiveMode::Recursive)
         .map_err(|e| format!("Failed to watch directory: {e}"))?;
 
+    record_backend_event(
+        &app_handle,
+        "LOG",
+        "watcher",
+        Some(&session_id),
+        "watcher.started",
+        "Started file watcher",
+        serde_json::json!({
+            "rootDir": root_dir.to_string_lossy().to_string(),
+            "gitignorePatternCount": gitignore_patterns.len(),
+        }),
+    );
+
     let sid = session_id.clone();
     let root = root_dir.clone();
     let ignores = gitignore_patterns;
@@ -161,6 +175,7 @@ fn event_loop(
         }
 
         let mut seen: HashMap<PathBuf, &'static str> = HashMap::new();
+        let batch_start = Instant::now();
 
         for result in &batch {
             match result {
@@ -177,6 +192,17 @@ fn event_loop(
                 }
                 Err(e) => {
                     log::warn!("File watcher error for session {session_id}: {e}");
+                    record_backend_event(
+                        app,
+                        "WARN",
+                        "watcher",
+                        Some(session_id),
+                        "watcher.event_error",
+                        "File watcher reported an error",
+                        serde_json::json!({
+                            "error": e.to_string(),
+                        }),
+                    );
                 }
             }
         }
@@ -191,6 +217,7 @@ fn event_loop(
             .as_millis() as u64;
 
         let event_name = format!("fs-change-{session_id}");
+        let unique_paths = seen.len();
         for (path, kind) in seen {
             let ev = FsChangeEvent {
                 session_id: session_id.to_string(),
@@ -202,6 +229,19 @@ fn event_loop(
                 log::warn!("Failed to emit fs-change: {e}");
             }
         }
+        record_backend_event(
+            app,
+            if batch_start.elapsed().as_millis() >= 100 { "WARN" } else { "DEBUG" },
+            "watcher",
+            Some(session_id),
+            "watcher.batch_emitted",
+            "Emitted debounced file watcher batch",
+            serde_json::json!({
+                "batchSize": batch.len(),
+                "uniquePaths": unique_paths,
+                "durationMs": batch_start.elapsed().as_millis() as u64,
+            }),
+        );
     }
 }
 

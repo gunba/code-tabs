@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { getSessionTranscript } from "../../lib/terminalRegistry";
+import { useRuntimeStore } from "../../store/runtime";
 import "./CommandPalette.css";
 
 interface Command {
@@ -24,6 +25,9 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const setActiveTab = useSessionStore((s) => s.setActiveTab);
   const setShowLauncher = useSettingsStore((s) => s.setShowLauncher);
+  const debugBuild = useRuntimeStore((s) => s.observabilityInfo.debugBuild);
+  const devtoolsAvailable = useRuntimeStore((s) => s.observabilityInfo.devtoolsAvailable);
+  const openMainDevtools = useRuntimeStore((s) => s.openMainDevtools);
 
   // Build command list
   const commands: Command[] = [
@@ -57,7 +61,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         onClose();
       },
     }] : []),
-    {
+    ...(debugBuild ? [{
       id: "toggle-debug-log",
       label: "Toggle Debug Log",
       description: "Show/hide the debug log panel (Ctrl+Shift+D)",
@@ -65,7 +69,16 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         onClose();
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "D", ctrlKey: true, shiftKey: true, bubbles: true }));
       },
-    },
+    }] : []),
+    ...(devtoolsAvailable ? [{
+      id: "open-devtools",
+      label: "Open DevTools",
+      description: "Open app devtools (Ctrl+Shift+I)",
+      action: () => {
+        openMainDevtools().catch(() => {});
+        onClose();
+      },
+    }] : []),
     ...sessions.map((s) => ({
       id: `tab-${s.id}`,
       label: `Switch to: ${s.name}`,

@@ -3,7 +3,7 @@ mod cli;
 mod config;
 mod git;
 mod process;
-mod data;
+pub(crate) mod data;
 mod file_watcher;
 
 pub use session::*;

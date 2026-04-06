@@ -7,6 +7,9 @@ export interface TapEntry {
   cat: string;
   len?: number;
   snap?: string;
+  tsIso?: string;
+  hookLabel?: string;
+  hookSource?: string;
   [key: string]: unknown;
 }
 

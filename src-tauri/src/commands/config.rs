@@ -1,17 +1,44 @@
 use super::data::get_data_dir;
+use crate::observability::record_backend_event;
+use serde_json::json;
+use tauri::AppHandle;
+
+fn log_discovery(app: &AppHandle, event: &str, message: &str, data: serde_json::Value) {
+    record_backend_event(app, "LOG", "discovery", None, event, message, data);
+}
 
 /// Read the UI config file. Returns the content or empty string if not found.
 #[tauri::command]
-pub fn read_ui_config() -> Result<String, String> {
+pub fn read_ui_config(app: AppHandle) -> Result<String, String> {
     let data_dir = get_data_dir()?;
     let path = data_dir.join("ui-config.json");
 
     if !path.exists() {
+        log_discovery(
+            &app,
+            "discovery.ui_config_read",
+            "UI config file does not exist yet",
+            json!({
+                "path": path.to_string_lossy().to_string(),
+                "exists": false,
+            }),
+        );
         return Ok(String::new());
     }
 
-    std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read ui-config.json: {}", e))
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read ui-config.json: {}", e))?;
+    log_discovery(
+        &app,
+        "discovery.ui_config_read",
+        "UI config file read",
+        json!({
+            "path": path.to_string_lossy().to_string(),
+            "exists": true,
+            "contentLength": content.len(),
+        }),
+    );
+    Ok(content)
 }
 
 /// Write the UI config file (used to create defaults).
@@ -30,13 +57,15 @@ pub fn write_ui_config(config_json: String) -> Result<(), String> {
 /// 3. User ~/.claude/settings.json
 // [RC-10] Hook configuration: discover_hooks / save_hooks (merges into existing settings)
 #[tauri::command]
-pub fn discover_hooks(working_dirs: Vec<String>) -> Result<serde_json::Value, String> {
+pub fn discover_hooks(app: AppHandle, working_dirs: Vec<String>) -> Result<serde_json::Value, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let mut all_hooks = serde_json::Map::new();
+    let mut scanned_files: Vec<String> = Vec::new();
 
     // User-level hooks
     let user_settings = home.join(".claude").join("settings.json");
     if let Ok(content) = std::fs::read_to_string(&user_settings) {
+        scanned_files.push(user_settings.to_string_lossy().to_string());
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
             if let Some(hooks) = parsed.get("hooks") {
                 all_hooks.insert("user".to_string(), hooks.clone());
@@ -53,6 +82,7 @@ pub fn discover_hooks(working_dirs: Vec<String>) -> Result<serde_json::Value, St
         ] {
             let settings_path = dir_path.join(".claude").join(settings_name);
             if let Ok(content) = std::fs::read_to_string(&settings_path) {
+                scanned_files.push(settings_path.to_string_lossy().to_string());
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
                     if let Some(hooks) = parsed.get("hooks") {
                         // [HM-02] Scope-prefixed keys keep project and project-local hooks distinct.
@@ -63,6 +93,18 @@ pub fn discover_hooks(working_dirs: Vec<String>) -> Result<serde_json::Value, St
             }
         }
     }
+
+    log_discovery(
+        &app,
+        "discovery.hooks_loaded",
+        "Hook discovery completed",
+        json!({
+            "workingDirs": working_dirs,
+            "scannedFiles": scanned_files,
+            "scopeCount": all_hooks.len(),
+            "scopes": all_hooks.keys().cloned().collect::<Vec<_>>(),
+        }),
+    );
 
     Ok(serde_json::Value::Object(all_hooks))
 }
@@ -257,34 +299,60 @@ fn list_md_in_dir(dir: &std::path::Path) -> Vec<serde_json::Value> {
 
 /// List agent definition files based on scope.
 #[tauri::command]
-pub fn list_agents(scope: String, working_dir: String) -> Result<Vec<serde_json::Value>, String> {
+pub fn list_agents(app: AppHandle, scope: String, working_dir: String) -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let dir = match scope.as_str() {
         "user" => home.join(".claude").join("agents"),
         "project" => std::path::Path::new(&working_dir).join(".claude").join("agents"),
         _ => return Err("Invalid scope".into()),
     };
-    Ok(list_md_in_dir(&dir))
+    let files = list_md_in_dir(&dir);
+    log_discovery(
+        &app,
+        "discovery.agent_files_loaded",
+        "Agent definitions listed",
+        json!({
+            "scope": scope,
+            "workingDir": working_dir,
+            "dir": dir.to_string_lossy().to_string(),
+            "count": files.len(),
+            "names": files.iter().filter_map(|file| file["name"].as_str()).collect::<Vec<_>>(),
+        }),
+    );
+    Ok(files)
 }
 
 /// List skill/command definition files based on scope.
 #[tauri::command]
-pub fn list_skills(scope: String, working_dir: String) -> Result<Vec<serde_json::Value>, String> {
+pub fn list_skills(app: AppHandle, scope: String, working_dir: String) -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let dir = match scope.as_str() {
         "user" => home.join(".claude").join("commands"),
         "project" => std::path::Path::new(&working_dir).join(".claude").join("commands"),
         _ => return Err("Invalid scope".into()),
     };
-    Ok(list_md_in_dir(&dir))
+    let files = list_md_in_dir(&dir);
+    log_discovery(
+        &app,
+        "discovery.skill_files_loaded",
+        "Skill definitions listed",
+        json!({
+            "scope": scope,
+            "workingDir": working_dir,
+            "dir": dir.to_string_lossy().to_string(),
+            "count": files.len(),
+            "names": files.iter().filter_map(|file| file["name"].as_str()).collect::<Vec<_>>(),
+        }),
+    );
+    Ok(files)
 }
 
 // [RC-20] Hardcoded DNS resolution of api.anthropic.com, 5s timeout, no user input
 /// Resolve api.anthropic.com to its IP address (Cloudflare edge).
 /// Hardcoded hostname — no user-supplied input. 5s timeout.
 #[tauri::command]
-pub async fn resolve_api_host() -> Result<String, String> {
-    tokio::time::timeout(
+pub async fn resolve_api_host(app: AppHandle) -> Result<String, String> {
+    let resolved = tokio::time::timeout(
         std::time::Duration::from_secs(5),
         tokio::task::spawn_blocking(|| {
             use std::net::ToSocketAddrs;
@@ -298,5 +366,15 @@ pub async fn resolve_api_host() -> Result<String, String> {
     )
     .await
     .map_err(|_| "DNS lookup timed out".to_string())?
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())??;
+    log_discovery(
+        &app,
+        "discovery.api_host_resolved",
+        "Resolved api.anthropic.com",
+        json!({
+            "host": "api.anthropic.com",
+            "ip": resolved,
+        }),
+    );
+    Ok(resolved)
 }

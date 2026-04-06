@@ -13,6 +13,8 @@ use tauri::async_runtime::{Mutex, RwLock};
 
 use tauri::ipc::Response;
 
+use crate::observability::record_backend_event;
+
 #[cfg(windows)]
 pub mod conpty;
 #[cfg(unix)]
@@ -45,6 +47,7 @@ struct Session {
 
 #[tauri::command]
 pub async fn pty_spawn(
+    app: tauri::AppHandle,
     file: String,
     args: Vec<String>,
     cols: u16,
@@ -53,6 +56,24 @@ pub async fn pty_spawn(
     env: BTreeMap<String, String>,
     state: tauri::State<'_, PtyState>,
 ) -> Result<PtyHandler, String> {
+    let env_keys: Vec<String> = env.keys().cloned().collect();
+    record_backend_event(
+        &app,
+        "LOG",
+        "pty",
+        None,
+        "pty.spawn_requested",
+        "PTY spawn requested",
+        serde_json::json!({
+            "file": &file,
+            "args": &args,
+            "cwd": &cwd,
+            "cols": cols,
+            "rows": rows,
+            "envKeys": &env_keys,
+        }),
+    );
+
     #[cfg(windows)]
     let result = conpty::spawn(
         &file,
@@ -89,6 +110,20 @@ pub async fn pty_spawn(
     });
 
     state.sessions.write().await.insert(handler, session);
+    record_backend_event(
+        &app,
+        "LOG",
+        "pty",
+        None,
+        "pty.spawned",
+        "PTY spawned",
+        serde_json::json!({
+            "handler": handler,
+            "childPid": result.process_id,
+            "cols": cols,
+            "rows": rows,
+        }),
+    );
     Ok(handler)
 }
 
@@ -179,6 +214,7 @@ pub async fn pty_resize(
 
 #[tauri::command]
 pub async fn pty_kill(
+    app: tauri::AppHandle,
     pid: PtyHandler,
     state: tauri::State<'_, PtyState>,
 ) -> Result<(), String> {
@@ -190,12 +226,37 @@ pub async fn pty_kill(
         .ok_or("Unavailable pid")?
         .clone();
 
+    record_backend_event(
+        &app,
+        "LOG",
+        "pty",
+        None,
+        "pty.kill_requested",
+        "PTY kill requested",
+        serde_json::json!({
+            "handler": pid,
+            "childPid": session.process_id,
+        }),
+    );
+
     #[cfg(windows)]
     session.conpty.kill()?;
 
     #[cfg(unix)]
     session.pty.lock().unwrap().kill()?;
 
+    record_backend_event(
+        &app,
+        "LOG",
+        "pty",
+        None,
+        "pty.killed",
+        "PTY kill completed",
+        serde_json::json!({
+            "handler": pid,
+            "childPid": session.process_id,
+        }),
+    );
     Ok(())
 }
 

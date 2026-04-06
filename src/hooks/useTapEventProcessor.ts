@@ -12,9 +12,11 @@ import { buildSubagentTabs } from "../lib/contextProjection";
 import { useSettingsStore } from "../store/settings";
 import { dlog } from "../lib/debugLog";
 import { getNoisyEventKinds } from "../lib/noisyEventKinds";
+import { traceSync } from "../lib/perfTrace";
 import type { TapEvent } from "../types/tapEvents";
 import type { SessionState, PermissionMode } from "../types/session";
 import type { ToolInputDiffData } from "../types/activity";
+import { getTapCategoryLabel, getTapCategoryMeta } from "../lib/tapCatalog";
 
 
 /** Return discriminating fields for key event types (for debug logs). */
@@ -104,11 +106,21 @@ export function useTapEventProcessor(
     const handleEvent = (event: TapEvent) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
+      traceSync("tap.handle_event", () => {
 
       useSessionStore.getState().addSeenEventKind(event.kind);
 
       if (!getNoisyEventKinds().has(event.kind)) {
-        dlog("tap", sid, `[${event.cat || "?"}] ${event.kind}${eventDetail(event)}`, "DEBUG");
+        const cat = event.cat || "?";
+        const categoryLabel = getTapCategoryLabel(cat);
+        dlog("tap", sid, `[${categoryLabel}] ${event.kind}${eventDetail(event)}`, "DEBUG", {
+          event: "tap.classified_event",
+          data: {
+            category: categoryLabel,
+            hookSource: getTapCategoryMeta(cat).hookSource,
+            kind: event.kind,
+          },
+        });
       }
 
       // No UUID dedup — CLI re-serializes conversation messages for JSONL persistence
@@ -438,6 +450,16 @@ export function useTapEventProcessor(
           .then((ip) => useSettingsStore.getState().setApiIp(ip as string))
           .catch((err: unknown) => dlog("session", sid, `API IP resolve failed: ${err}`, "WARN"));
       }
+      }, {
+        module: "tap",
+        sessionId: sid,
+        event: "tap.handle_event",
+        warnAboveMs: 12,
+        data: {
+          kind: event.kind,
+          category: event.cat ?? null,
+        },
+      });
     };
 
     const unsub = tapEventBus.subscribe(sessionId, handleEvent);

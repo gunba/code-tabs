@@ -24,10 +24,26 @@ export function useCliWatcher(): void {
     async function check() {
       try {
         trace("cliWatcher: check start");
+        dlog("discovery", null, "CLI watcher started", "LOG", {
+          event: "discovery.cli_watcher_started",
+          data: {},
+        });
         const version = await traceAsync("cliWatcher: check_cli_version", () =>
           invoke<string>("check_cli_version")
-        );
+        , {
+          module: "discovery",
+          event: "discovery.cli_version_perf",
+          warnAboveMs: 500,
+          data: {},
+        });
         const cached = useSettingsStore.getState().cliVersion;
+        dlog("discovery", null, "CLI version resolved", "LOG", {
+          event: "discovery.cli_version_loaded",
+          data: {
+            version,
+            previousVersion: cached,
+          },
+        });
 
         // Always re-parse on startup — the help text is fast to parse
         // and we need fresh data when new flags are added to the CLI.
@@ -36,9 +52,26 @@ export function useCliWatcher(): void {
           try {
             const help = await traceAsync("cliWatcher: get_cli_help", () =>
               invoke<string>("get_cli_help")
-            );
+            , {
+              module: "discovery",
+              event: "discovery.cli_help_perf",
+              warnAboveMs: 500,
+              data: { version },
+            });
             const capabilities = parseHelpText(help);
             useSettingsStore.getState().setCliCapabilities(version, capabilities);
+            dlog("discovery", null, "CLI help parsed into capabilities", "LOG", {
+              event: "discovery.cli_capabilities_loaded",
+              data: {
+                version,
+                helpLength: help.length,
+                models: capabilities.models,
+                permissionModes: capabilities.permissionModes,
+                flagCount: capabilities.flags.length,
+                optionCount: capabilities.options.length,
+                commandCount: capabilities.commands.length,
+              },
+            });
           } catch {
             // Help failed but version succeeded — still update version
             useSettingsStore.getState().setCliCapabilities(version, {
@@ -47,6 +80,10 @@ export function useCliWatcher(): void {
               flags: [],
               options: [],
               commands: [],
+            });
+            dlog("discovery", null, "CLI help parsing failed; stored empty capabilities", "WARN", {
+              event: "discovery.cli_capabilities_failed",
+              data: { version },
             });
           }
 
@@ -64,8 +101,12 @@ export function useCliWatcher(): void {
             dlog("config", null, `Claude CLI updated: ${cached} → ${version}`);
           }
         }
-      } catch {
+      } catch (err) {
         // CLI not found or version check failed — ignore
+        dlog("discovery", null, `CLI watcher failed: ${err}`, "WARN", {
+          event: "discovery.cli_watcher_failed",
+          data: { error: String(err) },
+        });
       }
     }
   }, []);
