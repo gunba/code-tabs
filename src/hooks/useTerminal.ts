@@ -356,15 +356,19 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
 
     if (onData) {
       disposables.push(term.onData((data) => {
+        // Strip SGR mouse tracking reports — xterm.js generates these when
+        // mouse tracking is enabled (\x1b[?1003h) but the CLI doesn't consume them.
+        const filtered = data.replace(/\x1b\[<[\d;]+[Mm]/g, "");
+        if (!filtered) return;
         dlog("terminal", sessionIdRef.current, "terminal input", "DEBUG", {
           event: "terminal.input",
           data: {
-            length: data.length,
-            text: data,
-            preview: escapePreview(data),
+            length: filtered.length,
+            text: filtered,
+            preview: escapePreview(filtered),
           },
         });
-        onData(data);
+        onData(filtered);
       }));
     }
     if (onResize) {

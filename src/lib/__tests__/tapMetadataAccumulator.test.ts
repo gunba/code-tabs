@@ -24,23 +24,30 @@ describe("TapMetadataAccumulator", () => {
     expect(diff2?.outputTokens).toBe(0); // not from ApiTelemetry anymore
   });
 
-  it("computes EMA-smoothed tokPerSec from ApiTelemetry", () => {
+  it("computes EMA-smoothed tokPerSec from ApiTelemetry durationMs + TurnEnd outputTokens", () => {
     const acc = new TapMetadataAccumulator();
+    // ApiTelemetry provides durationMs, TurnEnd provides outputTokens
     // 50 output tokens in 1000ms = 50 tok/s (first sample seeds EMA)
-    const diff1 = acc.process({
+    acc.process({
       kind: "ApiTelemetry", ts: 0, model: "opus", costUSD: 0.01,
       inputTokens: 100, outputTokens: 50, cachedInputTokens: 0,
       uncachedInputTokens: 100, durationMs: 1000, ttftMs: 200,
       queryChainId: null, queryDepth: 0, stopReason: null,
     });
+    const diff1 = acc.process({
+      kind: "TurnEnd", ts: 1, stopReason: "end_turn", outputTokens: 50,
+    });
     expect(diff1?.tokPerSec).toBe(50);
 
     // 100 output tokens in 500ms = 200 tok/s; EMA(0.3) = 0.3*200 + 0.7*50 = 95
-    const diff2 = acc.process({
-      kind: "ApiTelemetry", ts: 1, model: "opus", costUSD: 0.02,
+    acc.process({
+      kind: "ApiTelemetry", ts: 2, model: "opus", costUSD: 0.02,
       inputTokens: 200, outputTokens: 100, cachedInputTokens: 0,
       uncachedInputTokens: 200, durationMs: 500, ttftMs: 100,
       queryChainId: null, queryDepth: 0, stopReason: null,
+    });
+    const diff2 = acc.process({
+      kind: "TurnEnd", ts: 3, stopReason: "end_turn", outputTokens: 100,
     });
     expect(diff2?.tokPerSec).toBe(95);
   });

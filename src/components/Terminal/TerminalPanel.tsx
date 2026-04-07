@@ -14,7 +14,6 @@ import { registerBufferReader, unregisterBufferReader, registerTerminal, unregis
 import { useFileWatcher } from "../../hooks/useFileWatcher";
 import { useSettingsStore } from "../../store/settings";
 import { useRuntimeStore } from "../../store/runtime";
-import { IconSearch } from "../Icons/Icons";
 import { normalizePath } from "../../lib/paths";
 import { settledStateManager } from "../../lib/settledState";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
@@ -653,17 +652,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
                 <path d="M11 3v5a2 2 0 0 1-2 2H4" />
                 <polyline points="6 8 4 10 6 12" />
               </svg>
-            </button>
-            <button
-              className="bar-btn bar-btn-search"
-              onClick={() => {
-                const store = useSettingsStore.getState();
-                store.setSidePanel(store.sidePanel === "search" ? null : "search");
-              }}
-              title="Search conversations (Ctrl+Shift+F)"
-              aria-label="Search conversations"
-            >
-              <IconSearch size={14} />
             </button>
           </div>
         )}

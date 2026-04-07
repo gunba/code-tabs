@@ -102,14 +102,6 @@
   animation: queue-pulse 1.5s ease-in-out infinite;
 }
 
-.bar-btn-search {
-  color: var(--success);
-}
-.bar-btn-search:hover {
-  color: var(--success);
-  background: color-mix(in srgb, var(--success) 15%, transparent);
-}
-
 .bar-spacer { flex: 1; }
 
 @keyframes queue-pulse {

@@ -16,6 +16,7 @@ import type { Session, PermissionMode } from "../../types/session";
 import { isSessionIdle } from "../../types/session";
 import { getEffectiveState } from "../../lib/claude";
 import { useRuntimeStore } from "../../store/runtime";
+import { useVersionStore } from "../../store/version";
 import "./StatusBar.css";
 
 function formatDuration(secs: number): string {
@@ -25,6 +26,17 @@ function formatDuration(secs: number): string {
   if (m < 60) return `${m}m${s.toString().padStart(2, "0")}s`;
   const h = Math.floor(m / 60);
   return `${h}h${(m % 60).toString().padStart(2, "0")}m`;
+}
+
+function newerThan(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return true;
+    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return false;
+  }
+  return false;
 }
 
 function formatTimeRemaining(resetsAtSecs: number): string {
@@ -292,6 +304,19 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const devtoolsAvailable = useRuntimeStore((s) => s.observabilityInfo.devtoolsAvailable);
   const openMainDevtools = useRuntimeStore((s) => s.openMainDevtools);
 
+  // Version + update state
+  const appVersion = useVersionStore((s) => s.appVersion);
+  const claudeCodeBuildVersion = useVersionStore((s) => s.claudeCodeBuildVersion);
+  const appUpdate = useVersionStore((s) => s.appUpdate);
+  const appUpdateDownloading = useVersionStore((s) => s.appUpdateDownloading);
+  const appUpdateProgress = useVersionStore((s) => s.appUpdateProgress);
+  const downloadAndInstallAppUpdate = useVersionStore((s) => s.downloadAndInstallAppUpdate);
+  const latestCliVersion = useVersionStore((s) => s.latestCliVersion);
+  const cliUpdating = useVersionStore((s) => s.cliUpdating);
+  const updateCli = useVersionStore((s) => s.updateCli);
+  const cliVersion = useSettingsStore((s) => s.cliVersion);
+  const cliUpdateAvailable = newerThan(latestCliVersion, cliVersion);
+
   useEffect(() => {
     const dirs = sessions
       .filter((s) => !s.isMetaAgent && s.state !== "dead")
@@ -336,6 +361,54 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
       ) : (
         <span className="status-empty">No active session</span>
       )}
+
+      {/* CENTER: version info + update buttons */}
+      <div className="status-center">
+        {appVersion && (
+          <span className="status-item status-version">
+            v{appVersion}
+            {claudeCodeBuildVersion && claudeCodeBuildVersion !== "unknown" && (
+              <span className="status-build"> ({claudeCodeBuildVersion})</span>
+            )}
+          </span>
+        )}
+        {appUpdate && (
+          <button
+            className="status-update-btn"
+            disabled={appUpdateDownloading}
+            onClick={downloadAndInstallAppUpdate}
+            title={appUpdate.body || `Update to ${appUpdate.version}`}
+          >
+            {appUpdateDownloading ? `${appUpdateProgress}%` : `App ${appUpdate.version}`}
+          </button>
+        )}
+        {cliVersion && (
+          <span className="status-item status-version">CLI {cliVersion}</span>
+        )}
+        {cliUpdateAvailable && (
+          <button
+            className="status-update-btn"
+            disabled={cliUpdating}
+            onClick={async () => {
+              const result = await updateCli();
+              if (result?.success) {
+                invoke("check_cli_version")
+                  .then((v) => {
+                    if (typeof v === "string") {
+                      useSettingsStore.getState().setCliCapabilities(v, useSettingsStore.getState().cliCapabilities);
+                    }
+                  })
+                  .catch(() => {});
+                useVersionStore.getState().checkLatestCliVersion();
+              }
+            }}
+            title={cliUpdating ? "Updating..." : `Update CLI to ${latestCliVersion}`}
+          >
+            {cliUpdating ? "..." : `CLI ${latestCliVersion}`}
+          </button>
+        )}
+      </div>
+
       {/* Far-right action buttons — always visible */}
       <div className="status-actions">
         {activeSession && activeSession.state !== "dead" && (

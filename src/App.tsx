@@ -18,7 +18,6 @@ import { ActivityPanel } from "./components/ActivityPanel/ActivityPanel";
 import { SearchPanel } from "./components/SearchPanel/SearchPanel";
 import { ModalOverlay } from "./components/ModalOverlay/ModalOverlay";
 import { ContextViewer } from "./components/ContextViewer/ContextViewer";
-import { AppHeader } from "./components/AppHeader/AppHeader";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
 import { useNotifications } from "./hooks/useNotifications";
@@ -26,11 +25,12 @@ import { useCommandDiscovery } from "./hooks/useCommandDiscovery";
 import { useCtrlKey } from "./hooks/useCtrlKey";
 import { useUiConfigStore } from "./lib/uiConfig";
 import { useVersionStore } from "./store/version";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { killAllActivePtys } from "./lib/ptyProcess";
 import { killPty, writeToPty } from "./lib/ptyRegistry";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
 import { dlog, flushDebugLog } from "./lib/debugLog";
-import { IconStop, IconClose, IconReturn, IconGear } from "./components/Icons/Icons";
+import { IconStop, IconClose, IconReturn, IconGear, IconSearch } from "./components/Icons/Icons";
 import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
 import type { Session, Subagent } from "./types/session";
 import { isSubagentActive } from "./types/session";
@@ -126,6 +126,16 @@ export default function App() {
       useVersionStore.getState().checkLatestCliVersion();
     })();
   }, [init, loadRuntimeInfo]);
+
+  // Dynamic window title with version info
+  const appVersion = useVersionStore((s) => s.appVersion);
+  const cliVersion = useSettingsStore((s) => s.cliVersion);
+  useEffect(() => {
+    const parts = ["Claude Tabs"];
+    if (appVersion) parts[0] += ` v${appVersion}`;
+    if (cliVersion) parts.push(`CLI ${cliVersion}`);
+    getCurrentWindow().setTitle(parts.join(" · ")).catch(() => {});
+  }, [appVersion, cliVersion]);
 
   // [SL-02] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T, uses saved defaults or last config
   const quickLaunch = useCallback(async () => {
@@ -362,7 +372,6 @@ export default function App() {
 
   return (
     <div className={`app${ctrlHeld ? " ctrl-held" : ""}`}>
-      <AppHeader />
       {/* Tab bar */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
@@ -546,6 +555,16 @@ export default function App() {
               }),
             ])}
           </div>
+          <button
+            className="tab-search"
+            onClick={() => {
+              const store = useSettingsStore.getState();
+              store.setSidePanel(store.sidePanel === "search" ? null : "search");
+            }}
+            title="Search conversations (Ctrl+Shift+F)"
+          >
+            <IconSearch size={16} />
+          </button>
           <button
             className="tab-resume"
             onClick={() => setShowResumePicker(true)}
