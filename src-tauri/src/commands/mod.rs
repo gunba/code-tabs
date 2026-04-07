@@ -5,6 +5,7 @@ mod git;
 mod process;
 pub(crate) mod data;
 mod file_watcher;
+mod version;
 
 pub use session::*;
 pub use cli::*;
@@ -13,3 +14,4 @@ pub use git::*;
 pub use process::*;
 pub use data::*;
 pub use file_watcher::*;
+pub use version::*;

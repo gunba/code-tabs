@@ -18,12 +18,14 @@ import { ActivityPanel } from "./components/ActivityPanel/ActivityPanel";
 import { SearchPanel } from "./components/SearchPanel/SearchPanel";
 import { ModalOverlay } from "./components/ModalOverlay/ModalOverlay";
 import { ContextViewer } from "./components/ContextViewer/ContextViewer";
+import { AppHeader } from "./components/AppHeader/AppHeader";
 
 import { useCliWatcher } from "./hooks/useCliWatcher";
 import { useNotifications } from "./hooks/useNotifications";
 import { useCommandDiscovery } from "./hooks/useCommandDiscovery";
 import { useCtrlKey } from "./hooks/useCtrlKey";
 import { useUiConfigStore } from "./lib/uiConfig";
+import { useVersionStore } from "./store/version";
 import { killAllActivePtys } from "./lib/ptyProcess";
 import { killPty, writeToPty } from "./lib/ptyRegistry";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
@@ -118,6 +120,10 @@ export default function App() {
       // [HM-11] Startup intentionally does not install or mutate Claude hook
       // settings; hook changes are user-managed via the Hooks UI only.
       invoke("cleanup_session_data", { maxAgeHours: 72 }).catch(() => {});
+      // Version + update checks: fire after init (non-blocking, failures ignored)
+      useVersionStore.getState().loadBuildInfo();
+      useVersionStore.getState().checkForAppUpdate();
+      useVersionStore.getState().checkLatestCliVersion();
     })();
   }, [init, loadRuntimeInfo]);
 
@@ -356,6 +362,7 @@ export default function App() {
 
   return (
     <div className={`app${ctrlHeld ? " ctrl-held" : ""}`}>
+      <AppHeader />
       {/* Tab bar */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
