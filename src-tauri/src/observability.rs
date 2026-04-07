@@ -99,24 +99,29 @@ pub fn open_observability_log(app: AppHandle, session_id: Option<String>) -> Res
 
 #[tauri::command]
 pub fn open_main_devtools(app: AppHandle) -> Result<(), String> {
-    if !cfg!(debug_assertions) {
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = app;
         return Err("Devtools are only available in debug builds".into());
     }
-    record_backend_event(
-        &app,
-        "LOG",
-        "app",
-        None,
-        "app.devtools_open",
-        "Opening main webview devtools",
-        json!({}),
-    );
-    let window = app
-        .get_webview_window("main")
-        .ok_or("Main window not found")?;
-    window.open_devtools();
-    let _ = window.set_focus();
-    Ok(())
+    #[cfg(debug_assertions)]
+    {
+        record_backend_event(
+            &app,
+            "LOG",
+            "app",
+            None,
+            "app.devtools_open",
+            "Opening main webview devtools",
+            json!({}),
+        );
+        let window = app
+            .get_webview_window("main")
+            .ok_or("Main window not found")?;
+        window.open_devtools();
+        let _ = window.set_focus();
+        Ok(())
+    }
 }
 
 pub fn record_backend_event(
