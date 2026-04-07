@@ -14,6 +14,7 @@ export interface SubagentAction {
 // [SI-09] Subagent data captured via inspector tap events (no JSONL watcher)
 // [IN-03] Subagent tracking: Agent tool_use -> queue spawn -> first sidechain msg creates entry; pendingSpawns drained on UserInterruption/UserInput/SlashCommand
 // [IN-06] Dead subagent purge removed -- idle subs remain visible until session ends
+// [SR-05] Nested subagents supported via agentId-based routing (each event tagged with agentId, parentSessionId tracked)
 /**
  * Tracks subagent lifecycles from tap events.
  * One instance per session. Emits SubagentActions for the store.

@@ -1,3 +1,4 @@
+// [VA-01] Version store: build info, app update, CLI version check, CLI update
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { check, type Update } from "@tauri-apps/plugin-updater";

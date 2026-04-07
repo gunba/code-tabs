@@ -538,6 +538,7 @@ pub async fn send_notification(
     }
 }
 
+// [IN-07] Rust side of inspector port probe: TcpListener::bind on 127.0.0.1
 /// Check if a TCP port is available for binding on 127.0.0.1.
 /// Used by the frontend to find a free port for BUN_INSPECT before spawning.
 #[tauri::command]

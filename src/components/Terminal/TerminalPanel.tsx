@@ -152,7 +152,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const [loading, setLoading] = useState(!!session.config.resumeSession);
   const [queuedInput, setQueuedInput] = useState<string | null>(null);
 
-  // Hide loading spinner when inspector connects
+  // [SR-01] Hide loading spinner when inspector connects
   useEffect(() => {
     if (loading && inspector.connected) setLoading(false);
   }, [loading, inspector.connected]);
@@ -300,7 +300,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   // ── Session restart ──────────────────────────────────────────────────
   const triggerRespawnRef = useRef<(config?: SessionConfig, name?: string) => void>(() => {});
   // Stable ref so callbacks can call triggerRespawn without stale closures
-  // [RS-01] triggerRespawn: cleanup old PTY/watchers/inspector, allocate port, increment respawnCounter
+  // [RS-01] [PT-11] triggerRespawn: cleanup old PTY/watchers/inspector, allocate port, increment respawnCounter
   triggerRespawnRef.current = (config?: SessionConfig, name?: string) => {
     dlog("terminal", session.id, "respawn triggered", "LOG", {
       event: "session.respawn_triggered",

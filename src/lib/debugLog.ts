@@ -32,10 +32,10 @@ export interface DebugLogEntry {
 }
 
 const GLOBAL_KEY = "__global__";
-const MAX_ENTRIES = 15000;
+const MAX_ENTRIES = 15000; // [DP-04] Ring buffer capacity per session
 const FLUSH_INTERVAL_MS = 1500;
 const FLUSH_THRESHOLD = 25;
-const buffers = new Map<string, DebugLogEntry[]>();
+const buffers = new Map<string, DebugLogEntry[]>(); // [DP-13] Per-session ring buffers
 const pendingByKey = new Map<string, string[]>();
 
 let generation = 0;
@@ -183,6 +183,7 @@ function pushEntry(entry: DebugLogEntry, persist: boolean): void {
   forwardToConsole(entry);
 }
 
+// [DP-03] All app logging flows through dlog(module, sessionId, message, level?)
 export function dlog(
   module: string,
   sessionId: string | null,

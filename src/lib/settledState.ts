@@ -1,3 +1,4 @@
+// [SE-01] Centralized per-session settled-state hysteresis for idle/actionNeeded/waitingPermission
 import type { SessionState } from "../types/session";
 import { isSessionIdle } from "../types/session";
 import { dlog } from "./debugLog";

@@ -1,3 +1,4 @@
+// [VA-03] Rust version commands: build info, CLI version check, CLI update with install method detection
 use serde::Serialize;
 
 #[derive(Serialize)]

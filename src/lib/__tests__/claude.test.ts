@@ -498,7 +498,7 @@ describe("toolCategoryColor", () => {
   });
 
   it("returns mapped color for known tool (Agent)", () => {
-    expect(toolCategoryColor("Agent")).toBe("var(--accent-tertiary)");
+    expect(toolCategoryColor("Agent")).toBe("var(--accent-secondary)");
   });
 
   it("returns muted fallback for unknown/MCP tools", () => {

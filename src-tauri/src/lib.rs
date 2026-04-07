@@ -118,6 +118,7 @@ pub fn run() {
                     "arch": std::env::consts::ARCH,
                 }),
             );
+            // [WN-01] Native Windows decorations — no custom titlebar; dark theme set in tauri.conf.json
             #[cfg(target_os = "windows")]
             {
                 use tauri::Manager;

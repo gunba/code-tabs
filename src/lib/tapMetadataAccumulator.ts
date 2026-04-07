@@ -4,6 +4,7 @@ import type { SessionMetadata, SystemPromptBlock, CapturedMessage } from "../typ
 
 // [SI-07] Tool actions, user prompts, assistant text captured inline via event processing
 // [IN-11] StatusBar enrichment: model, subscription, region, latency, rate limits, lines changed
+// [SR-02] Counters start from zero on each inspector connection — show only NEW conversation usage
 /**
  * Stateful accumulator: processes tap events and produces metadata diffs.
  * One instance per session. Fingerprint-based diffing — only returns changes.

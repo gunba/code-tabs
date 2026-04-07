@@ -1,7 +1,8 @@
 /**
  * Theme system for Claude Tabs.
  *
- * All colors are exposed as CSS custom properties on :root.
+ * // [TH-01] All colors are CSS custom properties on :root — components use var(--x), not hardcoded hex.
+ * // [TH-02] Key variables: --bg-primary, --bg-surface, --accent (clay), --accent-secondary (blue), --accent-tertiary (purple), --term-bg, --term-fg
  * Components use var(--color-name) instead of hardcoded hex values.
  * The meta-agent (or any automation) can change themes by calling applyTheme().
  */

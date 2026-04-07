@@ -1,3 +1,4 @@
+// [VA-02] AppHeader: version info bar with app/CLI update buttons
 import { useVersionStore } from "../../store/version";
 import { useSettingsStore } from "../../store/settings";
 import { invoke } from "@tauri-apps/api/core";
