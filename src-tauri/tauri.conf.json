@@ -31,6 +31,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -43,6 +44,14 @@
       "nsis": {
         "installMode": "currentUser"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENDQ0Y4RUVEMjdGM0RFOUUKUldTZTN2TW43WTdQekZOTWRBYnM1dTVMcFo0VlBocnpBdnVWb0lsSFFPU2NId0hvUFpzQ1ZXcTkK",
+      "endpoints": [
+        "https://github.com/gunba/claude-tabs/releases/latest/download/latest.json"
+      ]
     }
   }
 }

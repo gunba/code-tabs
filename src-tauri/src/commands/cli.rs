@@ -51,7 +51,7 @@ pub async fn detect_claude_cli(app: AppHandle) -> Result<String, String> {
     result.map(|(path, _)| path)
 }
 
-fn detect_claude_cli_sync() -> Result<String, String> {
+pub(crate) fn detect_claude_cli_sync() -> Result<String, String> {
     detect_claude_cli_details_sync().map(|(path, _)| path)
 }
 

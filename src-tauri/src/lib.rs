@@ -103,6 +103,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             record_backend_event(
                 &app.handle(),
@@ -208,6 +209,9 @@ pub fn run() {
             commands::add_watch_path,
             commands::compute_file_diff,
             commands::read_file_for_snapshot,
+            commands::get_build_info,
+            commands::check_latest_cli_version,
+            commands::update_cli,
             observability::append_observability_data,
             observability::get_observability_info,
             observability::open_observability_log,
