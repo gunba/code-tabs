@@ -267,11 +267,9 @@ function ProviderCard({
               />
             ))}
           </div>
-          {!provider.predefined && (
-            <button className="providers-add-btn" onClick={onAddMapping} style={{ marginTop: 4, alignSelf: "flex-start" }}>
-              + Add
-            </button>
-          )}
+          <button className="providers-add-btn" onClick={onAddMapping} style={{ marginTop: 4, alignSelf: "flex-start" }}>
+            + Add
+          </button>
         </div>
       )}
     </div>
@@ -431,6 +429,9 @@ interface MappingRowProps {
 }
 
 function MappingRow({ mapping, isFirst, isLast, onUpdate, onRemove, onMove }: MappingRowProps) {
+  const [ctxDraft, setCtxDraft] = useState(() =>
+    mapping.contextWindow ? String(Math.round(mapping.contextWindow / 1000)) : ""
+  );
   return (
     <div className="providers-route-row">
       <div className="providers-route-arrows">
@@ -452,10 +453,12 @@ function MappingRow({ mapping, isFirst, isLast, onUpdate, onRemove, onMove }: Ma
       <input
         type="text"
         className="providers-route-context"
-        value={mapping.contextWindow ? `${Math.round(mapping.contextWindow / 1000)}k` : ""}
-        onChange={(e) => {
-          const raw = e.target.value.replace(/[^0-9]/g, "");
-          onUpdate({ contextWindow: raw ? parseInt(raw, 10) * 1000 : undefined });
+        value={ctxDraft}
+        onChange={(e) => setCtxDraft(e.target.value.replace(/[^0-9]/g, ""))}
+        onBlur={() => {
+          const n = parseInt(ctxDraft, 10);
+          onUpdate({ contextWindow: n > 0 ? n * 1000 : undefined });
+          if (!ctxDraft) setCtxDraft("");
         }}
         placeholder="200k"
       />
