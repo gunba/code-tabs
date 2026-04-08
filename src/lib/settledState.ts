@@ -24,6 +24,7 @@ class SettledStateManager {
   private pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private lastEffState = new Map<string, SessionState>();
   private settledKinds = new Map<string, SettledKind>();
+  private meaningfulActivitySeen = new Map<string, boolean>();
   private subscribers = new Set<Subscriber>();
 
   subscribe(onSettle: SettledCallback, onClear: ClearCallback): () => void {
@@ -32,10 +33,18 @@ class SettledStateManager {
     return () => { this.subscribers.delete(sub); };
   }
 
+  private isMeaningfullyActive(state: SessionState): boolean {
+    return state !== "starting" && state !== "idle" && state !== "dead";
+  }
+
   /** Feed an effective-state update for a session. Called from the Zustand effect in App.tsx. */
   update(sessionId: string, effState: SessionState): void {
     const prev = this.lastEffState.get(sessionId);
     this.lastEffState.set(sessionId, effState);
+
+    if (this.isMeaningfullyActive(effState)) {
+      this.meaningfulActivitySeen.set(sessionId, true);
+    }
 
     if (prev === effState) return;
 
@@ -67,15 +76,18 @@ class SettledStateManager {
       return;
     }
 
-    // Start hysteresis timer for idle transitions
-    if (isSessionIdle(effState) && prev && !isSessionIdle(prev) && prev !== "dead" && prev !== "starting") {
-      // Cancel any existing pending timer (shouldn't happen, but defensive)
+    // Start hysteresis timer for idle transitions only after meaningful activity
+    if (
+      isSessionIdle(effState)
+      && prev
+      && this.isMeaningfullyActive(prev)
+      && this.meaningfulActivitySeen.get(sessionId)
+    ) {
       const existing = this.pendingTimers.get(sessionId);
       if (existing) clearTimeout(existing);
 
       const timer = setTimeout(() => {
         this.pendingTimers.delete(sessionId);
-        // Verify state is still idle when timer fires
         const currentEff = this.lastEffState.get(sessionId);
         if (currentEff && isSessionIdle(currentEff)) {
           dlog("settled", sessionId, "idle confirmed after hysteresis");
@@ -110,6 +122,7 @@ class SettledStateManager {
     if (pending) clearTimeout(pending);
     this.pendingTimers.delete(sessionId);
     this.lastEffState.delete(sessionId);
+    this.meaningfulActivitySeen.delete(sessionId);
     if (this.settledKinds.has(sessionId)) {
       this.settledKinds.delete(sessionId);
       // Don't fire clear callbacks on removal — session is gone

@@ -13,7 +13,7 @@ import {
   DEFAULT_SESSION_CONFIG,
   ANTHROPIC_EFFORTS,
 } from "../../types/session";
-import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning, IconSkull, IconBulldozer } from "../Icons/Icons";
+import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning, IconSkull, IconBulldozer, IconDocument } from "../Icons/Icons";
 import { PillGroup } from "../PillGroup/PillGroup";
 import "./SessionLauncher.css";
 
@@ -505,104 +505,116 @@ export function SessionLauncher() {
 
         {/* Pill selectors — inline, wrapping */}
         <div className={`launcher-pills-section${isNonSessionCommand ? " launcher-selects-disabled" : ""}`}>
-          {showProviderSelector && (
+          <div className="launcher-pills-row">
+            {showProviderSelector && (
+              <select
+                className="launcher-select"
+                value={config.providerId ?? providerConfig.defaultProviderId}
+                onChange={(e) => handleProviderChange(e.target.value || null)}
+                disabled={isNonSessionCommand}
+              >
+                {providerConfig.providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+            <span className="launcher-pill-icon" title="Model"><IconModelDiamond size={13} /></span>
             <select
               className="launcher-select"
-              value={config.providerId ?? providerConfig.defaultProviderId}
-              onChange={(e) => handleProviderChange(e.target.value || null)}
+              value={config.model ?? ""}
+              onChange={(e) => handleModelSelect(e.target.value)}
               disabled={isNonSessionCommand}
             >
-              {providerConfig.providers.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              <option value="">default</option>
+              {modelOptions.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
-          )}
-          <span className="launcher-pill-icon" title="Model"><IconModelDiamond size={13} /></span>
-          <select
-            className="launcher-select"
-            value={config.model ?? ""}
-            onChange={(e) => handleModelSelect(e.target.value)}
-            disabled={isNonSessionCommand}
-          >
-            <option value="">default</option>
-            {modelOptions.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-          <span className="launcher-pill-icon" title="Effort"><IconLightning size={13} /></span>
-          <select
-            className="launcher-select"
-            value={config.effort ?? ""}
-            onChange={(e) => handleEffortSelect(e.target.value)}
-            disabled={isNonSessionCommand}
-          >
-            <option value="">default</option>
-            {effortOptions.map((e) => (
-              <option key={e.value} value={e.value}>{e.label}</option>
-            ))}
-          </select>
-          <div className="launcher-prompt-slot">
-            {savedPrompts.length > 0 ? (
-              <>
-                <select
-                  className="launcher-select launcher-prompt-select"
-                  value={selectedPromptId}
-                  onChange={(e) => setSelectedPromptId(e.target.value)}
-                  disabled={isNonSessionCommand}
-                  title="System prompt"
-                >
-                  <option value="">Default Prompt</option>
-                  {savedPrompts.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-                {selectedPromptId && (
-                  <button
-                    className={`launcher-toggle-pill launcher-prompt-mode${promptMode === "append" ? " launcher-toggle-pill-on" : ""}`}
-                    onClick={() => setPromptMode((m) => m === "replace" ? "append" : "replace")}
-                    title={promptMode === "replace" ? "Replace system prompt" : "Append to system prompt"}
-                    type="button"
-                  >
-                    {promptMode === "replace" ? "Replace" : "Append"}
-                  </button>
-                )}
-              </>
-            ) : (
-              <button
-                className="launcher-toggle-pill launcher-prompt-config-btn"
-                onClick={() => setShowConfigManager("prompts")}
-                title="Open system prompt configuration"
-                type="button"
-              >
-                System Prompt
-              </button>
-            )}
+            <span className="launcher-pill-icon" title="Effort"><IconLightning size={13} /></span>
+            <select
+              className="launcher-select"
+              value={config.effort ?? ""}
+              onChange={(e) => handleEffortSelect(e.target.value)}
+              disabled={isNonSessionCommand}
+            >
+              <option value="">default</option>
+              {effortOptions.map((e) => (
+                <option key={e.value} value={e.value}>{e.label}</option>
+              ))}
+            </select>
           </div>
-          <span className="launcher-pill-icon" title="Permissions"><IconLock size={13} /></span>
-          <PillGroup
-            options={PERM_PILLS}
-            selected={config.permissionMode === "default" ? null : config.permissionMode}
-            onChange={handlePermChange}
-            disabled={isNonSessionCommand}
-          />
-          <button
-            className={`launcher-toggle-pill${config.dangerouslySkipPermissions ? " launcher-toggle-pill-on launcher-toggle-skip" : ""}`}
-            onClick={() => updateConfig("dangerouslySkipPermissions", !config.dangerouslySkipPermissions)}
-            aria-pressed={config.dangerouslySkipPermissions}
-            title="Skip all permission prompts (--dangerously-skip-permissions)"
-            type="button"
-          >
-            <IconSkull size={12} /> Skip
-          </button>
-          <button
-            className={`launcher-toggle-pill${config.projectDir ? " launcher-toggle-pill-on launcher-toggle-sandbox" : ""}`}
-            onClick={() => updateConfig("projectDir", !config.projectDir)}
-            aria-pressed={config.projectDir}
-            title="Restrict Claude to the working directory (--project-dir)"
-            type="button"
-          >
-            <IconBulldozer size={12} /> Sandbox
-          </button>
+
+          <div className="launcher-pills-row launcher-pills-row-secondary">
+            <div className="launcher-prompt-group">
+              {savedPrompts.length > 0 ? (
+                <>
+                  <span className="launcher-pill-icon" title="System Prompt"><IconDocument size={13} /></span>
+                  <div className="launcher-prompt-slot">
+                    <select
+                      className="launcher-select launcher-prompt-select"
+                      value={selectedPromptId}
+                      onChange={(e) => setSelectedPromptId(e.target.value)}
+                      disabled={isNonSessionCommand}
+                      title="System prompt"
+                    >
+                      <option value="">Default Prompt</option>
+                      {savedPrompts.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {selectedPromptId && (
+                      <button
+                        className={`launcher-toggle-pill launcher-prompt-mode${promptMode === "append" ? " launcher-toggle-pill-on" : ""}`}
+                        onClick={() => setPromptMode((m) => m === "replace" ? "append" : "replace")}
+                        title={promptMode === "replace" ? "Replace system prompt" : "Append to system prompt"}
+                        type="button"
+                      >
+                        {promptMode === "replace" ? "Replace" : "Append"}
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <button
+                  className="launcher-toggle-pill launcher-prompt-config-btn"
+                  onClick={() => setShowConfigManager("prompts")}
+                  title="Open system prompt configuration"
+                  type="button"
+                >
+                  <IconDocument size={12} /> System Prompt
+                </button>
+              )}
+            </div>
+
+            <div className="launcher-permissions-group">
+              <span className="launcher-pill-icon" title="Permissions"><IconLock size={13} /></span>
+              <PillGroup
+                options={PERM_PILLS}
+                selected={config.permissionMode === "default" ? null : config.permissionMode}
+                onChange={handlePermChange}
+                disabled={isNonSessionCommand}
+              />
+            </div>
+
+            <button
+              className={`launcher-toggle-pill${config.dangerouslySkipPermissions ? " launcher-toggle-pill-on launcher-toggle-skip" : ""}`}
+              onClick={() => updateConfig("dangerouslySkipPermissions", !config.dangerouslySkipPermissions)}
+              aria-pressed={config.dangerouslySkipPermissions}
+              title="Skip all permission prompts (--dangerously-skip-permissions)"
+              type="button"
+            >
+              <IconSkull size={12} /> Skip
+            </button>
+            <button
+              className={`launcher-toggle-pill${config.projectDir ? " launcher-toggle-pill-on launcher-toggle-sandbox" : ""}`}
+              onClick={() => updateConfig("projectDir", !config.projectDir)}
+              aria-pressed={config.projectDir}
+              title="Restrict Claude to the working directory (--project-dir)"
+              type="button"
+            >
+              <IconBulldozer size={12} /> Sandbox
+            </button>
+          </div>
         </div>
 
         {/* CLI Options header (always shown) with TAP/TFC and save defaults */}

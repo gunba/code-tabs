@@ -240,7 +240,41 @@ describe("settledStateManager", () => {
     unsub();
   });
 
-  it("interrupted state settles as idle (via isSessionIdle)", () => {
+  it("does not settle for sessions that were never meaningfully active", () => {
+    const onSettle = vi.fn();
+    const unsub = settledStateManager.subscribe(onSettle, () => {});
+
+    settledStateManager.update("s1", "idle");
+    vi.advanceTimersByTime(2000);
+    expect(onSettle).not.toHaveBeenCalled();
+
+    settledStateManager.update("s1", "starting");
+    settledStateManager.update("s1", "idle");
+    vi.advanceTimersByTime(2000);
+    expect(onSettle).not.toHaveBeenCalled();
+
+    unsub();
+  });
+
+  it("does not re-settle idle after manual clear without new activity", () => {
+    const onSettle = vi.fn();
+    const onClear = vi.fn();
+    const unsub = settledStateManager.subscribe(onSettle, onClear);
+
+    settledStateManager.update("s1", "thinking");
+    settledStateManager.update("s1", "idle");
+    vi.advanceTimersByTime(2000);
+    expect(onSettle).toHaveBeenCalledWith("s1", "idle");
+
+    settledStateManager.clearSettled("s1");
+    vi.advanceTimersByTime(2000);
+    expect(onClear).toHaveBeenCalledWith("s1");
+    expect(onSettle).toHaveBeenCalledTimes(1);
+
+    unsub();
+  });
+
+  it("treats interrupted as meaningful previous activity before settling idle", () => {
     const onSettle = vi.fn();
     const unsub = settledStateManager.subscribe(onSettle, () => {});
 

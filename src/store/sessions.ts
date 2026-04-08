@@ -95,7 +95,13 @@ export const useSessionStore = create<SessionsState>((set) => ({
           || !!s.config.resumeSession
           || !!s.metadata.nodeSummary
           || s.metadata.assistantMessageCount > 0
-      );
+      ).map((s) => ({
+        ...s,
+        config: {
+          ...s.config,
+          launchWorkingDir: s.config.launchWorkingDir || s.config.workingDir,
+        },
+      }));
       // Assign colors sequentially to restored sessions
       const allIds = sessions.map((s) => s.id);
       for (const s of sessions) {
@@ -197,6 +203,10 @@ export const useSessionStore = create<SessionsState>((set) => ({
     });
     const tagged = {
       ...session,
+      config: {
+        ...session.config,
+        launchWorkingDir: session.config.launchWorkingDir || config.launchWorkingDir || config.workingDir,
+      },
       isMetaAgent: opts.isMetaAgent ?? false,
     };
     // Assign a color to the new session, avoiding colors of existing sessions

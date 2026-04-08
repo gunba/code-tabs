@@ -421,7 +421,11 @@ export function useTapEventProcessor(
 
       // [SI-20] Worktree cwd detection: SessionRegistration gated behind isSubagentInFlight
       if (event.kind === "ConversationMessage" && event.cwd && !event.isSidechain) {
-        updateCwdIfChanged(event.cwd);
+        if (!subTracker.isSubagentInFlight()) {
+          updateCwdIfChanged(event.cwd);
+        } else {
+          dlog("tap", sid, `ConversationMessage cwd(${event.cwd}) suppressed — subagent in flight`, "DEBUG");
+        }
       }
       if (event.kind === "SessionRegistration" && event.cwd) {
         if (!subTracker.isSubagentInFlight()) {

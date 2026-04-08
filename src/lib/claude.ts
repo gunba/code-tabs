@@ -16,10 +16,14 @@ export function getResumeId(session: Session): string {
   return session.config.resumeSession || session.config.sessionId || session.id;
 }
 
-// [DS-03] canResumeSession: derived from sessionId, resumeSession, or nodeSummary (no JSONL check)
-// [RS-03] Check conversation existence via nodeSummary || resumeSession (in-memory)
+// [DS-03] canResumeSession: resumable only with actual conversation evidence
+// [RS-03] Check conversation existence via resumeSession || nodeSummary || assistantMessageCount
 export function canResumeSession(session: Session): boolean {
-  return !!session.config.sessionId || !!session.config.resumeSession || !!session.metadata.nodeSummary;
+  return !!session.config.resumeSession || !!session.metadata.nodeSummary || session.metadata.assistantMessageCount > 0;
+}
+
+export function getLaunchWorkingDir(session: Session): string {
+  return session.config.launchWorkingDir || session.config.workingDir;
 }
 
 /** Find nearest non-dead tab from a given index. Returns null when no live tabs remain. */

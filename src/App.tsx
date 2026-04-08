@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, effectiveModel, getResumeId, modelLabel, modelColor, effortColor, canResumeSession, stripWorktreeFlags, formatTokenCount, eventKindColor, getActivityText } from "./lib/claude";
+import { dirToTabName, effectiveModel, getResumeId, getLaunchWorkingDir, modelLabel, modelColor, effortColor, canResumeSession, stripWorktreeFlags, formatTokenCount, eventKindColor, getActivityText } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { SubagentInspector } from "./components/SubagentInspector/SubagentInspector";
 
@@ -180,12 +180,14 @@ export default function App() {
   const relaunchDeadSession = useCallback(async (session: Session) => {
     const resumeConfig = {
       ...session.config,
+      workingDir: getLaunchWorkingDir(session),
+      launchWorkingDir: getLaunchWorkingDir(session),
       resumeSession: getResumeId(session),
       continueSession: false,
       extraFlags: stripWorktreeFlags(session.config.extraFlags),
     };
     const insertAtIndex = sessions.findIndex((s) => s.id === session.id);
-    const name = session.name || dirToTabName(session.config.workingDir);
+    const name = session.name || dirToTabName(getLaunchWorkingDir(session));
 
     try {
       await createSession(
@@ -205,6 +207,9 @@ export default function App() {
     (id: string) => {
       setInspectedSubagent(null);
       settledStateManager.clearSettled(id);
+      if (activeTabId && activeTabId !== id && settledTabs.get(activeTabId) === "idle") {
+        settledStateManager.clearSettled(activeTabId);
+      }
       const session = sessions.find((s) => s.id === id);
       if (!session) return;
 
@@ -217,7 +222,7 @@ export default function App() {
         setActiveTab(id);
       }
     },
-    [activeTabId, relaunchDeadSession, sessions, setActiveTab]
+    [activeTabId, relaunchDeadSession, sessions, setActiveTab, settledTabs]
   );
 
   // Close session, prompting for worktree prune on manual single-tab close
@@ -471,9 +476,11 @@ export default function App() {
                   }}
                   onDragEnd={() => { dragTabRef.current = null; setDragOverTabId(null); }}
                   onClick={(e) => {
-                    if (e.ctrlKey) {
+                    if (e.ctrlKey && canResumeSession(session)) {
                       setLastConfig({
                         ...session.config,
+                        workingDir: getLaunchWorkingDir(session),
+                        launchWorkingDir: getLaunchWorkingDir(session),
                         resumeSession: getResumeId(session),
                         continueSession: false,
                       });

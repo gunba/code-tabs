@@ -29,6 +29,7 @@ export type PermissionMode =
 
 export interface SessionConfig {
   workingDir: string;
+  launchWorkingDir?: string;
   model: string | null;
   permissionMode: PermissionMode;
   dangerouslySkipPermissions: boolean;
@@ -389,6 +390,7 @@ export interface SystemPromptRule {
 
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   workingDir: "",
+  launchWorkingDir: "",
   model: null,
   permissionMode: "default",
   dangerouslySkipPermissions: false,
