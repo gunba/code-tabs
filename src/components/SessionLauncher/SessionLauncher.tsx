@@ -12,7 +12,7 @@ import {
   type PermissionMode,
   DEFAULT_SESSION_CONFIG,
 } from "../../types/session";
-import { IconReturn, IconFolder, IconSkull, IconBulldozer } from "../Icons/Icons";
+import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning, IconSkull, IconBulldozer } from "../Icons/Icons";
 import { PillGroup } from "../PillGroup/PillGroup";
 import "./SessionLauncher.css";
 
@@ -55,9 +55,7 @@ export function SessionLauncher() {
   const cliCapabilities = useSettingsStore((s) => s.cliCapabilities);
   const commandUsage = useSettingsStore((s) => s.commandUsage);
   const savedPrompts = useSettingsStore((s) => s.savedPrompts);
-  const modelRegistry = useSettingsStore((s) => s.modelRegistry);
   const providerConfig = useSettingsStore((s) => s.providerConfig);
-  const registryEntries = useMemo(() => Object.values(modelRegistry), [modelRegistry]);
 
   // When resuming, use session-specific settings from lastConfig (set by handleConfigure);
   // otherwise savedDefaults (explicit "Save defaults") takes priority over lastConfig.
@@ -194,28 +192,10 @@ export function SessionLauncher() {
     [providerConfig.providers, selectedProviderId]
   );
 
-  const modelOptions = useMemo(() => {
-    const base = (selectedProvider?.knownModels ?? []).map((m) => ({
-      value: m.id,
-      label: m.label,
-      color: m.color,
-      family: m.family,
-    }));
-    // Merge [1m] variants from registry for models whose family matches
-    for (const entry of registryEntries) {
-      if (!entry.modelId.includes("[1m]")) continue;
-      const familyMatch = base.find((m) => m.family && entry.family === m.family);
-      if (familyMatch && !base.some((m) => m.value === entry.modelId)) {
-        base.push({
-          value: entry.modelId,
-          label: `${familyMatch.label} [1M]`,
-          color: familyMatch.color,
-          family: familyMatch.family,
-        });
-      }
-    }
-    return base;
-  }, [selectedProvider?.knownModels, registryEntries]);
+  const modelOptions = useMemo(() =>
+    (selectedProvider?.knownModels ?? []).map((m) => ({ value: m.id, label: m.label })),
+    [selectedProvider?.knownModels]
+  );
 
   const effortOptions = useMemo(() =>
     (selectedProvider?.effortLevels ?? []).map((e) => ({ value: e.value, label: e.label })),
@@ -520,29 +500,32 @@ export function SessionLauncher() {
               ))}
             </select>
           )}
+          <span className="launcher-pill-icon" title="Model"><IconModelDiamond size={13} /></span>
           <select
             className="launcher-select"
             value={config.model ?? ""}
             onChange={(e) => handleModelSelect(e.target.value)}
             disabled={isNonSessionCommand}
           >
-            <option value="">model: default</option>
+            <option value="">default</option>
             {modelOptions.map((m) => (
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
+          <span className="launcher-pill-icon" title="Effort"><IconLightning size={13} /></span>
           <select
             className="launcher-select"
             value={config.effort ?? ""}
             onChange={(e) => handleEffortSelect(e.target.value)}
             disabled={isNonSessionCommand}
           >
-            <option value="">effort: default</option>
+            <option value="">default</option>
             {effortOptions.map((e) => (
               <option key={e.value} value={e.value}>{e.label}</option>
             ))}
           </select>
           <span className="launcher-pills-break" />
+          <span className="launcher-pill-icon" title="Permissions"><IconLock size={13} /></span>
           <PillGroup
             options={PERM_PILLS}
             selected={config.permissionMode === "default" ? null : config.permissionMode}

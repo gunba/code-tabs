@@ -630,7 +630,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "claude-tabs-settings",
-      version: 11,
+      version: 12,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
@@ -749,6 +749,21 @@ export const useSettingsStore = create<SettingsState>()(
               }
               if (!Array.isArray(p.effortLevels) || (p.effortLevels as unknown[]).length === 0) {
                 p.effortLevels = p.kind === "openai_codex" ? CHATGPT_EFFORTS : ANTHROPIC_EFFORTS;
+              }
+            }
+          }
+        }
+        // v11→v12: Force-refresh model catalogs (added best, [1m] variants, fixed labels)
+        if (version < 12) {
+          const pc = state.providerConfig as { providers?: Array<Record<string, unknown>> } | undefined;
+          if (pc?.providers) {
+            for (const p of pc.providers) {
+              if (p.kind === "openai_codex") {
+                p.knownModels = CHATGPT_MODELS;
+                p.effortLevels = CHATGPT_EFFORTS;
+              } else if (p.id === "anthropic" || p.kind === "anthropic_compatible") {
+                p.knownModels = ANTHROPIC_MODELS;
+                p.effortLevels = ANTHROPIC_EFFORTS;
               }
             }
           }

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { trace, traceAsync } from "../lib/perfTrace";
 import { assignSessionColor, releaseSessionColor, findNearestLiveTab } from "../lib/claude";
+import { fetchAnthropicModelCatalog } from "../lib/modelCatalog";
 import { useActivityStore } from "./activity";
 import { dlog, removeDebugLogSession } from "../lib/debugLog";
 import type {
@@ -169,6 +170,18 @@ export const useSessionStore = create<SessionsState>((set) => ({
         data: { claudePath },
       });
     }
+
+    // Refresh Anthropic model catalog from docs (fire-and-forget, updates settings store)
+    fetchAnthropicModelCatalog().then(({ models, efforts }) => {
+      const { providerConfig, setProviderConfig } = useSettingsStore.getState();
+      const updated = providerConfig.providers.map((p) =>
+        p.kind === "anthropic_compatible" ? { ...p, knownModels: models, effortLevels: efforts } : p
+      );
+      if (JSON.stringify(updated) !== JSON.stringify(providerConfig.providers)) {
+        setProviderConfig({ ...providerConfig, providers: updated });
+        dlog("session", null, `model catalog refreshed: ${models.length} models`, "LOG");
+      }
+    }).catch(() => {});
   },
 
   createSession: async (name, config, opts = {}) => {

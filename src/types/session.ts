@@ -295,11 +295,12 @@ export interface ProviderConfig {
 // ── Default provider catalogs ───────────────────────────────────────
 
 export const ANTHROPIC_MODELS: ProviderModel[] = [
+  { id: "best",       label: "best",       family: "opus",   contextWindow: 200000, color: "#ff8000" },
   { id: "opus",       label: "opus",       family: "opus",   contextWindow: 200000, color: "#ff8000" },
-  { id: "opus[1m]",   label: "opus [1m]",  family: "opus",   contextWindow: 1000000, color: "#ff8000" },
+  { id: "opus[1m]",   label: "opus[1m]",   family: "opus",   contextWindow: 1000000, color: "#ff8000" },
   { id: "opusplan",   label: "opusplan",   family: "opus",   contextWindow: 200000, color: "#ff8000" },
   { id: "sonnet",     label: "sonnet",     family: "sonnet", contextWindow: 200000, color: "#a335ee" },
-  { id: "sonnet[1m]", label: "sonnet [1m]", family: "sonnet", contextWindow: 1000000, color: "#a335ee" },
+  { id: "sonnet[1m]", label: "sonnet[1m]", family: "sonnet", contextWindow: 1000000, color: "#a335ee" },
   { id: "haiku",      label: "haiku",      family: "haiku",  contextWindow: 200000, color: "#0070dd" },
 ];
 
