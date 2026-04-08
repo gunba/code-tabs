@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useSettingsStore } from "../../store/settings";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import type { ModelProvider, ModelMapping, ProviderConfig, ProviderModel } from "../../types/session";
-import { ANTHROPIC_MODELS, ANTHROPIC_EFFORTS } from "../../types/session";
+import { ANTHROPIC_EFFORTS, DEFAULT_CLAUDE_MAPPINGS } from "../../types/session";
 import { parseSocks5Url, buildSocks5Url } from "../../lib/socks5Url";
 import type { Socks5Parts } from "../../lib/socks5Url";
 import "./ProvidersPane.css";
@@ -37,8 +37,8 @@ export function ProvidersPane({ visible, onStatus }: ProvidersPaneProps) {
       name: "New Provider",
       kind: "anthropic_compatible",
       predefined: false,
-      modelMappings: [],
-      knownModels: ANTHROPIC_MODELS,
+      modelMappings: DEFAULT_CLAUDE_MAPPINGS.map((m, i) => ({ ...m, id: `${id}-map-${i}` })),
+      knownModels: [],
       effortLevels: ANTHROPIC_EFFORTS,
       baseUrl: "",
       apiKey: null,
@@ -171,8 +171,8 @@ function ProviderCard({
   onUpdate, onRemove, onSetDefault,
   onAddMapping, onRemoveMapping, onUpdateMapping, onMoveMapping,
 }: ProviderCardProps) {
-  const [showMappings, setShowMappings] = useState(provider.modelMappings.length > 0);
   const isAnthropicCompat = provider.kind === "anthropic_compatible";
+  const isAnthropicDefault = provider.id === "anthropic";
 
   return (
     <div className={`providers-card${isDefault ? " providers-card-default" : ""}`}>
@@ -235,53 +235,43 @@ function ProviderCard({
         <CodexAuthSection />
       )}
 
-      {/* Known Models */}
-      <KnownModelsEditor
-        models={provider.knownModels}
-        onChange={(models) => onUpdate({ knownModels: models })}
-      />
+      {/* Known Models — only for the default Anthropic provider */}
+      {isAnthropicDefault && (
+        <KnownModelsEditor
+          models={provider.knownModels}
+          onChange={(models) => onUpdate({ knownModels: models })}
+        />
+      )}
 
-      {/* Model Mappings (collapsible) — hidden for the default Anthropic provider */}
-      {provider.id !== "anthropic" && provider.modelMappings.length > 0 && (
+      {/* Model Mappings — shown expanded for all non-Anthropic providers */}
+      {!isAnthropicDefault && (
         <div className="providers-mappings-section">
-          <button
-            className="providers-mappings-toggle"
-            onClick={() => setShowMappings((s) => !s)}
-          >
-            {showMappings ? "\u25BC" : "\u25B6"} Mappings ({provider.modelMappings.length})
-          </button>
-          {showMappings && (
-            <>
-              <div className="providers-route-header">
-                <span></span>
-                <span>Pattern</span>
-                <span>Rewrite</span>
-                <span></span>
-              </div>
-              <div className="providers-route-list">
-                {provider.modelMappings.map((m, i) => (
-                  <MappingRow
-                    key={m.id}
-                    mapping={m}
-                    isFirst={i === 0}
-                    isLast={i === provider.modelMappings.length - 1}
-                    onUpdate={(u) => onUpdateMapping(m.id, u)}
-                    onRemove={() => onRemoveMapping(m.id)}
-                    onMove={(dir) => onMoveMapping(m.id, dir)}
-                  />
-                ))}
-              </div>
-              <button className="providers-add-btn" onClick={onAddMapping} style={{ marginTop: 4, alignSelf: "flex-start" }}>
-                + Add
-              </button>
-            </>
+          <div className="providers-mappings-label">Mappings</div>
+          <div className="providers-route-header">
+            <span></span>
+            <span>Pattern</span>
+            <span>Rewrite</span>
+            <span></span>
+          </div>
+          <div className="providers-route-list">
+            {provider.modelMappings.map((m, i) => (
+              <MappingRow
+                key={m.id}
+                mapping={m}
+                isFirst={i === 0}
+                isLast={i === provider.modelMappings.length - 1}
+                onUpdate={(u) => onUpdateMapping(m.id, u)}
+                onRemove={() => onRemoveMapping(m.id)}
+                onMove={(dir) => onMoveMapping(m.id, dir)}
+              />
+            ))}
+          </div>
+          {!provider.predefined && (
+            <button className="providers-add-btn" onClick={onAddMapping} style={{ marginTop: 4, alignSelf: "flex-start" }}>
+              + Add
+            </button>
           )}
         </div>
-      )}
-      {provider.id !== "anthropic" && provider.modelMappings.length === 0 && !provider.predefined && (
-        <button className="providers-add-btn" onClick={onAddMapping} style={{ alignSelf: "flex-start" }}>
-          + Mapping
-        </button>
       )}
     </div>
   );
@@ -290,7 +280,7 @@ function ProviderCard({
 // ── Known Models Editor ─────────────────────────────────────────────────
 
 function KnownModelsEditor({ models, onChange }: { models: ProviderModel[]; onChange: (models: ProviderModel[]) => void }) {
-  const [showModels, setShowModels] = useState(false);
+  const [showModels, setShowModels] = useState(true);
 
   const addModel = () => {
     onChange([...models, { id: "", label: "" }]);

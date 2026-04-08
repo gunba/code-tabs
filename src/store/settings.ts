@@ -630,7 +630,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "claude-tabs-settings",
-      version: 12,
+      version: 13,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
@@ -764,6 +764,21 @@ export const useSettingsStore = create<SettingsState>()(
               } else if (p.id === "anthropic") {
                 p.knownModels = ANTHROPIC_MODELS;
                 p.effortLevels = ANTHROPIC_EFFORTS;
+              }
+            }
+          }
+        }
+        // v12→v13: Force predefined provider names from constants, clear stale knownModels on custom providers
+        if (version < 13) {
+          const pc = state.providerConfig as { providers?: Array<Record<string, unknown>> } | undefined;
+          if (pc?.providers) {
+            for (const p of pc.providers) {
+              if (p.id === "openai-codex") {
+                p.name = "OpenAI";
+              }
+              // Custom providers don't need knownModels — dropdown derives from mapping rewrites
+              if (p.id !== "anthropic" && p.kind !== "openai_codex") {
+                p.knownModels = [];
               }
             }
           }

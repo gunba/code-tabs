@@ -225,6 +225,13 @@
   margin-top: 6px;
 }
 
+.providers-mappings-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
 .providers-mappings-toggle {
   background: transparent;
   border: none;

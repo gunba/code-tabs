@@ -323,6 +323,15 @@ export const CHATGPT_EFFORTS: ProviderEffort[] = [
   { value: "max",    label: "max" },
 ];
 
+// Default Claude-family mappings for new custom providers.
+// Pattern column auto-fills with these so the user only specifies rewrites.
+export const DEFAULT_CLAUDE_MAPPINGS: ModelMapping[] = [
+  { id: "map-opus",    pattern: "claude-opus-*",   rewriteModel: "" },
+  { id: "map-sonnet",  pattern: "claude-sonnet-*", rewriteModel: "" },
+  { id: "map-haiku",   pattern: "claude-haiku-*",  rewriteModel: "" },
+  { id: "map-catchall", pattern: "*",              rewriteModel: "" },
+];
+
 // [PR-02] Predefined OpenAI Codex provider maps Claude families onto
 // primary/small Codex models and ships in the default provider config.
 export const CODEX_PROVIDER: ModelProvider = {

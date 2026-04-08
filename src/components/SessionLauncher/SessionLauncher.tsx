@@ -192,10 +192,24 @@ export function SessionLauncher() {
     [providerConfig.providers, selectedProviderId]
   );
 
-  const modelOptions = useMemo(() =>
-    (selectedProvider?.knownModels ?? []).map((m) => ({ value: m.id, label: m.label })),
-    [selectedProvider?.knownModels]
-  );
+  const modelOptions = useMemo(() => {
+    if (!selectedProvider) return [];
+    // Anthropic: use knownModels directly
+    if (selectedProvider.id === "anthropic") {
+      return selectedProvider.knownModels.map((m) => ({ value: m.id, label: m.id }));
+    }
+    // Non-Anthropic: derive from unique mapping rewrite targets
+    const seen = new Set<string>();
+    const opts: Array<{ value: string; label: string }> = [];
+    for (const m of selectedProvider.modelMappings) {
+      const target = m.rewriteModel;
+      if (target && !seen.has(target)) {
+        seen.add(target);
+        opts.push({ value: target, label: target });
+      }
+    }
+    return opts;
+  }, [selectedProvider]);
 
   const effortOptions = useMemo(() =>
     (selectedProvider?.effortLevels ?? []).map((e) => ({ value: e.value, label: e.label })),
