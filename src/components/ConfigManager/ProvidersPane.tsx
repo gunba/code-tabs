@@ -429,8 +429,12 @@ interface MappingRowProps {
 
 function MappingRow({ mapping, isFirst, isLast, onUpdate, onRemove, onMove }: MappingRowProps) {
   const [ctxDraft, setCtxDraft] = useState(() =>
-    mapping.contextWindow ? String(Math.round(mapping.contextWindow / 1000)) : ""
+    mapping.contextWindow ? String(mapping.contextWindow) : ""
   );
+
+  useEffect(() => {
+    setCtxDraft(mapping.contextWindow ? String(mapping.contextWindow) : "");
+  }, [mapping.contextWindow]);
   return (
     <div className="providers-route-row">
       <div className="providers-route-arrows">
@@ -456,10 +460,10 @@ function MappingRow({ mapping, isFirst, isLast, onUpdate, onRemove, onMove }: Ma
         onChange={(e) => setCtxDraft(e.target.value.replace(/[^0-9]/g, ""))}
         onBlur={() => {
           const n = parseInt(ctxDraft, 10);
-          onUpdate({ contextWindow: n > 0 ? n * 1000 : undefined });
+          onUpdate({ contextWindow: n > 0 ? n : undefined });
           if (!ctxDraft) setCtxDraft("");
         }}
-        placeholder="200k"
+        placeholder="200000"
       />
       <button className="providers-route-remove" onClick={onRemove} title="Remove mapping">
         {"\u00D7"}

@@ -31,7 +31,7 @@ export interface SessionActivity {
   allFiles: Record<string, FileActivity>;
   /** Every unique file path the agent has touched this session (reads included). */
   visitedPaths: Set<string>;
-  /** Timestamp of the last UserInput/SlashCommand event (for Response mode boundary). */
+  /** Timestamp of the last committed response-boundary event for Response mode. */
   lastUserMessageAt: number;
   contextFiles: ContextFileEntry[];
   stats: ActivityStats;

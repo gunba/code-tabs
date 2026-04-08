@@ -863,6 +863,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 2px 10px;
+  align-content: start;
   flex: 1;
   min-height: 0;
 }
