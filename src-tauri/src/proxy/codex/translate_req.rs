@@ -47,7 +47,7 @@ pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, Stri
                 let effort = match budget {
                     0..=2048 => "low",
                     2049..=8192 => "medium",
-                    2049..=32768 => "high",
+                    8193..=32768 => "high",
                     _ => "xhigh",
                 };
                 codex_req["reasoning"] = json!({ "effort": effort });
@@ -68,9 +68,9 @@ pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, Stri
         codex_req["toolChoice"] = translate_tool_choice(tc);
     }
 
-    // messages → input
+    // messages → input (each message may produce multiple top-level input items)
     if let Some(messages) = req.get("messages").and_then(|v| v.as_array()) {
-        let input: Vec<Value> = messages.iter().map(translate_message).collect();
+        let input: Vec<Value> = messages.iter().flat_map(translate_message).collect();
         codex_req["input"] = json!(input);
     }
 
@@ -114,82 +114,125 @@ fn translate_tool_choice(tc: &Value) -> Value {
     }
 }
 
-fn translate_message(msg: &Value) -> Value {
+/// Translate one Anthropic message into one or more OpenAI input items.
+///
+/// Text blocks are grouped into a single message with role-appropriate content
+/// type (input_text for user, output_text for assistant).  tool_use and
+/// tool_result blocks become separate top-level items (function_call /
+/// function_call_output) — the OpenAI Responses API does NOT allow these
+/// inside a message's content array.
+fn translate_message(msg: &Value) -> Vec<Value> {
     let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("user");
+    let text_type = if role == "assistant" { "output_text" } else { "input_text" };
 
-    // If content is a simple string, pass through
+    // Simple string content — single message item
     if let Some(text) = msg.get("content").and_then(|v| v.as_str()) {
-        return json!({"role": role, "content": text});
+        return vec![json!({"role": role, "content": [{"type": text_type, "text": text}]})];
     }
 
-    // Content is an array of blocks
-    if let Some(blocks) = msg.get("content").and_then(|v| v.as_array()) {
-        let translated: Vec<Value> = blocks.iter().filter_map(translate_content_block).collect();
-        return json!({"role": role, "content": translated});
-    }
+    let blocks = match msg.get("content").and_then(|v| v.as_array()) {
+        Some(b) => b,
+        None => return vec![json!({"role": role, "content": [{"type": text_type, "text": ""}]})],
+    };
 
-    json!({"role": role, "content": ""})
-}
+    let mut items: Vec<Value> = Vec::new();
+    let mut text_parts: Vec<&str> = Vec::new();
+    let mut inline_content: Vec<Value> = Vec::new(); // non-text content that stays in the message (images)
 
-fn translate_content_block(block: &Value) -> Option<Value> {
-    let block_type = block.get("type").and_then(|v| v.as_str())?;
-    match block_type {
-        "text" => {
-            Some(json!({"type": "input_text", "text": block.get("text").and_then(|v| v.as_str()).unwrap_or("")}))
-        }
-        "tool_use" => {
-            let id = block.get("id").and_then(|v| v.as_str()).unwrap_or("");
-            let name = block.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let input = block.get("input").cloned().unwrap_or(json!({}));
-            let arguments = serde_json::to_string(&input).unwrap_or_default();
-            Some(json!({
-                "type": "function_call",
-                "call_id": id,
-                "name": name,
-                "arguments": arguments,
-            }))
-        }
-        "tool_result" => {
-            let tool_use_id = block.get("tool_use_id").and_then(|v| v.as_str()).unwrap_or("");
-            let output = extract_tool_result_text(block);
-            Some(json!({
-                "type": "function_call_output",
-                "call_id": tool_use_id,
-                "output": output,
-            }))
-        }
-        "image" => {
-            // Anthropic image → OpenAI input_image
-            if let Some(source) = block.get("source") {
-                let source_type = source.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                match source_type {
-                    "base64" => {
-                        let media_type = source.get("media_type").and_then(|v| v.as_str()).unwrap_or("image/png");
-                        let data = source.get("data").and_then(|v| v.as_str()).unwrap_or("");
-                        Some(json!({
-                            "type": "input_image",
-                            "image_url": format!("data:{media_type};base64,{data}"),
-                        }))
+    for block in blocks {
+        let block_type = match block.get("type").and_then(|v| v.as_str()) {
+            Some(t) => t,
+            None => continue,
+        };
+        match block_type {
+            "text" => {
+                text_parts.push(block.get("text").and_then(|v| v.as_str()).unwrap_or(""));
+            }
+            "tool_use" => {
+                let id = block.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                let name = block.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let input = block.get("input").cloned().unwrap_or(json!({}));
+                let arguments = serde_json::to_string(&input).unwrap_or_default();
+                // Flush any accumulated text before the function call
+                if !text_parts.is_empty() || !inline_content.is_empty() {
+                    let mut content = Vec::new();
+                    if !text_parts.is_empty() {
+                        content.push(json!({"type": text_type, "text": text_parts.join("")}));
+                        text_parts.clear();
                     }
-                    "url" => {
-                        let url = source.get("url").and_then(|v| v.as_str()).unwrap_or("");
-                        Some(json!({
-                            "type": "input_image",
-                            "image_url": url,
-                        }))
-                    }
-                    _ => None,
+                    content.append(&mut inline_content);
+                    items.push(json!({"role": role, "content": content}));
                 }
-            } else {
-                None
+                items.push(json!({
+                    "type": "function_call",
+                    "call_id": id,
+                    "name": name,
+                    "arguments": arguments,
+                }));
+            }
+            "tool_result" => {
+                let tool_use_id = block.get("tool_use_id").and_then(|v| v.as_str()).unwrap_or("");
+                let output = extract_tool_result_text(block);
+                items.push(json!({
+                    "type": "function_call_output",
+                    "call_id": tool_use_id,
+                    "output": output,
+                }));
+            }
+            "image" => {
+                if let Some(img) = translate_image_block(block) {
+                    inline_content.push(img);
+                }
+            }
+            _ => {
+                // Unknown block — include as text if possible
+                if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
+                    text_parts.push(text);
+                }
             }
         }
-        _ => {
-            // Unknown block type — pass through as input_text if it has text content
-            block.get("text").and_then(|v| v.as_str()).map(|text| {
-                json!({"type": "input_text", "text": text})
-            })
+    }
+
+    // Flush remaining text/inline content
+    if !text_parts.is_empty() || !inline_content.is_empty() {
+        let mut content = Vec::new();
+        if !text_parts.is_empty() {
+            content.push(json!({"type": text_type, "text": text_parts.join("")}));
         }
+        content.append(&mut inline_content);
+        items.push(json!({"role": role, "content": content}));
+    }
+
+    // If the message produced no items at all (e.g. empty tool_result-only user message
+    // where tool_results already emitted), return as-is. Otherwise if only tool_use blocks
+    // existed with no text, items already has the function_calls.
+    if items.is_empty() {
+        vec![json!({"role": role, "content": [{"type": text_type, "text": ""}]})]
+    } else {
+        items
+    }
+}
+
+fn translate_image_block(block: &Value) -> Option<Value> {
+    let source = block.get("source")?;
+    let source_type = source.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    match source_type {
+        "base64" => {
+            let media_type = source.get("media_type").and_then(|v| v.as_str()).unwrap_or("image/png");
+            let data = source.get("data").and_then(|v| v.as_str()).unwrap_or("");
+            Some(json!({
+                "type": "input_image",
+                "image_url": format!("data:{media_type};base64,{data}"),
+            }))
+        }
+        "url" => {
+            let url = source.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            Some(json!({
+                "type": "input_image",
+                "image_url": url,
+            }))
+        }
+        _ => None,
     }
 }
 
@@ -233,7 +276,8 @@ mod tests {
         assert_eq!(translated["instructions"], "You are a helpful assistant");
         assert_eq!(translated["stream"], true);
         assert_eq!(translated["input"][0]["role"], "user");
-        assert_eq!(translated["input"][0]["content"], "Hello");
+        assert_eq!(translated["input"][0]["content"][0]["type"], "input_text");
+        assert_eq!(translated["input"][0]["content"][0]["text"], "Hello");
     }
 
     #[test]
@@ -256,10 +300,14 @@ mod tests {
             "gpt-5.4",
         ).unwrap();
         let translated: Value = serde_json::from_slice(&result).unwrap();
-        assert_eq!(translated["input"][0]["content"][0]["type"], "function_call");
-        assert_eq!(translated["input"][0]["content"][0]["call_id"], "t1");
-        assert_eq!(translated["input"][1]["content"][0]["type"], "function_call_output");
-        assert_eq!(translated["input"][1]["content"][0]["call_id"], "t1");
+        // Assistant tool_use → top-level function_call
+        assert_eq!(translated["input"][0]["type"], "function_call");
+        assert_eq!(translated["input"][0]["call_id"], "t1");
+        assert_eq!(translated["input"][0]["name"], "read_file");
+        // User tool_result → top-level function_call_output
+        assert_eq!(translated["input"][1]["type"], "function_call_output");
+        assert_eq!(translated["input"][1]["call_id"], "t1");
+        assert_eq!(translated["input"][1]["output"], "file contents");
     }
 
     #[test]
