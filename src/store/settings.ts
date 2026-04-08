@@ -752,17 +752,6 @@ export const useSettingsStore = create<SettingsState>()(
               }
             }
           }
-          // Clean invalid effort values from persisted session configs
-          for (const key of ["lastConfig", "savedDefaults"] as const) {
-            const cfg = state[key] as Record<string, unknown> | undefined;
-            if (cfg?.effort === "xhigh") cfg.effort = "max";
-          }
-          const wd = state.workspaceDefaults as Record<string, Record<string, unknown>> | undefined;
-          if (wd) {
-            for (const ws of Object.values(wd)) {
-              if (ws.effort === "xhigh") ws.effort = "max";
-            }
-          }
         }
         return state;
       },
