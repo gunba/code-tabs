@@ -320,7 +320,7 @@ export const CHATGPT_EFFORTS: ProviderEffort[] = [
   { value: "low",    label: "low" },
   { value: "medium", label: "medium" },
   { value: "high",   label: "high" },
-  { value: "xhigh",  label: "xhigh" },
+  { value: "max",    label: "max" },
 ];
 
 // [PR-02] Predefined OpenAI Codex provider maps Claude families onto

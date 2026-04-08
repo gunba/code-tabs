@@ -13,7 +13,7 @@ use crate::observability::{
     record_backend_perf_start,
 };
 
-const CODEX_API_URL: &str = "https://api.openai.com/v1/responses";
+const CODEX_API_URL: &str = "https://chatgpt.com/backend-api/codex/responses";
 
 /// Resolve the Codex model name from the request model and provider config.
 fn resolve_codex_model(model: Option<&str>, provider: &ModelProvider) -> String {
