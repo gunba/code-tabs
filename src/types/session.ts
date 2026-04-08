@@ -255,12 +255,27 @@ export interface ModelMapping {
   rewriteModel?: string; // rewrite to this model name (undefined = keep original)
 }
 
+export interface ProviderModel {
+  id: string;            // model identifier sent to CLI/API (e.g., "opus", "gpt-5.4")
+  label: string;         // display name (e.g., "Opus", "GPT-5.4")
+  family?: string;       // grouping key for matching registry [1m] variants
+  contextWindow?: number; // default context window in tokens
+  color?: string;        // optional UI color
+}
+
+export interface ProviderEffort {
+  value: string;         // effort value sent to CLI (e.g., "low", "xhigh")
+  label: string;         // display label (e.g., "Low", "xHigh")
+}
+
 export interface ModelProvider {
   id: string;
   name: string;
   kind: ProviderKind;
   predefined: boolean;
   modelMappings: ModelMapping[];
+  knownModels: ProviderModel[];
+  effortLevels: ProviderEffort[];
 
   // anthropic_compatible fields
   baseUrl?: string;
@@ -277,6 +292,33 @@ export interface ProviderConfig {
   defaultProviderId: string;
 }
 
+// ── Default provider catalogs ───────────────────────────────────────
+
+export const ANTHROPIC_MODELS: ProviderModel[] = [
+  { id: "opus",   label: "Opus",   family: "opus",   contextWindow: 200000, color: "#ff8000" },
+  { id: "sonnet", label: "Sonnet", family: "sonnet", contextWindow: 200000, color: "#a335ee" },
+  { id: "haiku",  label: "Haiku",  family: "haiku",  contextWindow: 200000, color: "#0070dd" },
+];
+
+export const ANTHROPIC_EFFORTS: ProviderEffort[] = [
+  { value: "low",    label: "Low" },
+  { value: "medium", label: "Med" },
+  { value: "high",   label: "High" },
+  { value: "max",    label: "Max" },
+];
+
+export const CHATGPT_MODELS: ProviderModel[] = [
+  { id: "gpt-5.4",      label: "GPT-5.4",      contextWindow: 272000 },
+  { id: "gpt-5.4-mini", label: "GPT-5.4 Mini", contextWindow: 272000 },
+];
+
+export const CHATGPT_EFFORTS: ProviderEffort[] = [
+  { value: "low",    label: "Low" },
+  { value: "medium", label: "Med" },
+  { value: "high",   label: "High" },
+  { value: "xhigh",  label: "xHigh" },
+];
+
 // [PR-02] Predefined OpenAI Codex provider maps Claude families onto
 // primary/small Codex models and ships in the default provider config.
 export const CODEX_PROVIDER: ModelProvider = {
@@ -286,6 +328,8 @@ export const CODEX_PROVIDER: ModelProvider = {
   predefined: true,
   codexPrimaryModel: "gpt-5.4",
   codexSmallModel: "gpt-5.4-mini",
+  knownModels: CHATGPT_MODELS,
+  effortLevels: CHATGPT_EFFORTS,
   modelMappings: [
     { id: "codex-opus", pattern: "claude-opus-*", rewriteModel: "gpt-5.4" },
     { id: "codex-sonnet", pattern: "claude-sonnet-*", rewriteModel: "gpt-5.4" },
@@ -302,6 +346,8 @@ export const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
       kind: "anthropic_compatible",
       predefined: false,
       modelMappings: [],
+      knownModels: ANTHROPIC_MODELS,
+      effortLevels: ANTHROPIC_EFFORTS,
       baseUrl: "https://api.anthropic.com",
       apiKey: null,
     },

@@ -25,10 +25,13 @@ fn resolve_codex_model(model: Option<&str>, provider: &ModelProvider) -> String 
         None => return primary.to_string(),
     };
 
-    let lower = model.to_lowercase();
-    // Strip ANSI formatting codes (e.g., [1m] bold markers from subagents)
+    // Strip [1m] context suffix and ANSI formatting codes
+    let cleaned = model.to_lowercase()
+        .replace("[1m]", "")
+        .trim().to_string();
+    // Strip remaining ANSI bracket codes (e.g., bold markers from subagents)
     let cleaned: String = {
-        let mut s = lower.clone();
+        let mut s = cleaned;
         while let Some(start) = s.find('[') {
             if let Some(end) = s[start..].find(']') {
                 s = format!("{}{}", &s[..start], &s[start + end + 1..]);
@@ -340,6 +343,8 @@ mod tests {
             socks5_proxy: None,
             codex_primary_model: Some("gpt-5.4".into()),
             codex_small_model: Some("gpt-5.4-mini".into()),
+            known_models: Vec::new(),
+            effort_levels: Vec::new(),
         };
         assert_eq!(resolve_codex_model(Some("claude-haiku-4-5"), &provider), "gpt-5.4-mini");
         assert_eq!(resolve_codex_model(Some("haiku"), &provider), "gpt-5.4-mini");
@@ -358,6 +363,8 @@ mod tests {
             socks5_proxy: None,
             codex_primary_model: Some("gpt-5.4".into()),
             codex_small_model: Some("gpt-5.4-mini".into()),
+            known_models: Vec::new(),
+            effort_levels: Vec::new(),
         };
         assert_eq!(resolve_codex_model(Some("claude-opus-4-6"), &provider), "gpt-5.4");
         assert_eq!(resolve_codex_model(Some("opus"), &provider), "gpt-5.4");
@@ -377,7 +384,29 @@ mod tests {
             socks5_proxy: None,
             codex_primary_model: Some("gpt-5.4".into()),
             codex_small_model: Some("gpt-5.4-mini".into()),
+            known_models: Vec::new(),
+            effort_levels: Vec::new(),
         };
         assert_eq!(resolve_codex_model(Some("gpt-5.4"), &provider), "gpt-5.4");
+    }
+
+    #[test]
+    fn test_resolve_codex_model_1m_suffix() {
+        let provider = ModelProvider {
+            id: "codex".into(),
+            name: "Codex".into(),
+            kind: "openai_codex".into(),
+            predefined: true,
+            model_mappings: Vec::new(),
+            base_url: None,
+            api_key: None,
+            socks5_proxy: None,
+            codex_primary_model: Some("gpt-5.4".into()),
+            codex_small_model: Some("gpt-5.4-mini".into()),
+            known_models: Vec::new(),
+            effort_levels: Vec::new(),
+        };
+        assert_eq!(resolve_codex_model(Some("claude-opus-4-6[1m]"), &provider), "gpt-5.4");
+        assert_eq!(resolve_codex_model(Some("claude-haiku-4-5[1m]"), &provider), "gpt-5.4-mini");
     }
 }

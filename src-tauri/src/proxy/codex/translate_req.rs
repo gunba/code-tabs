@@ -28,15 +28,32 @@ pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, Stri
     if let Some(t) = req.get("top_p") { codex_req["top_p"] = t.clone(); }
     if let Some(ss) = req.get("stop_sequences") { codex_req["stop"] = ss.clone(); }
 
-    // thinking.budget_tokens → reasoning.effort
-    if let Some(thinking) = req.get("thinking") {
-        if let Some(budget) = thinking.get("budget_tokens").and_then(|v| v.as_u64()) {
-            let effort = match budget {
-                0..=2048 => "low",
-                2049..=8192 => "medium",
+    // output_config.effort → reasoning.effort
+    // Claude: low/medium/high/max → OpenAI: low/medium/high/xhigh
+    if let Some(oc) = req.get("output_config") {
+        if let Some(effort) = oc.get("effort").and_then(|v| v.as_str()) {
+            let oai_effort = match effort {
+                "low" => "low",
+                "medium" => "medium",
+                "high" => "high",
+                "max" => "xhigh",
                 _ => "high",
             };
-            codex_req["reasoning"] = json!({ "effort": effort });
+            codex_req["reasoning"] = json!({ "effort": oai_effort });
+        }
+    }
+    // Fallback: thinking.budget_tokens → reasoning.effort (older models)
+    if codex_req.get("reasoning").is_none() {
+        if let Some(thinking) = req.get("thinking") {
+            if let Some(budget) = thinking.get("budget_tokens").and_then(|v| v.as_u64()) {
+                let effort = match budget {
+                    0..=2048 => "low",
+                    2049..=8192 => "medium",
+                    2049..=32768 => "high",
+                    _ => "xhigh",
+                };
+                codex_req["reasoning"] = json!({ "effort": effort });
+            }
         }
     }
 
@@ -267,5 +284,21 @@ mod tests {
         let translated: Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(translated["input"][0]["content"][0]["type"], "input_image");
         assert_eq!(translated["input"][0]["content"][0]["image_url"], "data:image/png;base64,abc123");
+    }
+
+    #[test]
+    fn test_effort_mapping() {
+        for (claude_effort, oai_effort) in [("low", "low"), ("medium", "medium"), ("high", "high"), ("max", "xhigh")] {
+            let body = json!({
+                "model": "claude-opus-4-6",
+                "max_tokens": 1024,
+                "output_config": { "effort": claude_effort },
+                "messages": [{"role": "user", "content": "test"}],
+                "stream": true,
+            });
+            let result = translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.4").unwrap();
+            let translated: Value = serde_json::from_slice(&result).unwrap();
+            assert_eq!(translated["reasoning"]["effort"], oai_effort, "effort {claude_effort} should map to {oai_effort}");
+        }
     }
 }

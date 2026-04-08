@@ -5,7 +5,7 @@ import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { dlog } from "../../lib/debugLog";
 import type { CliOption, CliCommand } from "../../store/settings";
-import { dirToTabName, computeHeatLevel, heatClassName, MODEL_FAMILIES, extractModelFamily, isModel1m, resolveModelId } from "../../lib/claude";
+import { dirToTabName, computeHeatLevel, heatClassName } from "../../lib/claude";
 import { parseWorktreePath, normalizePath } from "../../lib/paths";
 import {
   type SessionConfig,
@@ -18,31 +18,12 @@ import "./SessionLauncher.css";
 
 // ── Option definitions ──────────────────────────────────────────────
 
-const MODEL_PILLS = MODEL_FAMILIES.map(f => ({ value: f.keyword, label: f.label }));
-
-const MODEL_COLOR_MAP: Record<string, string> = Object.fromEntries(
-  MODEL_FAMILIES.map(f => [f.keyword, f.color])
-);
-const modelColorFn = (value: string) => MODEL_COLOR_MAP[value] ?? "var(--accent)";
-
 const PERM_PILLS: Array<{ value: PermissionMode; label: string }> = [
   { value: "auto", label: "Auto" },
   { value: "acceptEdits", label: "Accept" },
   { value: "planMode", label: "Plan" },
   { value: "bypassPermissions", label: "Bypass" },
   { value: "dontAsk", label: "Don't Ask" },
-];
-
-const EFFORT_PILLS: Array<{ value: string; label: string }> = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Med" },
-  { value: "high", label: "High" },
-  { value: "max", label: "Max" },
-];
-
-const CONTEXT_PILLS: Array<{ value: "200k" | "1m"; label: string }> = [
-  { value: "200k", label: "200k" },
-  { value: "1m", label: "1M" },
 ];
 
 // [SL-11] Flags with dedicated UI controls excluded from the options grid
@@ -105,22 +86,6 @@ export function SessionLauncher() {
   const [selectedPromptId, setSelectedPromptId] = useState<string>("");
   const [promptMode, setPromptMode] = useState<"replace" | "append">("replace");
   const [launchError, setLaunchError] = useState<string>("");
-
-  // Derive model family + context variant from config.model for the pill UI.
-  // e.g. "claude-opus-4-6[1m]" → family="opus", variant="1m"
-  // e.g. "sonnet" → family="sonnet", variant="200k"
-  // e.g. null → family=null, variant="200k"
-  const selectedModelFamily = extractModelFamily(config.model);
-  const selectedContextVariant: "200k" | "1m" = isModel1m(config.model) ? "1m" : "200k";
-
-  // Which families have confirmed 1M entries in the registry?
-  const families1mAvailable = useMemo(() => {
-    const set = new Set<string>();
-    for (const entry of registryEntries) {
-      if (entry.modelId.includes("[1m]")) set.add(entry.family);
-    }
-    return set;
-  }, [registryEntries]);
 
   // Unified command line: editable string that starts from config selections.
   // User can edit freely; reset button regenerates from current dropdowns.
@@ -212,31 +177,8 @@ export function SessionLauncher() {
     setLaunchError("");
   }, []);
 
-  const handleModelFamilyChange = useCallback((family: string | null) => {
-    if (!family) {
-      updateConfig("model", null);
-    } else {
-      // When switching family, apply current context variant preference
-      const currentVariant = isModel1m(config.model) ? "1m" : "200k";
-      const entries = Object.values(useSettingsStore.getState().modelRegistry);
-      updateConfig("model", resolveModelId(family, currentVariant, entries));
-    }
-  }, [config.model, updateConfig]);
-
-  const handleContextVariantChange = useCallback((variant: "200k" | "1m" | null) => {
-    const family = extractModelFamily(config.model);
-    if (!family) return;
-    const v = variant ?? "200k";
-    const entries = Object.values(useSettingsStore.getState().modelRegistry);
-    updateConfig("model", resolveModelId(family, v, entries));
-  }, [config.model, updateConfig]);
-
   const handlePermChange = useCallback((value: PermissionMode | null) => {
     updateConfig("permissionMode", value ?? "default");
-  }, [updateConfig]);
-
-  const handleEffortChange = useCallback((value: string | null) => {
-    updateConfig("effort", value);
   }, [updateConfig]);
 
   const handleProviderChange = useCallback((value: string | null) => {
@@ -248,6 +190,49 @@ export function SessionLauncher() {
     [providerConfig.providers]
   );
   const showProviderSelector = providerConfig.providers.length > 1;
+
+  // Derive model and effort options from the selected provider
+  const selectedProviderId = config.providerId ?? providerConfig.defaultProviderId;
+  const selectedProvider = useMemo(() =>
+    providerConfig.providers.find((p) => p.id === selectedProviderId) ?? providerConfig.providers[0],
+    [providerConfig.providers, selectedProviderId]
+  );
+
+  const modelOptions = useMemo(() => {
+    const base = (selectedProvider?.knownModels ?? []).map((m) => ({
+      value: m.id,
+      label: m.label,
+      color: m.color,
+      family: m.family,
+    }));
+    // Merge [1m] variants from registry for models whose family matches
+    for (const entry of registryEntries) {
+      if (!entry.modelId.includes("[1m]")) continue;
+      const familyMatch = base.find((m) => m.family && entry.family === m.family);
+      if (familyMatch && !base.some((m) => m.value === entry.modelId)) {
+        base.push({
+          value: entry.modelId,
+          label: `${familyMatch.label} [1M]`,
+          color: familyMatch.color,
+          family: familyMatch.family,
+        });
+      }
+    }
+    return base;
+  }, [selectedProvider?.knownModels, registryEntries]);
+
+  const effortOptions = useMemo(() =>
+    (selectedProvider?.effortLevels ?? []).map((e) => ({ value: e.value, label: e.label })),
+    [selectedProvider?.effortLevels]
+  );
+
+  const handleModelSelect = useCallback((value: string) => {
+    updateConfig("model", value || null);
+  }, [updateConfig]);
+
+  const handleEffortSelect = useCallback((value: string) => {
+    updateConfig("effort", value || null);
+  }, [updateConfig]);
 
   const filteredCliOptions = useMemo((): CliOption[] => {
     return (cliCapabilities.options || [])
@@ -539,22 +524,17 @@ export function SessionLauncher() {
             </>
           )}
           <span className="launcher-pill-icon" title="Model"><IconModelDiamond size={13} /></span>
-          <PillGroup
-            options={MODEL_PILLS}
-            selected={selectedModelFamily}
-            onChange={handleModelFamilyChange}
-            colorFn={modelColorFn}
+          <select
+            className="launcher-select"
+            value={config.model ?? ""}
+            onChange={(e) => handleModelSelect(e.target.value)}
             disabled={isNonSessionCommand}
-          />
-          {selectedModelFamily && families1mAvailable.has(selectedModelFamily) && (
-            <PillGroup
-              options={CONTEXT_PILLS}
-              selected={selectedContextVariant}
-              onChange={handleContextVariantChange}
-              className="launcher-context-pills"
-              disabled={isNonSessionCommand}
-            />
-          )}
+          >
+            <option value="">Default</option>
+            {modelOptions.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
           <span className="launcher-pill-icon" title="Permissions"><IconLock size={13} /></span>
           <PillGroup
             options={PERM_PILLS}
@@ -564,12 +544,17 @@ export function SessionLauncher() {
           />
           <span className="launcher-pills-break" />
           <span className="launcher-pill-icon" title="Effort"><IconLightning size={13} /></span>
-          <PillGroup
-            options={EFFORT_PILLS}
-            selected={config.effort}
-            onChange={handleEffortChange}
+          <select
+            className="launcher-select"
+            value={config.effort ?? ""}
+            onChange={(e) => handleEffortSelect(e.target.value)}
             disabled={isNonSessionCommand}
-          />
+          >
+            <option value="">Default</option>
+            {effortOptions.map((e) => (
+              <option key={e.value} value={e.value}>{e.label}</option>
+            ))}
+          </select>
           <button
             className={`launcher-toggle-pill${config.dangerouslySkipPermissions ? " launcher-toggle-pill-on launcher-toggle-skip" : ""}`}
             onClick={() => updateConfig("dangerouslySkipPermissions", !config.dangerouslySkipPermissions)}

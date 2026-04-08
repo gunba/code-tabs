@@ -3,7 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useSettingsStore } from "../../store/settings";
 import type { StatusMessage } from "../../lib/settingsSchema";
-import type { ModelProvider, ModelMapping, ProviderConfig } from "../../types/session";
+import type { ModelProvider, ModelMapping, ProviderConfig, ProviderModel } from "../../types/session";
+import { ANTHROPIC_MODELS, ANTHROPIC_EFFORTS } from "../../types/session";
 import { parseSocks5Url, buildSocks5Url } from "../../lib/socks5Url";
 import type { Socks5Parts } from "../../lib/socks5Url";
 import "./ProvidersPane.css";
@@ -37,6 +38,8 @@ export function ProvidersPane({ visible, onStatus }: ProvidersPaneProps) {
       kind: "anthropic_compatible",
       predefined: false,
       modelMappings: [],
+      knownModels: ANTHROPIC_MODELS,
+      effortLevels: ANTHROPIC_EFFORTS,
       baseUrl: "",
       apiKey: null,
     };
@@ -227,6 +230,12 @@ function ProviderCard({
         <CodexAuthSection />
       )}
 
+      {/* Known Models */}
+      <KnownModelsEditor
+        models={provider.knownModels}
+        onChange={(models) => onUpdate({ knownModels: models })}
+      />
+
       {/* Model Mappings (collapsible) */}
       {provider.modelMappings.length > 0 && (
         <div className="providers-mappings-section">
@@ -268,6 +277,61 @@ function ProviderCard({
         <button className="providers-add-btn" onClick={onAddMapping} style={{ alignSelf: "flex-start" }}>
           + Mapping
         </button>
+      )}
+    </div>
+  );
+}
+
+// ── Known Models Editor ─────────────────────────────────────────────────
+
+function KnownModelsEditor({ models, onChange }: { models: ProviderModel[]; onChange: (models: ProviderModel[]) => void }) {
+  const [showModels, setShowModels] = useState(false);
+
+  const addModel = () => {
+    onChange([...models, { id: "", label: "" }]);
+    setShowModels(true);
+  };
+
+  const removeModel = (index: number) => {
+    onChange(models.filter((_, i) => i !== index));
+  };
+
+  const updateModel = (index: number, updates: Partial<ProviderModel>) => {
+    onChange(models.map((m, i) => i === index ? { ...m, ...updates } : m));
+  };
+
+  return (
+    <div className="providers-mappings-section">
+      <button className="providers-mappings-toggle" onClick={() => setShowModels((s) => !s)}>
+        {showModels ? "\u25BC" : "\u25B6"} Models ({models.length})
+      </button>
+      {showModels && (
+        <>
+          <div className="providers-route-list">
+            {models.map((m, i) => (
+              <div key={i} className="providers-route-row" style={{ gridTemplateColumns: "1fr 1fr 22px" }}>
+                <input
+                  type="text"
+                  value={m.id}
+                  onChange={(e) => updateModel(i, { id: e.target.value })}
+                  placeholder="model-id"
+                />
+                <input
+                  type="text"
+                  value={m.label}
+                  onChange={(e) => updateModel(i, { label: e.target.value })}
+                  placeholder="Display name"
+                />
+                <button className="providers-route-remove" onClick={() => removeModel(i)} title="Remove model">
+                  {"\u00D7"}
+                </button>
+              </div>
+            ))}
+          </div>
+          <button className="providers-add-btn" onClick={addModel} style={{ marginTop: 4, alignSelf: "flex-start" }}>
+            + Add Model
+          </button>
+        </>
       )}
     </div>
   );

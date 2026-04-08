@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
 import type { LaunchPreset, SessionConfig, PastSession, ProviderConfig, SystemPromptRule } from "../types/session";
-import { DEFAULT_SESSION_CONFIG, DEFAULT_PROVIDER_CONFIG, CODEX_PROVIDER } from "../types/session";
+import { DEFAULT_SESSION_CONFIG, DEFAULT_PROVIDER_CONFIG, CODEX_PROVIDER, ANTHROPIC_MODELS, ANTHROPIC_EFFORTS, CHATGPT_MODELS, CHATGPT_EFFORTS } from "../types/session";
 import { normalizePath, parseWorktreePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import type { EnvVarEntry } from "../lib/envVars";
@@ -630,7 +630,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "claude-tabs-settings",
-      version: 10,
+      version: 11,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
@@ -728,6 +728,26 @@ export const useSettingsStore = create<SettingsState>()(
           const pc = state.providerConfig as { providers?: Array<{ id: string }> } | undefined;
           if (pc?.providers && !pc.providers.some((p) => p.id === "openai-codex")) {
             pc.providers.push(CODEX_PROVIDER as never);
+          }
+        }
+        // v10→v11: Backfill knownModels and effortLevels on existing providers
+        if (version < 11) {
+          const pc = state.providerConfig as { providers?: Array<Record<string, unknown>> } | undefined;
+          if (pc?.providers) {
+            for (const p of pc.providers) {
+              if (!Array.isArray(p.knownModels) || (p.knownModels as unknown[]).length === 0) {
+                if (p.kind === "openai_codex") {
+                  p.knownModels = CHATGPT_MODELS;
+                  p.effortLevels = CHATGPT_EFFORTS;
+                } else {
+                  p.knownModels = ANTHROPIC_MODELS;
+                  p.effortLevels = ANTHROPIC_EFFORTS;
+                }
+              }
+              if (!Array.isArray(p.effortLevels) || (p.effortLevels as unknown[]).length === 0) {
+                p.effortLevels = p.kind === "openai_codex" ? CHATGPT_EFFORTS : ANTHROPIC_EFFORTS;
+              }
+            }
           }
         }
         return state;
