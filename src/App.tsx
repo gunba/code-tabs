@@ -392,9 +392,11 @@ export default function App() {
               const wt = parseWorktreePath(session.config.workingDir);
               const metaSpans: { text: string; color: string; title?: string }[] = [];
               if (m) {
+                const label = modelLabel(m);
+                const resolved = label !== m; // modelLabel shortened it to a family name
                 const vMatch = m.match(/(\d+)[.-](\d+)/);
-                const ver = vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
-                metaSpans.push({ text: modelLabel(m) + ver, color: modelColor(m) });
+                const ver = resolved && vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
+                metaSpans.push({ text: label + ver, color: modelColor(m) });
               }
               const effort = session.metadata.effortLevel ?? session.config.effort;
               if (effort) metaSpans.push({ text: effort.charAt(0).toUpperCase() + effort.slice(1), color: effortColor(effort) });
@@ -609,9 +611,11 @@ export default function App() {
               // [TA-09] Subagent model meta: falls back to parent session effectiveModel when sub.model absent
               const subModel = sub.model || (activeSession ? effectiveModel(activeSession) : null);
               if (subModel) {
+                const subLabel = modelLabel(subModel);
+                const subResolved = subLabel !== subModel;
                 const vMatch = subModel.match(/(\d+)[.-](\d+)/);
-                const ver = vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
-                metaParts.push(modelLabel(subModel) + ver);
+                const ver = subResolved && vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
+                metaParts.push(subLabel + ver);
               }
               if (sub.totalToolUses != null) metaParts.push(`${sub.totalToolUses} tools`);
               if (sub.durationMs != null) metaParts.push(`${Math.round(sub.durationMs / 1000)}s`);

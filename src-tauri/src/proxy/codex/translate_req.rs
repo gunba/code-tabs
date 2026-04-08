@@ -19,10 +19,7 @@ pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, Stri
         }
     }
 
-    // max_tokens → maxOutputTokens
-    if let Some(mt) = req.get("max_tokens").and_then(|v| v.as_u64()) {
-        codex_req["maxOutputTokens"] = json!(mt);
-    }
+    // max_tokens — Codex API does not support maxOutputTokens; skip
 
     // Passthrough fields
     if let Some(t) = req.get("temperature") { codex_req["temperature"] = t.clone(); }

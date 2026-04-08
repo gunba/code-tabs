@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
 import type { LaunchPreset, SessionConfig, PastSession, ProviderConfig, SystemPromptRule } from "../types/session";
-import { DEFAULT_SESSION_CONFIG, DEFAULT_PROVIDER_CONFIG, CODEX_PROVIDER, ANTHROPIC_MODELS, ANTHROPIC_EFFORTS, CHATGPT_MODELS, CHATGPT_EFFORTS } from "../types/session";
+import { DEFAULT_SESSION_CONFIG, DEFAULT_PROVIDER_CONFIG, CODEX_PROVIDER, ANTHROPIC_EFFORTS, CHATGPT_MODELS, CHATGPT_EFFORTS } from "../types/session";
 import { normalizePath, parseWorktreePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import type { EnvVarEntry } from "../lib/envVars";
@@ -723,65 +723,45 @@ export const useSettingsStore = create<SettingsState>()(
             (state.savedDefaults as Record<string, unknown>).providerId ??= null;
           }
         }
-        // v9→v10: Inject predefined Codex provider if not already present
-        if (version < 10) {
-          const pc = state.providerConfig as { providers?: Array<{ id: string }> } | undefined;
-          if (pc?.providers && !pc.providers.some((p) => p.id === "openai-codex")) {
-            pc.providers.push(CODEX_PROVIDER as never);
-          }
-        }
-        // v10→v11: Backfill knownModels and effortLevels on existing providers, rename Codex provider
-        if (version < 11) {
+        // ── Unconditional config sanitization (runs every load) ──────
+        {
           const pc = state.providerConfig as { providers?: Array<Record<string, unknown>> } | undefined;
           if (pc?.providers) {
+            // Inject predefined Codex provider if missing
+            if (!pc.providers.some((p) => p.id === "openai-codex")) {
+              pc.providers.push(CODEX_PROVIDER as never);
+            }
             for (const p of pc.providers) {
+              // Force canonical names and catalogs on predefined providers
               if (p.id === "openai-codex") {
                 p.name = "OpenAI";
+                p.effortLevels = CHATGPT_EFFORTS;
+                p.knownModels = CHATGPT_MODELS;
               }
-              if (!Array.isArray(p.knownModels) || (p.knownModels as unknown[]).length === 0) {
-                if (p.kind === "openai_codex") {
-                  p.knownModels = CHATGPT_MODELS;
-                  p.effortLevels = CHATGPT_EFFORTS;
-                } else {
-                  p.knownModels = ANTHROPIC_MODELS;
-                  p.effortLevels = ANTHROPIC_EFFORTS;
-                }
+              if (p.id === "anthropic") {
+                p.name = "Anthropic";
               }
-              if (!Array.isArray(p.effortLevels) || (p.effortLevels as unknown[]).length === 0) {
+              // Backfill missing fields
+              if (!Array.isArray(p.knownModels)) p.knownModels = [];
+              if (!Array.isArray(p.effortLevels)) {
                 p.effortLevels = p.kind === "openai_codex" ? CHATGPT_EFFORTS : ANTHROPIC_EFFORTS;
               }
-            }
-          }
-        }
-        // v11→v12: Force-refresh model catalogs (added best, [1m] variants, fixed labels)
-        if (version < 12) {
-          const pc = state.providerConfig as { providers?: Array<Record<string, unknown>> } | undefined;
-          if (pc?.providers) {
-            for (const p of pc.providers) {
-              if (p.kind === "openai_codex") {
-                p.knownModels = CHATGPT_MODELS;
-                p.effortLevels = CHATGPT_EFFORTS;
-              } else if (p.id === "anthropic") {
-                p.knownModels = ANTHROPIC_MODELS;
-                p.effortLevels = ANTHROPIC_EFFORTS;
-              }
-            }
-          }
-        }
-        // v12→v13: Force predefined provider names from constants, clear stale knownModels on custom providers,
-        // force-refresh OpenAI effort levels (remove stale xhigh values)
-        if (version < 13) {
-          const pc = state.providerConfig as { providers?: Array<Record<string, unknown>> } | undefined;
-          if (pc?.providers) {
-            for (const p of pc.providers) {
-              if (p.id === "openai-codex") {
-                p.name = "OpenAI";
-                p.effortLevels = CHATGPT_EFFORTS;
-              }
-              // Custom providers don't need knownModels — dropdown derives from mapping rewrites
+              if (!Array.isArray(p.modelMappings)) p.modelMappings = [];
+              // Custom providers: dropdown derives from mapping rewrites, not knownModels
               if (p.id !== "anthropic" && p.kind !== "openai_codex") {
                 p.knownModels = [];
               }
+            }
+          }
+          // Clean invalid effort values from persisted session configs
+          for (const key of ["lastConfig", "savedDefaults"] as const) {
+            const cfg = state[key] as Record<string, unknown> | undefined;
+            if (cfg?.effort === "xhigh") cfg.effort = "max";
+          }
+          const wd = state.workspaceDefaults as Record<string, Record<string, unknown>> | undefined;
+          if (wd) {
+            for (const ws of Object.values(wd)) {
+              if (ws.effort === "xhigh") ws.effort = "max";
             }
           }
         }
