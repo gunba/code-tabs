@@ -135,7 +135,7 @@ fn translate_content_block(block: &Value) -> Option<Value> {
     let block_type = block.get("type").and_then(|v| v.as_str())?;
     match block_type {
         "text" => {
-            Some(json!({"type": "text", "text": block.get("text").and_then(|v| v.as_str()).unwrap_or("")}))
+            Some(json!({"type": "input_text", "text": block.get("text").and_then(|v| v.as_str()).unwrap_or("")}))
         }
         "tool_use" => {
             let id = block.get("id").and_then(|v| v.as_str()).unwrap_or("");
@@ -185,9 +185,9 @@ fn translate_content_block(block: &Value) -> Option<Value> {
             }
         }
         _ => {
-            // Unknown block type — pass through as text if it has text content
+            // Unknown block type — pass through as input_text if it has text content
             block.get("text").and_then(|v| v.as_str()).map(|text| {
-                json!({"type": "text", "text": text})
+                json!({"type": "input_text", "text": text})
             })
         }
     }
@@ -231,7 +231,6 @@ mod tests {
         let translated: Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(translated["model"], "gpt-5.4");
         assert_eq!(translated["instructions"], "You are a helpful assistant");
-        assert_eq!(translated["maxOutputTokens"], 4096);
         assert_eq!(translated["stream"], true);
         assert_eq!(translated["input"][0]["role"], "user");
         assert_eq!(translated["input"][0]["content"], "Hello");

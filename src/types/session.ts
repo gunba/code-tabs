@@ -253,6 +253,7 @@ export interface ModelMapping {
   id: string;
   pattern: string;       // glob pattern matching model name (e.g., "claude-haiku-*")
   rewriteModel?: string; // rewrite to this model name (undefined = keep original)
+  contextWindow?: number; // context window in tokens for the rewrite target
 }
 
 export interface ProviderModel {
@@ -311,18 +312,6 @@ export const ANTHROPIC_EFFORTS: ProviderEffort[] = [
   { value: "max",    label: "max" },
 ];
 
-export const CHATGPT_MODELS: ProviderModel[] = [
-  { id: "gpt-5.4",      label: "gpt-5.4",      contextWindow: 272000 },
-  { id: "gpt-5.4-mini", label: "gpt-5.4-mini", contextWindow: 272000 },
-];
-
-export const CHATGPT_EFFORTS: ProviderEffort[] = [
-  { value: "low",    label: "low" },
-  { value: "medium", label: "medium" },
-  { value: "high",   label: "high" },
-  { value: "max",    label: "xhigh" },
-];
-
 // Default Claude-family mappings for new custom providers.
 // Pattern column auto-fills with these so the user only specifies rewrites.
 export const DEFAULT_CLAUDE_MAPPINGS: ModelMapping[] = [
@@ -341,8 +330,8 @@ export const CODEX_PROVIDER: ModelProvider = {
   predefined: true,
   codexPrimaryModel: "gpt-5.4",
   codexSmallModel: "gpt-5.4-mini",
-  knownModels: CHATGPT_MODELS,
-  effortLevels: CHATGPT_EFFORTS,
+  knownModels: [],
+  effortLevels: ANTHROPIC_EFFORTS,
   modelMappings: [
     { id: "codex-opus", pattern: "claude-opus-*", rewriteModel: "gpt-5.4" },
     { id: "codex-sonnet", pattern: "claude-sonnet-*", rewriteModel: "gpt-5.4" },

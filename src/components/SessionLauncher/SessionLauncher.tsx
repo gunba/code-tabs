@@ -213,8 +213,11 @@ export function SessionLauncher() {
   }, [selectedProvider]);
 
   const effortOptions = useMemo(() =>
-    (selectedProvider?.effortLevels ?? []).map((e) => ({ value: e.value, label: e.label })),
-    [selectedProvider?.effortLevels]
+    (selectedProvider?.effortLevels ?? []).map((e) => ({
+      value: e.value,
+      label: e.value === "max" && selectedProvider?.kind === "openai_codex" ? "xhigh" : e.label,
+    })),
+    [selectedProvider?.effortLevels, selectedProvider?.kind]
   );
 
   const handleModelSelect = useCallback((value: string) => {

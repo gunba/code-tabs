@@ -200,6 +200,7 @@ pub struct ModelMapping {
     pub id: String,
     pub pattern: String,
     pub rewrite_model: Option<String>,
+    pub context_window: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

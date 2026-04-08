@@ -1167,8 +1167,8 @@ mod tests {
     #[test]
     fn test_apply_model_mappings_match() {
         let mappings = vec![
-            ModelMapping { id: "m1".into(), pattern: "claude-haiku-*".into(), rewrite_model: Some("glm-5.0".into()) },
-            ModelMapping { id: "m2".into(), pattern: "*".into(), rewrite_model: None },
+            ModelMapping { id: "m1".into(), pattern: "claude-haiku-*".into(), rewrite_model: Some("glm-5.0".into()), context_window: None },
+            ModelMapping { id: "m2".into(), pattern: "*".into(), rewrite_model: None, context_window: None },
         ];
         assert_eq!(apply_model_mappings("claude-haiku-4-5", &mappings), Some("glm-5.0".into()));
     }
@@ -1176,7 +1176,7 @@ mod tests {
     #[test]
     fn test_apply_model_mappings_no_rewrite() {
         let mappings = vec![
-            ModelMapping { id: "m1".into(), pattern: "*".into(), rewrite_model: None },
+            ModelMapping { id: "m1".into(), pattern: "*".into(), rewrite_model: None, context_window: None },
         ];
         assert_eq!(apply_model_mappings("claude-opus-4-6", &mappings), None);
     }
@@ -1184,8 +1184,8 @@ mod tests {
     #[test]
     fn test_apply_model_mappings_first_match_wins() {
         let mappings = vec![
-            ModelMapping { id: "m1".into(), pattern: "claude-*".into(), rewrite_model: Some("a".into()) },
-            ModelMapping { id: "m2".into(), pattern: "claude-haiku-*".into(), rewrite_model: Some("b".into()) },
+            ModelMapping { id: "m1".into(), pattern: "claude-*".into(), rewrite_model: Some("a".into()), context_window: None },
+            ModelMapping { id: "m2".into(), pattern: "claude-haiku-*".into(), rewrite_model: Some("b".into()), context_window: None },
         ];
         // "claude-*" matches first, even though "claude-haiku-*" is more specific
         assert_eq!(apply_model_mappings("claude-haiku-4-5", &mappings), Some("a".into()));
@@ -1194,7 +1194,7 @@ mod tests {
     #[test]
     fn test_apply_model_mappings_no_match() {
         let mappings = vec![
-            ModelMapping { id: "m1".into(), pattern: "glm-*".into(), rewrite_model: Some("x".into()) },
+            ModelMapping { id: "m1".into(), pattern: "glm-*".into(), rewrite_model: Some("x".into()), context_window: None },
         ];
         assert_eq!(apply_model_mappings("claude-opus-4-6", &mappings), None);
     }

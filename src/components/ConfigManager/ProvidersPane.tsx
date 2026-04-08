@@ -251,6 +251,7 @@ function ProviderCard({
             <span></span>
             <span>Pattern</span>
             <span>Rewrite</span>
+            <span>Context</span>
             <span></span>
           </div>
           <div className="providers-route-list">
@@ -447,6 +448,16 @@ function MappingRow({ mapping, isFirst, isLast, onUpdate, onRemove, onMove }: Ma
         value={mapping.rewriteModel ?? ""}
         onChange={(e) => onUpdate({ rewriteModel: e.target.value || undefined })}
         placeholder="(keep original)"
+      />
+      <input
+        type="text"
+        className="providers-route-context"
+        value={mapping.contextWindow ? `${Math.round(mapping.contextWindow / 1000)}k` : ""}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/[^0-9]/g, "");
+          onUpdate({ contextWindow: raw ? parseInt(raw, 10) * 1000 : undefined });
+        }}
+        placeholder="200k"
       />
       <button className="providers-route-remove" onClick={onRemove} title="Remove mapping">
         {"\u00D7"}
