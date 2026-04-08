@@ -118,7 +118,9 @@ export function ProvidersPane({ visible, onStatus }: ProvidersPaneProps) {
           <button className="providers-add-btn" onClick={addProvider}>+ Add</button>
         </div>
         <div className="providers-list">
-          {providerConfig.providers.map((p) => (
+          {[...providerConfig.providers]
+            .sort((a, b) => (b.predefined ? 1 : 0) - (a.predefined ? 1 : 0))
+            .map((p) => (
             <ProviderCard
               key={p.id}
               provider={p}
@@ -176,23 +178,22 @@ function ProviderCard({
           disabled={provider.predefined}
         />
         <div className="providers-card-actions">
-          {provider.kind !== "anthropic_compatible" && (
-            <span className="providers-card-kind-badge">{provider.kind.replace(/_/g, " ")}</span>
-          )}
           {!isDefault && (
             <button className="providers-card-btn" onClick={onSetDefault} title="Set as default">
               Default
             </button>
           )}
           {isDefault && <span className="providers-card-badge">Default</span>}
-          <button
-            className="providers-card-btn providers-card-btn-danger"
-            onClick={onRemove}
-            title="Remove"
-            disabled={isOnly || provider.predefined}
-          >
-            Remove
-          </button>
+          {!provider.predefined && (
+            <button
+              className="providers-card-btn providers-card-btn-danger"
+              onClick={onRemove}
+              title="Remove"
+              disabled={isOnly}
+            >
+              Remove
+            </button>
+          )}
         </div>
       </div>
 
@@ -227,45 +228,47 @@ function ProviderCard({
       )}
 
       {/* Model Mappings (collapsible) */}
-      <div className="providers-mappings-section">
-        <button
-          className="providers-mappings-toggle"
-          onClick={() => setShowMappings((s) => !s)}
-        >
-          {showMappings ? "\u25BC" : "\u25B6"} Model Mappings ({provider.modelMappings.length})
-        </button>
-        {showMappings && (
-          <>
-            {provider.modelMappings.length > 0 && (
+      {provider.modelMappings.length > 0 && (
+        <div className="providers-mappings-section">
+          <button
+            className="providers-mappings-toggle"
+            onClick={() => setShowMappings((s) => !s)}
+          >
+            {showMappings ? "\u25BC" : "\u25B6"} Mappings ({provider.modelMappings.length})
+          </button>
+          {showMappings && (
+            <>
               <div className="providers-route-header">
                 <span></span>
                 <span>Pattern</span>
-                <span>Rewrite To</span>
+                <span>Rewrite</span>
                 <span></span>
               </div>
-            )}
-            <div className="providers-route-list">
-              {provider.modelMappings.map((m, i) => (
-                <MappingRow
-                  key={m.id}
-                  mapping={m}
-                  isFirst={i === 0}
-                  isLast={i === provider.modelMappings.length - 1}
-                  onUpdate={(u) => onUpdateMapping(m.id, u)}
-                  onRemove={() => onRemoveMapping(m.id)}
-                  onMove={(dir) => onMoveMapping(m.id, dir)}
-                />
-              ))}
-            </div>
-            <button className="providers-add-btn" onClick={onAddMapping} style={{ marginTop: 4 }}>
-              + Add Mapping
-            </button>
-            <p className="providers-route-hint">
-              Mappings match top-to-bottom (first match wins). Patterns use glob syntax (e.g. claude-haiku-*).
-            </p>
-          </>
-        )}
-      </div>
+              <div className="providers-route-list">
+                {provider.modelMappings.map((m, i) => (
+                  <MappingRow
+                    key={m.id}
+                    mapping={m}
+                    isFirst={i === 0}
+                    isLast={i === provider.modelMappings.length - 1}
+                    onUpdate={(u) => onUpdateMapping(m.id, u)}
+                    onRemove={() => onRemoveMapping(m.id)}
+                    onMove={(dir) => onMoveMapping(m.id, dir)}
+                  />
+                ))}
+              </div>
+              <button className="providers-add-btn" onClick={onAddMapping} style={{ marginTop: 4, alignSelf: "flex-start" }}>
+                + Add
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {provider.modelMappings.length === 0 && !provider.predefined && (
+        <button className="providers-add-btn" onClick={onAddMapping} style={{ alignSelf: "flex-start" }}>
+          + Mapping
+        </button>
+      )}
     </div>
   );
 }

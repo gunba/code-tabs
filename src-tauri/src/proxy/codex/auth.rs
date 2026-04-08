@@ -12,7 +12,7 @@ const TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const REDIRECT_URI: &str = "http://localhost:1455/auth/callback";
 const CALLBACK_PORT: u16 = 1455;
-const SCOPES: &str = "openid profile email offline_access api.connectors.read api.connectors.invoke";
+const SCOPES: &str = "openid profile email offline_access api.connectors.read api.connectors.invoke api.responses.write";
 const FLOW_TIMEOUT_SECS: u64 = 600; // 10 minutes
 const TOKEN_REFRESH_BUFFER_SECS: u64 = 60;
 
@@ -62,6 +62,14 @@ impl CodexAuthState {
             .lock()
             .ok()
             .and_then(|t| t.as_ref().and_then(|t| t.email.clone()))
+    }
+
+    /// Get the current access token without refreshing. Returns None if not logged in.
+    pub fn get_access_token_sync(&self) -> Option<String> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|t| t.as_ref().map(|t| t.access_token.clone()))
     }
 
     /// Get a valid access token, auto-refreshing if expired.

@@ -281,7 +281,7 @@ export interface ProviderConfig {
 // primary/small Codex models and ships in the default provider config.
 export const CODEX_PROVIDER: ModelProvider = {
   id: "openai-codex",
-  name: "OpenAI Codex",
+  name: "ChatGPT",
   kind: "openai_codex",
   predefined: true,
   codexPrimaryModel: "gpt-5.4",

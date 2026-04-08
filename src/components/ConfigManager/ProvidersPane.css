@@ -5,8 +5,6 @@
   padding: 12px;
   height: 100%;
   overflow-y: auto;
-  max-width: 800px;
-  margin: 0 auto;
 }
 
 .providers-section {
@@ -42,9 +40,17 @@
 }
 
 .providers-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+}
+
+@media (max-width: 800px) {
+  .providers-list { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 500px) {
+  .providers-list { grid-template-columns: 1fr; }
 }
 
 .providers-card {
@@ -52,6 +58,9 @@
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .providers-card-default {
@@ -62,8 +71,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 6px;
 }
 
 .providers-card-name {
@@ -74,6 +82,7 @@
   font-weight: 600;
   outline: none;
   width: 100%;
+  min-width: 0;
 }
 
 .providers-card-actions {
@@ -99,6 +108,7 @@
   padding: 1px 6px;
   font-size: 9px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .providers-card-btn:hover {
@@ -126,7 +136,7 @@
 .providers-field > span {
   font-size: 10px;
   color: var(--text-muted);
-  width: 80px;
+  width: 55px;
   flex-shrink: 0;
 }
 
@@ -135,10 +145,11 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 3px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 11px;
   outline: none;
+  min-width: 0;
 }
 
 .providers-field input:focus {
@@ -156,13 +167,13 @@
 .socks5-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .socks5-label {
   font-size: 10px;
   color: var(--text-muted);
-  width: 80px;
+  width: 55px;
   flex-shrink: 0;
 }
 
@@ -170,9 +181,9 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 3px;
-  padding: 4px 6px;
+  padding: 3px 4px;
   color: var(--text-primary);
-  font-size: 11px;
+  font-size: 10px;
   outline: none;
   flex: none;
 }
@@ -186,9 +197,9 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 3px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 11px;
   outline: none;
   min-width: 0;
 }
@@ -198,7 +209,7 @@
 }
 
 .socks5-port {
-  width: 60px;
+  width: 50px;
   flex: none !important;
 }
 
@@ -208,12 +219,30 @@
   flex: none;
 }
 
-/* ── Model Routes ──────────────────────────────────────────────── */
+/* ── Model Mappings ──────────────────────────────────────────────── */
+
+.providers-mappings-section {
+  margin-top: 2px;
+}
+
+.providers-mappings-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 0;
+  font-weight: 600;
+}
+
+.providers-mappings-toggle:hover {
+  color: var(--text-primary);
+}
 
 .providers-route-header {
   display: grid;
-  grid-template-columns: 40px 1fr 1fr 120px 28px;
-  gap: 6px;
+  grid-template-columns: 30px 1fr 1fr 22px;
+  gap: 4px;
   padding: 0 2px;
   font-size: 9px;
   color: var(--text-muted);
@@ -224,13 +253,13 @@
 .providers-route-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .providers-route-row {
   display: grid;
-  grid-template-columns: 40px 1fr 1fr 120px 28px;
-  gap: 6px;
+  grid-template-columns: 30px 1fr 1fr 22px;
+  gap: 4px;
   align-items: center;
 }
 
@@ -245,9 +274,9 @@
   border: 1px solid var(--border-subtle);
   color: var(--text-muted);
   border-radius: 2px;
-  width: 18px;
-  height: 14px;
-  font-size: 8px;
+  width: 16px;
+  height: 12px;
+  font-size: 7px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
@@ -270,9 +299,9 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 3px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 11px;
   outline: none;
   min-width: 0;
 }
@@ -281,29 +310,14 @@
   border-color: var(--accent-secondary);
 }
 
-.providers-route-row select {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 3px;
-  padding: 4px 6px;
-  color: var(--text-primary);
-  font-size: 11px;
-  outline: none;
-  min-width: 0;
-}
-
-.providers-route-row select:focus {
-  border-color: var(--accent-secondary);
-}
-
 .providers-route-remove {
   background: transparent;
   border: 1px solid var(--border-subtle);
   color: var(--text-muted);
   border-radius: 3px;
-  width: 24px;
-  height: 24px;
-  font-size: 12px;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
   cursor: pointer;
   padding: 0;
   display: flex;
@@ -317,7 +331,7 @@
 }
 
 .providers-route-hint {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
-  margin: 4px 0 0;
+  margin: 2px 0 0;
 }

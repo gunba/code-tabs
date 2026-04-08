@@ -29,6 +29,8 @@ pub struct ProxyInner {
     pub traffic_log_files: HashMap<String, std::io::BufWriter<std::fs::File>>,
     pub traffic_log_paths: HashMap<String, std::path::PathBuf>,
     pub session_providers: HashMap<String, String>,
+    pub codex_auth: codex::auth::CodexAuthState,
+    pub codex_client: reqwest::Client,
 }
 
 pub struct ProxyState(pub Arc<Mutex<ProxyInner>>);
@@ -45,6 +47,10 @@ impl ProxyState {
             traffic_log_files: HashMap::new(),
             traffic_log_paths: HashMap::new(),
             session_providers: HashMap::new(),
+            codex_auth: codex::auth::CodexAuthState::new(
+                dirs::data_local_dir().unwrap_or_default().join("claude-tabs"),
+            ),
+            codex_client: build_plain_client(),
         })))
     }
 }
@@ -306,7 +312,10 @@ pub fn unbind_session_provider(
 // ── Codex auth commands ─────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn codex_login(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn codex_login(
+    proxy_state: State<'_, ProxyState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     let (auth_url, verifier, state) = codex::auth::build_auth_url();
 
     // Open browser for OAuth
@@ -314,14 +323,16 @@ pub async fn codex_login(app: tauri::AppHandle) -> Result<(), String> {
 
     // Wait for callback in background, then exchange code
     let app_clone = app.clone();
+    let inner = proxy_state.0.clone();
     tokio::spawn(async move {
         match codex::auth::wait_for_callback(&state).await {
             Ok(code) => {
                 match codex::auth::exchange_code(&code, &verifier).await {
                     Ok(tokens) => {
-                        let auth_state = get_codex_auth_state();
                         let email = tokens.email.clone();
-                        auth_state.set_tokens(tokens);
+                        if let Ok(s) = inner.lock() {
+                            s.codex_auth.set_tokens(tokens);
+                        }
                         let _ = app_clone.emit("codex-auth-changed", serde_json::json!({
                             "loggedIn": true,
                             "email": email,
@@ -348,9 +359,9 @@ pub async fn codex_login(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn codex_logout() -> Result<(), String> {
-    let auth_state = get_codex_auth_state();
-    auth_state.clear();
+pub fn codex_logout(proxy_state: State<'_, ProxyState>) -> Result<(), String> {
+    let s = proxy_state.0.lock().map_err(|e| e.to_string())?;
+    s.codex_auth.clear();
     Ok(())
 }
 
@@ -361,19 +372,12 @@ pub struct CodexAuthStatus {
 }
 
 #[tauri::command]
-pub fn codex_auth_status() -> Result<CodexAuthStatus, String> {
-    let auth_state = get_codex_auth_state();
+pub fn codex_auth_status(proxy_state: State<'_, ProxyState>) -> Result<CodexAuthStatus, String> {
+    let s = proxy_state.0.lock().map_err(|e| e.to_string())?;
     Ok(CodexAuthStatus {
-        logged_in: auth_state.is_logged_in(),
-        email: auth_state.get_email(),
+        logged_in: s.codex_auth.is_logged_in(),
+        email: s.codex_auth.get_email(),
     })
-}
-
-fn get_codex_auth_state() -> codex::auth::CodexAuthState {
-    let app_data = dirs::data_local_dir()
-        .unwrap_or_default()
-        .join("claude-tabs");
-    codex::auth::CodexAuthState::new(app_data)
 }
 
 #[tauri::command]
@@ -645,7 +649,6 @@ async fn handle_connection(
 
     // Dispatch by provider kind
     if provider.kind == "openai_codex" {
-        let auth_state = get_codex_auth_state();
         return codex::handle_request(
             &mut stream,
             &method,
@@ -653,7 +656,12 @@ async fn handle_connection(
             &headers,
             &final_body,
             provider,
-            &auth_state,
+            &proxy_state,
+            session_id.as_deref(),
+            &app,
+            should_log,
+            &model,
+            &rewrite,
         ).await;
     }
 
@@ -838,7 +846,7 @@ fn decompress_if_gzip(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-fn write_traffic_entry(
+pub(crate) fn write_traffic_entry(
     proxy_state: &Arc<Mutex<ProxyInner>>,
     session_id: &Option<String>,
     req_ts: f64,
