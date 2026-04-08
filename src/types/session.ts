@@ -320,7 +320,7 @@ export const CHATGPT_EFFORTS: ProviderEffort[] = [
   { value: "low",    label: "low" },
   { value: "medium", label: "medium" },
   { value: "high",   label: "high" },
-  { value: "max",    label: "max" },
+  { value: "max",    label: "xhigh" },
 ];
 
 // Default Claude-family mappings for new custom providers.

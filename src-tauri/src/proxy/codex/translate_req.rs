@@ -8,6 +8,7 @@ pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, Stri
     let mut codex_req = json!({
         "model": codex_model,
         "stream": req.get("stream").and_then(|v| v.as_bool()).unwrap_or(true),
+        "store": false,
     });
 
     // system → instructions

@@ -180,8 +180,9 @@ export function SessionLauncher() {
   }, [updateConfig]);
 
   const handleProviderChange = useCallback((value: string | null) => {
-    updateConfig("providerId", value);
-  }, [updateConfig]);
+    // Reset model and effort when switching providers — the old values may be invalid
+    setConfig((prev) => ({ ...prev, providerId: value, model: null, effort: null }));
+  }, []);
 
   const showProviderSelector = providerConfig.providers.length > 1;
 
@@ -330,6 +331,11 @@ export function SessionLauncher() {
     const finalConfig: SessionConfig = isNonSessionCommand
       ? { ...launchConfig, runMode: true, model: null, permissionMode: "default", effort: null, dangerouslySkipPermissions: false, projectDir: false }
       : { ...launchConfig, runMode: false };
+    // For non-Anthropic providers, ensure model defaults to the first available option
+    if (!isNonSessionCommand && selectedProvider && selectedProvider.id !== "anthropic" && !finalConfig.model) {
+      const firstModel = selectedProvider.modelMappings.find((m) => m.rewriteModel)?.rewriteModel;
+      if (firstModel) finalConfig.model = firstModel;
+    }
     const storedName = finalConfig.resumeSession
       ? useSettingsStore.getState().sessionNames[finalConfig.resumeSession]
       : undefined;

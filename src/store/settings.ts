@@ -768,13 +768,15 @@ export const useSettingsStore = create<SettingsState>()(
             }
           }
         }
-        // v12→v13: Force predefined provider names from constants, clear stale knownModels on custom providers
+        // v12→v13: Force predefined provider names from constants, clear stale knownModels on custom providers,
+        // force-refresh OpenAI effort levels (remove stale xhigh values)
         if (version < 13) {
           const pc = state.providerConfig as { providers?: Array<Record<string, unknown>> } | undefined;
           if (pc?.providers) {
             for (const p of pc.providers) {
               if (p.id === "openai-codex") {
                 p.name = "OpenAI";
+                p.effortLevels = CHATGPT_EFFORTS;
               }
               // Custom providers don't need knownModels — dropdown derives from mapping rewrites
               if (p.id !== "anthropic" && p.kind !== "openai_codex") {
