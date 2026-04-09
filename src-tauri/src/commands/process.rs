@@ -33,8 +33,7 @@ pub async fn kill_process_tree(pid: u32) -> Result<(), String> {
 pub(crate) fn kill_process_tree_sync(root_pid: u32) -> Result<(), String> {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
-        TH32CS_SNAPPROCESS,
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
     };
     use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
 
@@ -128,8 +127,7 @@ fn kill_session_holder_sync(session_id: &str) -> Result<SessionHolderResult, Str
     use std::os::windows::process::CommandExt;
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
-        TH32CS_SNAPPROCESS,
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
     };
 
     // 1. Find PIDs whose command line contains this session ID
@@ -162,7 +160,10 @@ fn kill_session_holder_sync(session_id: &str) -> Result<SessionHolderResult, Str
     }
 
     if matching_pids.is_empty() {
-        return Ok(SessionHolderResult { killed: 0, external: vec![] });
+        return Ok(SessionHolderResult {
+            killed: 0,
+            external: vec![],
+        });
     }
 
     // 2. Build process tree to check ancestry
@@ -187,7 +188,10 @@ fn kill_session_holder_sync(session_id: &str) -> Result<SessionHolderResult, Str
     };
 
     // 3. For each matching PID, walk parent chain to see if it's our descendant
-    let mut result = SessionHolderResult { killed: 0, external: vec![] };
+    let mut result = SessionHolderResult {
+        killed: 0,
+        external: vec![],
+    };
 
     for pid in matching_pids {
         if is_descendant_of(pid, my_pid, &process_tree) {
@@ -227,7 +231,10 @@ fn kill_session_holder_sync(session_id: &str) -> Result<SessionHolderResult, Str
         })
         .unwrap_or_default();
 
-    let mut result = SessionHolderResult { killed: 0, external: vec![] };
+    let mut result = SessionHolderResult {
+        killed: 0,
+        external: vec![],
+    };
 
     for line in stdout.lines() {
         if let Ok(pid) = line.trim().parse::<u32>() {
@@ -285,8 +292,7 @@ fn kill_orphan_sessions_sync(session_ids: &[String]) -> Result<u32, String> {
     use std::os::windows::process::CommandExt;
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32,
-        TH32CS_SNAPPROCESS,
+        CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
     };
 
     if session_ids.is_empty() {
@@ -301,7 +307,14 @@ fn kill_orphan_sessions_sync(session_ids: &[String]) -> Result<u32, String> {
         .join(" or ");
 
     let output = std::process::Command::new("wmic")
-        .args(["process", "where", &where_clause, "get", "ProcessId", "/value"])
+        .args([
+            "process",
+            "where",
+            &where_clause,
+            "get",
+            "ProcessId",
+            "/value",
+        ])
         .creation_flags(0x08000000) // CREATE_NO_WINDOW
         .output()
         .map_err(|e| format!("Failed to enumerate processes: {}", e))?;
@@ -333,8 +346,12 @@ fn kill_orphan_sessions_sync(session_ids: &[String]) -> Result<u32, String> {
         .and_then(|name| {
             std::process::Command::new("wmic")
                 .args([
-                    "process", "where", &format!("Name='{}'", name),
-                    "get", "ProcessId", "/value",
+                    "process",
+                    "where",
+                    &format!("Name='{}'", name),
+                    "get",
+                    "ProcessId",
+                    "/value",
                 ])
                 .creation_flags(0x08000000)
                 .output()
@@ -463,8 +480,7 @@ fn kill_orphan_sessions_sync(session_ids: &[String]) -> Result<u32, String> {
                     .filter_map(|e| e.ok())
                     .filter_map(|e| {
                         let pid: u32 = e.file_name().to_str()?.parse().ok()?;
-                        let stat =
-                            std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
+                        let stat = std::fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?;
                         let ppid: u32 = stat.split_whitespace().nth(3)?.parse().ok()?;
                         Some((pid, ppid))
                     })

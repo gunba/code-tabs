@@ -1,17 +1,17 @@
-mod session;
 mod cli;
 mod config;
-mod git;
-mod process;
 pub(crate) mod data;
 mod file_watcher;
+mod git;
+mod process;
+mod session;
 mod version;
 
-pub use session::*;
 pub use cli::*;
 pub use config::*;
-pub use git::*;
-pub use process::*;
 pub use data::*;
 pub use file_watcher::*;
+pub use git::*;
+pub use process::*;
+pub use session::*;
 pub use version::*;

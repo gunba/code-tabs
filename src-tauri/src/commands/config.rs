@@ -46,8 +46,7 @@ pub fn read_ui_config(app: AppHandle) -> Result<String, String> {
 pub fn write_ui_config(config_json: String) -> Result<(), String> {
     let data_dir = get_data_dir()?;
     let path = data_dir.join("ui-config.json");
-    std::fs::write(&path, config_json)
-        .map_err(|e| format!("Failed to write ui-config.json: {}", e))
+    std::fs::write(&path, config_json).map_err(|e| format!("Failed to write ui-config.json: {}", e))
 }
 
 /// Discover hooks from Claude Code settings files.
@@ -57,7 +56,10 @@ pub fn write_ui_config(config_json: String) -> Result<(), String> {
 /// 3. User ~/.claude/settings.json
 // [RC-10] Hook configuration: discover_hooks / save_hooks (merges into existing settings)
 #[tauri::command]
-pub fn discover_hooks(app: AppHandle, working_dirs: Vec<String>) -> Result<serde_json::Value, String> {
+pub fn discover_hooks(
+    app: AppHandle,
+    working_dirs: Vec<String>,
+) -> Result<serde_json::Value, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let mut all_hooks = serde_json::Map::new();
     let mut scanned_files: Vec<String> = Vec::new();
@@ -118,8 +120,12 @@ pub fn save_hooks(scope: String, working_dir: String, hooks_json: String) -> Res
 
     let settings_path = match scope.as_str() {
         "user" => home.join(".claude").join("settings.json"),
-        "project" => std::path::Path::new(&working_dir).join(".claude").join("settings.json"),
-        "project-local" => std::path::Path::new(&working_dir).join(".claude").join("settings.local.json"),
+        "project" => std::path::Path::new(&working_dir)
+            .join(".claude")
+            .join("settings.json"),
+        "project-local" => std::path::Path::new(&working_dir)
+            .join(".claude")
+            .join("settings.local.json"),
         _ => return Err("Invalid scope".into()),
     };
 
@@ -151,21 +157,35 @@ fn validate_md_file_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("Name cannot be empty".into());
     }
-    if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
-        return Err(format!("Invalid name '{}': only alphanumeric, hyphens, underscores allowed", name));
+    if !name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!(
+            "Invalid name '{}': only alphanumeric, hyphens, underscores allowed",
+            name
+        ));
     }
     Ok(())
 }
 
 /// Resolve the path for a config file based on scope and file type.
-fn resolve_config_path(scope: &str, working_dir: &str, file_type: &str) -> Result<std::path::PathBuf, String> {
+fn resolve_config_path(
+    scope: &str,
+    working_dir: &str,
+    file_type: &str,
+) -> Result<std::path::PathBuf, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
 
     match file_type {
         "settings" => match scope {
             "user" => Ok(home.join(".claude").join("settings.json")),
-            "project" => Ok(std::path::Path::new(working_dir).join(".claude").join("settings.json")),
-            "project-local" => Ok(std::path::Path::new(working_dir).join(".claude").join("settings.local.json")),
+            "project" => Ok(std::path::Path::new(working_dir)
+                .join(".claude")
+                .join("settings.json")),
+            "project-local" => Ok(std::path::Path::new(working_dir)
+                .join(".claude")
+                .join("settings.local.json")),
             _ => Err("Invalid scope".into()),
         },
         "claudemd-user" => Ok(home.join(".claude").join("CLAUDE.md")),
@@ -175,20 +195,32 @@ fn resolve_config_path(scope: &str, working_dir: &str, file_type: &str) -> Resul
             let name = file_type.split_once(':').map(|(_, n)| n).unwrap_or("");
             validate_md_file_name(name)?;
             match scope {
-                "user" => Ok(home.join(".claude").join("agents").join(format!("{}.md", name))),
-                "project" => Ok(std::path::Path::new(working_dir).join(".claude").join("agents").join(format!("{}.md", name))),
+                "user" => Ok(home
+                    .join(".claude")
+                    .join("agents")
+                    .join(format!("{}.md", name))),
+                "project" => Ok(std::path::Path::new(working_dir)
+                    .join(".claude")
+                    .join("agents")
+                    .join(format!("{}.md", name))),
                 _ => Err("Invalid scope".into()),
             }
-        },
+        }
         _ if file_type.starts_with("skill:") || file_type.starts_with("skill-delete:") => {
             let name = file_type.split_once(':').map(|(_, n)| n).unwrap_or("");
             validate_md_file_name(name)?;
             match scope {
-                "user" => Ok(home.join(".claude").join("commands").join(format!("{}.md", name))),
-                "project" => Ok(std::path::Path::new(working_dir).join(".claude").join("commands").join(format!("{}.md", name))),
+                "user" => Ok(home
+                    .join(".claude")
+                    .join("commands")
+                    .join(format!("{}.md", name))),
+                "project" => Ok(std::path::Path::new(working_dir)
+                    .join(".claude")
+                    .join("commands")
+                    .join(format!("{}.md", name))),
                 _ => Err("Invalid scope".into()),
             }
-        },
+        }
         _ => Err(format!("Unknown file_type: {}", file_type)),
     }
 }
@@ -197,7 +229,11 @@ fn resolve_config_path(scope: &str, working_dir: &str, file_type: &str) -> Resul
 // [CM-08] JSON validated before write, parent dirs auto-created
 /// Read a config file. Returns content or empty string if not found.
 #[tauri::command]
-pub fn read_config_file(scope: String, working_dir: String, file_type: String) -> Result<String, String> {
+pub fn read_config_file(
+    scope: String,
+    working_dir: String,
+    file_type: String,
+) -> Result<String, String> {
     let path = resolve_config_path(&scope, &working_dir, &file_type)?;
     if !path.exists() {
         return Ok(String::new());
@@ -208,7 +244,12 @@ pub fn read_config_file(scope: String, working_dir: String, file_type: String) -
 /// Write a config file. Creates parent directories if needed.
 /// For settings files, validates JSON. For agent-delete, deletes the file.
 #[tauri::command]
-pub fn write_config_file(scope: String, working_dir: String, file_type: String, content: String) -> Result<(), String> {
+pub fn write_config_file(
+    scope: String,
+    working_dir: String,
+    file_type: String,
+    content: String,
+) -> Result<(), String> {
     // Handle agent/skill deletion
     if file_type.starts_with("agent-delete:") || file_type.starts_with("skill-delete:") {
         let path = resolve_config_path(&scope, &working_dir, &file_type)?;
@@ -233,7 +274,8 @@ pub fn write_config_file(scope: String, working_dir: String, file_type: String, 
         }
     }
 
-    std::fs::write(&path, &content).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+    std::fs::write(&path, &content)
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }
 
 /// Merge, dedupe, sort, and write event kind strings to src/types/eventKinds.json.
@@ -243,7 +285,12 @@ pub fn save_event_kinds(project_root: String, kinds: Vec<String>) -> Result<(), 
     // In dev builds, CARGO_MANIFEST_DIR points to src-tauri/; parent is the repo root.
     // In release builds, fall back to the provided project_root.
     let root = option_env!("CARGO_MANIFEST_DIR")
-        .map(|d| std::path::Path::new(d).parent().unwrap_or(std::path::Path::new(d)).to_path_buf())
+        .map(|d| {
+            std::path::Path::new(d)
+                .parent()
+                .unwrap_or(std::path::Path::new(d))
+                .to_path_buf()
+        })
         .unwrap_or_else(|| std::path::PathBuf::from(&project_root));
     let path = root.join("src").join("types").join("eventKinds.json");
 
@@ -261,8 +308,8 @@ pub fn save_event_kinds(project_root: String, kinds: Vec<String>) -> Result<(), 
     all.sort();
     all.dedup();
 
-    let json = serde_json::to_string_pretty(&all)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    let json =
+        serde_json::to_string_pretty(&all).map_err(|e| format!("Failed to serialize: {}", e))?;
 
     std::fs::write(&path, json + "\n")
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
@@ -278,7 +325,8 @@ fn list_md_in_dir(dir: &std::path::Path) -> Vec<serde_json::Value> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("md") {
-                let name = path.file_stem()
+                let name = path
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("")
                     .to_string();
@@ -292,18 +340,27 @@ fn list_md_in_dir(dir: &std::path::Path) -> Vec<serde_json::Value> {
         }
     }
     files.sort_by(|a, b| {
-        a["name"].as_str().unwrap_or("").cmp(b["name"].as_str().unwrap_or(""))
+        a["name"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(b["name"].as_str().unwrap_or(""))
     });
     files
 }
 
 /// List agent definition files based on scope.
 #[tauri::command]
-pub fn list_agents(app: AppHandle, scope: String, working_dir: String) -> Result<Vec<serde_json::Value>, String> {
+pub fn list_agents(
+    app: AppHandle,
+    scope: String,
+    working_dir: String,
+) -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let dir = match scope.as_str() {
         "user" => home.join(".claude").join("agents"),
-        "project" => std::path::Path::new(&working_dir).join(".claude").join("agents"),
+        "project" => std::path::Path::new(&working_dir)
+            .join(".claude")
+            .join("agents"),
         _ => return Err("Invalid scope".into()),
     };
     let files = list_md_in_dir(&dir);
@@ -324,11 +381,17 @@ pub fn list_agents(app: AppHandle, scope: String, working_dir: String) -> Result
 
 /// List skill/command definition files based on scope.
 #[tauri::command]
-pub fn list_skills(app: AppHandle, scope: String, working_dir: String) -> Result<Vec<serde_json::Value>, String> {
+pub fn list_skills(
+    app: AppHandle,
+    scope: String,
+    working_dir: String,
+) -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let dir = match scope.as_str() {
         "user" => home.join(".claude").join("commands"),
-        "project" => std::path::Path::new(&working_dir).join(".claude").join("commands"),
+        "project" => std::path::Path::new(&working_dir)
+            .join(".claude")
+            .join("commands"),
         _ => return Err("Invalid scope".into()),
     };
     let files = list_md_in_dir(&dir);

@@ -1,12 +1,10 @@
-use std::path::PathBuf;
-use tauri::{AppHandle, State};
 use crate::file_watcher::FileWatcherState;
 use crate::observability::{
-    record_backend_event,
-    record_backend_perf_end,
-    record_backend_perf_fail,
+    record_backend_event, record_backend_perf_end, record_backend_perf_fail,
     record_backend_perf_start,
 };
+use std::path::PathBuf;
+use tauri::{AppHandle, State};
 
 const MAX_SNAPSHOT_BYTES: usize = 500 * 1024;
 
@@ -21,7 +19,13 @@ pub async fn start_file_watcher(
     let span_data = serde_json::json!({
         "rootDir": root_dir,
     });
-    record_backend_perf_start(&app, "watcher", Some(&session_id), "watcher.start", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "watcher",
+        Some(&session_id),
+        "watcher.start",
+        span_data.clone(),
+    );
     let root = PathBuf::from(&root_dir);
     if !root.is_dir() {
         let err = format!("Directory does not exist: {root_dir}");
@@ -75,7 +79,13 @@ pub async fn stop_file_watcher(
 ) -> Result<(), String> {
     let span_start = std::time::Instant::now();
     let span_data = serde_json::json!({});
-    record_backend_perf_start(&app, "watcher", Some(&session_id), "watcher.stop", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "watcher",
+        Some(&session_id),
+        "watcher.stop",
+        span_data.clone(),
+    );
     match crate::file_watcher::stop_watcher(&session_id, &state) {
         Ok(()) => {
             record_backend_event(
@@ -124,7 +134,13 @@ pub async fn add_watch_path(
 ) -> Result<(), String> {
     let span_start = std::time::Instant::now();
     let span_data = serde_json::json!({ "path": path });
-    record_backend_perf_start(&app, "watcher", Some(&session_id), "watcher.add_path", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "watcher",
+        Some(&session_id),
+        "watcher.add_path",
+        span_data.clone(),
+    );
     let p = PathBuf::from(&path);
     match crate::file_watcher::add_watch_path(&session_id, &p, &state) {
         Ok(()) => {
@@ -173,10 +189,16 @@ pub async fn compute_file_diff(
 ) -> Result<String, String> {
     let span_start = std::time::Instant::now();
     let span_data = serde_json::json!({ "filePath": file_path });
-    record_backend_perf_start(&app, "watcher", None, "watcher.compute_diff", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "watcher",
+        None,
+        "watcher.compute_diff",
+        span_data.clone(),
+    );
     let result = tokio::task::spawn_blocking(move || {
-        let current = std::fs::read_to_string(&file_path)
-            .map_err(|e| format!("Failed to read file: {e}"))?;
+        let current =
+            std::fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
         let old = before_content.as_deref().unwrap_or("");
 
@@ -233,10 +255,16 @@ pub async fn compute_file_diff(
 pub async fn read_file_for_snapshot(file_path: String, app: AppHandle) -> Result<String, String> {
     let span_start = std::time::Instant::now();
     let span_data = serde_json::json!({ "filePath": file_path });
-    record_backend_perf_start(&app, "watcher", None, "watcher.read_snapshot", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "watcher",
+        None,
+        "watcher.read_snapshot",
+        span_data.clone(),
+    );
     let result = tokio::task::spawn_blocking(move || {
-        let metadata = std::fs::metadata(&file_path)
-            .map_err(|e| format!("Failed to stat file: {e}"))?;
+        let metadata =
+            std::fs::metadata(&file_path).map_err(|e| format!("Failed to stat file: {e}"))?;
 
         if metadata.len() > MAX_SNAPSHOT_BYTES as u64 {
             return Err(format!(
@@ -246,8 +274,7 @@ pub async fn read_file_for_snapshot(file_path: String, app: AppHandle) -> Result
             ));
         }
 
-        let content = std::fs::read(&file_path)
-            .map_err(|e| format!("Failed to read file: {e}"))?;
+        let content = std::fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
         // Check if binary (contains null bytes in first 8KB)
         let check_len = content.len().min(8192);

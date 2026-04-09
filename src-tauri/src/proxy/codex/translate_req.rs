@@ -101,6 +101,14 @@ fn sanitize_system_instructions(text: &str) -> String {
         .join("\n")
 }
 
+fn message_text_type(role: &str) -> &'static str {
+    if role == "assistant" {
+        "output_text"
+    } else {
+        "input_text"
+    }
+}
+
 fn translate_tool(tool: &Value) -> Value {
     json!({
         "type": "function",
@@ -128,14 +136,13 @@ fn translate_tool_choice(tc: &Value) -> Value {
 /// Translate one Anthropic message into one or more OpenAI input items.
 ///
 /// Text blocks are grouped into a single message with input content items.
-/// The Responses API uses `input_text` for message inputs regardless of role.
-/// tool_use and
-/// tool_result blocks become separate top-level items (function_call /
-/// function_call_output) — the OpenAI Responses API does NOT allow these
-/// inside a message's content array.
+/// User/developer/system messages use `input_text`, while assistant history
+/// must use `output_text`. tool_use and tool_result blocks become separate
+/// top-level items (function_call / function_call_output) because the
+/// Responses API does not allow them inside a message content array.
 fn translate_message(msg: &Value) -> Vec<Value> {
     let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("user");
-    let text_type = "input_text";
+    let text_type = message_text_type(role);
 
     // Simple string content — single message item
     if let Some(text) = msg.get("content").and_then(|v| v.as_str()) {
@@ -408,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn test_assistant_messages_still_use_input_text_items() {
+    fn test_assistant_messages_use_output_text_items() {
         let body = json!({
             "model": "claude-opus-4-6",
             "messages": [
@@ -421,10 +428,34 @@ mod tests {
         let translated: Value = serde_json::from_slice(&result).unwrap();
 
         assert_eq!(translated["input"][0]["role"], "assistant");
-        assert_eq!(translated["input"][0]["content"][0]["type"], "input_text");
+        assert_eq!(translated["input"][0]["content"][0]["type"], "output_text");
         assert_eq!(
             translated["input"][0]["content"][0]["text"],
             "Previous assistant reply"
+        );
+    }
+
+    #[test]
+    fn test_assistant_text_blocks_use_output_text_items() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "messages": [
+                {"role": "assistant", "content": [
+                    {"type": "text", "text": "First part. "},
+                    {"type": "text", "text": "Second part."}
+                ]}
+            ],
+            "stream": true,
+        });
+        let result =
+            translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.4").unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert_eq!(translated["input"][0]["role"], "assistant");
+        assert_eq!(translated["input"][0]["content"][0]["type"], "output_text");
+        assert_eq!(
+            translated["input"][0]["content"][0]["text"],
+            "First part. Second part."
         );
     }
 

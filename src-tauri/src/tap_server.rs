@@ -35,8 +35,7 @@ pub fn start_tap_server(
     session_id: String,
     tap_state: tauri::State<'_, Arc<Mutex<TapServerState>>>,
 ) -> Result<u16, String> {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .map_err(|e| format!("TCP bind failed: {e}"))?;
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("TCP bind failed: {e}"))?;
     let port = listener
         .local_addr()
         .map_err(|e| format!("local_addr failed: {e}"))?
@@ -92,9 +91,7 @@ pub fn start_tap_server(
                     );
                     // Set blocking with read timeout for the data stream
                     stream.set_nonblocking(false).ok();
-                    stream
-                        .set_read_timeout(Some(Duration::from_secs(5)))
-                        .ok();
+                    stream.set_read_timeout(Some(Duration::from_secs(5))).ok();
 
                     let mut reader = BufReader::new(stream);
                     let mut line = String::new();

@@ -14,7 +14,9 @@ pub fn format_sse_event(event_type: &str, data: &Value) -> Vec<u8> {
 pub struct StreamTranslator {
     original_model: String,
     content_index: usize,
-    text_started: bool,
+    text_open: bool,
+    text_block_count: usize,
+    pending_message_text: Option<String>,
     function_calls: Vec<Value>,
     upstream_output_count: usize,
     stop_reason_override: Option<String>,
@@ -27,7 +29,9 @@ impl StreamTranslator {
         Self {
             original_model: original_model.to_string(),
             content_index: 0,
-            text_started: false,
+            text_open: false,
+            text_block_count: 0,
+            pending_message_text: None,
             function_calls: Vec::new(),
             upstream_output_count: 0,
             stop_reason_override: None,
@@ -87,19 +91,7 @@ impl StreamTranslator {
                     return Vec::new();
                 }
 
-                let mut output = Vec::new();
-
-                if !self.text_started {
-                    self.text_started = true;
-                    output.extend_from_slice(&format_sse_event(
-                        "content_block_start",
-                        &json!({
-                            "type": "content_block_start",
-                            "index": self.content_index,
-                            "content_block": {"type": "text", "text": ""},
-                        }),
-                    ));
-                }
+                let mut output = self.start_text_block_if_needed();
 
                 output.extend_from_slice(&format_sse_event(
                     "content_block_delta",
@@ -112,11 +104,28 @@ impl StreamTranslator {
 
                 output
             }
-            "response.function_call_arguments.done" | "response.output_item.done" => {
-                // Collect function calls for emission at finalize
+            "response.output_text.done" => {
+                if let Some(text) = event.get("text").and_then(|v| v.as_str()) {
+                    self.stage_output_text(text);
+                }
+                Vec::new()
+            }
+            "response.content_part.added" | "response.content_part.done" => {
+                if let Some(text) = extract_content_part_output_text(&event) {
+                    self.stage_output_text(&text);
+                }
+                Vec::new()
+            }
+            "response.output_item.added" | "response.output_item.done" => {
                 if let Some(item) = event.get("item") {
-                    if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
-                        self.push_function_call(item.clone());
+                    match item.get("type").and_then(|v| v.as_str()) {
+                        Some("function_call") => {
+                            if event_type == "response.output_item.done" {
+                                self.push_function_call(item.clone());
+                            }
+                        }
+                        Some("message") => self.stage_message_text(item),
+                        _ => {}
                     }
                 }
                 Vec::new()
@@ -125,13 +134,19 @@ impl StreamTranslator {
                 let empty_response = json!({});
                 let response = event.get("response").unwrap_or(&empty_response);
 
-                if let Some(output) = event
-                    .get("response")
-                    .and_then(|v| v.get("output"))
-                    .and_then(|v| v.as_array())
-                {
-                    self.upstream_output_count = output.len();
-                    self.function_calls = collect_function_calls(output);
+                if let Some(output) = response.get("output").and_then(|v| v.as_array()) {
+                    if !output.is_empty() {
+                        self.upstream_output_count = output.len();
+                    }
+                    for call in collect_function_calls(output) {
+                        self.push_function_call(call);
+                    }
+                }
+                if self.upstream_output_count == 0 && response_has_output_text(response) {
+                    self.upstream_output_count = 1;
+                }
+                if !self.text_open && self.pending_message_text.is_none() {
+                    self.pending_message_text = extract_response_output_text(response);
                 }
                 self.stop_reason_override = stop_reason_override(response);
                 self.done = true;
@@ -157,17 +172,26 @@ impl StreamTranslator {
     fn finalize_with_usage(&mut self, usage: &Value, service_tier: Option<&str>) -> Vec<u8> {
         let mut output = Vec::new();
 
-        // Close text block if started
-        if self.text_started {
-            output.extend_from_slice(&format_sse_event(
-                "content_block_stop",
-                &json!({
-                    "type": "content_block_stop",
-                    "index": self.content_index,
-                }),
-            ));
-            self.content_index += 1;
+        if !self.text_open {
+            if let Some(text) = self
+                .pending_message_text
+                .take()
+                .filter(|text| !text.is_empty())
+            {
+                output.extend_from_slice(&self.start_text_block_if_needed());
+                output.extend_from_slice(&format_sse_event(
+                    "content_block_delta",
+                    &json!({
+                        "type": "content_block_delta",
+                        "index": self.content_index,
+                        "delta": {"type": "text_delta", "text": text},
+                    }),
+                ));
+            }
         }
+
+        // Close text block if started
+        output.extend_from_slice(&self.stop_text_block_if_open());
 
         let shaped_tool_calls = shape_function_calls(&self.function_calls);
         let stop_reason = self.stop_reason_override.clone().unwrap_or_else(|| {
@@ -234,9 +258,9 @@ impl StreamTranslator {
             if self.upstream_output_count > 0 {
                 self.upstream_output_count
             } else {
-                self.function_calls.len() + usize::from(self.text_started)
+                self.function_calls.len() + self.text_block_count
             },
-            usize::from(self.text_started),
+            self.text_block_count,
             &shaped_tool_calls.summary,
             &stop_reason,
         ));
@@ -254,13 +278,62 @@ impl StreamTranslator {
 
     fn push_function_call(&mut self, item: Value) {
         let call_id = item.get("call_id");
-        if !self
+        if let Some(existing) = self
             .function_calls
-            .iter()
-            .any(|existing| existing.get("call_id") == call_id)
+            .iter_mut()
+            .find(|existing| existing.get("call_id") == call_id)
         {
+            *existing = item;
+        } else {
             self.function_calls.push(item);
         }
+    }
+
+    fn stage_message_text(&mut self, item: &Value) {
+        if let Some(text) = extract_message_output_text(item) {
+            self.stage_output_text(&text);
+        }
+    }
+
+    fn stage_output_text(&mut self, text: &str) {
+        if self.text_open || self.pending_message_text.is_some() || text.is_empty() {
+            return;
+        }
+        self.pending_message_text = Some(text.to_string());
+    }
+
+    fn start_text_block_if_needed(&mut self) -> Vec<u8> {
+        if self.text_open {
+            return Vec::new();
+        }
+
+        self.text_open = true;
+        self.text_block_count += 1;
+        format_sse_event(
+            "content_block_start",
+            &json!({
+                "type": "content_block_start",
+                "index": self.content_index,
+                "content_block": {"type": "text", "text": ""},
+            }),
+        )
+    }
+
+    fn stop_text_block_if_open(&mut self) -> Vec<u8> {
+        if !self.text_open {
+            return Vec::new();
+        }
+
+        self.text_open = false;
+        let output = format_sse_event(
+            "content_block_stop",
+            &json!({
+                "type": "content_block_stop",
+                "index": self.content_index,
+            }),
+        );
+        self.content_index += 1;
+        output
     }
 }
 
@@ -277,6 +350,63 @@ fn stop_reason_override(response: &Value) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_output_text_from_items(items: &[Value]) -> Option<String> {
+    items.iter().find_map(extract_message_output_text)
+}
+
+fn extract_response_output_text(response: &Value) -> Option<String> {
+    response
+        .get("output_text")
+        .and_then(|v| v.as_str())
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            response
+                .get("output")
+                .and_then(|v| v.as_array())
+                .and_then(|items| extract_output_text_from_items(items))
+        })
+}
+
+fn response_has_output_text(response: &Value) -> bool {
+    extract_response_output_text(response).is_some()
+}
+
+fn extract_message_output_text(item: &Value) -> Option<String> {
+    if item.get("type").and_then(|v| v.as_str()) != Some("message") {
+        return None;
+    }
+    if item.get("role").and_then(|v| v.as_str()) != Some("assistant") {
+        return None;
+    }
+
+    let blocks = item.get("content").and_then(|v| v.as_array())?;
+    let text = blocks
+        .iter()
+        .filter(|block| block.get("type").and_then(|v| v.as_str()) == Some("output_text"))
+        .filter_map(|block| block.get("text").and_then(|v| v.as_str()))
+        .collect::<Vec<_>>()
+        .join("");
+
+    if text.is_empty() {
+        None
+    } else {
+        Some(text)
+    }
+}
+
+fn extract_content_part_output_text(event: &Value) -> Option<String> {
+    let part = event.get("part")?;
+    if part.get("type").and_then(|v| v.as_str()) != Some("output_text") {
+        return None;
+    }
+
+    part.get("text")
+        .and_then(|v| v.as_str())
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
 }
 
 #[cfg(test)]
@@ -319,6 +449,126 @@ mod tests {
         let text = String::from_utf8_lossy(&output);
 
         assert!(text.contains("\"stop_reason\":\"max_tokens\""));
+    }
+
+    #[test]
+    fn test_stream_uses_output_item_done_message_text_when_no_delta_arrives() {
+        let mut t = StreamTranslator::new("claude-opus-4-6");
+        let staged = t.process_line(
+            "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello from item done\"}]}}",
+        );
+        assert!(staged.is_empty());
+
+        let output = t.process_line(
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[]}}",
+        );
+        let text = String::from_utf8_lossy(&output);
+
+        assert!(text.contains("content_block_start"));
+        assert!(text.contains("Hello from item done"));
+        assert!(text.contains("\"stop_reason\":\"end_turn\""));
+    }
+
+    #[test]
+    fn test_stream_preserves_output_item_function_calls_when_completed_output_is_empty() {
+        let mut t = StreamTranslator::new("claude-opus-4-6");
+        let staged = t.process_line(
+            "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_1\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"pattern\\\":\\\"System Prompt\\\"}\",\"call_id\":\"call_1\",\"name\":\"Grep\"}}",
+        );
+        assert!(staged.is_empty());
+
+        let output = t.process_line(
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[]}}",
+        );
+        let text = String::from_utf8_lossy(&output);
+
+        assert!(text.contains("\"type\":\"tool_use\""));
+        assert!(text.contains("\"id\":\"call_1\""));
+        assert!(text.contains("\"name\":\"Grep\""));
+        assert!(text.contains("\\\"System Prompt\\\""));
+        assert!(text.contains("\"stop_reason\":\"tool_use\""));
+        assert_eq!(t.final_summary().unwrap().upstream_output_count, 1);
+    }
+
+    #[test]
+    fn test_stream_uses_output_text_done_when_no_delta_arrives() {
+        let mut t = StreamTranslator::new("claude-opus-4-6");
+        let staged = t.process_line(
+            "data: {\"type\":\"response.output_text.done\",\"text\":\"Hello from output_text.done\"}",
+        );
+        assert!(staged.is_empty());
+
+        let output = t.process_line(
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[]}}",
+        );
+        let text = String::from_utf8_lossy(&output);
+
+        assert!(text.contains("content_block_start"));
+        assert!(text.contains("Hello from output_text.done"));
+        assert!(text.contains("\"stop_reason\":\"end_turn\""));
+    }
+
+    #[test]
+    fn test_stream_uses_content_part_done_when_no_delta_arrives() {
+        let mut t = StreamTranslator::new("claude-opus-4-6");
+        let staged = t.process_line(
+            "data: {\"type\":\"response.content_part.done\",\"part\":{\"type\":\"output_text\",\"text\":\"Hello from content_part.done\"}}",
+        );
+        assert!(staged.is_empty());
+
+        let output = t.process_line(
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[]}}",
+        );
+        let text = String::from_utf8_lossy(&output);
+
+        assert!(text.contains("content_block_start"));
+        assert!(text.contains("Hello from content_part.done"));
+        assert!(text.contains("\"stop_reason\":\"end_turn\""));
+    }
+
+    #[test]
+    fn test_stream_uses_output_item_added_message_text_when_no_delta_arrives() {
+        let mut t = StreamTranslator::new("claude-opus-4-6");
+        let staged = t.process_line(
+            "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello from item added\"}]}}",
+        );
+        assert!(staged.is_empty());
+
+        let output = t.process_line(
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[]}}",
+        );
+        let text = String::from_utf8_lossy(&output);
+
+        assert!(text.contains("content_block_start"));
+        assert!(text.contains("Hello from item added"));
+        assert!(text.contains("\"stop_reason\":\"end_turn\""));
+    }
+
+    #[test]
+    fn test_stream_uses_completed_message_text_when_no_delta_arrives() {
+        let mut t = StreamTranslator::new("claude-opus-4-6");
+        let output = t.process_line(
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello from completed\"}]}]}}",
+        );
+        let text = String::from_utf8_lossy(&output);
+
+        assert!(text.contains("content_block_start"));
+        assert!(text.contains("Hello from completed"));
+        assert!(text.contains("\"stop_reason\":\"end_turn\""));
+    }
+
+    #[test]
+    fn test_stream_uses_completed_output_text_when_no_delta_arrives() {
+        let mut t = StreamTranslator::new("claude-opus-4-6");
+        let output = t.process_line(
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output_text\":\"Hello from top-level output_text\"}}",
+        );
+        let text = String::from_utf8_lossy(&output);
+
+        assert!(text.contains("content_block_start"));
+        assert!(text.contains("Hello from top-level output_text"));
+        assert!(text.contains("\"stop_reason\":\"end_turn\""));
+        assert_eq!(t.final_summary().unwrap().upstream_output_count, 1);
     }
 
     #[test]

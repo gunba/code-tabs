@@ -89,24 +89,10 @@ pub async fn pty_spawn(
     );
 
     #[cfg(windows)]
-    let result = conpty::spawn(
-        &file,
-        &args,
-        cols,
-        rows,
-        cwd.as_deref(),
-        &env,
-    )?;
+    let result = conpty::spawn(&file, &args, cols, rows, cwd.as_deref(), &env)?;
 
     #[cfg(unix)]
-    let result = unix::spawn(
-        &file,
-        &args,
-        cols,
-        rows,
-        cwd.as_deref(),
-        &env,
-    )?;
+    let result = unix::spawn(&file, &args, cols, rows, cwd.as_deref(), &env)?;
 
     let handler = state.session_id.fetch_add(1, Ordering::Relaxed);
 
@@ -217,11 +203,7 @@ pub async fn pty_resize(
     session.conpty.resize(cols, rows)?;
 
     #[cfg(unix)]
-    session
-        .pty
-        .lock()
-        .unwrap()
-        .resize(cols, rows)?;
+    session.pty.lock().unwrap().resize(cols, rows)?;
 
     Ok(())
 }
@@ -302,10 +284,7 @@ pub async fn pty_exitstatus(
 }
 
 #[tauri::command]
-pub async fn pty_destroy(
-    pid: PtyHandler,
-    state: tauri::State<'_, PtyState>,
-) -> Result<(), String> {
+pub async fn pty_destroy(pid: PtyHandler, state: tauri::State<'_, PtyState>) -> Result<(), String> {
     state.sessions.write().await.remove(&pid);
     Ok(())
 }

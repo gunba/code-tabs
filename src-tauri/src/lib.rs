@@ -27,10 +27,10 @@ pub struct ActivePids(pub Mutex<HashSet<u32>>);
 /// `KILL_ON_JOB_CLOSE` ensures they all die when our process exits.
 #[cfg(target_os = "windows")]
 fn setup_job_object() {
+    use std::mem;
+    use windows_sys::Win32::Foundation::*;
     use windows_sys::Win32::System::JobObjects::*;
     use windows_sys::Win32::System::Threading::*;
-    use windows_sys::Win32::Foundation::*;
-    use std::mem;
 
     unsafe {
         let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
@@ -138,7 +138,10 @@ pub fn run() {
                             )
                         };
                         if hr != 0 {
-                            log::warn!("DwmSetWindowAttribute(CAPTION_COLOR) failed: HRESULT 0x{:08X}", hr);
+                            log::warn!(
+                                "DwmSetWindowAttribute(CAPTION_COLOR) failed: HRESULT 0x{:08X}",
+                                hr
+                            );
                         }
                     }
                 }

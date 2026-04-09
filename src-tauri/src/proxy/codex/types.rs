@@ -1,6 +1,10 @@
 use serde_json::{json, Value};
 
-pub fn anthropic_usage_json(input_tokens: u64, output_tokens: u64, service_tier: Option<&str>) -> Value {
+pub fn anthropic_usage_json(
+    input_tokens: u64,
+    output_tokens: u64,
+    service_tier: Option<&str>,
+) -> Value {
     json!({
         "input_tokens": input_tokens,
         "cache_creation_input_tokens": 0,

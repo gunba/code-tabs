@@ -10,9 +10,7 @@ pub async fn git_repo_check(working_dir: String) -> bool {
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000);
         }
-        cmd.output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        cmd.output().map(|o| o.status.success()).unwrap_or(false)
     })
     .await
     .unwrap_or(false)
@@ -32,11 +30,15 @@ pub async fn prune_worktree(worktree_path: String, project_root: String) -> Resu
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000);
         }
-        let output = cmd.output().map_err(|e| format!("Failed to run git: {e}"))?;
+        let output = cmd
+            .output()
+            .map_err(|e| format!("Failed to run git: {e}"))?;
         if output.status.success() {
             Ok(())
         } else {
             Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
         }
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

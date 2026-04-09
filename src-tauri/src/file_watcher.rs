@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use crate::observability::record_backend_event;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter};
-use crate::observability::record_backend_event;
 
 const IGNORED_DIRS: &[&str] = &[
     ".git",
@@ -114,9 +114,12 @@ pub fn start_watcher(
 
     let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
 
-    let mut watcher = RecommendedWatcher::new(move |res| {
-        let _ = tx.send(res);
-    }, Config::default())
+    let mut watcher = RecommendedWatcher::new(
+        move |res| {
+            let _ = tx.send(res);
+        },
+        Config::default(),
+    )
     .map_err(|e| format!("Failed to create watcher: {e}"))?;
 
     watcher
@@ -231,7 +234,11 @@ fn event_loop(
         }
         record_backend_event(
             app,
-            if batch_start.elapsed().as_millis() >= 100 { "WARN" } else { "DEBUG" },
+            if batch_start.elapsed().as_millis() >= 100 {
+                "WARN"
+            } else {
+                "DEBUG"
+            },
             "watcher",
             Some(session_id),
             "watcher.batch_emitted",

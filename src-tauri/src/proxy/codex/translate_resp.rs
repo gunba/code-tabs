@@ -19,7 +19,7 @@ pub fn translate_response_with_summary(
     let mut content: Vec<Value> = Vec::new();
     let mut stop_reason = "end_turn".to_string();
     let mut text_block_count = 0usize;
-    let output_count = resp
+    let mut output_count = resp
         .get("output")
         .and_then(|v| v.as_array())
         .map(|output| output.len())
@@ -71,6 +71,17 @@ pub fn translate_response_with_summary(
                 _ => {}
             }
         }
+    }
+
+    if text_block_count == 0 {
+        if let Some(text) = extract_response_output_text(&resp) {
+            content.push(json!({"type": "text", "text": text}));
+            text_block_count += 1;
+        }
+    }
+
+    if output_count == 0 && response_has_output_text(&resp) {
+        output_count = 1;
     }
 
     if shaped_tool_calls.summary.emitted_tool_call_count > 0 {
@@ -133,6 +144,18 @@ pub fn translate_response_with_summary(
     })
 }
 
+fn extract_response_output_text(response: &Value) -> Option<String> {
+    response
+        .get("output_text")
+        .and_then(|v| v.as_str())
+        .filter(|text| !text.is_empty())
+        .map(str::to_string)
+}
+
+fn response_has_output_text(response: &Value) -> bool {
+    extract_response_output_text(response).is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +186,29 @@ mod tests {
         assert_eq!(resp["stop_reason"], "end_turn");
         assert_eq!(resp["usage"]["input_tokens"], 10);
         assert_eq!(resp["usage"]["speed"], "standard");
+    }
+
+    #[test]
+    fn test_top_level_output_text_response_translation() {
+        let codex_resp = json!({
+            "id": "resp_top_level_text",
+            "output_text": "Hello from top-level output_text",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+            "status": "completed",
+        });
+        let result = translate_response_with_summary(
+            serde_json::to_vec(&codex_resp).unwrap().as_slice(),
+            "claude-opus-4-6",
+        )
+        .unwrap();
+        let resp: Value = serde_json::from_slice(&result.body).unwrap();
+
+        assert_eq!(resp["content"][0]["type"], "text");
+        assert_eq!(
+            resp["content"][0]["text"],
+            "Hello from top-level output_text"
+        );
+        assert_eq!(result.summary.upstream_output_count, 1);
     }
 
     #[test]

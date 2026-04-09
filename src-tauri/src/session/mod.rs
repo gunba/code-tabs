@@ -85,5 +85,4 @@ impl SessionManager {
             .filter_map(|id| sessions.get(id).cloned())
             .collect()
     }
-
 }

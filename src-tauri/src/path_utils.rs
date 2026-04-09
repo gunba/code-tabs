@@ -31,7 +31,9 @@ fn extract_cwd_from_jsonl(path: &Path) -> Option<String> {
     let file = std::fs::File::open(path).ok()?;
     let reader = BufReader::new(file);
     for line in reader.lines().take(20) {
-        let Ok(line) = line else { continue; };
+        let Ok(line) = line else {
+            continue;
+        };
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
             if let Some(cwd) = parsed["cwd"].as_str() {
                 if !cwd.is_empty() {
@@ -84,7 +86,9 @@ fn decode_project_dir_heuristic(encoded: &str) -> String {
                     break;
                 }
             }
-            if matched { break; }
+            if matched {
+                break;
+            }
         }
 
         if !matched {
@@ -96,4 +100,3 @@ fn decode_project_dir_heuristic(encoded: &str) -> String {
 
     current.to_string_lossy().to_string()
 }
-

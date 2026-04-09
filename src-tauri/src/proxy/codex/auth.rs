@@ -1,9 +1,9 @@
-use std::sync::{Arc, Mutex};
-use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
 use base64::Engine;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 // ── OAuth Configuration ─────────────────────────────────────────────
 
@@ -12,7 +12,8 @@ const TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 const CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const REDIRECT_URI: &str = "http://localhost:1455/auth/callback";
 const CALLBACK_PORT: u16 = 1455;
-const SCOPES: &str = "openid profile email offline_access api.connectors.read api.connectors.invoke";
+const SCOPES: &str =
+    "openid profile email offline_access api.connectors.read api.connectors.invoke";
 const FLOW_TIMEOUT_SECS: u64 = 600; // 10 minutes
 const TOKEN_REFRESH_BUFFER_SECS: u64 = 60;
 
@@ -70,7 +71,11 @@ impl CodexAuthState {
         let (token, refresh_token, expires_at) = {
             let guard = self.inner.lock().map_err(|e| e.to_string())?;
             match guard.as_ref() {
-                Some(t) => (t.access_token.clone(), t.refresh_token.clone(), t.expires_at),
+                Some(t) => (
+                    t.access_token.clone(),
+                    t.refresh_token.clone(),
+                    t.expires_at,
+                ),
                 None => return Err("Not logged in".into()),
             }
         };
@@ -259,7 +264,9 @@ pub async fn exchange_code(code: &str, verifier: &str) -> Result<CodexTokens, St
         expires_in: Option<u64>,
     }
 
-    let body: TokenResponse = resp.json().await
+    let body: TokenResponse = resp
+        .json()
+        .await
         .map_err(|e| format!("Failed to parse token response: {e}"))?;
 
     let now = std::time::SystemTime::now()
@@ -303,7 +310,9 @@ async fn refresh_access_token(refresh_token: &str) -> Result<CodexTokens, String
         expires_in: Option<u64>,
     }
 
-    let body: TokenResponse = resp.json().await
+    let body: TokenResponse = resp
+        .json()
+        .await
         .map_err(|e| format!("Failed to parse refresh response: {e}"))?;
 
     let now = std::time::SystemTime::now()
@@ -315,7 +324,9 @@ async fn refresh_access_token(refresh_token: &str) -> Result<CodexTokens, String
 
     Ok(CodexTokens {
         access_token: body.access_token,
-        refresh_token: body.refresh_token.or_else(|| Some(refresh_token.to_string())),
+        refresh_token: body
+            .refresh_token
+            .or_else(|| Some(refresh_token.to_string())),
         expires_at: now + body.expires_in.unwrap_or(3600),
         email,
     })
@@ -329,7 +340,10 @@ fn extract_email_from_jwt(jwt: &str) -> Option<String> {
         .decode(payload)
         .ok()?;
     let claims: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
-    claims.get("email").and_then(|e| e.as_str()).map(|s| s.to_string())
+    claims
+        .get("email")
+        .and_then(|e| e.as_str())
+        .map(|s| s.to_string())
 }
 
 // ── URL encoding ────────────────────────────────────────────────────

@@ -49,11 +49,7 @@ fn append_lines(session_id: Option<&str>, lines: &str) -> Result<u64, String> {
 pub fn get_observability_info() -> Result<ObservabilityInfo, String> {
     let enabled = observability_enabled();
     let global_log_path = if enabled {
-        Some(
-            observability_path(None)?
-                .to_string_lossy()
-                .to_string(),
-        )
+        Some(observability_path(None)?.to_string_lossy().to_string())
     } else {
         None
     };
@@ -67,10 +63,7 @@ pub fn get_observability_info() -> Result<ObservabilityInfo, String> {
 }
 
 #[tauri::command]
-pub fn append_observability_data(
-    session_id: Option<String>,
-    lines: String,
-) -> Result<u64, String> {
+pub fn append_observability_data(session_id: Option<String>, lines: String) -> Result<u64, String> {
     if !observability_enabled() {
         return Ok(0);
     }

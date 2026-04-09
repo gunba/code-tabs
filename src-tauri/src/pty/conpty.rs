@@ -154,7 +154,6 @@ impl ConPtyHandle {
             }
         }
     }
-
 }
 
 /// Result of a successful ConPTY spawn.
@@ -205,9 +204,7 @@ fn build_command_line(file: &str, args: &[String]) -> Vec<u16> {
 
 /// Build a null-terminated wide environment block from key-value pairs.
 /// Format: "KEY=VALUE\0KEY=VALUE\0\0"
-fn build_env_block(
-    env: &std::collections::BTreeMap<String, String>,
-) -> Vec<u16> {
+fn build_env_block(env: &std::collections::BTreeMap<String, String>) -> Vec<u16> {
     // Start with inherited environment, then overlay
     let mut merged: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
 
@@ -250,14 +247,10 @@ pub fn spawn(
         Y: rows as i16,
     };
     let mut hpcon: HPCON = 0;
-    let hr = unsafe {
-        CreatePseudoConsole(size, pty_input_read.0, pty_output_write.0, 0, &mut hpcon)
-    };
+    let hr =
+        unsafe { CreatePseudoConsole(size, pty_input_read.0, pty_output_write.0, 0, &mut hpcon) };
     if hr < 0 {
-        return Err(format!(
-            "CreatePseudoConsole failed: HRESULT 0x{:08x}",
-            hr
-        ));
+        return Err(format!("CreatePseudoConsole failed: HRESULT 0x{:08x}", hr));
     }
     let hpcon = OwnedHpcon(hpcon);
 
@@ -329,10 +322,7 @@ pub fn spawn(
             FALSE as BOOL,
             creation_flags,
             env_block.as_ptr() as *const _,
-            cwd_wide
-                .as_ref()
-                .map(|w| w.as_ptr())
-                .unwrap_or(ptr::null()),
+            cwd_wide.as_ref().map(|w| w.as_ptr()).unwrap_or(ptr::null()),
             &si.StartupInfo,
             &mut pi,
         )

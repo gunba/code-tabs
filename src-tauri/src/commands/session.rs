@@ -35,10 +35,7 @@ pub fn set_active_tab(id: String, manager: State<'_, SessionManager>) -> Result<
 }
 
 #[tauri::command]
-pub fn reorder_tabs(
-    order: Vec<String>,
-    manager: State<'_, SessionManager>,
-) -> Result<(), String> {
+pub fn reorder_tabs(order: Vec<String>, manager: State<'_, SessionManager>) -> Result<(), String> {
     manager.reorder_tabs(order);
     Ok(())
 }

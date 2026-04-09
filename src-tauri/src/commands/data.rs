@@ -25,8 +25,7 @@ pub(crate) fn get_session_data_dir(session_id: &str) -> Result<std::path::PathBu
 }
 
 pub(crate) fn open_path(path: &std::path::Path) -> Result<(), String> {
-    open::that_detached(path)
-        .map_err(|e| format!("Failed to open {}: {}", path.display(), e))
+    open::that_detached(path).map_err(|e| format!("Failed to open {}: {}", path.display(), e))
 }
 
 pub(crate) fn reveal_path(path: &std::path::Path) -> Result<(), String> {
@@ -110,8 +109,8 @@ pub fn cleanup_session_data(max_age_hours: u64) -> Result<u32, String> {
         return Ok(0);
     }
     let mut removed = 0u32;
-    let cutoff = std::time::SystemTime::now()
-        - std::time::Duration::from_secs(max_age_hours * 3600);
+    let cutoff =
+        std::time::SystemTime::now() - std::time::Duration::from_secs(max_age_hours * 3600);
     if let Ok(entries) = std::fs::read_dir(&sessions_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -248,7 +247,8 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
 
     let mut raw_entries: Vec<RawEntry> = Vec::new();
     // Global map: message UUID → session_id (for resolving chain parents)
-    let mut uuid_to_session: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut uuid_to_session: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     // Walk project dirs
     let entries = std::fs::read_dir(&projects_dir)
@@ -256,7 +256,9 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.is_dir() { continue; }
+        if !path.is_dir() {
+            continue;
+        }
 
         let encoded_name = path
             .file_name()
@@ -304,7 +306,9 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                 .unwrap_or("")
                 .to_string();
 
-            if session_id.is_empty() { continue; }
+            if session_id.is_empty() {
+                continue;
+            }
 
             let last_modified = chrono::DateTime::<chrono::Utc>::from(modified)
                 .format("%Y-%m-%dT%H:%M:%SZ")
@@ -324,7 +328,10 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                         }
                         // Capture sourceToolAssistantUUID (plan-mode fork link)
                         if source_tool_uuid.is_none() {
-                            if let Some(stid) = parsed.get("sourceToolAssistantUUID").and_then(|v| v.as_str()) {
+                            if let Some(stid) = parsed
+                                .get("sourceToolAssistantUUID")
+                                .and_then(|v| v.as_str())
+                            {
                                 if !stid.is_empty() {
                                     source_tool_uuid = Some(stid.to_string());
                                 }
@@ -337,7 +344,9 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                             }
                         }
                     }
-                    if !first_msg.is_empty() && source_tool_uuid.is_some() { break; }
+                    if !first_msg.is_empty() && source_tool_uuid.is_some() {
+                        break;
+                    }
                 }
             }
 
@@ -378,7 +387,9 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
                             }
                         }
                     }
-                    if !last_msg.is_empty() && !model.is_empty() { break; }
+                    if !last_msg.is_empty() && !model.is_empty() {
+                        break;
+                    }
                 }
             }
 
@@ -404,9 +415,8 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
     }
 
     // --- Chain detection: resolve sourceToolAssistantUUID → parent session via UUID map ---
-    let id_set: std::collections::HashSet<String> = raw_entries.iter()
-        .map(|e| e.session_id.clone())
-        .collect();
+    let id_set: std::collections::HashSet<String> =
+        raw_entries.iter().map(|e| e.session_id.clone()).collect();
     for entry in &mut raw_entries {
         if let Some(ref stid) = entry.source_tool_uuid {
             if let Some(parent_sid) = uuid_to_session.get(stid) {
@@ -437,7 +447,9 @@ fn extract_user_text(parsed: &serde_json::Value) -> Option<String> {
     };
     let content = &parsed["message"]["content"];
     if let Some(text) = content.as_str() {
-        if let Some(t) = truncate(text) { return Some(t); }
+        if let Some(t) = truncate(text) {
+            return Some(t);
+        }
     }
     if let Some(arr) = content.as_array() {
         for block in arr {
@@ -455,20 +467,27 @@ fn extract_user_text(parsed: &serde_json::Value) -> Option<String> {
 /// Unlike `extract_user_text`, this returns the complete text without truncation or filtering.
 fn extract_message_text(parsed: &serde_json::Value) -> Option<String> {
     let msg_type = parsed["type"].as_str()?;
-    if msg_type != "user" && msg_type != "assistant" { return None; }
+    if msg_type != "user" && msg_type != "assistant" {
+        return None;
+    }
     let content = &parsed["message"]["content"];
 
     // User messages can be a plain string
     if let Some(text) = content.as_str() {
-        if !text.is_empty() { return Some(text.to_string()); }
+        if !text.is_empty() {
+            return Some(text.to_string());
+        }
     }
     // Both user and assistant use text blocks in arrays
     if let Some(arr) = content.as_array() {
-        let parts: Vec<&str> = arr.iter()
+        let parts: Vec<&str> = arr
+            .iter()
             .filter(|b| b["type"].as_str() == Some("text"))
             .filter_map(|b| b["text"].as_str())
             .collect();
-        if !parts.is_empty() { return Some(parts.join(" ")); }
+        if !parts.is_empty() {
+            return Some(parts.join(" "));
+        }
     }
     None
 }
@@ -510,7 +529,9 @@ fn search_session_content_sync(query: &str) -> Result<Vec<serde_json::Value>, St
 
     for entry in project_dirs.flatten() {
         let path = entry.path();
-        if !path.is_dir() { continue; }
+        if !path.is_dir() {
+            continue;
+        }
 
         let dir_files = match std::fs::read_dir(&path) {
             Ok(f) => f,
@@ -529,7 +550,9 @@ fn search_session_content_sync(query: &str) -> Result<Vec<serde_json::Value>, St
             };
 
             let size = metadata.len();
-            if size > MAX_CONTENT_SEARCH_FILE_SIZE { continue; }
+            if size > MAX_CONTENT_SEARCH_FILE_SIZE {
+                continue;
+            }
 
             let session_id = fpath
                 .file_stem()
@@ -537,7 +560,9 @@ fn search_session_content_sync(query: &str) -> Result<Vec<serde_json::Value>, St
                 .unwrap_or("")
                 .to_string();
 
-            if session_id.is_empty() { continue; }
+            if session_id.is_empty() {
+                continue;
+            }
 
             files.push(FileEntry {
                 path: fpath,
@@ -553,7 +578,9 @@ fn search_session_content_sync(query: &str) -> Result<Vec<serde_json::Value>, St
     let mut results: Vec<serde_json::Value> = Vec::new();
 
     for file_entry in &files {
-        if results.len() >= MAX_CONTENT_SEARCH_RESULTS { break; }
+        if results.len() >= MAX_CONTENT_SEARCH_RESULTS {
+            break;
+        }
 
         let file_handle = match std::fs::File::open(&file_entry.path) {
             Ok(f) => f,
@@ -588,11 +615,16 @@ fn search_session_content_sync(query: &str) -> Result<Vec<serde_json::Value>, St
                 let snippet_half = 100;
                 let start = pos.saturating_sub(snippet_half);
                 let start = text.floor_char_boundary(start);
-                let end = text.ceil_char_boundary((pos + query_lower.len() + snippet_half).min(text.len()));
+                let end = text
+                    .ceil_char_boundary((pos + query_lower.len() + snippet_half).min(text.len()));
                 let mut snippet = String::new();
-                if start > 0 { snippet.push_str("..."); }
+                if start > 0 {
+                    snippet.push_str("...");
+                }
                 snippet.push_str(&text[start..end]);
-                if end < text.len() { snippet.push_str("..."); }
+                if end < text.len() {
+                    snippet.push_str("...");
+                }
 
                 results.push(serde_json::json!({
                     "sessionId": file_entry.session_id,
@@ -768,9 +800,7 @@ fn search_jsonl_files_sync(
                 // Build snippet centered on match
                 let snippet_half = 150;
                 let start = text.floor_char_boundary(pos.saturating_sub(snippet_half));
-                let end = text.ceil_char_boundary(
-                    (pos + match_len + snippet_half).min(text.len()),
-                );
+                let end = text.ceil_char_boundary((pos + match_len + snippet_half).min(text.len()));
                 let mut snippet = String::new();
                 if start > 0 {
                     snippet.push_str("...");
@@ -833,7 +863,11 @@ mod tests {
 
 #[tauri::command]
 pub fn shell_open(path: String) -> Result<(), String> {
-    if path.starts_with("http://") || path.starts_with("https://") || path.starts_with("ws://") || path.starts_with("wss://") {
+    if path.starts_with("http://")
+        || path.starts_with("https://")
+        || path.starts_with("ws://")
+        || path.starts_with("wss://")
+    {
         open::that_detached(&path).map_err(|e| format!("shell_open failed for {path}: {e}"))
     } else {
         open_path(std::path::Path::new(&path))
@@ -864,8 +898,8 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
         return Err(format!("File not found: {}", file_path));
     }
 
-    let metadata = std::fs::metadata(path)
-        .map_err(|e| format!("Cannot read file metadata: {}", e))?;
+    let metadata =
+        std::fs::metadata(path).map_err(|e| format!("Cannot read file metadata: {}", e))?;
     if metadata.len() > MAX_CONVERSATION_FILE_SIZE {
         return Err(format!(
             "File too large ({:.1} MB, max {} MB)",
@@ -874,8 +908,7 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
         ));
     }
 
-    let file = std::fs::File::open(path)
-        .map_err(|e| format!("Cannot open file: {}", e))?;
+    let file = std::fs::File::open(path).map_err(|e| format!("Cannot open file: {}", e))?;
 
     use std::io::BufRead;
     let reader = std::io::BufReader::new(file);
@@ -907,73 +940,80 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
             serde_json::json!([{ "type": "text", "text": text }])
         } else if let Some(arr) = content.as_array() {
             // Already an array of content blocks — pass through
-            serde_json::Value::Array(arr.iter().map(|block| {
-                let block_type = block["type"].as_str().unwrap_or("text");
-                match block_type {
-                    "text" => serde_json::json!({
-                        "type": "text",
-                        "text": block["text"].as_str().unwrap_or("")
-                    }),
-                    "tool_use" => {
-                        let mut obj = serde_json::json!({
-                            "type": "tool_use",
-                            "name": block["name"].as_str().unwrap_or("unknown"),
-                        });
-                        if let Some(id) = block["id"].as_str() {
-                            obj["id"] = serde_json::Value::String(id.to_string());
-                        }
-                        // Truncate large tool inputs
-                        if let Some(input) = block.get("input") {
-                            let input_str = serde_json::to_string(input).unwrap_or_default();
-                            if input_str.len() > 2000 {
-                                let end = input_str.floor_char_boundary(2000);
-                                obj["input"] = serde_json::Value::String(
-                                    format!("{}...", &input_str[..end])
-                                );
-                            } else {
-                                obj["input"] = input.clone();
+            serde_json::Value::Array(
+                arr.iter()
+                    .map(|block| {
+                        let block_type = block["type"].as_str().unwrap_or("text");
+                        match block_type {
+                            "text" => serde_json::json!({
+                                "type": "text",
+                                "text": block["text"].as_str().unwrap_or("")
+                            }),
+                            "tool_use" => {
+                                let mut obj = serde_json::json!({
+                                    "type": "tool_use",
+                                    "name": block["name"].as_str().unwrap_or("unknown"),
+                                });
+                                if let Some(id) = block["id"].as_str() {
+                                    obj["id"] = serde_json::Value::String(id.to_string());
+                                }
+                                // Truncate large tool inputs
+                                if let Some(input) = block.get("input") {
+                                    let input_str =
+                                        serde_json::to_string(input).unwrap_or_default();
+                                    if input_str.len() > 2000 {
+                                        let end = input_str.floor_char_boundary(2000);
+                                        obj["input"] = serde_json::Value::String(format!(
+                                            "{}...",
+                                            &input_str[..end]
+                                        ));
+                                    } else {
+                                        obj["input"] = input.clone();
+                                    }
+                                }
+                                obj
                             }
-                        }
-                        obj
-                    },
-                    "tool_result" => {
-                        let mut obj = serde_json::json!({ "type": "tool_result" });
-                        if let Some(id) = block["tool_use_id"].as_str() {
-                            obj["toolUseId"] = serde_json::Value::String(id.to_string());
-                        }
-                        if let Some(err) = block["is_error"].as_bool() {
-                            obj["isError"] = serde_json::Value::Bool(err);
-                        }
-                        // Extract text from tool result content
-                        if let Some(text) = block["content"].as_str() {
-                            let truncated = if text.len() > 2000 {
-                                let end = text.floor_char_boundary(2000);
-                                format!("{}...", &text[..end])
-                            } else {
-                                text.to_string()
-                            };
-                            obj["text"] = serde_json::Value::String(truncated);
-                        } else if let Some(arr) = block["content"].as_array() {
-                            let parts: Vec<&str> = arr.iter()
-                                .filter(|b| b["type"].as_str() == Some("text"))
-                                .filter_map(|b| b["text"].as_str())
-                                .collect();
-                            if !parts.is_empty() {
-                                let joined = parts.join("\n");
-                                let truncated = if joined.len() > 2000 {
-                                    let end = joined.floor_char_boundary(2000);
-                                    format!("{}...", &joined[..end])
-                                } else {
-                                    joined
-                                };
-                                obj["text"] = serde_json::Value::String(truncated);
+                            "tool_result" => {
+                                let mut obj = serde_json::json!({ "type": "tool_result" });
+                                if let Some(id) = block["tool_use_id"].as_str() {
+                                    obj["toolUseId"] = serde_json::Value::String(id.to_string());
+                                }
+                                if let Some(err) = block["is_error"].as_bool() {
+                                    obj["isError"] = serde_json::Value::Bool(err);
+                                }
+                                // Extract text from tool result content
+                                if let Some(text) = block["content"].as_str() {
+                                    let truncated = if text.len() > 2000 {
+                                        let end = text.floor_char_boundary(2000);
+                                        format!("{}...", &text[..end])
+                                    } else {
+                                        text.to_string()
+                                    };
+                                    obj["text"] = serde_json::Value::String(truncated);
+                                } else if let Some(arr) = block["content"].as_array() {
+                                    let parts: Vec<&str> = arr
+                                        .iter()
+                                        .filter(|b| b["type"].as_str() == Some("text"))
+                                        .filter_map(|b| b["text"].as_str())
+                                        .collect();
+                                    if !parts.is_empty() {
+                                        let joined = parts.join("\n");
+                                        let truncated = if joined.len() > 2000 {
+                                            let end = joined.floor_char_boundary(2000);
+                                            format!("{}...", &joined[..end])
+                                        } else {
+                                            joined
+                                        };
+                                        obj["text"] = serde_json::Value::String(truncated);
+                                    }
+                                }
+                                obj
                             }
+                            _ => serde_json::json!({ "type": block_type }),
                         }
-                        obj
-                    },
-                    _ => serde_json::json!({ "type": block_type }),
-                }
-            }).collect())
+                    })
+                    .collect(),
+            )
         } else {
             continue;
         };
