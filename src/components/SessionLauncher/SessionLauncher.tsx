@@ -542,9 +542,7 @@ export function SessionLauncher() {
                 <option key={e.value} value={e.value}>{e.label}</option>
               ))}
             </select>
-          </div>
 
-          <div className="launcher-pills-row launcher-pills-row-secondary">
             <div className="launcher-prompt-group">
               {savedPrompts.length > 0 ? (
                 <>
@@ -585,7 +583,9 @@ export function SessionLauncher() {
                 </button>
               )}
             </div>
+          </div>
 
+          <div className="launcher-pills-row launcher-pills-row-secondary">
             <div className="launcher-permissions-group">
               <span className="launcher-pill-icon" title="Permissions"><IconLock size={13} /></span>
               <PillGroup
