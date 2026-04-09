@@ -53,7 +53,7 @@ pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, Stri
     // optional tuning parameters that are not required for parity.
 
     if let Some(max_tokens) = req.get("max_tokens").and_then(|v| v.as_u64()) {
-        codex_req["max_output_tokens"] = json!(max_tokens);
+        codex_req["max_tokens"] = json!(max_tokens);
     }
 
     if let Some(reasoning) = translate_reasoning(&req) {
@@ -296,7 +296,7 @@ mod tests {
         assert_eq!(translated["model"], "gpt-5.4");
         assert_eq!(translated["instructions"], "You are a helpful assistant");
         assert_eq!(translated["stream"], true);
-        assert_eq!(translated["max_output_tokens"], 4096);
+        assert_eq!(translated["max_tokens"], 4096);
         assert_eq!(translated["input"][0]["role"], "user");
         assert_eq!(translated["input"][0]["content"][0]["type"], "input_text");
         assert_eq!(translated["input"][0]["content"][0]["text"], "Hello");

@@ -85,7 +85,7 @@ pub fn translate_response_with_summary(
                 .and_then(|v| v.get("reason"))
                 .and_then(|v| v.as_str())
             {
-                if reason == "max_output_tokens" {
+                if reason == "max_output_tokens" || reason == "max_tokens" {
                     stop_reason = "max_tokens".to_string();
                 }
             }
@@ -185,6 +185,25 @@ mod tests {
         assert_eq!(resp["content"][0]["name"], "read_file");
         assert_eq!(resp["content"][0]["input"]["path"], "test.txt");
         assert_eq!(resp["stop_reason"], "tool_use");
+    }
+
+    #[test]
+    fn test_incomplete_max_tokens_maps_to_anthropic_stop_reason() {
+        let codex_resp = json!({
+            "id": "resp_max_tokens",
+            "output": [],
+            "usage": {"input_tokens": 20, "output_tokens": 10},
+            "status": "incomplete",
+            "incomplete_details": {"reason": "max_tokens"},
+        });
+        let result = translate_response_with_summary(
+            serde_json::to_vec(&codex_resp).unwrap().as_slice(),
+            "claude-opus-4-6",
+        )
+        .unwrap();
+        let resp: Value = serde_json::from_slice(&result.body).unwrap();
+
+        assert_eq!(resp["stop_reason"], "max_tokens");
     }
 
     #[test]

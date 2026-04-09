@@ -266,13 +266,14 @@ impl StreamTranslator {
 
 fn stop_reason_override(response: &Value) -> Option<String> {
     if response.get("status").and_then(|v| v.as_str()) == Some("incomplete") {
-        if response
+        if let Some(reason) = response
             .get("incomplete_details")
             .and_then(|v| v.get("reason"))
             .and_then(|v| v.as_str())
-            == Some("max_output_tokens")
         {
-            return Some("max_tokens".to_string());
+            if reason == "max_output_tokens" || reason == "max_tokens" {
+                return Some("max_tokens".to_string());
+            }
         }
     }
     None
@@ -307,6 +308,17 @@ mod tests {
         assert!(text.contains("end_turn"));
         assert!(text.contains("\"speed\":\"standard\""));
         assert!(text.contains("message_stop"));
+    }
+
+    #[test]
+    fn test_stream_incomplete_max_tokens_maps_to_anthropic_stop_reason() {
+        let mut t = StreamTranslator::new("claude-opus-4-6");
+        let output = t.process_line(
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"max_tokens\"},\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[]}}",
+        );
+        let text = String::from_utf8_lossy(&output);
+
+        assert!(text.contains("\"stop_reason\":\"max_tokens\""));
     }
 
     #[test]
