@@ -1,3 +1,4 @@
+use super::types::anthropic_usage_json;
 use serde_json::{json, Value};
 
 /// Format a single SSE event in Anthropic's streaming format.
@@ -39,7 +40,7 @@ impl StreamTranslator {
                 "content": [],
                 "stop_reason": null,
                 "stop_sequence": null,
-                "usage": {"input_tokens": 0, "output_tokens": 0},
+                "usage": anthropic_usage_json(0, 0, None),
             }
         }))
     }
@@ -121,17 +122,22 @@ impl StreamTranslator {
                     .cloned()
                     .unwrap_or(json!({}));
 
-                self.finalize_with_usage(&usage)
+                let service_tier = event.get("response")
+                    .and_then(|v| v.get("service_tier"))
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+
+                self.finalize_with_usage(&usage, service_tier.as_deref())
             }
             _ => Vec::new(),
         }
     }
 
     fn finalize(&mut self) -> Vec<u8> {
-        self.finalize_with_usage(&json!({}))
+        self.finalize_with_usage(&json!({}), None)
     }
 
-    fn finalize_with_usage(&mut self, usage: &Value) -> Vec<u8> {
+    fn finalize_with_usage(&mut self, usage: &Value, service_tier: Option<&str>) -> Vec<u8> {
         let mut output = Vec::new();
 
         // Close text block if started
@@ -175,7 +181,7 @@ impl StreamTranslator {
         output.extend_from_slice(&format_sse_event("message_delta", &json!({
             "type": "message_delta",
             "delta": {"stop_reason": stop_reason, "stop_sequence": null},
-            "usage": {"output_tokens": output_tokens},
+            "usage": anthropic_usage_json(input_tokens, output_tokens, service_tier),
         })));
 
         // message_stop
@@ -216,6 +222,7 @@ mod tests {
         assert!(text.contains("content_block_stop"));
         assert!(text.contains("message_delta"));
         assert!(text.contains("end_turn"));
+        assert!(text.contains("\"speed\":\"standard\""));
         assert!(text.contains("message_stop"));
     }
 }

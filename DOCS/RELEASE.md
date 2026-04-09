@@ -5,10 +5,10 @@ Build commands, version locations, and release workflow for Claude Tabs.
 ## Build Commands
 
 ```bash
-npm run build:quick     # Release binary, no installer (~30s after first build)
-npm run build:debug     # Debug binary, fastest (~10-15s incremental)
+npm run build:quick     # Sync rules + release binary, no installer (~30s after first build)
+npm run build:debug     # Sync rules + debug binary, fastest (~10-15s incremental)
 npm run tauri dev       # Dev mode with hot-reload
-npm run tauri build     # Full NSIS installer (only for releases)
+npm run build:release   # Sync rules + full NSIS installer (only for releases)
 ```
 
 ### Outputs
@@ -37,13 +37,14 @@ Version must be bumped in all three files:
 
 1. Bump version in all three files
 2. Run validation (tsc + test + cargo check)
-3. Build locally with `build:quick` to verify compilation
-4. Commit version bump, push with tag:
+3. Build locally with `build:quick` to verify compilation and refresh the tracked `.claude/rules` snapshot.
+4. Include any resulting `.claude/rules/*` updates in the release commit.
+5. Commit version bump, push with tag:
    ```bash
    git tag v<version>
    git push origin master --tags
    ```
-5. Create GitHub release (no artifacts — CI handles uploads):
+6. Create GitHub release (no artifacts — CI handles uploads):
    ```bash
    gh release create v<version> --title "v<version>" --generate-notes
    ```

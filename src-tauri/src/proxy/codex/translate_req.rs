@@ -1,5 +1,32 @@
 use serde_json::{json, Value};
 
+fn map_reasoning_effort(value: &str) -> &'static str {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "none" | "minimal" => "none",
+        "low" => "low",
+        "medium" => "medium",
+        "high" => "high",
+        "max" | "xhigh" => "xhigh",
+        _ => "medium",
+    }
+}
+
+fn translate_reasoning(req: &Value) -> Option<Value> {
+    if let Some(effort) = req
+        .get("output_config")
+        .and_then(|v| v.get("effort"))
+        .and_then(|v| v.as_str())
+    {
+        return Some(json!({ "effort": map_reasoning_effort(effort) }));
+    }
+
+    if req.get("thinking").is_some() {
+        return Some(json!({ "effort": "medium" }));
+    }
+
+    None
+}
+
 /// Translate an Anthropic Messages API request body into an OpenAI Codex request body.
 pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, String> {
     let req: Value =
@@ -20,9 +47,18 @@ pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, Stri
     }
 
     // Keep the request body to the minimal shape used by the known-good
-    // Codex transport. The chatgpt.com Codex backend rejects some Responses
-    // API fields (for example `temperature`), so we intentionally omit
-    // Anthropic-only and optional tuning parameters here.
+    // Codex transport, but preserve core execution controls. The
+    // chatgpt.com Codex backend rejects some Responses API fields (for
+    // example `temperature`), so we intentionally omit Anthropic-only and
+    // optional tuning parameters that are not required for parity.
+
+    if let Some(max_tokens) = req.get("max_tokens").and_then(|v| v.as_u64()) {
+        codex_req["max_output_tokens"] = json!(max_tokens);
+    }
+
+    if let Some(reasoning) = translate_reasoning(&req) {
+        codex_req["reasoning"] = reasoning;
+    }
 
     // tools
     if let Some(tools) = req.get("tools").and_then(|v| v.as_array()) {
@@ -84,18 +120,15 @@ fn translate_tool_choice(tc: &Value) -> Value {
 
 /// Translate one Anthropic message into one or more OpenAI input items.
 ///
-/// Text blocks are grouped into a single message with role-appropriate content
-/// type (input_text for user, output_text for assistant).  tool_use and
+/// Text blocks are grouped into a single message with input content items.
+/// The Responses API uses `input_text` for message inputs regardless of role.
+/// tool_use and
 /// tool_result blocks become separate top-level items (function_call /
 /// function_call_output) — the OpenAI Responses API does NOT allow these
 /// inside a message's content array.
 fn translate_message(msg: &Value) -> Vec<Value> {
     let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("user");
-    let text_type = if role == "assistant" {
-        "output_text"
-    } else {
-        "input_text"
-    };
+    let text_type = "input_text";
 
     // Simple string content — single message item
     if let Some(text) = msg.get("content").and_then(|v| v.as_str()) {
@@ -252,6 +285,7 @@ mod tests {
         assert_eq!(translated["model"], "gpt-5.4");
         assert_eq!(translated["instructions"], "You are a helpful assistant");
         assert_eq!(translated["stream"], true);
+        assert_eq!(translated["max_output_tokens"], 4096);
         assert_eq!(translated["input"][0]["role"], "user");
         assert_eq!(translated["input"][0]["content"][0]["type"], "input_text");
         assert_eq!(translated["input"][0]["content"][0]["text"], "Hello");
@@ -286,6 +320,24 @@ mod tests {
     }
 
     #[test]
+    fn test_assistant_messages_still_use_input_text_items() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "messages": [
+                {"role": "assistant", "content": "Previous assistant reply"}
+            ],
+            "stream": true,
+        });
+        let result =
+            translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.4").unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert_eq!(translated["input"][0]["role"], "assistant");
+        assert_eq!(translated["input"][0]["content"][0]["type"], "input_text");
+        assert_eq!(translated["input"][0]["content"][0]["text"], "Previous assistant reply");
+    }
+
+    #[test]
     fn test_image_translation() {
         let body = json!({
             "model": "claude-opus-4-6",
@@ -308,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unsupported_optional_fields_are_omitted() {
+    fn test_reasoning_fields_are_mapped_when_supported() {
         let body = json!({
             "model": "claude-opus-4-6",
             "temperature": 0.2,
@@ -326,7 +378,22 @@ mod tests {
         assert!(translated.get("temperature").is_none());
         assert!(translated.get("top_p").is_none());
         assert!(translated.get("stop").is_none());
-        assert!(translated.get("reasoning").is_none());
+        assert_eq!(translated["reasoning"]["effort"], "xhigh");
+    }
+
+    #[test]
+    fn test_thinking_defaults_to_medium_reasoning() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "thinking": { "budget_tokens": 32000 },
+            "messages": [{"role": "user", "content": "test"}],
+            "stream": true,
+        });
+        let result =
+            translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.4").unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert_eq!(translated["reasoning"]["effort"], "medium");
     }
 
     #[test]

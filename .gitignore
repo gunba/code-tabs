@@ -15,7 +15,6 @@ test-commands.json
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 .claude/changelog-last-version
-.claude/rules/
 
 # Runtime output
 .proofs/

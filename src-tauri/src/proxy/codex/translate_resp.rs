@@ -1,3 +1,4 @@
+use super::types::anthropic_usage_json;
 use serde_json::{json, Value};
 
 /// Translate an OpenAI Codex response body into Anthropic Messages API format.
@@ -67,6 +68,7 @@ pub fn translate_response(body: &[u8], original_model: &str) -> Result<Vec<u8>, 
     let usage = resp.get("usage").cloned().unwrap_or(json!({}));
     let input_tokens = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
     let output_tokens = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+    let service_tier = resp.get("service_tier").and_then(|v| v.as_str());
 
     let anthropic_resp = json!({
         "id": resp.get("id").and_then(|v| v.as_str()).unwrap_or("msg_codex"),
@@ -76,10 +78,7 @@ pub fn translate_response(body: &[u8], original_model: &str) -> Result<Vec<u8>, 
         "content": content,
         "stop_reason": stop_reason,
         "stop_sequence": null,
-        "usage": {
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-        },
+        "usage": anthropic_usage_json(input_tokens, output_tokens, service_tier),
     });
 
     serde_json::to_vec(&anthropic_resp).map_err(|e| format!("Failed to serialize: {e}"))
@@ -113,6 +112,7 @@ mod tests {
         assert_eq!(resp["content"][0]["text"], "Hello world");
         assert_eq!(resp["stop_reason"], "end_turn");
         assert_eq!(resp["usage"]["input_tokens"], 10);
+        assert_eq!(resp["usage"]["speed"], "standard");
     }
 
     #[test]

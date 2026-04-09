@@ -8,7 +8,7 @@ Tauri v2 desktop app managing multiple Claude Code CLI sessions in tabs. Rust ba
 
 # Workflow
 
-The user launches with `claude -w` for isolated worktrees. A SessionStart hook automatically sets up shared build dependencies. Do NOT call EnterWorktree — the user has already done this.
+The user launches with `claude -w` for isolated worktrees. Shared directories such as `.claude/rules/` are symlinked into those worktrees. Do NOT call EnterWorktree — the user has already done this.
 
 The user will run `/r`, `/j`, `/b` when ready. Do not run these automatically.
 
@@ -71,11 +71,12 @@ For long-running Bash commands such as Codex delegates or builds, launch them wi
 
 # Documentation
 
-All tagged documentation is managed by `proofd`. Canonical rule data lives outside the repo in the proofd knowledge base. `.claude/rules/` is automatically generated output for Claude Code auto-loading.
+All tagged documentation is managed by `proofd`. Canonical rule data lives outside the repo in the proofd knowledge base. `.claude/rules/` is generated output for Claude Code auto-loading and is committed as a tracked snapshot in this repo.
 
 Do not hand-edit `.claude/rules/*.md`. Use `python "$HOME/.claude/agent-proofs/bin/proofd.py"` subcommands to create rules, add entries, split rules, record verifications, and regenerate the rule output.
 
-`python "$HOME/.claude/agent-proofs/bin/proofd.py" sync` regenerates local `.claude/rules/*.md` files on disk. Those files are generated, gitignored, and disposable. Their absence from `git status` is expected; the canonical proof update lives in the external proofd KB plus any source tag comments or code changes in the repo.
+`python "$HOME/.claude/agent-proofs/bin/proofd.py" sync` regenerates local `.claude/rules/*.md` files on disk. Those files are generated but tracked here so fresh clones and new worktrees always have a real root rules directory to load and symlink. The canonical proof update still lives in the external proofd KB plus any source tag comments or code changes in the repo.
+Do not hand-run `proofd sync` during an active coding session unless the user explicitly asks for it. `/b` or release/finalization work owns that refresh step so the user does not need to remember it manually.
 Generated rule markdown intentionally omits `Files:` lines. If you need the anchored files for a tag, use `python "$HOME/.claude/agent-proofs/bin/proofd.py" entry-files --tag <TAG>`.
 
 Tags are embedded in source code as `// [TAG] brief description` comments at implementation sites. Tags must be allocated by `proofd`; agents must not invent tag IDs themselves.

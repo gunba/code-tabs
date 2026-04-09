@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 
 // ── OpenAI Codex request types ──────────────────────────────────────
 
@@ -12,7 +13,7 @@ pub struct CodexRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<CodexTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_choice: Option<serde_json::Value>,
+    pub tool_choice: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -29,7 +30,7 @@ pub struct CodexRequest {
 #[derive(Debug, Serialize)]
 pub struct CodexMessage {
     pub role: String,
-    pub content: serde_json::Value,
+    pub content: Value,
 }
 
 #[derive(Debug, Serialize)]
@@ -40,7 +41,7 @@ pub struct CodexTool {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parameters: Option<serde_json::Value>,
+    pub parameters: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -95,5 +96,26 @@ pub struct CodexStreamEvent {
     #[serde(rename = "type")]
     pub event_type: String,
     #[serde(flatten)]
-    pub data: serde_json::Value,
+    pub data: Value,
+}
+
+pub fn anthropic_usage_json(input_tokens: u64, output_tokens: u64, service_tier: Option<&str>) -> Value {
+    json!({
+        "input_tokens": input_tokens,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "output_tokens": output_tokens,
+        "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0,
+        },
+        "service_tier": service_tier.unwrap_or("standard"),
+        "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0,
+        },
+        "inference_geo": "",
+        "iterations": [],
+        "speed": "standard",
+    })
 }

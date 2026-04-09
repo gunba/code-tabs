@@ -29,13 +29,15 @@ Per repo, `proofd` stores:
 - Repo metadata in `kb/repos/<repo-id>/repo.json`
 - Branch overlays in `%LOCALAPPDATA%\\proofd\\overlays\\<repo-id>\\<branch>\\rules/*.json`
 
-The code repo only receives generated `.claude/rules/*.md`.
+The code repo receives generated `.claude/rules/*.md` as a tracked snapshot.
+Claude worktrees should symlink `.claude/rules/` back to the main repo so one generated ruleset is shared across the parent session and worktrees.
 
 For cross-machine use:
 
 - share or git-sync the KB root
 - keep `state.db` local to each machine
-- let each machine regenerate `.claude/rules/` locally
+- use committed `.claude/rules/` for default startup context
+- refresh the tracked snapshot locally with `proofd sync` during build or release finalization when proof content changed
 
 `repo_id` now defaults to a stable digest of the normalized `remote.origin.url`, so the same repo can resolve to the same KB identity on Windows and Linux. If a repo has no stable origin remote, use `--repo-key <stable-id>` or `PROOFD_REPO_KEY=<stable-id>`.
 
@@ -114,7 +116,7 @@ Current tools:
 1. Import once from the legacy `.proofs` and `.claude/rules`.
 2. Stop editing rule markdown directly.
 3. Let agents create/update rules through `proofd`.
-4. Run `proofd sync` whenever rule state changes.
+4. Let `/b` or release/finalization work run `proofd sync` to refresh the tracked shared rules snapshot when proof content changed, rather than doing it mid-session by hand.
 5. Promote branch overlays when the code branch is ready to merge.
 
 ## Notes

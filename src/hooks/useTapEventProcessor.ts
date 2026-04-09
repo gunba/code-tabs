@@ -156,8 +156,15 @@ export function useTapEventProcessor(
         worktreeExitCwd = session?.metadata?.worktreeInfo?.originalCwd || null;
       }
 
+      const suppressSubagentWorktreeEvent =
+        (event.kind === "WorktreeState" || event.kind === "WorktreeCleared")
+        && subTracker.isSubagentInFlight();
+
       // 2. Metadata accumulator
-      const metaDiff = metaAcc.process(event);
+      const metaDiff = suppressSubagentWorktreeEvent ? null : metaAcc.process(event);
+      if (suppressSubagentWorktreeEvent) {
+        dlog("tap", sid, `${event.kind} suppressed — subagent in flight`, "DEBUG");
+      }
       if (metaDiff) {
         updateMetadata(sid, metaDiff);
       }
@@ -436,11 +443,15 @@ export function useTapEventProcessor(
       }
       // WorktreeState: authoritative worktree path from CLI
       if (event.kind === "WorktreeState" && event.worktreePath) {
-        updateCwdIfChanged(event.worktreePath);
+        if (!suppressSubagentWorktreeEvent) {
+          updateCwdIfChanged(event.worktreePath);
+        }
       }
       // WorktreeCleared: restore original working directory
       if (event.kind === "WorktreeCleared" && worktreeExitCwd) {
-        updateCwdIfChanged(worktreeExitCwd);
+        if (!suppressSubagentWorktreeEvent) {
+          updateCwdIfChanged(worktreeExitCwd);
+        }
       }
 
       // Resolve API IP on first fetch (skip if already resolved by any session)
