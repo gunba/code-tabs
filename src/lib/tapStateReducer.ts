@@ -129,15 +129,3 @@ export function reduceTapBatch(state: SessionState, events: TapEvent[]): Session
 
   return result;
 }
-
-/**
- * Check if an event represents a genuine completion (transition to idle).
- * Used by useTapEventProcessor for queued input dispatch signaling.
- */
-export function isCompletionEvent(event: TapEvent): boolean {
-  return (event.kind === "ConversationMessage"
-    && event.messageType === "assistant"
-    && event.stopReason === "end_turn"
-    && !event.isSidechain)
-    || event.kind === "IdlePrompt";
-}

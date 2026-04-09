@@ -6,4 +6,4 @@
 - [AR-01] Core data flow: React UI (WebView2) communicates with Rust backend via Tauri IPC, which manages PTY sessions to the Claude Code CLI ``` React UI (WebView2) <-> Tauri IPC <-> Rust Backend <-> PTY (ConPTY/openpty) <-> Claude Code CLI ```
 - [BV-02] Never do a full NSIS build just to test. Use build:quick or build:debug.
 - [BV-03] Before every commit: `npx tsc --noEmit` (zero TS errors), `npm test` (all Vitest pass), `cargo check` in src-tauri (zero Rust errors)
-- [LO-01] Main window layout: tab bar, subagent bar, terminal with button bar, command bar (slash commands + skill pills), command history, status bar
+- [LO-01] Main window layout: tab bar, subagent bar, terminal, command bar (slash commands + skill pills + command history), status bar

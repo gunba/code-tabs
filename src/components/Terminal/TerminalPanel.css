@@ -62,53 +62,6 @@
   overflow: hidden;
 }
 
-/* [TR-07] Vertical button bar (28px right-side column) */
-
-.terminal-button-bar {
-  display: flex;
-  flex-direction: column;
-  width: 28px;
-  flex-shrink: 0;
-  background: var(--bg-surface);
-  border-left: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  padding: 2px 0;
-  gap: 2px;
-  align-items: center;
-}
-
-.bar-btn {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s, background 0.15s;
-}
-
-.bar-btn:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
-}
-
-.bar-btn-active {
-  color: var(--accent);
-  animation: queue-pulse 1.5s ease-in-out infinite;
-}
-
-.bar-spacer { flex: 1; }
-
-@keyframes queue-pulse {
-  0%, 100% { color: color-mix(in srgb, var(--accent) 50%, transparent); }
-  50% { color: var(--accent); }
-}
-
 /* ── Dead Session Overlay ──────────────────────────────────────────── */
 
 .dead-overlay {

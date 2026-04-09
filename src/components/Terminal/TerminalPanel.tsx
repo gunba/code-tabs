@@ -15,9 +15,7 @@ import { useFileWatcher } from "../../hooks/useFileWatcher";
 import { useSettingsStore } from "../../store/settings";
 import { useRuntimeStore } from "../../store/runtime";
 import { normalizePath } from "../../lib/paths";
-import { settledStateManager } from "../../lib/settledState";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
-import { isSessionIdle } from "../../types/session";
 import { startTraceSpan, traceAsync } from "../../lib/perfTrace";
 import "./TerminalPanel.css";
 
@@ -149,7 +147,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   }, [session.id, inspector.disconnect]);
 
   const [loading, setLoading] = useState(!!session.config.resumeSession);
-  const [queuedInput, setQueuedInput] = useState<string | null>(null);
 
   // [SR-01] Hide loading spinner when inspector connects
   useEffect(() => {
@@ -543,61 +540,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, session.id, terminal.termGeneration]);
 
-  // Queue input handler: read from terminal buffer (authoritative), or cancel if already queued
-  const handleQueueInput = useCallback(() => {
-    if (queuedInput) {
-      dlog("terminal", session.id, "queued input cleared", "DEBUG", {
-        event: "terminal.queue_input_cleared",
-        data: { queuedInput },
-      });
-      setQueuedInput(null);
-      return;
-    }
-    const text = terminalRef.current?.getCurrentInput() ?? "";
-    if (!text) return;
-    writeToPty(session.id, "\x15"); // Clear terminal input line
-    dlog("terminal", session.id, "queued current input", "DEBUG", {
-      event: "terminal.queue_input",
-      data: {
-        text,
-      },
-    });
-    setQueuedInput(text);
-    // pty.handle and terminalRef are stable refs — omitted from deps intentionally
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queuedInput]);
-
-  // Auto-send queued input on settled-idle (unified hysteresis, not transient idle flashes).
-  useEffect(() => {
-    if (!queuedInput) return;
-    if (session.state === "dead") { setQueuedInput(null); return; }
-
-    const sendIfReady = () => {
-      if (!isSessionIdle(session.state)) return; // Belt-and-suspenders
-      dlog("terminal", session.id, "sending queued input (settled-idle)", "LOG", {
-        event: "terminal.queue_input_sent",
-        data: { text: queuedInput },
-      });
-      writeToPty(session.id, queuedInput + "\r");
-      setQueuedInput(null);
-    };
-
-    // If already settled when queued input is set, send immediately
-    if (settledStateManager.getSettled(session.id) === "idle" && isSessionIdle(session.state)) {
-      sendIfReady();
-      return;
-    }
-
-    return settledStateManager.subscribe(
-      (sid, kind) => {
-        if (sid === session.id && kind === "idle") sendIfReady();
-      },
-      () => {},
-    );
-    // pty.handle is a stable ref — omitted from deps intentionally
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queuedInput, session.id, session.state]);
-
   // Reclaim focus when terminal is visible but loses it to non-interactive elements.
   // Uses termRef directly instead of terminal (which is a new object every render).
   useEffect(() => {
@@ -625,7 +567,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   }, [visible, session.id]);
 
   const showDeadOverlay = session.state === "dead" && visible;
-  const showButtonBar = visible && session.state !== "dead";
 
   // [TR-05] Hidden tabs use CSS display:none — never unmount/remount xterm.js
   return (
@@ -641,23 +582,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       )}
       <div className="terminal-inner">
         <div className="terminal-container" ref={setContainer} />
-        {/* [TR-07] Vertical button bar (28px) with queue and search buttons */}
-        {showButtonBar && (
-          <div className="terminal-button-bar">
-            <div className="bar-spacer" />
-            <button
-              className={`bar-btn${queuedInput ? " bar-btn-active" : ""}`}
-              onClick={handleQueueInput}
-              title={queuedInput ? `Queued: "${queuedInput}" (click to cancel)` : "Queue input for idle send"}
-              aria-label="Queue input"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 3v5a2 2 0 0 1-2 2H4" />
-                <polyline points="6 8 4 10 6 12" />
-              </svg>
-            </button>
-          </div>
-        )}
       </div>
       {showDeadOverlay && externalHolder && (
         <div className="dead-overlay">

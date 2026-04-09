@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reduceTapEvent, reduceTapBatch, isCompletionEvent } from "../tapStateReducer";
+import { reduceTapEvent, reduceTapBatch } from "../tapStateReducer";
 import type { TapEvent } from "../../types/tapEvents";
 import type { SessionState } from "../../types/session";
 
@@ -28,6 +28,25 @@ describe("reduceTapEvent", () => {
 
   it("SystemPromptCapture is informational — no state change", () => {
     expect(reduceTapEvent("thinking", { kind: "SystemPromptCapture", ts: 0, text: "...", model: "opus", messageCount: 1 })).toBe("thinking");
+  });
+
+  it("StatusLineUpdate is informational — no state change", () => {
+    expect(reduceTapEvent("thinking", {
+      kind: "StatusLineUpdate", ts: 0,
+      sessionId: "", cwd: "", modelId: "", modelDisplayName: "",
+      cliVersion: "", outputStyle: "",
+      totalCostUsd: 0, totalDurationMs: 0, totalApiDurationMs: 0,
+      totalLinesAdded: 0, totalLinesRemoved: 0,
+      totalInputTokens: 0, totalOutputTokens: 0,
+      contextWindowSize: 0,
+      currentInputTokens: 0, currentOutputTokens: 0,
+      cacheCreationInputTokens: 0, cacheReadInputTokens: 0,
+      contextUsedPercent: 0, contextRemainingPercent: 0,
+      exceeds200kTokens: false,
+      fiveHourUsedPercent: 0, fiveHourResetsAt: 0,
+      sevenDayUsedPercent: 0, sevenDayResetsAt: 0,
+      vimMode: "",
+    })).toBe("thinking");
   });
 
   it("ThinkingStart → thinking", () => {
@@ -564,58 +583,5 @@ describe("sequence replays", () => {
       state = reduceTapEvent(state, event);
       expect(state, `after ${event.kind}`).toBe(expected);
     }
-  });
-});
-
-describe("isCompletionEvent", () => {
-  it("ConversationMessage assistant end_turn !sidechain is completion", () => {
-    expect(isCompletionEvent(convMsg({ stopReason: "end_turn" }))).toBe(true);
-  });
-
-  it("ConversationMessage sidechain end_turn is NOT completion", () => {
-    expect(isCompletionEvent(convMsg({ isSidechain: true, agentId: "a1", stopReason: "end_turn" }))).toBe(false);
-  });
-
-  it("TurnEnd end_turn is NOT completion (SSE lacks agentId)", () => {
-    expect(isCompletionEvent({ kind: "TurnEnd", ts: 0, stopReason: "end_turn", outputTokens: 100 })).toBe(false);
-  });
-
-  it("TurnEnd tool_use is not completion", () => {
-    expect(isCompletionEvent({ kind: "TurnEnd", ts: 0, stopReason: "tool_use", outputTokens: 100 })).toBe(false);
-  });
-
-  it("ConversationMessage result is not completion (dead path removed)", () => {
-    expect(isCompletionEvent(convMsg({ messageType: "result" }))).toBe(false);
-  });
-
-  it("ThinkingStart is not completion", () => {
-    expect(isCompletionEvent({ kind: "ThinkingStart", ts: 0, index: 0 })).toBe(false);
-  });
-
-  it("StatusLineUpdate is informational — no state change", () => {
-    expect(reduceTapEvent("thinking", {
-      kind: "StatusLineUpdate", ts: 0,
-      sessionId: "", cwd: "", modelId: "", modelDisplayName: "",
-      cliVersion: "", outputStyle: "",
-      totalCostUsd: 0, totalDurationMs: 0, totalApiDurationMs: 0,
-      totalLinesAdded: 0, totalLinesRemoved: 0,
-      totalInputTokens: 0, totalOutputTokens: 0,
-      contextWindowSize: 0,
-      currentInputTokens: 0, currentOutputTokens: 0,
-      cacheCreationInputTokens: 0, cacheReadInputTokens: 0,
-      contextUsedPercent: 0, contextRemainingPercent: 0,
-      exceeds200kTokens: false,
-      fiveHourUsedPercent: 0, fiveHourResetsAt: 0,
-      sevenDayUsedPercent: 0, sevenDayResetsAt: 0,
-      vimMode: "",
-    })).toBe("thinking");
-  });
-
-  it("IdlePrompt is completion", () => {
-    expect(isCompletionEvent({ kind: "IdlePrompt", ts: 0 })).toBe(true);
-  });
-
-  it("TurnDuration is NOT completion (queued input dispatch uses ConversationMessage/IdlePrompt)", () => {
-    expect(isCompletionEvent({ kind: "TurnDuration", ts: 0, durationMs: 10000, messageCount: 5 })).toBe(false);
   });
 });

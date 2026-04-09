@@ -9,7 +9,6 @@ import { startTraceSpan, traceSync } from "../lib/perfTrace";
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
-const PROMPT_MARKER_NEW = ">\u00A0"; // > + NBSP — current Claude Code prompt
 const XTVERSION_REPLY = "\x1bP>|xterm.js(6.0.0)\x1b\\";
 
 interface UseTerminalOptions {
@@ -614,26 +613,6 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
     return lines.join("\n");
   }, []);
 
-  // Read current input from terminal buffer — authoritative, immediate,
-  // independent of PTY input tracking. Strips the prompt prefix.
-  const getCurrentInput = useCallback((): string => {
-    const term = termRef.current;
-    if (!term) return "";
-    const buf = term.buffer.active;
-    // xterm.js: baseY is scrollback lines above viewport, cursorY is viewport-relative
-    const y = buf.baseY + buf.cursorY;
-    const line = buf.getLine(y);
-    if (!line) return "";
-    const text = line.translateToString(true);
-    const promptIdx = text.lastIndexOf(PROMPT_MARKER_NEW);
-    if (promptIdx >= 0) {
-      // Strip focus event remnants ([I = focus in, [O = focus out) that leak into buffer text
-      return text.slice(promptIdx + 2).replace(/\[[OI]/g, "").trimEnd();
-    }
-    return "";
-  }, []);
-
-
   return {
     attach,
     write,
@@ -648,7 +627,6 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
     fit,
     getDimensions,
     getBufferText,
-    getCurrentInput,
     termRef,
     webglRef,
     ready,

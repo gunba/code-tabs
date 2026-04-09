@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/sessions";
 import { useActivityStore } from "../store/activity";
 import { tapEventBus } from "../lib/tapEventBus";
-import { reduceTapEvent, isCompletionEvent } from "../lib/tapStateReducer";
+import { reduceTapEvent } from "../lib/tapStateReducer";
 import { TapMetadataAccumulator } from "../lib/tapMetadataAccumulator";
 import { TapSubagentTracker } from "../lib/tapSubagentTracker";
 import { normalizePath, canonicalizePath } from "../lib/paths";
@@ -57,7 +57,7 @@ function eventDetail(event: TapEvent): string {
  */
 export function useTapEventProcessor(
   sessionId: string | null
-): { completionCount: number; claudeSessionId: string | null; userPrompt: string | null } {
+): { claudeSessionId: string | null; userPrompt: string | null } {
   const updateState = useSessionStore((s) => s.updateState);
   const updateMetadata = useSessionStore((s) => s.updateMetadata);
   const updateConfig = useSessionStore((s) => s.updateConfig);
@@ -69,7 +69,6 @@ export function useTapEventProcessor(
   const updateProcessHealth = useSessionStore((s) => s.updateProcessHealth);
 
   // useState for values that TerminalPanel reacts to
-  const [completionCount, setCompletionCount] = useState(0);
   const [claudeSessionId, setClaudeSessionId] = useState<string | null>(null);
   const [userPrompt, setUserPrompt] = useState<string | null>(null);
 
@@ -92,7 +91,6 @@ export function useTapEventProcessor(
     subTrackerRef.current = subTracker;
     stateRef.current = "starting";
     let activityTurnCounter = 0;
-    setCompletionCount(0);
     setClaudeSessionId(null);
     setUserPrompt(null);
 
@@ -141,12 +139,6 @@ export function useTapEventProcessor(
         updateState(sid, newState);
       } else if (!getNoisyEventKinds().has(event.kind)) {
         dlog("inspector", sid, `state ${prevState} unchanged by ${event.kind}`, "DEBUG");
-      }
-
-      // Completion signals for queued input dispatch (only when state actually applied, not suppressed)
-      if (stateRef.current === "idle" && prevState !== "idle" && isCompletionEvent(event)) {
-        dlog("inspector", sid, `completion signal (${event.kind})`, "DEBUG");
-        setCompletionCount((c) => c + 1);
       }
 
       // Read originalCwd BEFORE accumulator clears worktreeInfo
@@ -495,5 +487,5 @@ export function useTapEventProcessor(
     };
   }, [sessionId, updateState, updateMetadata, updateConfig, addSubagent, updateSubagent, removeSubagent, addSkillInvocation, addCommandHistory, updateProcessHealth]);
 
-  return { completionCount, claudeSessionId, userPrompt };
+  return { claudeSessionId, userPrompt };
 }
