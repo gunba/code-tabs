@@ -40,7 +40,7 @@ pub fn translate_request(body: &[u8], codex_model: &str) -> Result<Vec<u8>, Stri
 
     // system → instructions
     if let Some(system) = req.get("system") {
-        let instructions = extract_system_text(system);
+        let instructions = sanitize_system_instructions(&extract_system_text(system));
         if !instructions.is_empty() {
             codex_req["instructions"] = json!(instructions);
         }
@@ -92,6 +92,17 @@ fn extract_system_text(system: &Value) -> String {
             .join("\n"),
         _ => String::new(),
     }
+}
+
+fn sanitize_system_instructions(text: &str) -> String {
+    text.lines()
+        .filter(|line| {
+            !line
+                .to_ascii_lowercase()
+                .contains("anthropic-billing-header")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn translate_tool(tool: &Value) -> Value {
@@ -292,6 +303,87 @@ mod tests {
     }
 
     #[test]
+    fn test_billing_header_is_removed_from_string_system_prompt() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "system": "You are a helpful assistant\nx-anthropic-billing-header: cc_version=2.1.92.26f; cc_entrypoint=cli; cch=ce585;\nKeep answers concise.",
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ],
+            "stream": true,
+        });
+        let result =
+            translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.4").unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert_eq!(
+            translated["instructions"],
+            "You are a helpful assistant\nKeep answers concise."
+        );
+    }
+
+    #[test]
+    fn test_billing_header_is_removed_from_system_array_prompt() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "system": [
+                { "type": "text", "text": "You are a helpful assistant" },
+                { "type": "text", "text": "x-anthropic-billing-header: cc_version=2.1.92.26f; cc_entrypoint=cli; cch=ce585;" },
+                { "type": "text", "text": "Keep answers concise." }
+            ],
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ],
+            "stream": true,
+        });
+        let result =
+            translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.4").unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert_eq!(
+            translated["instructions"],
+            "You are a helpful assistant\nKeep answers concise."
+        );
+    }
+
+    #[test]
+    fn test_billing_header_only_prompt_is_omitted() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "system": "x-anthropic-billing-header: cc_version=2.1.92.26f; cc_entrypoint=cli; cch=ce585;",
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ],
+            "stream": true,
+        });
+        let result =
+            translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.4").unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert!(translated.get("instructions").is_none());
+    }
+
+    #[test]
+    fn test_embedded_billing_header_line_is_removed() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "system": "You are a helpful assistant\nmetadata: x-anthropic-billing-header: cc_version=2.1.92.26f; cc_entrypoint=cli; cch=ce585;\nKeep answers concise.",
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ],
+            "stream": true,
+        });
+        let result =
+            translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.4").unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert_eq!(
+            translated["instructions"],
+            "You are a helpful assistant\nKeep answers concise."
+        );
+    }
+
+    #[test]
     fn test_tool_use_translation() {
         let body = json!({
             "model": "claude-opus-4-6",
@@ -334,7 +426,10 @@ mod tests {
 
         assert_eq!(translated["input"][0]["role"], "assistant");
         assert_eq!(translated["input"][0]["content"][0]["type"], "input_text");
-        assert_eq!(translated["input"][0]["content"][0]["text"], "Previous assistant reply");
+        assert_eq!(
+            translated["input"][0]["content"][0]["text"],
+            "Previous assistant reply"
+        );
     }
 
     #[test]

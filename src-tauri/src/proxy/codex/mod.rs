@@ -1,13 +1,16 @@
 pub mod auth;
+pub mod response_shape;
 pub mod stream;
 pub mod translate_req;
 pub mod translate_resp;
 pub mod types;
 
 use crate::observability::{
-    record_backend_event, record_backend_perf_end, record_backend_perf_start,
+    record_backend_event, record_backend_perf_end, record_backend_perf_fail,
+    record_backend_perf_start,
 };
 use crate::session::types::ModelProvider;
+use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use tokio::io::AsyncWriteExt;
 
@@ -96,6 +99,46 @@ fn build_synthetic_models_response(provider: &ModelProvider) -> Vec<u8> {
         "last_id": small,
     });
     serde_json::to_vec(&models).unwrap_or_default()
+}
+
+fn codex_traffic_meta(
+    provider: &ModelProvider,
+    session_scoped: bool,
+    request_model: &Option<String>,
+    rewrite: &Option<String>,
+    codex_model: &str,
+    upstream_mode: &str,
+    translated_request_len: usize,
+    summary: Option<&response_shape::ResponseTranslationSummary>,
+) -> Value {
+    let mut translation = json!({
+        "proxy": "codex",
+        "upstreamMode": upstream_mode,
+        "requestModel": request_model,
+        "resolvedCodexModel": codex_model,
+        "translatedRequestLen": translated_request_len,
+    });
+    if let Some(summary) = summary {
+        if let Some(obj) = translation.as_object_mut() {
+            obj.insert(
+                "summary".to_string(),
+                serde_json::to_value(summary).unwrap_or_else(|_| json!({})),
+            );
+        }
+    }
+
+    json!({
+        "route": {
+            "sessionScoped": session_scoped,
+            "providerId": provider.id,
+            "provider": provider.name,
+            "providerKind": provider.kind,
+            "requestModel": request_model,
+            "rewrite": rewrite,
+            "resolvedCodexModel": codex_model,
+        },
+        "translation": translation,
+    })
 }
 
 pub async fn handle_request(
@@ -223,13 +266,41 @@ pub async fn handle_request(
         .unwrap_or(true);
 
     let original_model = req_model.as_deref().unwrap_or("claude-opus-4-6");
+    let upstream_mode = if is_streaming {
+        "streaming"
+    } else {
+        "non_streaming"
+    };
+    let translated_request_len = codex_body.len();
+    let codex_span_data = serde_json::json!({
+        "model": codex_model,
+        "streaming": is_streaming,
+        "bodyLen": translated_request_len,
+    });
+
+    record_backend_event(
+        app,
+        "DEBUG",
+        "proxy",
+        session_id,
+        "codex.request_prepared",
+        "Prepared Codex upstream request",
+        serde_json::json!({
+            "requestModel": req_model,
+            "originalModel": original_model,
+            "codexModel": codex_model,
+            "rewrite": rewrite,
+            "upstreamMode": upstream_mode,
+            "translatedBodyLen": translated_request_len,
+        }),
+    );
 
     record_backend_perf_start(
         app,
         "proxy",
         session_id,
         "codex.upstream_request",
-        serde_json::json!({ "model": codex_model, "streaming": is_streaming, "bodyLen": codex_body.len() }),
+        codex_span_data.clone(),
     );
 
     // Send to OpenAI using persistent client
@@ -246,6 +317,42 @@ pub async fn handle_request(
     let resp = match request.body(codex_body).send().await {
         Ok(r) => r,
         Err(e) => {
+            if should_log {
+                super::write_traffic_entry(
+                    proxy_state,
+                    &session_id_owned,
+                    req_ts,
+                    span_start,
+                    "POST",
+                    "/v1/messages",
+                    orig_model,
+                    &provider.name,
+                    rewrite,
+                    &req_body_for_log,
+                    502,
+                    b"",
+                    Some(codex_traffic_meta(
+                        provider,
+                        session_id.is_some(),
+                        orig_model,
+                        rewrite,
+                        &codex_model,
+                        upstream_mode,
+                        translated_request_len,
+                        None,
+                    )),
+                );
+            }
+            record_backend_perf_fail(
+                app,
+                "proxy",
+                session_id,
+                "codex.upstream_request",
+                span_start,
+                codex_span_data.clone(),
+                serde_json::json!({}),
+                e.to_string(),
+            );
             record_backend_event(
                 app,
                 "ERR",
@@ -263,6 +370,42 @@ pub async fn handle_request(
     if !resp.status().is_success() {
         let status = resp.status().as_u16();
         let body = resp.text().await.unwrap_or_default();
+        if should_log {
+            super::write_traffic_entry(
+                proxy_state,
+                &session_id_owned,
+                req_ts,
+                span_start,
+                "POST",
+                "/v1/messages",
+                orig_model,
+                &provider.name,
+                rewrite,
+                &req_body_for_log,
+                status,
+                body.as_bytes(),
+                Some(codex_traffic_meta(
+                    provider,
+                    session_id.is_some(),
+                    orig_model,
+                    rewrite,
+                    &codex_model,
+                    upstream_mode,
+                    translated_request_len,
+                    None,
+                )),
+            );
+        }
+        record_backend_perf_fail(
+            app,
+            "proxy",
+            session_id,
+            "codex.upstream_request",
+            span_start,
+            codex_span_data.clone(),
+            serde_json::json!({ "status": status }),
+            format!("Codex API {status}"),
+        );
         record_backend_event(
             app,
             "WARN",
@@ -288,6 +431,10 @@ pub async fn handle_request(
         use futures_util::StreamExt;
         let mut byte_stream = resp.bytes_stream();
         let mut buffer = String::new();
+        let mut chunk_count = 0usize;
+        let mut line_count = 0usize;
+        let mut translated_write_count = 0usize;
+        let mut chunk_error: Option<String> = None;
         let mut resp_log_buf: Vec<u8> = if should_log {
             Vec::with_capacity(8192)
         } else {
@@ -298,6 +445,7 @@ pub async fn handle_request(
             let chunk = match chunk {
                 Ok(c) => c,
                 Err(e) => {
+                    chunk_error = Some(e.to_string());
                     record_backend_event(
                         app,
                         "WARN",
@@ -310,6 +458,7 @@ pub async fn handle_request(
                     break;
                 }
             };
+            chunk_count += 1;
             buffer.push_str(&String::from_utf8_lossy(&chunk));
 
             while let Some(newline_pos) = buffer.find('\n') {
@@ -318,9 +467,11 @@ pub async fn handle_request(
                 if line.is_empty() {
                     continue;
                 }
+                line_count += 1;
 
                 let output = translator.process_line(&line);
                 if !output.is_empty() {
+                    translated_write_count += 1;
                     if should_log {
                         resp_log_buf.extend_from_slice(&output);
                     }
@@ -331,8 +482,10 @@ pub async fn handle_request(
         }
 
         if !buffer.trim().is_empty() {
+            line_count += 1;
             let output = translator.process_line(buffer.trim());
             if !output.is_empty() {
+                translated_write_count += 1;
                 if should_log {
                     resp_log_buf.extend_from_slice(&output);
                 }
@@ -340,6 +493,29 @@ pub async fn handle_request(
                 tcp_stream.flush().await?;
             }
         }
+
+        let translation_summary = translator.final_summary().cloned();
+        let translation_summary_value = translation_summary
+            .as_ref()
+            .map(|summary| serde_json::to_value(summary).unwrap_or_else(|_| json!({})))
+            .unwrap_or(Value::Null);
+
+        record_backend_event(
+            app,
+            "DEBUG",
+            "proxy",
+            session_id,
+            "codex.stream_summary",
+            "Processed Codex streaming response",
+            serde_json::json!({
+                "chunkCount": chunk_count,
+                "lineCount": line_count,
+                "translatedWriteCount": translated_write_count,
+                "completed": translator.is_done(),
+                "chunkError": chunk_error,
+                "summary": translation_summary_value.clone(),
+            }),
+        );
 
         if should_log {
             super::write_traffic_entry(
@@ -355,6 +531,16 @@ pub async fn handle_request(
                 &req_body_for_log,
                 200,
                 &resp_log_buf,
+                Some(codex_traffic_meta(
+                    provider,
+                    session_id.is_some(),
+                    orig_model,
+                    rewrite,
+                    &codex_model,
+                    upstream_mode,
+                    translated_request_len,
+                    translation_summary.as_ref(),
+                )),
             );
         }
 
@@ -365,14 +551,75 @@ pub async fn handle_request(
             "codex.upstream_request",
             span_start,
             5000,
-            serde_json::json!({ "model": codex_model, "streaming": true }),
-            serde_json::json!({}),
+            codex_span_data.clone(),
+            serde_json::json!({
+                "chunkCount": chunk_count,
+                "lineCount": line_count,
+                "translatedWriteCount": translated_write_count,
+                "completed": translator.is_done(),
+                "summary": translation_summary_value,
+            }),
         );
     } else {
-        let codex_body = resp.bytes().await.map_err(|e| format!("Read error: {e}"))?;
-        let translated = match translate_resp::translate_response(&codex_body, original_model) {
+        let codex_response_body = match resp.bytes().await {
+            Ok(body) => body,
+            Err(e) => {
+                record_backend_perf_fail(
+                    app,
+                    "proxy",
+                    session_id,
+                    "codex.upstream_request",
+                    span_start,
+                    codex_span_data.clone(),
+                    serde_json::json!({}),
+                    format!("Read error: {e}"),
+                );
+                send_error(tcp_stream, 502, &format!("Codex upstream read failed: {e}")).await;
+                return Ok(());
+            }
+        };
+        let translated = match translate_resp::translate_response_with_summary(
+            &codex_response_body,
+            original_model,
+        ) {
             Ok(b) => b,
             Err(e) => {
+                if should_log {
+                    super::write_traffic_entry(
+                        proxy_state,
+                        &session_id_owned,
+                        req_ts,
+                        span_start,
+                        "POST",
+                        "/v1/messages",
+                        orig_model,
+                        &provider.name,
+                        rewrite,
+                        &req_body_for_log,
+                        500,
+                        &codex_response_body,
+                        Some(codex_traffic_meta(
+                            provider,
+                            session_id.is_some(),
+                            orig_model,
+                            rewrite,
+                            &codex_model,
+                            upstream_mode,
+                            translated_request_len,
+                            None,
+                        )),
+                    );
+                }
+                record_backend_perf_fail(
+                    app,
+                    "proxy",
+                    session_id,
+                    "codex.upstream_request",
+                    span_start,
+                    codex_span_data.clone(),
+                    serde_json::json!({}),
+                    e.clone(),
+                );
                 record_backend_event(
                     app,
                     "ERR",
@@ -391,13 +638,28 @@ pub async fn handle_request(
                 return Ok(());
             }
         };
+        let translated_summary_value =
+            serde_json::to_value(&translated.summary).unwrap_or_else(|_| json!({}));
+
+        record_backend_event(
+            app,
+            "DEBUG",
+            "proxy",
+            session_id,
+            "codex.translation_summary",
+            "Translated Codex response",
+            serde_json::json!({
+                "upstreamMode": upstream_mode,
+                "summary": translated_summary_value.clone(),
+            }),
+        );
 
         let resp_str = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
-            translated.len(),
+            translated.body.len(),
         );
         tcp_stream.write_all(resp_str.as_bytes()).await?;
-        tcp_stream.write_all(&translated).await?;
+        tcp_stream.write_all(&translated.body).await?;
         tcp_stream.flush().await?;
 
         if should_log {
@@ -413,7 +675,17 @@ pub async fn handle_request(
                 rewrite,
                 &req_body_for_log,
                 200,
-                &translated,
+                &translated.body,
+                Some(codex_traffic_meta(
+                    provider,
+                    session_id.is_some(),
+                    orig_model,
+                    rewrite,
+                    &codex_model,
+                    upstream_mode,
+                    translated_request_len,
+                    Some(&translated.summary),
+                )),
             );
         }
 
@@ -424,8 +696,11 @@ pub async fn handle_request(
             "codex.upstream_request",
             span_start,
             5000,
-            serde_json::json!({ "model": codex_model, "streaming": false }),
-            serde_json::json!({ "responseLen": translated.len() }),
+            codex_span_data,
+            serde_json::json!({
+                "responseLen": translated.body.len(),
+                "summary": translated_summary_value,
+            }),
         );
     }
 

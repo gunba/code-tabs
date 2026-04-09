@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
 use tauri::{Emitter, State};
 
-use crate::session::types::{ModelMapping, ModelProvider, ProviderConfig, SystemPromptRule};
 use crate::observability::{
-    record_backend_event,
-    record_backend_perf_end,
-    record_backend_perf_fail,
+    record_backend_event, record_backend_perf_end, record_backend_perf_fail,
     record_backend_perf_start,
 };
+use crate::session::types::{ModelMapping, ModelProvider, ProviderConfig, SystemPromptRule};
 
 pub mod codex;
 
@@ -48,7 +47,9 @@ impl ProxyState {
             traffic_log_paths: HashMap::new(),
             session_providers: HashMap::new(),
             codex_auth: codex::auth::CodexAuthState::new(
-                dirs::data_local_dir().unwrap_or_default().join("claude-tabs"),
+                dirs::data_local_dir()
+                    .unwrap_or_default()
+                    .join("claude-tabs"),
             ),
             codex_client: build_plain_client(),
         })))
@@ -65,8 +66,7 @@ fn build_plain_client() -> reqwest::Client {
 }
 
 fn build_client_for_provider(provider: &ModelProvider) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(300));
+    let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(300));
 
     if let Some(ref proxy_url) = provider.socks5_proxy {
         let proxy = reqwest::Proxy::all(proxy_url)
@@ -74,7 +74,9 @@ fn build_client_for_provider(provider: &ModelProvider) -> Result<reqwest::Client
         builder = builder.proxy(proxy);
     }
 
-    builder.build().map_err(|e| format!("Client build failed for '{}': {e}", provider.name))
+    builder
+        .build()
+        .map_err(|e| format!("Client build failed for '{}': {e}", provider.name))
 }
 
 fn build_client_map(config: &ProviderConfig) -> Result<HashMap<String, reqwest::Client>, String> {
@@ -100,7 +102,13 @@ pub async fn start_api_proxy(
     let span_data = serde_json::json!({
         "providerCount": config.providers.len(),
     });
-    record_backend_perf_start(&app, "proxy", None, "proxy.start_api_proxy", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "proxy",
+        None,
+        "proxy.start_api_proxy",
+        span_data.clone(),
+    );
 
     let result: Result<u16, String> = async {
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -241,7 +249,13 @@ pub fn update_provider_config(
     let span_data = serde_json::json!({
         "providerCount": config.providers.len(),
     });
-    record_backend_perf_start(&app, "proxy", None, "proxy.update_provider_config", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "proxy",
+        None,
+        "proxy.update_provider_config",
+        span_data.clone(),
+    );
     let result = (|| -> Result<(), String> {
         let clients = build_client_map(&config)?;
         let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
@@ -326,31 +340,38 @@ pub async fn codex_login(
     let inner = proxy_state.0.clone();
     tokio::spawn(async move {
         match codex::auth::wait_for_callback(&state).await {
-            Ok(code) => {
-                match codex::auth::exchange_code(&code, &verifier).await {
-                    Ok(tokens) => {
-                        let email = tokens.email.clone();
-                        if let Ok(s) = inner.lock() {
-                            s.codex_auth.set_tokens(tokens);
-                        }
-                        let _ = app_clone.emit("codex-auth-changed", serde_json::json!({
+            Ok(code) => match codex::auth::exchange_code(&code, &verifier).await {
+                Ok(tokens) => {
+                    let email = tokens.email.clone();
+                    if let Ok(s) = inner.lock() {
+                        s.codex_auth.set_tokens(tokens);
+                    }
+                    let _ = app_clone.emit(
+                        "codex-auth-changed",
+                        serde_json::json!({
                             "loggedIn": true,
                             "email": email,
-                        }));
-                    }
-                    Err(e) => {
-                        let _ = app_clone.emit("codex-auth-changed", serde_json::json!({
+                        }),
+                    );
+                }
+                Err(e) => {
+                    let _ = app_clone.emit(
+                        "codex-auth-changed",
+                        serde_json::json!({
                             "loggedIn": false,
                             "error": e,
-                        }));
-                    }
+                        }),
+                    );
                 }
-            }
+            },
             Err(e) => {
-                let _ = app_clone.emit("codex-auth-changed", serde_json::json!({
-                    "loggedIn": false,
-                    "error": e,
-                }));
+                let _ = app_clone.emit(
+                    "codex-auth-changed",
+                    serde_json::json!({
+                        "loggedIn": false,
+                        "error": e,
+                    }),
+                );
             }
         }
     });
@@ -391,7 +412,13 @@ pub fn update_system_prompt_rules(
         "ruleCount": rules.len(),
         "enabledRuleCount": rules.iter().filter(|rule| rule.enabled).count(),
     });
-    record_backend_perf_start(&app, "proxy", None, "proxy.update_system_prompt_rules", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "proxy",
+        None,
+        "proxy.update_system_prompt_rules",
+        span_data.clone(),
+    );
     let result = (|| -> Result<(), String> {
         // Validate all enabled rule patterns at config time
         for rule in &rules {
@@ -452,10 +479,20 @@ pub fn update_system_prompt_rules(
 // ── Traffic logging commands ─────────────────────────────────────────
 
 #[tauri::command]
-pub fn start_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>, app: tauri::AppHandle) -> Result<String, String> {
+pub fn start_traffic_log(
+    session_id: String,
+    proxy_state: State<'_, ProxyState>,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
     let span_start = std::time::Instant::now();
     let span_data = serde_json::json!({ "sessionId": session_id });
-    record_backend_perf_start(&app, "traffic", Some(&session_id), "traffic.start_log", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "traffic",
+        Some(&session_id),
+        "traffic.start_log",
+        span_data.clone(),
+    );
     let result = (|| -> Result<String, String> {
         let dir = crate::commands::get_session_data_dir(&session_id)?;
         let path = dir.join("traffic.jsonl");
@@ -510,10 +547,20 @@ pub fn start_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>,
 }
 
 #[tauri::command]
-pub fn stop_traffic_log(session_id: String, proxy_state: State<'_, ProxyState>, app: tauri::AppHandle) -> Result<(), String> {
+pub fn stop_traffic_log(
+    session_id: String,
+    proxy_state: State<'_, ProxyState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
     let span_start = std::time::Instant::now();
     let span_data = serde_json::json!({ "sessionId": session_id });
-    record_backend_perf_start(&app, "traffic", Some(&session_id), "traffic.stop_log", span_data.clone());
+    record_backend_perf_start(
+        &app,
+        "traffic",
+        Some(&session_id),
+        "traffic.stop_log",
+        span_data.clone(),
+    );
     let result = (|| -> Result<(), String> {
         let mut s = proxy_state.0.lock().map_err(|e| e.to_string())?;
         if let Some(ref mut writer) = s.traffic_log_files.get_mut(&session_id) {
@@ -582,11 +629,8 @@ async fn handle_connection(
     let mut tmp = [0u8; 65536];
 
     loop {
-        let n = tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            stream.read(&mut tmp),
-        )
-        .await??;
+        let n = tokio::time::timeout(std::time::Duration::from_secs(30), stream.read(&mut tmp))
+            .await??;
 
         if n == 0 {
             return Ok(());
@@ -622,14 +666,18 @@ async fn handle_connection(
 
     // Determine if traffic logging is active for this session
     let should_log = session_id.as_ref().map_or(false, |id| {
-        proxy_state.lock().ok().map_or(false, |s| s.traffic_log_files.contains_key(id))
+        proxy_state
+            .lock()
+            .ok()
+            .map_or(false, |s| s.traffic_log_files.contains_key(id))
     });
 
     // Route: look up session's provider, then apply its model mappings
     let model = extract_model(&body);
     let provider = resolve_session_provider(session_id.as_deref(), &session_providers, &config);
 
-    let rewrite = model.as_deref()
+    let rewrite = model
+        .as_deref()
         .and_then(|m| apply_model_mappings(m, &provider.model_mappings));
     let mut final_body = match rewrite.as_deref() {
         Some(new_model) => rewrite_model_in_body(&body, new_model),
@@ -638,14 +686,43 @@ async fn handle_connection(
     if !rules.is_empty() {
         final_body = rewrite_system_prompt_in_body(&final_body, &rules);
     }
+    let route_event_data = serde_json::json!({
+        "method": method,
+        "rawPath": raw_path,
+        "path": path,
+        "sessionScoped": session_id.is_some(),
+        "requestModel": model,
+        "providerId": provider.id,
+        "provider": provider.name,
+        "providerKind": provider.kind,
+        "rewrite": rewrite,
+        "systemPromptRulesApplied": !rules.is_empty(),
+        "shouldLogTraffic": should_log,
+    });
+    let route_traffic_meta = serde_json::json!({
+        "route": route_event_data.clone(),
+    });
+
+    record_backend_event(
+        &app,
+        "DEBUG",
+        "proxy",
+        session_id.as_deref(),
+        "proxy.route_resolved",
+        "Resolved proxy route",
+        route_event_data,
+    );
 
     // Emit routing event for debug panel visibility
-    let _ = app.emit("proxy-route", serde_json::json!({
-        "model": model.as_deref().unwrap_or("(none)"),
-        "provider": provider.name,
-        "rewrite": rewrite,
-        "path": path,
-    }));
+    let _ = app.emit(
+        "proxy-route",
+        serde_json::json!({
+            "model": model.as_deref().unwrap_or("(none)"),
+            "provider": provider.name,
+            "rewrite": rewrite,
+            "path": path,
+        }),
+    );
 
     // Dispatch by provider kind
     if provider.kind == "openai_codex" {
@@ -662,19 +739,23 @@ async fn handle_connection(
             should_log,
             &model,
             &rewrite,
-        ).await;
+        )
+        .await;
     }
 
     // ── Anthropic-compatible provider: passthrough with model rewrite ──
 
     // Build upstream URL
-    let base_url = provider.base_url.as_deref().unwrap_or("https://api.anthropic.com");
+    let base_url = provider
+        .base_url
+        .as_deref()
+        .unwrap_or("https://api.anthropic.com");
     let url = format!("{}{}", base_url.trim_end_matches('/'), path);
 
     // Build upstream request
     let client = clients.get(&provider.id).unwrap_or(&default_client);
-    let http_method = reqwest::Method::from_bytes(method.as_bytes())
-        .unwrap_or(reqwest::Method::POST);
+    let http_method =
+        reqwest::Method::from_bytes(method.as_bytes()).unwrap_or(reqwest::Method::POST);
     let mut req = client.request(http_method, &url);
 
     let has_provider_key = provider.api_key.is_some();
@@ -694,7 +775,11 @@ async fn handle_connection(
     }
 
     // Capture request body for traffic logging before it's consumed
-    let final_body_for_log = if should_log { Some(final_body.clone()) } else { None };
+    let final_body_for_log = if should_log {
+        Some(final_body.clone())
+    } else {
+        None
+    };
     let req_start = std::time::Instant::now();
     let req_ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -706,20 +791,21 @@ async fn handle_connection(
     let log_method = method.clone();
     let log_path = path.clone();
     let log_session_id = session_id.clone();
+    let route_span_data = serde_json::json!({
+        "method": log_method,
+        "path": log_path,
+        "model": log_model,
+        "provider": log_provider,
+        "rewrite": log_rewrite,
+        "shouldLogTraffic": should_log,
+    });
 
     record_backend_perf_start(
         &app,
         "proxy",
         log_session_id.as_deref(),
         "proxy.route_request",
-        serde_json::json!({
-            "method": log_method,
-            "path": log_path,
-            "model": log_model,
-            "provider": log_provider,
-            "rewrite": log_rewrite,
-            "shouldLogTraffic": should_log,
-        }),
+        route_span_data.clone(),
     );
 
     req = req.body(final_body);
@@ -731,11 +817,31 @@ async fn handle_connection(
             let error_message = e.to_string();
             if should_log {
                 write_traffic_entry(
-                    &proxy_state, &log_session_id, req_ts, req_start,
-                    &log_method, &log_path, &log_model, &log_provider, &log_rewrite,
-                    &final_body_for_log, 502, b"",
+                    &proxy_state,
+                    &log_session_id,
+                    req_ts,
+                    req_start,
+                    &log_method,
+                    &log_path,
+                    &log_model,
+                    &log_provider,
+                    &log_rewrite,
+                    &final_body_for_log,
+                    502,
+                    b"",
+                    Some(route_traffic_meta.clone()),
                 );
             }
+            record_backend_perf_fail(
+                &app,
+                "proxy",
+                log_session_id.as_deref(),
+                "proxy.route_request",
+                req_start,
+                route_span_data.clone(),
+                serde_json::json!({}),
+                &error_message,
+            );
             record_backend_event(
                 &app,
                 "WARN",
@@ -775,7 +881,11 @@ async fn handle_connection(
     stream.write_all(resp_hdrs.as_bytes()).await?;
 
     // Stream response body — flush each chunk immediately for SSE
-    let mut resp_buf: Option<Vec<u8>> = if should_log { Some(Vec::with_capacity(8192)) } else { None };
+    let mut resp_buf: Option<Vec<u8>> = if should_log {
+        Some(Vec::with_capacity(8192))
+    } else {
+        None
+    };
     while let Some(chunk) = resp.chunk().await? {
         stream.write_all(&chunk).await?;
         stream.flush().await?;
@@ -787,9 +897,19 @@ async fn handle_connection(
     // Write traffic log entry after response completes
     if let Some(resp_bytes) = resp_buf {
         write_traffic_entry(
-            &proxy_state, &log_session_id, req_ts, req_start,
-            &log_method, &log_path, &log_model, &log_provider, &log_rewrite,
-            &final_body_for_log, status_code, &resp_bytes,
+            &proxy_state,
+            &log_session_id,
+            req_ts,
+            req_start,
+            &log_method,
+            &log_path,
+            &log_model,
+            &log_provider,
+            &log_rewrite,
+            &final_body_for_log,
+            status_code,
+            &resp_bytes,
+            Some(route_traffic_meta.clone()),
         );
     }
 
@@ -800,14 +920,7 @@ async fn handle_connection(
         "proxy.route_request",
         req_start,
         1000,
-        serde_json::json!({
-            "method": log_method,
-            "path": log_path,
-            "model": log_model,
-            "provider": log_provider,
-            "rewrite": log_rewrite,
-            "shouldLogTraffic": should_log,
-        }),
+        route_span_data,
         serde_json::json!({
             "status": status_code,
         }),
@@ -846,11 +959,10 @@ fn decompress_if_gzip(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-pub(crate) fn write_traffic_entry(
-    proxy_state: &Arc<Mutex<ProxyInner>>,
-    session_id: &Option<String>,
+fn build_traffic_entry_json(
     req_ts: f64,
-    req_start: std::time::Instant,
+    dur_ms: u64,
+    sid: &str,
     method: &str,
     path: &str,
     model: &Option<String>,
@@ -859,17 +971,16 @@ pub(crate) fn write_traffic_entry(
     req_body: &Option<Vec<u8>>,
     status: u16,
     resp_bytes: &[u8],
-) {
-    let sid = match session_id {
-        Some(id) => id,
-        None => return,
-    };
-    let dur_ms = req_start.elapsed().as_millis() as u64;
-    let req_str = req_body.as_ref().map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
+    extra_meta: Option<Value>,
+) -> Value {
+    let req_str = req_body
+        .as_ref()
+        .map(|b| String::from_utf8_lossy(b).into_owned())
+        .unwrap_or_default();
     let resp_str = decompress_if_gzip(resp_bytes);
     let req_len = req_body.as_ref().map(|b| b.len()).unwrap_or(0);
 
-    let line = serde_json::json!({
+    let mut entry = serde_json::json!({
         "ts": req_ts,
         "dur_ms": dur_ms,
         "session_id": sid,
@@ -884,6 +995,47 @@ pub(crate) fn write_traffic_entry(
         "resp_len": resp_bytes.len(),
         "resp": resp_str,
     });
+
+    if let Some(extra_meta) = extra_meta {
+        if let Some(entry_obj) = entry.as_object_mut() {
+            match extra_meta {
+                serde_json::Value::Object(extra_obj) => {
+                    entry_obj.extend(extra_obj);
+                }
+                other => {
+                    entry_obj.insert("meta".to_string(), other);
+                }
+            }
+        }
+    }
+
+    entry
+}
+
+pub(crate) fn write_traffic_entry(
+    proxy_state: &Arc<Mutex<ProxyInner>>,
+    session_id: &Option<String>,
+    req_ts: f64,
+    req_start: std::time::Instant,
+    method: &str,
+    path: &str,
+    model: &Option<String>,
+    provider: &str,
+    rewrite: &Option<String>,
+    req_body: &Option<Vec<u8>>,
+    status: u16,
+    resp_bytes: &[u8],
+    extra_meta: Option<Value>,
+) {
+    let sid = match session_id {
+        Some(id) => id,
+        None => return,
+    };
+    let dur_ms = req_start.elapsed().as_millis() as u64;
+    let line = build_traffic_entry_json(
+        req_ts, dur_ms, sid, method, path, model, provider, rewrite, req_body, status, resp_bytes,
+        extra_meta,
+    );
 
     if let Ok(mut s) = proxy_state.lock() {
         if let Some(ref mut writer) = s.traffic_log_files.get_mut(sid) {
@@ -960,7 +1112,10 @@ fn rewrite_model_in_body(body: &[u8], new_model: &str) -> Vec<u8> {
 }
 
 fn rewrite_system_prompt_in_body(body: &[u8], rules: &[SystemPromptRule]) -> Vec<u8> {
-    let enabled: Vec<&SystemPromptRule> = rules.iter().filter(|r| r.enabled && !r.pattern.is_empty()).collect();
+    let enabled: Vec<&SystemPromptRule> = rules
+        .iter()
+        .filter(|r| r.enabled && !r.pattern.is_empty())
+        .collect();
     if enabled.is_empty() {
         return body.to_vec();
     }
@@ -1074,7 +1229,8 @@ async fn send_error(stream: &mut tokio::net::TcpStream, status: u16, msg: &str) 
     let body = serde_json::json!({
         "type": "error",
         "error": { "type": "proxy_error", "message": msg }
-    }).to_string();
+    })
+    .to_string();
     let reason = match status {
         400 => "Bad Request",
         413 => "Too Large",
@@ -1094,7 +1250,13 @@ async fn send_error(stream: &mut tokio::net::TcpStream, status: u16, msg: &str) 
 mod tests {
     use super::*;
 
-    fn make_provider(id: &str, name: &str, base_url: &str, api_key: Option<&str>, socks5: Option<&str>) -> ModelProvider {
+    fn make_provider(
+        id: &str,
+        name: &str,
+        base_url: &str,
+        api_key: Option<&str>,
+        socks5: Option<&str>,
+    ) -> ModelProvider {
         ModelProvider {
             id: id.into(),
             name: name.into(),
@@ -1102,7 +1264,7 @@ mod tests {
             predefined: false,
             model_mappings: Vec::new(),
             known_models: Vec::new(),
-        
+
             base_url: Some(base_url.into()),
             api_key: api_key.map(|s| s.into()),
             socks5_proxy: socks5.map(|s| s.into()),
@@ -1125,8 +1287,20 @@ mod tests {
     fn test_resolve_session_provider_bound() {
         let config = ProviderConfig {
             providers: vec![
-                make_provider("glm", "GLM", "https://api.z.ai/api/anthropic", Some("k"), None),
-                make_provider("anthropic", "Anthropic", "https://api.anthropic.com", None, None),
+                make_provider(
+                    "glm",
+                    "GLM",
+                    "https://api.z.ai/api/anthropic",
+                    Some("k"),
+                    None,
+                ),
+                make_provider(
+                    "anthropic",
+                    "Anthropic",
+                    "https://api.anthropic.com",
+                    None,
+                    None,
+                ),
             ],
             default_provider_id: "anthropic".into(),
         };
@@ -1150,9 +1324,13 @@ mod tests {
     #[test]
     fn test_resolve_session_provider_missing_provider_fallback() {
         let config = ProviderConfig {
-            providers: vec![
-                make_provider("anthropic", "Anthropic", "https://api.anthropic.com", None, None),
-            ],
+            providers: vec![make_provider(
+                "anthropic",
+                "Anthropic",
+                "https://api.anthropic.com",
+                None,
+                None,
+            )],
             default_provider_id: "anthropic".into(),
         };
         let mut sp = HashMap::new();
@@ -1167,35 +1345,67 @@ mod tests {
     #[test]
     fn test_apply_model_mappings_match() {
         let mappings = vec![
-            ModelMapping { id: "m1".into(), pattern: "claude-haiku-*".into(), rewrite_model: Some("glm-5.0".into()), context_window: None },
-            ModelMapping { id: "m2".into(), pattern: "*".into(), rewrite_model: None, context_window: None },
+            ModelMapping {
+                id: "m1".into(),
+                pattern: "claude-haiku-*".into(),
+                rewrite_model: Some("glm-5.0".into()),
+                context_window: None,
+            },
+            ModelMapping {
+                id: "m2".into(),
+                pattern: "*".into(),
+                rewrite_model: None,
+                context_window: None,
+            },
         ];
-        assert_eq!(apply_model_mappings("claude-haiku-4-5", &mappings), Some("glm-5.0".into()));
+        assert_eq!(
+            apply_model_mappings("claude-haiku-4-5", &mappings),
+            Some("glm-5.0".into())
+        );
     }
 
     #[test]
     fn test_apply_model_mappings_no_rewrite() {
-        let mappings = vec![
-            ModelMapping { id: "m1".into(), pattern: "*".into(), rewrite_model: None, context_window: None },
-        ];
+        let mappings = vec![ModelMapping {
+            id: "m1".into(),
+            pattern: "*".into(),
+            rewrite_model: None,
+            context_window: None,
+        }];
         assert_eq!(apply_model_mappings("claude-opus-4-6", &mappings), None);
     }
 
     #[test]
     fn test_apply_model_mappings_first_match_wins() {
         let mappings = vec![
-            ModelMapping { id: "m1".into(), pattern: "claude-*".into(), rewrite_model: Some("a".into()), context_window: None },
-            ModelMapping { id: "m2".into(), pattern: "claude-haiku-*".into(), rewrite_model: Some("b".into()), context_window: None },
+            ModelMapping {
+                id: "m1".into(),
+                pattern: "claude-*".into(),
+                rewrite_model: Some("a".into()),
+                context_window: None,
+            },
+            ModelMapping {
+                id: "m2".into(),
+                pattern: "claude-haiku-*".into(),
+                rewrite_model: Some("b".into()),
+                context_window: None,
+            },
         ];
         // "claude-*" matches first, even though "claude-haiku-*" is more specific
-        assert_eq!(apply_model_mappings("claude-haiku-4-5", &mappings), Some("a".into()));
+        assert_eq!(
+            apply_model_mappings("claude-haiku-4-5", &mappings),
+            Some("a".into())
+        );
     }
 
     #[test]
     fn test_apply_model_mappings_no_match() {
-        let mappings = vec![
-            ModelMapping { id: "m1".into(), pattern: "glm-*".into(), rewrite_model: Some("x".into()), context_window: None },
-        ];
+        let mappings = vec![ModelMapping {
+            id: "m1".into(),
+            pattern: "glm-*".into(),
+            rewrite_model: Some("x".into()),
+            context_window: None,
+        }];
         assert_eq!(apply_model_mappings("claude-opus-4-6", &mappings), None);
     }
 
@@ -1244,34 +1454,90 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_build_traffic_entry_includes_extra_metadata() {
+        let entry = build_traffic_entry_json(
+            123.0,
+            45,
+            "sess-1",
+            "POST",
+            "/v1/messages",
+            &Some("claude-opus-4-6".into()),
+            "Codex",
+            &Some("gpt-5.4".into()),
+            &Some(br#"{"model":"claude-opus-4-6"}"#.to_vec()),
+            200,
+            br#"{"type":"message"}"#,
+            Some(serde_json::json!({
+                "route": {
+                    "providerId": "openai-codex",
+                    "providerKind": "openai_codex",
+                },
+                "translation": {
+                    "proxy": "codex",
+                    "upstreamMode": "streaming",
+                    "summary": {
+                        "upstreamToolCallCount": 3,
+                    },
+                },
+            })),
+        );
+
+        assert_eq!(entry["route"]["providerId"], "openai-codex");
+        assert_eq!(entry["translation"]["upstreamMode"], "streaming");
+        assert_eq!(entry["translation"]["summary"]["upstreamToolCallCount"], 3);
+        assert_eq!(entry["rewrite"], "gpt-5.4");
+    }
+
     // ── SOCKS5 client builder tests ──────────────────────────────────
 
     #[test]
     fn test_build_client_map_no_proxy() {
         let config = ProviderConfig::default();
         let clients = build_client_map(&config).unwrap();
-        assert!(clients.is_empty(), "no providers have socks5_proxy, map should be empty");
+        assert!(
+            clients.is_empty(),
+            "no providers have socks5_proxy, map should be empty"
+        );
     }
 
     #[test]
     fn test_build_client_map_with_proxy() {
         let config = ProviderConfig {
             providers: vec![
-                make_provider("proxied", "Proxied", "https://api.example.com", None, Some("socks5h://user:pass@127.0.0.1:1080")),
+                make_provider(
+                    "proxied",
+                    "Proxied",
+                    "https://api.example.com",
+                    None,
+                    Some("socks5h://user:pass@127.0.0.1:1080"),
+                ),
                 make_provider("direct", "Direct", "https://api.anthropic.com", None, None),
             ],
             default_provider_id: "direct".into(),
         };
         let clients = build_client_map(&config).unwrap();
         assert_eq!(clients.len(), 1, "only proxied provider should be in map");
-        assert!(clients.contains_key("proxied"), "proxied provider should have a client");
-        assert!(!clients.contains_key("direct"), "direct provider should not be in map");
+        assert!(
+            clients.contains_key("proxied"),
+            "proxied provider should have a client"
+        );
+        assert!(
+            !clients.contains_key("direct"),
+            "direct provider should not be in map"
+        );
     }
 
     #[test]
     fn test_build_client_map_invalid_proxy_url() {
         let config = ProviderConfig {
-            providers: vec![make_provider("bad", "Bad", "https://api.example.com", None, Some("not a valid url!!!"))],
+            providers: vec![make_provider(
+                "bad",
+                "Bad",
+                "https://api.example.com",
+                None,
+                Some("not a valid url!!!"),
+            )],
             default_provider_id: "bad".into(),
         };
         let result = build_client_map(&config);
@@ -1280,7 +1546,13 @@ mod tests {
 
     // ── System prompt rewrite tests ──────────────────────────────────────
 
-    fn make_rule(name: &str, pattern: &str, replacement: &str, flags: &str, enabled: bool) -> SystemPromptRule {
+    fn make_rule(
+        name: &str,
+        pattern: &str,
+        replacement: &str,
+        flags: &str,
+        enabled: bool,
+    ) -> SystemPromptRule {
         SystemPromptRule {
             id: format!("rule-{}", name),
             name: name.to_string(),

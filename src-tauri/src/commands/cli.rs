@@ -1,5 +1,5 @@
-use crate::session::types::SessionConfig;
 use crate::observability::record_backend_event;
+use crate::session::types::SessionConfig;
 use serde_json::json;
 use tauri::AppHandle;
 
@@ -9,12 +9,19 @@ struct ClaudeBinaryRead {
     path: Option<String>,
 }
 
-fn log_discovery(app: &AppHandle, level: &str, event: &str, message: &str, data: serde_json::Value) {
+fn log_discovery(
+    app: &AppHandle,
+    level: &str,
+    event: &str,
+    message: &str,
+    data: serde_json::Value,
+) {
     record_backend_event(app, level, "discovery", None, event, message, data);
 }
 
 fn command_names(values: &[serde_json::Value], key: &str) -> Vec<String> {
-    values.iter()
+    values
+        .iter()
         .filter_map(|value| value.get(key).and_then(|entry| entry.as_str()))
         .map(|value| value.to_string())
         .collect()
@@ -56,7 +63,11 @@ pub(crate) fn detect_claude_cli_sync() -> Result<String, String> {
 }
 
 fn detect_claude_cli_details_sync() -> Result<(String, &'static str), String> {
-    let which_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+    let which_cmd = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
     let mut cmd = std::process::Command::new(which_cmd);
     cmd.arg("claude");
     #[cfg(target_os = "windows")]
@@ -64,7 +75,8 @@ fn detect_claude_cli_details_sync() -> Result<(String, &'static str), String> {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    let output = cmd.output()
+    let output = cmd
+        .output()
         .map_err(|e| format!("Failed to search for claude: {}", e))?;
 
     if output.status.success() {
@@ -90,10 +102,10 @@ fn detect_claude_cli_details_sync() -> Result<(String, &'static str), String> {
             .join("npm")
             .join("claude.cmd"),
         home.join("AppData")
-        	.join("Local")
-        	.join("Programs")
-        	.join("npm-global")
-        	.join("claude.cmd"),
+            .join("Local")
+            .join("Programs")
+            .join("npm-global")
+            .join("claude.cmd"),
     ];
     #[cfg(not(target_os = "windows"))]
     let candidates = [
@@ -103,7 +115,10 @@ fn detect_claude_cli_details_sync() -> Result<(String, &'static str), String> {
 
     for candidate in &candidates {
         if candidate.exists() {
-            return Ok((candidate.to_string_lossy().to_string(), "fallback_candidate"));
+            return Ok((
+                candidate.to_string_lossy().to_string(),
+                "fallback_candidate",
+            ));
         }
     }
 
@@ -124,21 +139,32 @@ fn run_claude_cli(args: &[&str], label: &str) -> Result<String, String> {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    let output = cmd.output()
+    let output = cmd
+        .output()
         .map_err(|e| format!("Failed to run {}: {}", label, e))?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(format!("{} failed: {}", label, if stderr.is_empty() { "unknown error".to_string() } else { stderr }))
+        Err(format!(
+            "{} failed: {}",
+            label,
+            if stderr.is_empty() {
+                "unknown error".to_string()
+            } else {
+                stderr
+            }
+        ))
     }
 }
 
 /// Run `claude --version` — async to avoid blocking the WebView.
 #[tauri::command]
 pub async fn check_cli_version(app: AppHandle) -> Result<String, String> {
-    let version = tokio::task::spawn_blocking(|| run_claude_cli(&["--version"], "claude --version"))
-        .await.map_err(|e| e.to_string())??;
+    let version =
+        tokio::task::spawn_blocking(|| run_claude_cli(&["--version"], "claude --version"))
+            .await
+            .map_err(|e| e.to_string())??;
     log_discovery(
         &app,
         "LOG",
@@ -163,16 +189,22 @@ pub async fn get_cli_help(app: AppHandle) -> Result<String, String> {
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
         }
-        let output = cmd.output()
+        let output = cmd
+            .output()
             .map_err(|e| format!("Failed to run claude --help: {}", e))?;
         if output.status.success() {
             Ok::<String, String>(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            if !stderr.is_empty() { Ok::<String, String>(stderr) }
-            else { Err("claude --help failed".to_string()) }
+            if !stderr.is_empty() {
+                Ok::<String, String>(stderr)
+            } else {
+                Err("claude --help failed".to_string())
+            }
         }
-    }).await.map_err(|e| e.to_string())??;
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     log_discovery(
         &app,
         "LOG",
@@ -192,7 +224,9 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, String
     // Helper: read a file if it exists and is under 500MB, return lossy UTF-8
     let read_if_exists = |p: &std::path::Path| -> Option<String> {
         let meta = std::fs::metadata(p).ok()?;
-        if meta.len() > 500 * 1024 * 1024 { return None; }
+        if meta.len() > 500 * 1024 * 1024 {
+            return None;
+        }
         let bytes = std::fs::read(p).ok()?;
         Some(String::from_utf8_lossy(&bytes).to_string())
     };
@@ -261,8 +295,11 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, String
 
         // 3. Sibling node_modules
         if let Some(parent) = path.parent() {
-            let sibling = parent.join("node_modules")
-                .join("@anthropic-ai").join("claude-code").join("cli.js");
+            let sibling = parent
+                .join("node_modules")
+                .join("@anthropic-ai")
+                .join("claude-code")
+                .join("cli.js");
             if let Some(content) = read_if_exists(&sibling) {
                 if is_claude_content(&content) {
                     return Ok(ClaudeBinaryRead {
@@ -277,9 +314,14 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, String
 
     // 4. Legacy versions dir (~/.local/share/claude/versions/<latest>)
     if let Some(home) = dirs::home_dir() {
-        let versions_dir = home.join(".local").join("share").join("claude").join("versions");
+        let versions_dir = home
+            .join(".local")
+            .join("share")
+            .join("claude")
+            .join("versions");
         if let Ok(entries) = std::fs::read_dir(&versions_dir) {
-            let mut versions: Vec<_> = entries.flatten()
+            let mut versions: Vec<_> = entries
+                .flatten()
                 .map(|e| e.file_name().to_string_lossy().to_string())
                 .collect();
             versions.sort();
@@ -305,12 +347,13 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, String
     npm_cmd.args(["root", "-g"]);
     #[cfg(target_os = "windows")]
     npm_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    if let Ok(output) = npm_cmd.output()
-    {
+    if let Ok(output) = npm_cmd.output() {
         let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if !root.is_empty() {
             let npm_cli = std::path::Path::new(&root)
-                .join("@anthropic-ai").join("claude-code").join("cli.js");
+                .join("@anthropic-ai")
+                .join("claude-code")
+                .join("cli.js");
             if let Some(content) = read_if_exists(&npm_cli) {
                 if is_claude_content(&content) {
                     return Ok(ClaudeBinaryRead {
@@ -331,18 +374,24 @@ fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, String
 /// Two-step scan: finds name:"..." positions, then searches a brace-depth-bounded
 /// window for descriptions (literal, reversed, computed/ternary, template literal).
 #[tauri::command]
-pub async fn discover_builtin_commands(app: AppHandle, cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
+pub async fn discover_builtin_commands(
+    app: AppHandle,
+    cli_path: Option<String>,
+) -> Result<Vec<serde_json::Value>, String> {
     let cli_path_for_log = cli_path.clone();
-    let commands = tokio::task::spawn_blocking(move || discover_builtin_commands_sync(cli_path.as_deref()))
-        .await
-        .map_err(|e| e.to_string())??;
+    let commands =
+        tokio::task::spawn_blocking(move || discover_builtin_commands_sync(cli_path.as_deref()))
+            .await
+            .map_err(|e| e.to_string())??;
     let binary_info = if cfg!(debug_assertions) {
         read_claude_binary(cli_path_for_log.as_deref())
             .ok()
-            .map(|binary| json!({
-                "binarySource": binary.source,
-                "binaryPath": binary.path,
-            }))
+            .map(|binary| {
+                json!({
+                    "binarySource": binary.source,
+                    "binaryPath": binary.path,
+                })
+            })
             .unwrap_or_else(|| json!({}))
     } else {
         json!({})
@@ -362,7 +411,9 @@ pub async fn discover_builtin_commands(app: AppHandle, cli_path: Option<String>)
     Ok(commands)
 }
 
-fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_json::Value>, String> {
+fn discover_builtin_commands_sync(
+    cli_path: Option<&str>,
+) -> Result<Vec<serde_json::Value>, String> {
     let content = match read_claude_binary(cli_path) {
         Ok(c) => c.content,
         Err(_) => return Ok(Vec::new()),
@@ -452,17 +503,41 @@ fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_js
 
         let desc = None
             // 1. Literal description in forward window
-            .or_else(|| desc_literal_re.captures(fwd_window).map(|c| c[1].to_string()))
+            .or_else(|| {
+                desc_literal_re
+                    .captures(fwd_window)
+                    .map(|c| c[1].to_string())
+            })
             // 2. Literal description in reverse window (reversed property order)
-            .or_else(|| desc_literal_re.captures(rev_window).map(|c| c[1].to_string()))
+            .or_else(|| {
+                desc_literal_re
+                    .captures(rev_window)
+                    .map(|c| c[1].to_string())
+            })
             // 3. Computed description in forward window
-            .or_else(|| desc_computed_re.captures(fwd_window).map(|c| c[1].to_string()))
+            .or_else(|| {
+                desc_computed_re
+                    .captures(fwd_window)
+                    .map(|c| c[1].to_string())
+            })
             // 4. Computed description in reverse window
-            .or_else(|| desc_computed_re.captures(rev_window).map(|c| c[1].to_string()))
+            .or_else(|| {
+                desc_computed_re
+                    .captures(rev_window)
+                    .map(|c| c[1].to_string())
+            })
             // 5. Template literal in forward window
-            .or_else(|| desc_template_re.captures(fwd_window).map(|c| strip_interpolations(&c[1])))
+            .or_else(|| {
+                desc_template_re
+                    .captures(fwd_window)
+                    .map(|c| strip_interpolations(&c[1]))
+            })
             // 6. Template literal in reverse window
-            .or_else(|| desc_template_re.captures(rev_window).map(|c| strip_interpolations(&c[1])))
+            .or_else(|| {
+                desc_template_re
+                    .captures(rev_window)
+                    .map(|c| strip_interpolations(&c[1]))
+            })
             .unwrap_or_default();
 
         // Clean up escaped newlines in descriptions
@@ -475,8 +550,11 @@ fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_js
         let cmd = c["cmd"].as_str().unwrap_or("");
         let desc = c["desc"].as_str().unwrap_or("");
         // Skip commands that look like CLI tools or MCP tools (very long descriptions about DOM/browser)
-        !cmd.starts_with("/--") && !desc.contains("tab ID") && !desc.contains("DOM")
-            && cmd.len() >= 4 && cmd.len() <= 30
+        !cmd.starts_with("/--")
+            && !desc.contains("tab ID")
+            && !desc.contains("DOM")
+            && cmd.len() >= 4
+            && cmd.len() <= 30
     });
 
     Ok(commands)
@@ -486,18 +564,24 @@ fn discover_builtin_commands_sync(cli_path: Option<&str>) -> Result<Vec<serde_js
 /// Extracts Zod schema patterns: keyName:u.type().optional().describe("...")
 /// Returns discovered settings with key, type, description, choices.
 #[tauri::command]
-pub async fn discover_settings_schema(app: AppHandle, cli_path: Option<String>) -> Result<Vec<serde_json::Value>, String> {
+pub async fn discover_settings_schema(
+    app: AppHandle,
+    cli_path: Option<String>,
+) -> Result<Vec<serde_json::Value>, String> {
     let cli_path_for_log = cli_path.clone();
-    let fields = tokio::task::spawn_blocking(move || discover_settings_schema_sync(cli_path.as_deref()))
-        .await
-        .map_err(|e| e.to_string())??;
+    let fields =
+        tokio::task::spawn_blocking(move || discover_settings_schema_sync(cli_path.as_deref()))
+            .await
+            .map_err(|e| e.to_string())??;
     let binary_info = if cfg!(debug_assertions) {
         read_claude_binary(cli_path_for_log.as_deref())
             .ok()
-            .map(|binary| json!({
-                "binarySource": binary.source,
-                "binaryPath": binary.path,
-            }))
+            .map(|binary| {
+                json!({
+                    "binarySource": binary.source,
+                    "binaryPath": binary.path,
+                })
+            })
             .unwrap_or_else(|| json!({}))
     } else {
         json!({})
@@ -544,12 +628,40 @@ fn discover_settings_schema_sync(cli_path: Option<&str>) -> Result<Vec<serde_jso
             continue;
         }
         // Skip common JS/minification noise
-        if matches!(key.as_str(),
-            "type" | "name" | "value" | "message" | "data" | "error" | "status" |
-            "content" | "role" | "input" | "output" | "result" | "text" | "key" |
-            "description" | "title" | "path" | "args" | "options" | "config" |
-            "params" | "command" | "event" | "action" | "state" | "context" |
-            "source" | "target" | "children" | "parent" | "index" | "length"
+        if matches!(
+            key.as_str(),
+            "type"
+                | "name"
+                | "value"
+                | "message"
+                | "data"
+                | "error"
+                | "status"
+                | "content"
+                | "role"
+                | "input"
+                | "output"
+                | "result"
+                | "text"
+                | "key"
+                | "description"
+                | "title"
+                | "path"
+                | "args"
+                | "options"
+                | "config"
+                | "params"
+                | "command"
+                | "event"
+                | "action"
+                | "state"
+                | "context"
+                | "source"
+                | "target"
+                | "children"
+                | "parent"
+                | "index"
+                | "length"
         ) {
             continue;
         }
@@ -583,7 +695,11 @@ fn discover_settings_schema_sync(cli_path: Option<&str>) -> Result<Vec<serde_jso
                     c[1].split(',')
                         .filter_map(|s| {
                             let trimmed = s.trim().trim_matches('"');
-                            if !trimmed.is_empty() { Some(trimmed.to_string()) } else { None }
+                            if !trimmed.is_empty() {
+                                Some(trimmed.to_string())
+                            } else {
+                                None
+                            }
                         })
                         .collect()
                 })
@@ -619,7 +735,10 @@ fn discover_settings_schema_sync(cli_path: Option<&str>) -> Result<Vec<serde_jso
 
     // Sort alphabetically for consistency
     fields.sort_by(|a, b| {
-        a["key"].as_str().unwrap_or("").cmp(b["key"].as_str().unwrap_or(""))
+        a["key"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(b["key"].as_str().unwrap_or(""))
     });
 
     Ok(fields)
@@ -637,7 +756,10 @@ pub struct DiscoveredEnvVar {
 /// Mine the Claude CLI binary for environment variable names used via process.env.
 /// Returns the hardcoded catalog merged with any additional names found in the binary.
 #[tauri::command]
-pub async fn discover_env_vars(app: AppHandle, cli_path: Option<String>) -> Result<Vec<DiscoveredEnvVar>, String> {
+pub async fn discover_env_vars(
+    app: AppHandle,
+    cli_path: Option<String>,
+) -> Result<Vec<DiscoveredEnvVar>, String> {
     let cli_path_for_log = cli_path.clone();
     let vars = tokio::task::spawn_blocking(move || discover_env_vars_sync(cli_path.as_deref()))
         .await
@@ -645,10 +767,12 @@ pub async fn discover_env_vars(app: AppHandle, cli_path: Option<String>) -> Resu
     let binary_info = if cfg!(debug_assertions) {
         read_claude_binary(cli_path_for_log.as_deref())
             .ok()
-            .map(|binary| json!({
-                "binarySource": binary.source,
-                "binaryPath": binary.path,
-            }))
+            .map(|binary| {
+                json!({
+                    "binarySource": binary.source,
+                    "binaryPath": binary.path,
+                })
+            })
             .unwrap_or_else(|| json!({}))
     } else {
         json!({})
@@ -670,31 +794,156 @@ pub async fn discover_env_vars(app: AppHandle, cli_path: Option<String>) -> Resu
 
 fn env_var_catalog() -> Vec<DiscoveredEnvVar> {
     vec![
-        DiscoveredEnvVar { name: "ANTHROPIC_API_KEY".into(), description: "Anthropic API key for authentication".into(), category: "api".into(), documented: true },
-        DiscoveredEnvVar { name: "ANTHROPIC_BASE_URL".into(), description: "Custom API base URL (for proxies or alternative endpoints)".into(), category: "api".into(), documented: true },
-        DiscoveredEnvVar { name: "ANTHROPIC_AUTH_TOKEN".into(), description: "Bearer token (alternative to API key)".into(), category: "api".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_API_KEY_HELPER_TTY".into(), description: "Program path that outputs an API key to stdout".into(), category: "api".into(), documented: true },
-        DiscoveredEnvVar { name: "ANTHROPIC_MODEL".into(), description: "Default model override".into(), category: "model".into(), documented: true },
-        DiscoveredEnvVar { name: "ANTHROPIC_SMALL_FAST_MODEL".into(), description: "Small/fast model for lightweight tasks".into(), category: "model".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_MAX_OUTPUT_TOKENS".into(), description: "Maximum output tokens per response".into(), category: "model".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_DISABLE_TELEMETRY".into(), description: "Disable usage telemetry (set to \"1\")".into(), category: "features".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_GIT_BASH_PATH".into(), description: "Path to Git Bash executable (Windows)".into(), category: "features".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_ENABLE_UNIFIED_READ_WRITE".into(), description: "Enable unified read+write tool".into(), category: "features".into(), documented: true },
-        DiscoveredEnvVar { name: "BASH_DEFAULT_TIMEOUT_MS".into(), description: "Default bash command timeout in milliseconds".into(), category: "features".into(), documented: true },
-        DiscoveredEnvVar { name: "BASH_MAX_TIMEOUT_MS".into(), description: "Maximum allowed bash timeout in milliseconds".into(), category: "features".into(), documented: true },
-        DiscoveredEnvVar { name: "DISABLE_AUTOUPDATER".into(), description: "Disable automatic updates (set to \"1\")".into(), category: "features".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_USE_BEDROCK".into(), description: "Use AWS Bedrock instead of direct API (set to \"1\")".into(), category: "aws".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_BEDROCK_REGION".into(), description: "AWS region for Bedrock".into(), category: "aws".into(), documented: true },
-        DiscoveredEnvVar { name: "AWS_PROFILE".into(), description: "AWS credential profile for Bedrock authentication".into(), category: "aws".into(), documented: true },
-        DiscoveredEnvVar { name: "AWS_REGION".into(), description: "AWS region (fallback for Bedrock region)".into(), category: "aws".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_USE_VERTEX".into(), description: "Use Google Vertex AI instead of direct API (set to \"1\")".into(), category: "gcp".into(), documented: true },
-        DiscoveredEnvVar { name: "ANTHROPIC_VERTEX_PROJECT_ID".into(), description: "Google Cloud project ID for Vertex AI".into(), category: "gcp".into(), documented: true },
-        DiscoveredEnvVar { name: "ANTHROPIC_VERTEX_REGION".into(), description: "Google Cloud region for Vertex AI".into(), category: "gcp".into(), documented: true },
-        DiscoveredEnvVar { name: "HTTP_PROXY".into(), description: "HTTP proxy server URL".into(), category: "network".into(), documented: true },
-        DiscoveredEnvVar { name: "HTTPS_PROXY".into(), description: "HTTPS proxy server URL".into(), category: "network".into(), documented: true },
-        DiscoveredEnvVar { name: "NO_PROXY".into(), description: "Comma-separated hosts to bypass proxy".into(), category: "network".into(), documented: true },
-        DiscoveredEnvVar { name: "NODE_TLS_REJECT_UNAUTHORIZED".into(), description: "TLS cert validation — set \"0\" to disable (insecure)".into(), category: "network".into(), documented: true },
-        DiscoveredEnvVar { name: "CLAUDE_CODE_SKIP_BINARY_CHECK".into(), description: "Skip binary integrity check on startup".into(), category: "debug".into(), documented: true },
+        DiscoveredEnvVar {
+            name: "ANTHROPIC_API_KEY".into(),
+            description: "Anthropic API key for authentication".into(),
+            category: "api".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "ANTHROPIC_BASE_URL".into(),
+            description: "Custom API base URL (for proxies or alternative endpoints)".into(),
+            category: "api".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "ANTHROPIC_AUTH_TOKEN".into(),
+            description: "Bearer token (alternative to API key)".into(),
+            category: "api".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_API_KEY_HELPER_TTY".into(),
+            description: "Program path that outputs an API key to stdout".into(),
+            category: "api".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "ANTHROPIC_MODEL".into(),
+            description: "Default model override".into(),
+            category: "model".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "ANTHROPIC_SMALL_FAST_MODEL".into(),
+            description: "Small/fast model for lightweight tasks".into(),
+            category: "model".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_MAX_OUTPUT_TOKENS".into(),
+            description: "Maximum output tokens per response".into(),
+            category: "model".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_DISABLE_TELEMETRY".into(),
+            description: "Disable usage telemetry (set to \"1\")".into(),
+            category: "features".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_GIT_BASH_PATH".into(),
+            description: "Path to Git Bash executable (Windows)".into(),
+            category: "features".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_ENABLE_UNIFIED_READ_WRITE".into(),
+            description: "Enable unified read+write tool".into(),
+            category: "features".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "BASH_DEFAULT_TIMEOUT_MS".into(),
+            description: "Default bash command timeout in milliseconds".into(),
+            category: "features".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "BASH_MAX_TIMEOUT_MS".into(),
+            description: "Maximum allowed bash timeout in milliseconds".into(),
+            category: "features".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "DISABLE_AUTOUPDATER".into(),
+            description: "Disable automatic updates (set to \"1\")".into(),
+            category: "features".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_USE_BEDROCK".into(),
+            description: "Use AWS Bedrock instead of direct API (set to \"1\")".into(),
+            category: "aws".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_BEDROCK_REGION".into(),
+            description: "AWS region for Bedrock".into(),
+            category: "aws".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "AWS_PROFILE".into(),
+            description: "AWS credential profile for Bedrock authentication".into(),
+            category: "aws".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "AWS_REGION".into(),
+            description: "AWS region (fallback for Bedrock region)".into(),
+            category: "aws".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_USE_VERTEX".into(),
+            description: "Use Google Vertex AI instead of direct API (set to \"1\")".into(),
+            category: "gcp".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "ANTHROPIC_VERTEX_PROJECT_ID".into(),
+            description: "Google Cloud project ID for Vertex AI".into(),
+            category: "gcp".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "ANTHROPIC_VERTEX_REGION".into(),
+            description: "Google Cloud region for Vertex AI".into(),
+            category: "gcp".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "HTTP_PROXY".into(),
+            description: "HTTP proxy server URL".into(),
+            category: "network".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "HTTPS_PROXY".into(),
+            description: "HTTPS proxy server URL".into(),
+            category: "network".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "NO_PROXY".into(),
+            description: "Comma-separated hosts to bypass proxy".into(),
+            category: "network".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "NODE_TLS_REJECT_UNAUTHORIZED".into(),
+            description: "TLS cert validation — set \"0\" to disable (insecure)".into(),
+            category: "network".into(),
+            documented: true,
+        },
+        DiscoveredEnvVar {
+            name: "CLAUDE_CODE_SKIP_BINARY_CHECK".into(),
+            description: "Skip binary integrity check on startup".into(),
+            category: "debug".into(),
+            documented: true,
+        },
     ]
 }
 
@@ -725,7 +974,8 @@ fn discover_env_vars_sync(cli_path: Option<&str>) -> Result<Vec<DiscoveredEnvVar
 
     // Sort: documented first, then by category, then by name
     result.sort_by(|a, b| {
-        b.documented.cmp(&a.documented)
+        b.documented
+            .cmp(&a.documented)
             .then(a.category.cmp(&b.category))
             .then(a.name.cmp(&b.name))
     });
@@ -744,7 +994,8 @@ pub async fn fetch_settings_schema(app: AppHandle) -> Result<String, String> {
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .map_err(|e| format!("HTTP client error: {}", e))?;
-        client.get(url)
+        client
+            .get(url)
             .send()
             .and_then(|r| r.error_for_status())
             .and_then(|r| r.text())
@@ -767,7 +1018,10 @@ pub async fn fetch_settings_schema(app: AppHandle) -> Result<String, String> {
 
 /// Scan for plugin/custom command files in multiple locations.
 #[tauri::command]
-pub fn discover_plugin_commands(app: AppHandle, extra_dirs: Vec<String>) -> Result<Vec<serde_json::Value>, String> {
+pub fn discover_plugin_commands(
+    app: AppHandle,
+    extra_dirs: Vec<String>,
+) -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     let mut commands = Vec::new();
 
@@ -783,11 +1037,13 @@ pub fn discover_plugin_commands(app: AppHandle, extra_dirs: Vec<String>) -> Resu
                         if let Some(fm) = content.strip_prefix("---") {
                             if let Some(end) = fm.find("---") {
                                 let meta = &fm[..end];
-                                let name = meta.lines()
+                                let name = meta
+                                    .lines()
                                     .find(|l| l.trim().starts_with("name:"))
                                     .and_then(|l| l.trim().strip_prefix("name:"))
                                     .map(|s| s.trim().to_string());
-                                let desc = meta.lines()
+                                let desc = meta
+                                    .lines()
                                     .find(|l| l.trim().starts_with("description:"))
                                     .and_then(|l| l.trim().strip_prefix("description:"))
                                     .map(|s| s.trim().chars().take(120).collect::<String>());
@@ -803,14 +1059,19 @@ pub fn discover_plugin_commands(app: AppHandle, extra_dirs: Vec<String>) -> Resu
                 } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
                     if let Some(parent) = path.parent() {
                         if parent.file_name().and_then(|n| n.to_str()) == Some("commands") {
-                            let name = path.file_stem()
+                            let name = path
+                                .file_stem()
                                 .and_then(|s| s.to_str())
                                 .unwrap_or("")
                                 .to_string();
                             if !name.is_empty() {
                                 let desc = std::fs::read_to_string(&path)
                                     .ok()
-                                    .and_then(|c| c.lines().next().map(|l| l.trim().trim_start_matches('#').trim().to_string()))
+                                    .and_then(|c| {
+                                        c.lines().next().map(|l| {
+                                            l.trim().trim_start_matches('#').trim().to_string()
+                                        })
+                                    })
                                     .unwrap_or_default();
                                 commands.push(serde_json::json!({
                                     "cmd": format!("/{}", name),
@@ -1023,7 +1284,9 @@ pub fn build_claude_args(config: SessionConfig) -> Result<Vec<String>, String> {
 /// Walks ~/.claude/projects/*/*.jsonl, caps at 200 most recent files by mtime,
 /// and counts `<command-name>X</command-name>` patterns.
 #[tauri::command]
-pub async fn scan_command_usage(app: AppHandle) -> Result<std::collections::HashMap<String, u64>, String> {
+pub async fn scan_command_usage(
+    app: AppHandle,
+) -> Result<std::collections::HashMap<String, u64>, String> {
     let counts = tokio::task::spawn_blocking(scan_command_usage_sync)
         .await
         .map_err(|e| e.to_string())??;
@@ -1052,11 +1315,15 @@ fn scan_command_usage_sync() -> Result<std::collections::HashMap<String, u64>, S
     let entries = std::fs::read_dir(&projects_dir).map_err(|e| e.to_string())?;
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.is_dir() { continue; }
+        if !path.is_dir() {
+            continue;
+        }
         if let Ok(dir_entries) = std::fs::read_dir(&path) {
             for file in dir_entries.flatten() {
                 let fpath = file.path();
-                if fpath.extension().and_then(|e| e.to_str()) != Some("jsonl") { continue; }
+                if fpath.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                    continue;
+                }
                 if let Ok(meta) = std::fs::metadata(&fpath) {
                     let mtime = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
                     files.push((mtime, fpath));
@@ -1094,36 +1361,57 @@ fn scan_command_usage_sync() -> Result<std::collections::HashMap<String, u64>, S
 /// Run `claude plugin list --available --json` and return raw JSON output.
 #[tauri::command]
 pub async fn plugin_list() -> Result<String, String> {
-    tokio::task::spawn_blocking(|| run_claude_cli(&["plugin", "list", "--available", "--json"], "claude plugin list"))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(|| {
+        run_claude_cli(
+            &["plugin", "list", "--available", "--json"],
+            "claude plugin list",
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Run `claude plugin install <name> --scope <scope>`.
 #[tauri::command]
 pub async fn plugin_install(name: String, scope: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || run_claude_cli(&["plugin", "install", &name, "--scope", &scope], "plugin install"))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        run_claude_cli(
+            &["plugin", "install", &name, "--scope", &scope],
+            "plugin install",
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Run `claude plugin uninstall <name>`.
 #[tauri::command]
 pub async fn plugin_uninstall(name: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || run_claude_cli(&["plugin", "uninstall", &name], "plugin uninstall"))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        run_claude_cli(&["plugin", "uninstall", &name], "plugin uninstall")
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Run `claude plugin enable <name>`.
 #[tauri::command]
 pub async fn plugin_enable(name: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || run_claude_cli(&["plugin", "enable", &name], "plugin enable"))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        run_claude_cli(&["plugin", "enable", &name], "plugin enable")
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Run `claude plugin disable <name>`.
 #[tauri::command]
 pub async fn plugin_disable(name: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || run_claude_cli(&["plugin", "disable", &name], "plugin disable"))
-        .await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || {
+        run_claude_cli(&["plugin", "disable", &name], "plugin disable")
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -1136,7 +1424,10 @@ mod tests {
 
     /// Valid content with an embedded marker for origin verification.
     fn valid_content_with_marker() -> String {
-        format!(r#"stuff name:"review",description:"Review code" {} more stuff"#, TEST_MARKER)
+        format!(
+            r#"stuff name:"review",description:"Review code" {} more stuff"#,
+            TEST_MARKER
+        )
     }
 
     // --- read_claude_binary tests ---
@@ -1152,7 +1443,10 @@ mod tests {
         assert!(result.is_ok(), "should read valid JS file directly");
         let returned = result.unwrap();
         // Verify the content came from our temp file, not a system fallback
-        assert!(returned.content.contains(TEST_MARKER), "should return content from the given path");
+        assert!(
+            returned.content.contains(TEST_MARKER),
+            "should return content from the given path"
+        );
         assert_eq!(returned.source, "direct_cli_path");
         assert_eq!(returned.path.as_deref(), Some(js_path.to_str().unwrap()));
     }
@@ -1172,8 +1466,10 @@ mod tests {
         match result {
             Ok(content) => {
                 // If fallback succeeded, verify it did NOT return our invalid content
-                assert!(!content.content.contains(TEST_MARKER),
-                    "invalid content should be skipped; fallback returned system binary");
+                assert!(
+                    !content.content.contains(TEST_MARKER),
+                    "invalid content should be skipped; fallback returned system binary"
+                );
             }
             Err(_) => {
                 // All fallbacks failed too — expected on machines without Claude
@@ -1200,10 +1496,16 @@ mod tests {
         std::fs::write(&cmd_path, &shim_content).unwrap();
 
         let result = read_claude_binary(Some(cmd_path.to_str().unwrap()));
-        assert!(result.is_ok(), "should resolve .cmd shim to JS file: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "should resolve .cmd shim to JS file: {:?}",
+            result.err()
+        );
         let returned = result.unwrap();
-        assert!(returned.content.contains(TEST_MARKER),
-            "should return content from the .cmd shim's JS target");
+        assert!(
+            returned.content.contains(TEST_MARKER),
+            "should return content from the .cmd shim's JS target"
+        );
         assert_eq!(returned.source, "cmd_shim_js");
         assert_eq!(returned.path.as_deref(), Some(js_path.to_str().unwrap()));
     }
@@ -1219,17 +1521,16 @@ mod tests {
 
         // Create a .cmd shim pointing to it
         let cmd_path = dir.path().join("claude.cmd");
-        let shim_content = format!(
-            "@\"%~dp0\\node.exe\" \"{}\" %*\r\n",
-            js_path.display()
-        );
+        let shim_content = format!("@\"%~dp0\\node.exe\" \"{}\" %*\r\n", js_path.display());
         std::fs::write(&cmd_path, &shim_content).unwrap();
 
         let result = read_claude_binary(Some(cmd_path.to_str().unwrap()));
         match result {
             Ok(content) => {
-                assert!(!content.content.contains(TEST_MARKER),
-                    "invalid JS content via shim should not be returned");
+                assert!(
+                    !content.content.contains(TEST_MARKER),
+                    "invalid JS content via shim should not be returned"
+                );
             }
             Err(_) => {
                 // All fallbacks failed — expected behavior
@@ -1244,10 +1545,7 @@ mod tests {
         // .cmd shim points to a JS file that does not exist
         let cmd_path = dir.path().join("claude.cmd");
         let missing_path = dir.path().join("nonexistent.js");
-        let shim_content = format!(
-            "@\"node\" \"{}\" %*\r\n",
-            missing_path.display()
-        );
+        let shim_content = format!("@\"node\" \"{}\" %*\r\n", missing_path.display());
         std::fs::write(&cmd_path, &shim_content).unwrap();
 
         let result = read_claude_binary(Some(cmd_path.to_str().unwrap()));
@@ -1262,7 +1560,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         // Create the sibling node_modules structure with marked content
-        let sibling_dir = dir.path()
+        let sibling_dir = dir
+            .path()
             .join("node_modules")
             .join("@anthropic-ai")
             .join("claude-code");
@@ -1275,12 +1574,22 @@ mod tests {
         std::fs::write(&fake_bin, "not-valid-content").unwrap();
 
         let result = read_claude_binary(Some(fake_bin.to_str().unwrap()));
-        assert!(result.is_ok(), "should fall through to sibling node_modules: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "should fall through to sibling node_modules: {:?}",
+            result.err()
+        );
         let returned = result.unwrap();
-        assert!(returned.content.contains(TEST_MARKER),
-            "should return content from sibling node_modules");
+        let expected_cli = sibling_dir.join("cli.js");
+        assert!(
+            returned.content.contains(TEST_MARKER),
+            "should return content from sibling node_modules"
+        );
         assert_eq!(returned.source, "sibling_node_modules");
-        assert!(returned.path.as_deref().unwrap_or("").ends_with("node_modules/@anthropic-ai/claude-code/cli.js"));
+        assert_eq!(
+            returned.path.as_deref(),
+            Some(expected_cli.to_str().unwrap())
+        );
     }
 
     #[test]
@@ -1318,15 +1627,20 @@ mod tests {
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         assert!(result.is_ok());
         let commands = result.unwrap();
-        assert!(commands.len() >= 4, "should extract at least 4 commands, got {}", commands.len());
+        assert!(
+            commands.len() >= 4,
+            "should extract at least 4 commands, got {}",
+            commands.len()
+        );
 
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
         assert!(names.contains(&"/review"), "should contain /review");
         assert!(names.contains(&"/init"), "should contain /init");
         assert!(names.contains(&"/compact"), "should contain /compact");
-        assert!(names.contains(&"/bug-report"), "should contain /bug-report (hyphens allowed)");
+        assert!(
+            names.contains(&"/bug-report"),
+            "should contain /bug-report (hyphens allowed)"
+        );
     }
 
     #[test]
@@ -1339,7 +1653,8 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let review_count = commands.iter()
+        let review_count = commands
+            .iter()
             .filter(|c| c["cmd"].as_str() == Some("/review"))
             .count();
         assert_eq!(review_count, 1, "should deduplicate /review");
@@ -1358,12 +1673,13 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
         assert!(names.contains(&"/review"), "/review should be kept");
-        assert!(!names.contains(&"/browser-tool"), "DOM-related tool should be filtered");
+        assert!(
+            !names.contains(&"/browser-tool"),
+            "DOM-related tool should be filtered"
+        );
     }
 
     #[test]
@@ -1377,7 +1693,10 @@ mod tests {
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
         let desc = commands[0]["desc"].as_str().unwrap();
-        assert!(!desc.contains("\\n"), "escaped newlines should be replaced with spaces");
+        assert!(
+            !desc.contains("\\n"),
+            "escaped newlines should be replaced with spaces"
+        );
         assert!(desc.contains("Line one Line two"));
     }
 
@@ -1395,10 +1714,11 @@ mod tests {
         assert!(result.is_ok());
         // /ab is only 3 chars, filtered by cmd.len() >= 4
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
-        assert!(!names.contains(&"/ab"), "/ab should be filtered (too short)");
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
+        assert!(
+            !names.contains(&"/ab"),
+            "/ab should be filtered (too short)"
+        );
     }
 
     #[test]
@@ -1416,15 +1736,23 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
-        assert!(names.contains(&"/tasks"), "should find /tasks with intervening aliases");
-        assert!(names.contains(&"/branch"), "should find /branch with intervening aliases");
-        assert!(names.contains(&"/permissions"), "should find /permissions with intervening aliases");
+        assert!(
+            names.contains(&"/tasks"),
+            "should find /tasks with intervening aliases"
+        );
+        assert!(
+            names.contains(&"/branch"),
+            "should find /branch with intervening aliases"
+        );
+        assert!(
+            names.contains(&"/permissions"),
+            "should find /permissions with intervening aliases"
+        );
 
-        let tasks_desc = commands.iter()
+        let tasks_desc = commands
+            .iter()
             .find(|c| c["cmd"].as_str() == Some("/tasks"))
             .and_then(|c| c["desc"].as_str())
             .unwrap();
@@ -1445,18 +1773,26 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
-        assert!(names.contains(&"/rewind"), "should find /rewind with reversed order");
-        assert!(names.contains(&"/release-notes"), "should find /release-notes with reversed order");
+        assert!(
+            names.contains(&"/rewind"),
+            "should find /rewind with reversed order"
+        );
+        assert!(
+            names.contains(&"/release-notes"),
+            "should find /release-notes with reversed order"
+        );
 
-        let rewind_desc = commands.iter()
+        let rewind_desc = commands
+            .iter()
             .find(|c| c["cmd"].as_str() == Some("/rewind"))
             .and_then(|c| c["desc"].as_str())
             .unwrap();
-        assert!(rewind_desc.contains("Restore"), "rewind should have its description");
+        assert!(
+            rewind_desc.contains("Restore"),
+            "rewind should have its description"
+        );
     }
 
     #[test]
@@ -1473,18 +1809,26 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
-        assert!(names.contains(&"/login"), "should find /login with computed description");
-        assert!(names.contains(&"/terminal-setup"), "should find /terminal-setup with computed description");
+        assert!(
+            names.contains(&"/login"),
+            "should find /login with computed description"
+        );
+        assert!(
+            names.contains(&"/terminal-setup"),
+            "should find /terminal-setup with computed description"
+        );
 
-        let login_desc = commands.iter()
+        let login_desc = commands
+            .iter()
             .find(|c| c["cmd"].as_str() == Some("/login"))
             .and_then(|c| c["desc"].as_str())
             .unwrap();
-        assert!(login_desc.contains("Anthropic"), "login should have first branch of ternary as description");
+        assert!(
+            login_desc.contains("Anthropic"),
+            "login should have first branch of ternary as description"
+        );
     }
 
     #[test]
@@ -1498,18 +1842,26 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
-        assert!(names.contains(&"/model"), "should find /model with template literal description");
+        assert!(
+            names.contains(&"/model"),
+            "should find /model with template literal description"
+        );
 
-        let model_desc = commands.iter()
+        let model_desc = commands
+            .iter()
             .find(|c| c["cmd"].as_str() == Some("/model"))
             .and_then(|c| c["desc"].as_str())
             .unwrap();
-        assert!(model_desc.contains("Set the AI model"), "model should have template literal text");
-        assert!(!model_desc.contains("${"), "interpolations should be stripped");
+        assert!(
+            model_desc.contains("Set the AI model"),
+            "model should have template literal text"
+        );
+        assert!(
+            !model_desc.contains("${"),
+            "interpolations should be stripped"
+        );
     }
 
     #[test]
@@ -1528,13 +1880,15 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
-        assert!(names.contains(&"/fast"), "should find /fast even without extractable description");
+        assert!(
+            names.contains(&"/fast"),
+            "should find /fast even without extractable description"
+        );
 
-        let fast_desc = commands.iter()
+        let fast_desc = commands
+            .iter()
             .find(|c| c["cmd"].as_str() == Some("/fast"))
             .and_then(|c| c["desc"].as_str())
             .unwrap();
@@ -1556,17 +1910,22 @@ mod tests {
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
 
-        let foo_desc = commands.iter()
+        let foo_desc = commands
+            .iter()
             .find(|c| c["cmd"].as_str() == Some("/foo"))
             .and_then(|c| c["desc"].as_str())
             .unwrap();
-        let bar_desc = commands.iter()
+        let bar_desc = commands
+            .iter()
             .find(|c| c["cmd"].as_str() == Some("/bar"))
             .and_then(|c| c["desc"].as_str())
             .unwrap();
 
         assert_eq!(foo_desc, "", "/foo should not steal /bar's description");
-        assert_eq!(bar_desc, "Bar description", "/bar should keep its own description");
+        assert_eq!(
+            bar_desc, "Bar description",
+            "/bar should keep its own description"
+        );
     }
 
     #[test]
@@ -1585,14 +1944,18 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
         assert!(names.contains(&"/commit"), "real command should be found");
-        assert!(!names.contains(&"/Python"), "highlight.js language should be filtered");
+        assert!(
+            !names.contains(&"/Python"),
+            "highlight.js language should be filtered"
+        );
         assert!(!names.contains(&"/SIGABRT"), "signal should be filtered");
-        assert!(!names.contains(&"/HTMLDivElement"), "HTML element should be filtered");
+        assert!(
+            !names.contains(&"/HTMLDivElement"),
+            "HTML element should be filtered"
+        );
     }
 
     #[test]
@@ -1608,11 +1971,12 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
-        assert!(!names.contains(&"/heapdump"), "isHidden:!0 command should be filtered");
+        assert!(
+            !names.contains(&"/heapdump"),
+            "isHidden:!0 command should be filtered"
+        );
         assert!(names.contains(&"/help"), "visible command should be kept");
     }
 
@@ -1629,11 +1993,12 @@ mod tests {
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
-        let names: Vec<&str> = commands.iter()
-            .filter_map(|c| c["cmd"].as_str())
-            .collect();
+        let names: Vec<&str> = commands.iter().filter_map(|c| c["cmd"].as_str()).collect();
 
-        assert!(!names.contains(&"/mcp__"), "MCP template fragment should be filtered");
+        assert!(
+            !names.contains(&"/mcp__"),
+            "MCP template fragment should be filtered"
+        );
         assert!(names.contains(&"/mcp"), "real /mcp command should be kept");
     }
 
@@ -1659,7 +2024,10 @@ mod tests {
         let v = verbose.unwrap();
         assert_eq!(v["type"], "boolean");
         assert_eq!(v["optional"], true);
-        assert!(v["description"].as_str().unwrap().contains("verbose logging"));
+        assert!(v["description"]
+            .as_str()
+            .unwrap()
+            .contains("verbose logging"));
     }
 
     #[test]
@@ -1679,8 +2047,12 @@ mod tests {
         assert!(theme.is_some(), "should find themeMode field");
         let t = theme.unwrap();
         assert_eq!(t["type"], "enum");
-        let choices: Vec<&str> = t["choices"].as_array().unwrap()
-            .iter().filter_map(|v| v.as_str()).collect();
+        let choices: Vec<&str> = t["choices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
         assert_eq!(choices, vec!["light", "dark", "system"]);
     }
 
@@ -1700,11 +2072,15 @@ mod tests {
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         let fields = result.unwrap();
-        let keys: Vec<&str> = fields.iter()
-            .filter_map(|f| f["key"].as_str())
-            .collect();
-        assert!(!keys.contains(&"type"), "noise key 'type' should be skipped");
-        assert!(!keys.contains(&"value"), "noise key 'value' should be skipped");
+        let keys: Vec<&str> = fields.iter().filter_map(|f| f["key"].as_str()).collect();
+        assert!(
+            !keys.contains(&"type"),
+            "noise key 'type' should be skipped"
+        );
+        assert!(
+            !keys.contains(&"value"),
+            "noise key 'value' should be skipped"
+        );
         assert!(keys.contains(&"customSetting"), "valid key should be kept");
     }
 
@@ -1725,11 +2101,15 @@ mod tests {
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         let fields = result.unwrap();
-        let keys: Vec<&str> = fields.iter()
-            .filter_map(|f| f["key"].as_str())
-            .collect();
-        assert!(!keys.contains(&"noDescription"), "field without .describe() should be skipped");
-        assert!(keys.contains(&"hasDescription"), "field with .describe() should be kept");
+        let keys: Vec<&str> = fields.iter().filter_map(|f| f["key"].as_str()).collect();
+        assert!(
+            !keys.contains(&"noDescription"),
+            "field without .describe() should be skipped"
+        );
+        assert!(
+            keys.contains(&"hasDescription"),
+            "field with .describe() should be kept"
+        );
     }
 
     #[test]
@@ -1742,7 +2122,10 @@ mod tests {
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty(), "no Zod patterns means no schema fields");
+        assert!(
+            result.unwrap().is_empty(),
+            "no Zod patterns means no schema fields"
+        );
     }
 
     #[test]
@@ -1760,10 +2143,12 @@ mod tests {
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         let fields = result.unwrap();
-        let keys: Vec<&str> = fields.iter()
-            .filter_map(|f| f["key"].as_str())
-            .collect();
-        assert_eq!(keys, vec!["alphaSetting", "middleSetting", "zebraSetting"], "should be sorted alphabetically");
+        let keys: Vec<&str> = fields.iter().filter_map(|f| f["key"].as_str()).collect();
+        assert_eq!(
+            keys,
+            vec!["alphaSetting", "middleSetting", "zebraSetting"],
+            "should be sorted alphabetically"
+        );
     }
 
     // --- build_claude_args tests ---
@@ -1779,8 +2164,14 @@ mod tests {
         let idx = args.iter().position(|a| a == "--project-dir").unwrap();
         let dir_arg = &args[idx + 1];
         #[cfg(not(target_os = "windows"))]
-        assert_eq!(dir_arg, "/home/user/project", "Linux paths must keep forward slashes");
+        assert_eq!(
+            dir_arg, "/home/user/project",
+            "Linux paths must keep forward slashes"
+        );
         #[cfg(target_os = "windows")]
-        assert_eq!(dir_arg, "\\home\\user\\project", "Windows should normalize to backslashes");
+        assert_eq!(
+            dir_arg, "\\home\\user\\project",
+            "Windows should normalize to backslashes"
+        );
     }
 }

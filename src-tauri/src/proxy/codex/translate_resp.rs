@@ -1,61 +1,99 @@
+use super::response_shape::{
+    build_translation_summary, shape_function_calls, ResponseTranslationSummary,
+};
 use super::types::anthropic_usage_json;
 use serde_json::{json, Value};
 
+pub struct TranslatedResponse {
+    pub body: Vec<u8>,
+    pub summary: ResponseTranslationSummary,
+}
+
 /// Translate an OpenAI Codex response body into Anthropic Messages API format.
 pub fn translate_response(body: &[u8], original_model: &str) -> Result<Vec<u8>, String> {
-    let resp: Value = serde_json::from_slice(body)
-        .map_err(|e| format!("Failed to parse Codex response: {e}"))?;
+    translate_response_with_summary(body, original_model).map(|translated| translated.body)
+}
+
+pub fn translate_response_with_summary(
+    body: &[u8],
+    original_model: &str,
+) -> Result<TranslatedResponse, String> {
+    let resp: Value =
+        serde_json::from_slice(body).map_err(|e| format!("Failed to parse Codex response: {e}"))?;
 
     let mut content: Vec<Value> = Vec::new();
     let mut stop_reason = "end_turn".to_string();
+    let mut text_block_count = 0usize;
+    let output_count = resp
+        .get("output")
+        .and_then(|v| v.as_array())
+        .map(|output| output.len())
+        .unwrap_or(0);
+    let raw_function_calls = resp
+        .get("output")
+        .and_then(|v| v.as_array())
+        .map(|output| {
+            output
+                .iter()
+                .filter(|item| item.get("type").and_then(|v| v.as_str()) == Some("function_call"))
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let shaped_tool_calls = shape_function_calls(&raw_function_calls);
 
     // Process output items
     if let Some(output) = resp.get("output").and_then(|v| v.as_array()) {
+        let mut function_call_index = 0usize;
+
         for item in output {
             match item.get("type").and_then(|v| v.as_str()) {
                 Some("message") => {
                     if let Some(blocks) = item.get("content").and_then(|v| v.as_array()) {
                         for block in blocks {
-                            if let Some("output_text") = block.get("type").and_then(|v| v.as_str()) {
+                            if let Some("output_text") = block.get("type").and_then(|v| v.as_str())
+                            {
                                 if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
                                     content.push(json!({"type": "text", "text": text}));
+                                    text_block_count += 1;
                                 }
                             }
                         }
                     }
                 }
                 Some("function_call") => {
-                    let call_id = item.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
-                    let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                    let arguments = item.get("arguments").and_then(|v| v.as_str()).unwrap_or("{}");
-                    let input: Value = serde_json::from_str(arguments).unwrap_or(json!({}));
-                    content.push(json!({
-                        "type": "tool_use",
-                        "id": call_id,
-                        "name": name,
-                        "input": input,
-                    }));
-                    stop_reason = "tool_use".to_string();
+                    let decision = &shaped_tool_calls.decisions[function_call_index];
+                    function_call_index += 1;
+                    if decision.emit {
+                        content.push(json!({
+                            "type": "tool_use",
+                            "id": decision.call.id,
+                            "name": decision.call.name,
+                            "input": decision.call.input,
+                        }));
+                    }
                 }
                 _ => {}
             }
         }
     }
 
+    if shaped_tool_calls.summary.emitted_tool_call_count > 0 {
+        stop_reason = "tool_use".to_string();
+    }
+
     // Map stop reason from status
     if let Some(status) = resp.get("status").and_then(|v| v.as_str()) {
-        match status {
-            "incomplete" => {
-                if let Some(reason) = resp.get("incomplete_details")
-                    .and_then(|v| v.get("reason"))
-                    .and_then(|v| v.as_str())
-                {
-                    if reason == "max_output_tokens" {
-                        stop_reason = "max_tokens".to_string();
-                    }
+        if status == "incomplete" {
+            if let Some(reason) = resp
+                .get("incomplete_details")
+                .and_then(|v| v.get("reason"))
+                .and_then(|v| v.as_str())
+            {
+                if reason == "max_output_tokens" {
+                    stop_reason = "max_tokens".to_string();
                 }
             }
-            _ => {} // "completed" → keep existing stop_reason
         }
     }
 
@@ -66,8 +104,14 @@ pub fn translate_response(body: &[u8], original_model: &str) -> Result<Vec<u8>, 
 
     // Build usage
     let usage = resp.get("usage").cloned().unwrap_or(json!({}));
-    let input_tokens = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-    let output_tokens = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+    let input_tokens = usage
+        .get("input_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let output_tokens = usage
+        .get("output_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     let service_tier = resp.get("service_tier").and_then(|v| v.as_str());
 
     let anthropic_resp = json!({
@@ -81,7 +125,17 @@ pub fn translate_response(body: &[u8], original_model: &str) -> Result<Vec<u8>, 
         "usage": anthropic_usage_json(input_tokens, output_tokens, service_tier),
     });
 
-    serde_json::to_vec(&anthropic_resp).map_err(|e| format!("Failed to serialize: {e}"))
+    let body =
+        serde_json::to_vec(&anthropic_resp).map_err(|e| format!("Failed to serialize: {e}"))?;
+    Ok(TranslatedResponse {
+        body,
+        summary: build_translation_summary(
+            output_count,
+            text_block_count,
+            &shaped_tool_calls.summary,
+            &stop_reason,
+        ),
+    })
 }
 
 #[cfg(test)]
@@ -103,7 +157,8 @@ mod tests {
         let result = translate_response(
             serde_json::to_vec(&codex_resp).unwrap().as_slice(),
             "claude-opus-4-6",
-        ).unwrap();
+        )
+        .unwrap();
         let resp: Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(resp["type"], "message");
         assert_eq!(resp["role"], "assistant");
@@ -128,11 +183,41 @@ mod tests {
         let result = translate_response(
             serde_json::to_vec(&codex_resp).unwrap().as_slice(),
             "claude-opus-4-6",
-        ).unwrap();
+        )
+        .unwrap();
         let resp: Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(resp["content"][0]["type"], "tool_use");
         assert_eq!(resp["content"][0]["name"], "read_file");
         assert_eq!(resp["content"][0]["input"]["path"], "test.txt");
         assert_eq!(resp["stop_reason"], "tool_use");
+    }
+
+    #[test]
+    fn test_multi_function_call_worktree_agents_are_shaped() {
+        let codex_resp = json!({
+            "id": "resp_789",
+            "output": [
+                {"type": "function_call", "call_id": "agent-1", "name": "Agent", "arguments": "{\"task\":\"first\",\"isolation\":\"worktree\"}"},
+                {"type": "function_call", "call_id": "agent-2", "name": "Agent", "arguments": "{\"task\":\"second\",\"isolation\":\"worktree\"}"},
+                {"type": "function_call", "call_id": "read-1", "name": "read_file", "arguments": "{\"path\":\"README.md\"}"}
+            ],
+            "usage": {"input_tokens": 20, "output_tokens": 10},
+            "status": "completed",
+        });
+        let translated = translate_response_with_summary(
+            serde_json::to_vec(&codex_resp).unwrap().as_slice(),
+            "claude-opus-4-6",
+        )
+        .unwrap();
+        let resp: Value = serde_json::from_slice(&translated.body).unwrap();
+
+        assert_eq!(resp["content"].as_array().unwrap().len(), 2);
+        assert_eq!(resp["content"][0]["id"], "agent-1");
+        assert_eq!(resp["content"][1]["id"], "read-1");
+        assert_eq!(translated.summary.upstream_tool_call_count, 3);
+        assert_eq!(translated.summary.emitted_tool_call_count, 2);
+        assert_eq!(translated.summary.suppressed_tool_call_count, 1);
+        assert_eq!(translated.summary.suppressed_tool_call_ids, vec!["agent-2"]);
+        assert!(translated.summary.shaping_applied);
     }
 }
