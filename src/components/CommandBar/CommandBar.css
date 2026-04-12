@@ -86,14 +86,14 @@
   align-items: center;
 }
 
-/* [CB-14] Scroll area capped at 72px (~4 rows) with overflow-y: auto */
+/* [CB-14] Scroll area capped at 126px (~7 rows) with overflow-y: auto */
 .command-bar-scroll {
   display: flex;
   gap: 3px;
   flex: 1;
   min-width: 0;
   flex-wrap: wrap;
-  max-height: 72px;      /* ~4 rows of command pills (16px each + gaps) */
+  max-height: 126px;     /* ~7 rows of command pills (16px each + gaps) */
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) transparent;

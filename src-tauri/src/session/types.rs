@@ -28,6 +28,9 @@ pub enum PermissionMode {
 #[serde(rename_all = "camelCase")]
 pub struct SessionConfig {
     pub working_dir: String,
+    // [ST-01] launch_working_dir: directory at session launch; working_dir may change via worktree events
+    #[serde(default)]
+    pub launch_working_dir: Option<String>,
     pub model: Option<String>,
     pub permission_mode: PermissionMode,
     pub dangerously_skip_permissions: bool,
@@ -60,6 +63,7 @@ impl Default for SessionConfig {
     fn default() -> Self {
         Self {
             working_dir: String::new(),
+            launch_working_dir: None,
             model: None,
             permission_mode: PermissionMode::Default,
             dangerously_skip_permissions: false,

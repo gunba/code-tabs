@@ -1,4 +1,5 @@
 mod commands;
+pub mod discovery;
 mod file_watcher;
 mod observability;
 mod path_utils;

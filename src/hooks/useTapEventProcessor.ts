@@ -210,7 +210,6 @@ export function useTapEventProcessor(
         const agentId = isSidechain ? (subTracker.getLastActiveAgentId?.() ?? null) : null;
 
         if (event.kind === "TurnStart" && !isSidechain) {
-          activityStore.markUserMessage(sid);
           activityTurnCounter++;
           activityStore.startTurn(sid, `turn-${activityTurnCounter}`);
         }
@@ -408,7 +407,9 @@ export function useTapEventProcessor(
         }
       }
 
+      // [AS-01] markUserMessage on UserInput/SlashCommand (not TurnStart) — response window starts at real user input
       if (event.kind === "UserInput" || event.kind === "SlashCommand") {
+        useActivityStore.getState().markUserMessage(sid);
         setUserPrompt(event.display.slice(0, 200));
       }
 

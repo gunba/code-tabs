@@ -1,0 +1,165 @@
+name: Discovery Audit
+
+# Detects drift between Claude Tabs's settings/command/env-var discovery and
+# the official Claude Code documentation. Non-blocking by design: the purpose
+# is to surface drift for a human to triage, not to gate builds.
+
+on:
+  pull_request:
+    paths:
+      - "src-tauri/src/discovery/**"
+      - "src-tauri/src/bin/discover_audit.rs"
+      - "src-tauri/src/commands/cli.rs"
+      - "src-tauri/tests/fixtures/*.html"
+      - "src-tauri/Cargo.toml"
+      - ".github/workflows/discovery-audit.yml"
+  schedule:
+    # Weekly at Mondays 07:00 UTC — catches doc-side additions even when
+    # no related PR was opened. Adjust cron without going through :00/:30 bursts.
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write  # for posting PR comments (non-blocking).
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    # Advisory only — don't fail the PR. The summary is the signal.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Resolve Claude Code path
+        id: claude_path
+        shell: bash
+        run: |
+          # The npm-global install lives under ~/.npm-global or /usr/local/lib.
+          # `npm root -g` is the authoritative answer.
+          CC_PATH="$(npm root -g)/@anthropic-ai/claude-code/cli.js"
+          if [[ ! -f "$CC_PATH" ]]; then
+            echo "::error::Claude Code cli.js not found at $CC_PATH"
+            exit 1
+          fi
+          CC_VERSION="$(npm view @anthropic-ai/claude-code version)"
+          echo "path=$CC_PATH" >> "$GITHUB_OUTPUT"
+          echo "version=$CC_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Claude Code $CC_VERSION at $CC_PATH"
+
+      - name: Build discover_audit
+        working-directory: src-tauri
+        run: cargo build --bin discover_audit --release
+
+      - name: Refresh docs fixtures (scheduled runs only)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          ./src-tauri/target/release/discover_audit fetch-docs \
+            --out src-tauri/tests/fixtures
+
+      - name: Run discovery audit
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          ./src-tauri/target/release/discover_audit \
+            audit \
+            --cli-path "${{ steps.claude_path.outputs.path }}" \
+            --format json > audit.json
+          EXIT=$?
+          set -e
+          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
+          cat audit.json
+
+      - name: Generate step summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ ! -f audit.json ]]; then
+            echo "## Discovery audit: no output" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          CC_VERSION="${{ steps.claude_path.outputs.version }}"
+          {
+            echo "## Discovery audit — Claude Code \`$CC_VERSION\`"
+            echo ""
+            TOTAL=$(jq -r .totalMissing audit.json)
+            if [[ "$TOTAL" == "0" ]]; then
+              echo ":white_check_mark: No drift detected."
+            else
+              echo ":warning: **$TOTAL missing** item(s). See details below."
+            fi
+            echo ""
+            for section in settings commands envVars; do
+              M=$(jq -r ".${section}.missing | length" audit.json)
+              E=$(jq -r ".${section}.extra | length" audit.json)
+              echo "### ${section}"
+              echo ""
+              echo "- missing (docs says, we don't find): **$M**"
+              echo "- extra (we find, docs doesn't list): $E (informational)"
+              if [[ "$M" -gt 0 ]]; then
+                echo ""
+                echo "<details><summary>Missing items</summary>"
+                echo ""
+                echo '```'
+                jq -r ".${section}.missing[]" audit.json
+                echo '```'
+                echo ""
+                echo "</details>"
+              fi
+              echo ""
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on PR (when missing > 0)
+        if: github.event_name == 'pull_request' && steps.audit.outputs.exit_code != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('audit.json', 'utf8'));
+            const { totalMissing, settings, commands, envVars } = report;
+            const fmtList = (items, cap = 15) => {
+              if (items.length === 0) return '_(none)_';
+              const shown = items.slice(0, cap);
+              const more = items.length - cap;
+              return '```\n' + shown.join('\n') + '\n```' + (more > 0 ? `\n…and ${more} more` : '');
+            };
+            const body = [
+              `## Discovery audit — ${totalMissing} missing item(s)`,
+              '',
+              'Drift between our discovery pipeline and `code.claude.com/docs`.',
+              '',
+              `### Settings (${settings.missing.length} missing)`,
+              fmtList(settings.missing),
+              `### Commands (${commands.missing.length} missing)`,
+              fmtList(commands.missing),
+              `### Env vars (${envVars.missing.length} missing)`,
+              fmtList(envVars.missing),
+              '',
+              '_This check is advisory only — drift does not block the PR._',
+              '_To reproduce locally: `npm run discover:audit`._',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

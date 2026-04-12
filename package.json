@@ -18,7 +18,10 @@
     "proof:lint": "python tools/proofd.py lint",
     "proof:mcp": "python tools/proofd.py mcp",
     "codex:handoff": "python tools/codex_handoff.py",
-    "codex:delegate": "python tools/codex_delegate.py"
+    "codex:delegate": "python tools/codex_delegate.py",
+    "discover:dump": "cargo run --manifest-path src-tauri/Cargo.toml --bin discover_audit -- dump",
+    "discover:audit": "cargo run --manifest-path src-tauri/Cargo.toml --bin discover_audit -- audit",
+    "discover:fetch-docs": "cargo run --manifest-path src-tauri/Cargo.toml --bin discover_audit -- fetch-docs --out src-tauri/tests/fixtures"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",

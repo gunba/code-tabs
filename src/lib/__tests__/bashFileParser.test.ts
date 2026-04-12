@@ -183,6 +183,32 @@ describe("parseBashFileOps", () => {
       const ops = parseBashFileOps('echo "wrote > src/config.ts" > output.txt', CWD);
       expect(ops).toEqual([{ path: `${CWD}/output.txt`, kind: "modified" }]);
     });
+
+    it("ignores > inside single-quoted strings (Rust type signatures)", () => {
+      // Regression: rg/grep patterns containing `>` (e.g. `-> &str>`) were being
+      // parsed as redirect operators, polluting the activity tree with folders
+      // like `&str>` and `&str>,/n`.
+      expect(
+        parseBashFileOps("rg 'fn foo() -> &str>' src/lib", CWD),
+      ).toEqual([]);
+      expect(
+        parseBashFileOps("rg 'HashMap<&str, &str>\\n' src/lib", CWD),
+      ).toEqual([]);
+    });
+
+    it("ignores > inside double-quoted strings", () => {
+      expect(
+        parseBashFileOps('rg "fn foo() -> Vec<&str>" src/lib', CWD),
+      ).toEqual([]);
+    });
+
+    it("still extracts a real redirect after a quoted string containing >", () => {
+      const ops = parseBashFileOps(
+        "rg 'fn foo() -> &str>' src/lib > out.log",
+        CWD,
+      );
+      expect(ops).toEqual([{ path: `${CWD}/out.log`, kind: "modified" }]);
+    });
   });
 
   describe("absolute paths", () => {

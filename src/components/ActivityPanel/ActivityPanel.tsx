@@ -47,10 +47,10 @@ interface AgentOnFile {
 function EmptyPanel({ message }: { message: string }) {
   return (
     <div className="activity-panel">
-      <div className="activity-panel-header">
-        <span className="activity-panel-title">Activity</span>
+      <div className="activity-panel-empty">
+        <IconFolder size={32} className="activity-panel-empty-icon" />
+        <span>{message}</span>
       </div>
-      <div className="activity-panel-empty">{message}</div>
     </div>
   );
 }
@@ -452,28 +452,11 @@ export function ActivityPanel() {
 
   return (
     <div className="activity-panel">
-      <div className="activity-panel-header">
-        <span className="activity-panel-title">Activity</span>
-        <div className="activity-mode-toggle">
-          <button
-            className={`activity-mode-btn${mode === "response" ? " active" : ""}`}
-            onClick={() => activeTabId && activityStore().setViewMode(activeTabId, "response")}
-          >
-            Response
-          </button>
-          <button
-            className={`activity-mode-btn${mode === "session" ? " active" : ""}`}
-            onClick={() => activeTabId && activityStore().setViewMode(activeTabId, "session")}
-          >
-            Session
-          </button>
-        </div>
-      </div>
-
       <div className="activity-panel-body activity-tree-container" ref={containerRef}>
         {rows.length === 0 ? (
           <div className="activity-panel-empty">
-            {mode === "response" ? "No activity yet" : "No files visited"}
+            <IconFolder size={32} className="activity-panel-empty-icon" />
+            <span>{mode === "response" ? "No activity yet" : "No files visited"}</span>
           </div>
         ) : (
           <>

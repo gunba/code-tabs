@@ -55,7 +55,7 @@
 }
 
 .right-panel-tab-active {
-  background: var(--bg-primary);
+  background: var(--bg-surface);
   color: var(--text-primary);
   font-weight: 600;
   box-shadow: inset 0 -2px 0 var(--accent);
@@ -73,6 +73,58 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Activity tab when followed by the inline Response/Session pill:
+   drop the tab's right border so the pill reads as part of the tab. */
+.right-panel-tab-no-border {
+  border-right: none;
+}
+
+/* Slot that positions the pill inline in the tab row and provides the
+   separator before the next tab (Search/Debug). The pill-slot only renders
+   when Activity is the active tab, so it always carries the accent underline
+   to make the Activity section read as one continuous active tab. */
+.right-panel-tab-pill-slot {
+  display: inline-flex;
+  align-items: center;
+  align-self: stretch;
+  padding: 0 8px 0 4px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Segmented control: two buttons joined by a 1px gap showing the
+   --border color through, matching the prior Activity mode toggle. */
+.right-panel-tab-pill {
+  display: inline-flex;
+  gap: 1px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.right-panel-pill-btn {
+  background: var(--bg-surface);
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: background 0.1s, color 0.1s;
+}
+
+.right-panel-pill-btn:hover {
+  color: var(--text-secondary);
+  background: var(--bg-surface-hover);
+}
+
+.right-panel-pill-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .right-panel-content {

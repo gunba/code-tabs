@@ -85,6 +85,38 @@ function tokenize(cmd: string): string[] {
   return tokens;
 }
 
+// [BA-01] maskQuoted: replace quoted-string content with spaces so '>' in patterns isn't treated as redirect
+// [BA-02] Position-based splice: redirect tokens removed by index from masked view before tokenizing
+/**
+ * Replace characters inside single/double-quoted substrings with spaces so
+ * regex-based redirect extraction does not mistake content like `fn foo() ->
+ * &str>` inside a grep/rg pattern for a real `>` redirect operator. Preserves
+ * string length so match indices map 1:1 to positions in the original command.
+ */
+function maskQuoted(cmd: string): string {
+  let result = "";
+  let inSingle = false;
+  let inDouble = false;
+  for (const ch of cmd) {
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      result += " ";
+      continue;
+    }
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      result += " ";
+      continue;
+    }
+    if (inSingle || inDouble) {
+      result += " ";
+    } else {
+      result += ch;
+    }
+  }
+  return result;
+}
+
 /* ---------- path validation ---------- */
 
 function isPlausiblePath(token: string): boolean {
@@ -133,23 +165,33 @@ export function parseBashFileOps(command: string, workingDir: string): BashFileO
   };
 
   // 1. Extract redirect targets before tokenizing (they apply regardless of command)
+  //    Run regexes on a quote-masked view so `>` inside quoted strings (e.g. a
+  //    Rust type signature in a grep pattern) isn't mistaken for a redirect.
+  //    Masking preserves positions, so match.index is valid against `trimmed`.
+  const masked = maskQuoted(trimmed);
   let redirectCleaned = trimmed;
 
-  for (const m of trimmed.matchAll(REDIRECT_RE)) {
+  for (const m of masked.matchAll(REDIRECT_RE)) {
     const target = m[1];
     if (isPlausiblePath(target)) {
       push(target, "modified");
     }
     // Remove the redirect from the command so it doesn't confuse the tokenizer
-    redirectCleaned = redirectCleaned.replace(m[0], " ");
+    redirectCleaned =
+      redirectCleaned.slice(0, m.index) +
+      " ".repeat(m[0].length) +
+      redirectCleaned.slice(m.index + m[0].length);
   }
 
-  for (const m of trimmed.matchAll(INPUT_REDIRECT_RE)) {
+  for (const m of masked.matchAll(INPUT_REDIRECT_RE)) {
     const target = m[1];
     if (isPlausiblePath(target)) {
       push(target, "read");
     }
-    redirectCleaned = redirectCleaned.replace(m[0], " ");
+    redirectCleaned =
+      redirectCleaned.slice(0, m.index) +
+      " ".repeat(m[0].length) +
+      redirectCleaned.slice(m.index + m[0].length);
   }
 
   // 2. Split on pipes and semicolons — process each segment independently

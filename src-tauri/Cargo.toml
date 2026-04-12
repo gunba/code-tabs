@@ -7,6 +7,13 @@ edition = "2021"
 name = "claude_tabs_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
+# Standalone discovery audit binary. See src/bin/discover_audit.rs.
+# Runs the same discovery::* functions the app uses, optionally diffing
+# against docs.claude.com to catch drift (missing settings/commands/env-vars).
+[[bin]]
+name = "discover_audit"
+path = "src/bin/discover_audit.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -38,6 +45,7 @@ base64 = "0.22"
 rand = "0.8"
 futures-util = "0.3"
 similar = "2"
+scraper = "0.23"
 
 [dev-dependencies]
 tempfile = "3"
