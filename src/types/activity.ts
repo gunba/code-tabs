@@ -41,6 +41,9 @@ export interface SessionActivity {
   stats: ActivityStats;
   /** Persisted collapsed/expanded folder paths for the activity tree. */
   expandedPaths: Set<string>;
+  /** Folder paths that have been observed at least once; used to scope auto-expand
+   *  to genuinely new folders so user collapses on already-seen folders aren't undone. */
+  seenFolderPaths: Set<string>;
   /** Persisted view mode toggle (Response vs Session). */
   viewMode: ViewMode;
 }
@@ -68,6 +71,7 @@ export function emptySessionActivity(): SessionActivity {
     contextFiles: [],
     stats: { filesModified: 0, filesCreated: 0, filesDeleted: 0, filesRead: 0, filesSearched: 0 },
     expandedPaths: new Set(),
+    seenFolderPaths: new Set(),
     viewMode: "response",
   };
 }

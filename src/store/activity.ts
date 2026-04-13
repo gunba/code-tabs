@@ -324,15 +324,23 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       const activity = sessions[sessionId];
       if (!activity) return state;
       let changed = false;
-      const next = new Set(activity.expandedPaths);
+      const nextExpanded = new Set(activity.expandedPaths);
+      const nextSeen = new Set(activity.seenFolderPaths);
       for (const p of paths) {
-        if (!next.has(p)) {
-          next.add(p);
+        // Only auto-expand folders we've never seen before — this preserves
+        // user collapses on already-seen folders across tree refreshes.
+        if (!nextSeen.has(p)) {
+          nextSeen.add(p);
+          nextExpanded.add(p);
           changed = true;
         }
       }
       if (!changed) return state;
-      sessions[sessionId] = { ...activity, expandedPaths: next };
+      sessions[sessionId] = {
+        ...activity,
+        expandedPaths: nextExpanded,
+        seenFolderPaths: nextSeen,
+      };
       return { sessions };
     }),
 
