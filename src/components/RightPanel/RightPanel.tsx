@@ -1,13 +1,11 @@
 import { Fragment, useEffect } from "react";
 import { useSettingsStore } from "../../store/settings";
 import { useRuntimeStore } from "../../store/runtime";
-import { useActivityStore } from "../../store/activity";
 import { useSessionStore } from "../../store/sessions";
 import { ActivityPanel } from "../ActivityPanel/ActivityPanel";
 import { SearchPanel } from "../SearchPanel/SearchPanel";
 import { DebugPanel } from "../DebugPanel/DebugPanel";
 import { IconFolder, IconSearch, IconTerminal } from "../Icons/Icons";
-import type { ViewMode } from "../../types/activity";
 import "./RightPanel.css";
 
 type RightPanelTab = "activity" | "search" | "debug";
@@ -23,8 +21,8 @@ export function RightPanel() {
   const rightPanelTab = useSettingsStore((s) => s.rightPanelTab);
   const setRightPanelTab = useSettingsStore((s) => s.setRightPanelTab);
   const activeTabId = useSessionStore((s) => s.activeTabId);
-  const activity = useActivityStore((s) => (activeTabId ? s.sessions[activeTabId] ?? null : null));
-  const mode: ViewMode = activity?.viewMode ?? "response";
+  const mode = useSettingsStore((s) => s.activityViewMode);
+  const setMode = useSettingsStore((s) => s.setActivityViewMode);
 
   useEffect(() => {
     if (!debugBuild && rightPanelTab === "debug") {
@@ -38,10 +36,6 @@ export function RightPanel() {
   const tabs = debugBuild ? BASE_TABS : BASE_TABS.filter((tab) => tab.id !== "debug");
   // [RI-01] Response/Session pill is inline after Activity tab, visible only when activity tab active + session open
   const showPill = activeTab === "activity" && !!activeTabId;
-
-  const setMode = (m: ViewMode) => {
-    if (activeTabId) useActivityStore.getState().setViewMode(activeTabId, m);
-  };
 
   return (
     <aside className="right-panel">

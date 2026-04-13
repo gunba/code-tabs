@@ -6,7 +6,6 @@ import type {
   ContextFileEntry,
   FileChangeKind,
   ToolInputDiffData,
-  ViewMode,
 } from "../types/activity";
 import { emptySessionActivity, computeStats } from "../types/activity";
 import { traceSync } from "../lib/perfTrace";
@@ -40,7 +39,6 @@ interface ActivityState {
   clearSession: (sessionId: string) => void;
   toggleExpandedPath: (sessionId: string, path: string) => void;
   mergeExpandedPaths: (sessionId: string, paths: Iterable<string>) => void;
-  setViewMode: (sessionId: string, mode: ViewMode) => void;
 }
 
 function ensureSession(
@@ -341,15 +339,6 @@ export const useActivityStore = create<ActivityState>()((set) => ({
         expandedPaths: nextExpanded,
         seenFolderPaths: nextSeen,
       };
-      return { sessions };
-    }),
-
-  setViewMode: (sessionId, mode) =>
-    set((state) => {
-      const sessions = { ...state.sessions };
-      const activity = sessions[sessionId];
-      if (!activity || activity.viewMode === mode) return state;
-      sessions[sessionId] = { ...activity, viewMode: mode };
       return { sessions };
     }),
 

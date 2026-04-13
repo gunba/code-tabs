@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useActivityStore } from "../../store/activity";
 import { useSessionStore } from "../../store/sessions";
+import { useSettingsStore } from "../../store/settings";
 import { ClaudeMascot } from "./ClaudeMascot";
 import type { MascotState } from "./ClaudeMascot";
 import { IconFolder, IconDocument } from "../Icons/Icons";
 import { isSubagentActive } from "../../types/session";
-import type { FileActivity, ContextFileEntry, ViewMode } from "../../types/activity";
+import type { FileActivity, ContextFileEntry } from "../../types/activity";
 import { buildFileTree, flattenTree, allFolderPaths } from "../../lib/fileTree";
 import type { FileTreeNode } from "../../lib/fileTree";
 import { canonicalizePath } from "../../lib/paths";
@@ -185,8 +186,8 @@ export function ActivityPanel() {
   const activity = useActivityStore((s) => activeTabId ? s.sessions[activeTabId] ?? null : null);
   const activityStore = useActivityStore.getState;
 
-  // Store-backed view mode and expanded paths (persist across tab/mode switches)
-  const mode: ViewMode = activity?.viewMode ?? "response";
+  // Store-backed view mode (global setting) and expanded paths (per-session, persist across tab switches)
+  const mode = useSettingsStore((s) => s.activityViewMode);
   const expandedPaths: Set<string> = activity?.expandedPaths ?? emptySet;
 
   // Floating/sticky mascot

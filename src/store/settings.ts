@@ -129,6 +129,7 @@ interface SettingsState {
   modelRegistry: Record<string, ModelRegistryEntry>;
   recordingConfig: RecordingConfig;
   compressionEnabled: boolean;
+  activityViewMode: "response" | "session";
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -170,6 +171,7 @@ interface SettingsState {
   updateModelRegistry: (entry: ModelRegistryEntry) => void;
   setRecordingConfig: (config: Partial<RecordingConfig>) => void;
   setCompressionEnabled: (enabled: boolean) => void;
+  setActivityViewMode: (mode: "response" | "session") => void;
   toggleNoisyEventKind: (kind: string) => void;
 }
 
@@ -211,6 +213,7 @@ export const useSettingsStore = create<SettingsState>()(
       modelRegistry: {},
       recordingConfig: DEFAULT_RECORDING_CONFIG,
       compressionEnabled: false,
+      activityViewMode: "response",
 
       addRecentDir: (dir) =>
         set((s) => {
@@ -636,6 +639,8 @@ export const useSettingsStore = create<SettingsState>()(
         invoke("set_compression_enabled", { enabled }).catch(() => {});
       },
 
+      setActivityViewMode: (mode) => set({ activityViewMode: mode }),
+
       toggleNoisyEventKind: (kind) => set((s) => {
         const current = s.recordingConfig.noisyEventKinds;
         const next = current.includes(kind)
@@ -830,6 +835,7 @@ export const useSettingsStore = create<SettingsState>()(
         modelRegistry: state.modelRegistry,
         recordingConfig: state.recordingConfig,
         compressionEnabled: state.compressionEnabled,
+        activityViewMode: state.activityViewMode,
       }),
     }
   )
