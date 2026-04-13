@@ -272,6 +272,24 @@ describe("generateRulesFromDiff", () => {
     expect(rules.length).toBe(0);
   });
 
+  it("dedups hunks already handled by an existing enabled rule (raw baseline)", () => {
+    // Existing rule transforms "foo" -> "FOO". User diffs against raw and additionally
+    // changes "bar" -> "BAR". The "foo" hunk should be deduped because the existing rule
+    // already produces that transformation.
+    const existing: SystemPromptRule[] = [{
+      id: "1", name: "foo to FOO", pattern: escapeRegex("foo"),
+      replacement: "FOO", flags: "g", enabled: true,
+    }];
+    const raw = "header\nfoo\nkeep\nbar";
+    // Edited reflects both existing rule's effect and user's new edit
+    const edited = "header\nFOO\nkeep\nBAR";
+    const rules = generateRulesFromDiff(raw, edited, existing);
+    // Only the bar -> BAR change should be generated; foo -> FOO is already handled.
+    expect(rules.length).toBe(1);
+    expect(rules[0].pattern).toBe("bar");
+    expect(rules[0].replacement).toBe("BAR");
+  });
+
   it("generates rules that are disabled by default", () => {
     const rules = generateRulesFromDiff("old", "new", []);
     for (const rule of rules) {

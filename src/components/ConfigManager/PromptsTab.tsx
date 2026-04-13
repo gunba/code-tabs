@@ -332,14 +332,14 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
 
   const handleGenerateRules = useCallback(() => {
     if (!observedEdited) return;
-    const generated = generateRulesFromDiff(rulesAppliedText, observedEditText, systemPromptRules);
+    const generated = generateRulesFromDiff(observedRawText, observedEditText, systemPromptRules);
     if (generated.length === 0) {
       onStatus({ type: "error", text: "No rules could be generated from these changes" });
       setTimeout(() => onStatus(null), 3000);
       return;
     }
     setPendingRules(generated);
-  }, [observedEdited, rulesAppliedText, observedEditText, systemPromptRules, onStatus]);
+  }, [observedEdited, observedRawText, observedEditText, systemPromptRules, onStatus]);
 
   const handleConfirmRules = useCallback(() => {
     if (!pendingRules) return;

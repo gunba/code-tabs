@@ -186,7 +186,12 @@ function groupHunks(diff: DiffLine[]): Hunk[] {
 
 /**
  * Generate SystemPromptRules from the diff between original and edited text.
- * Deduplicates against existingRules by pattern.
+ * Deduplicates against existingRules in two ways:
+ *  - Exact pattern equality (cheap structural check).
+ *  - Effect equivalence: skip a hunk if applying the enabled existing rules
+ *    to its deleted text already produces the hunk's added text. This
+ *    handles the common case where the diff baseline is the raw observed
+ *    prompt and existing rules already account for some of the changes.
  * Returns rules NOT yet committed — caller decides when to add them.
  */
 export function generateRulesFromDiff(
@@ -199,9 +204,17 @@ export function generateRulesFromDiff(
   const diff = diffLines(original, edited);
   const hunks = groupHunks(diff);
   const existingPatterns = new Set(existingRules.map((r) => r.pattern));
+  const enabledExisting = existingRules.filter((r) => r.enabled && r.pattern);
   const rules: SystemPromptRule[] = [];
 
   for (const hunk of hunks) {
+    // Skip hunks already handled by existing enabled rules.
+    if (enabledExisting.length > 0) {
+      const deletedText = hunk.delLines.join("\n");
+      const expected = hunk.addLines.join("\n");
+      if (applyRulesToText(deletedText, enabledExisting) === expected) continue;
+    }
+
     let pattern: string;
     let replacement: string;
     let name: string;
@@ -235,7 +248,7 @@ export function generateRulesFromDiff(
       name = "Replace: " + hunk.delLines[0].slice(0, 40);
     }
 
-    // Deduplicate
+    // Deduplicate by exact pattern equality
     if (existingPatterns.has(pattern)) continue;
 
     // Determine flags: add 's' (dotall) when pattern spans multiple lines
