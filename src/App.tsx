@@ -29,7 +29,7 @@ import { killPty, writeToPty } from "./lib/ptyRegistry";
 import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForSession } from "./lib/inspectorPort";
 import { focusTerminal } from "./lib/terminalRegistry";
 import { dlog, flushDebugLog } from "./lib/debugLog";
-import { IconStop, IconClose, IconReturn, IconGear } from "./components/Icons/Icons";
+import { IconStop, IconClose, IconReturn, IconGear, IconSearch } from "./components/Icons/Icons";
 import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
 import type { Session, Subagent } from "./types/session";
 import { isSubagentActive } from "./types/session";
@@ -273,6 +273,12 @@ export default function App() {
       if (e.ctrlKey && e.shiftKey && e.key === "R") {
         e.preventDefault();
         setShowResumePicker(true);
+      }
+
+      // Ctrl+Shift+F: open RightPanel search tab
+      if (e.ctrlKey && e.shiftKey && e.key === "F") {
+        e.preventDefault();
+        useSettingsStore.getState().setRightPanelTab("search");
       }
 
       // [KB-07] Ctrl+,: config manager
@@ -553,6 +559,13 @@ export default function App() {
             title="Resume session (Ctrl+Shift+R)"
           >
             <IconReturn size={16} />
+          </button>
+          <button
+            className="tab-search"
+            onClick={() => useSettingsStore.getState().setRightPanelTab("search")}
+            title="Search conversations (Ctrl+Shift+F)"
+          >
+            <IconSearch size={16} />
           </button>
           <button
             className="tab-config"

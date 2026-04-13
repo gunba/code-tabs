@@ -216,6 +216,7 @@
 .tab-close:focus:not(:focus-visible),
 .tab-config:focus:not(:focus-visible),
 .tab-resume:focus:not(:focus-visible),
+.tab-search:focus:not(:focus-visible),
 .tab-add:focus:not(:focus-visible) {
   outline: none;
 }
@@ -308,6 +309,27 @@
 .tab-resume:hover {
   background: color-mix(in srgb, var(--accent-secondary) 20%, var(--bg-surface));
   color: var(--accent-secondary);
+}
+
+.tab-search {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 66px;
+  height: 66px;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-surface));
+  color: var(--success);
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-search:hover {
+  background: color-mix(in srgb, var(--success) 20%, var(--bg-surface));
+  color: var(--success);
 }
 
 .tab-config {
