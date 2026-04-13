@@ -2,11 +2,12 @@
  * File tree builder for the Activity Panel.
  *
  * Converts a flat set of file paths into a hierarchical tree structure
- * suitable for rendering as a file explorer. All paths are placed in a
- * single unified tree rooted at the deepest common ancestor. The
- * workspace directory node is marked with isWorkspaceRoot for styling.
- * Single-child directory chains are compressed (VSCode compact folders),
- * except that compression never collapses through the workspace root.
+ * suitable for rendering as a file explorer. Each top-level touched
+ * folder appears as its own root node — there is no synthetic wrapper
+ * spanning a common ancestor. The workspace directory node is marked
+ * with isWorkspaceRoot for styling. Single-child directory chains are
+ * compressed (VSCode compact folders), except that compression never
+ * collapses through the workspace root.
  */
 
 import type { FileActivity } from "../types/activity";
@@ -54,11 +55,11 @@ function splitSegments(normalizedPath: string): string[] {
 /**
  * Build a unified file tree from a map of file paths and a workspace directory.
  *
- * All files (workspace-internal and external) are placed in one tree. The
- * tree is rooted at the deepest common ancestor of all files. The node
- * matching the workspace directory is marked with isWorkspaceRoot.
+ * Each top-level touched folder appears as its own root node. The node
+ * matching the workspace directory (if present in the tree) is marked
+ * with isWorkspaceRoot.
  */
-// [AP-02] Unified tree with workspace root marking, worktree project name, and single-child compression
+// [AP-02] Flat top-level roots with workspace marking, worktree project name, and single-child compression
 export function buildFileTree(
   files: Map<string, FileActivity>,
   workspaceDir: string,
@@ -70,13 +71,11 @@ export function buildFileTree(
 
   // Build a single trie from ALL file paths
   const root = newTrieNode();
-  const allSegmentArrays: string[][] = [];
 
   for (const [path, activity] of files) {
     const normalized = canonicalizePath(path);
     const segments = splitSegments(normalized);
     if (segments.length === 0) continue;
-    allSegmentArrays.push(segments);
 
     let current = root;
     for (const segment of segments) {
@@ -101,54 +100,13 @@ export function buildFileTree(
     }
   }
 
-  // Find the common prefix to skip (start tree at deepest common ancestor)
-  const lcp = longestCommonPrefix(allSegmentArrays);
-  // Also include the workspace root in consideration: don't skip past it
-  const maxSkip = wsSegments.length > 0
-    ? Math.min(lcp, wsSegments.length - 1)
-    : Math.max(0, lcp - 1);
-  const skipCount = Math.max(0, maxSkip);
-
-  let trimmedRoot = root;
-  const rootLabel: string[] = [];
-  for (let i = 0; i < skipCount; i++) {
-    const entries = [...trimmedRoot.children.entries()];
-    if (entries.length !== 1) break;
-    // Don't skip past the workspace root
-    if (entries[0][1].isWorkspaceRoot) break;
-    rootLabel.push(entries[0][0]);
-    trimmedRoot = entries[0][1];
-  }
-
-  const prefixPath = rootLabel.join("/");
-  const nodes = trieToNodes(trimmedRoot, prefixPath);
+  const nodes = trieToNodes(root, "");
   const compressed = compressTree(nodes);
 
   // Rename the workspace root node to the project name for worktrees
   const wt = canonWs ? parseWorktreePath(canonWs) : null;
   if (wt) {
     renameWorkspaceRoot(compressed, wt.projectName);
-  }
-
-  // If we skipped a common prefix, wrap in a root folder
-  if (rootLabel.length > 0 && compressed.length > 0) {
-    // Check if the wrapper itself is the workspace root
-    const isWsRoot = rootLabel.length === wsSegments.length &&
-      rootLabel.every((seg, i) => seg === wsSegments[i]);
-
-    // Show an abbreviated prefix name (last 2 segments) for readability
-    const displayName = rootLabel.length <= 2
-      ? prefixPath
-      : rootLabel.slice(-2).join("/");
-
-    return [{
-      name: isWsRoot && wt ? wt.projectName : displayName,
-      fullPath: prefixPath,
-      isFile: false,
-      children: compressed,
-      activity: null,
-      isWorkspaceRoot: isWsRoot,
-    }];
   }
 
   return compressed;
@@ -165,20 +123,6 @@ function renameWorkspaceRoot(nodes: FileTreeNode[], projectName: string): void {
       renameWorkspaceRoot(node.children, projectName);
     }
   }
-}
-
-/** Compute length of the longest common prefix among arrays of segments. */
-function longestCommonPrefix(arrays: string[][]): number {
-  if (arrays.length === 0) return 0;
-  let len = 0;
-  const first = arrays[0];
-  outer: for (let i = 0; i < first.length; i++) {
-    for (let j = 1; j < arrays.length; j++) {
-      if (i >= arrays[j].length || arrays[j][i] !== first[i]) break outer;
-    }
-    len++;
-  }
-  return len;
 }
 
 /** Recursively convert trie children into sorted FileTreeNode arrays. */
