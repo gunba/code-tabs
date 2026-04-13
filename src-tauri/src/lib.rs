@@ -92,6 +92,24 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     setup_child_reaper();
 
+    // [LX-01] WebKit2GTK 4.1 crashes (Wayland protocol Error 71 or silent
+    // hang under XWayland) on many Linux GPU/driver combos when the
+    // DMA-BUF renderer or accelerated compositing path is used. Force the
+    // safe software paths so the binary launches consistently across
+    // distros without requiring users to set env vars themselves. Honor
+    // any pre-set value so power users can opt back in.
+    #[cfg(target_os = "linux")]
+    {
+        for (k, v) in [
+            ("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
+            ("WEBKIT_DISABLE_COMPOSITING_MODE", "1"),
+        ] {
+            if std::env::var_os(k).is_none() {
+                std::env::set_var(k, v);
+            }
+        }
+    }
+
     // [PT-03] Strip CLAUDECODE env var so spawned PTYs don't think
     // they're nested inside another Claude Code session.
     std::env::remove_var("CLAUDECODE");
