@@ -3,7 +3,7 @@
 Launch Codex as a subprocess for Claude workflow delegation.
 
 This is intentionally a thin wrapper around `codex exec`:
-- it builds a workflow-specific prompt via `tools/codex_handoff.py`
+- it builds a workflow-specific prompt via the installed `codex_handoff.py`
 - it runs Codex in the current repo/worktree
 - it grants Codex the extra writable directories needed for proofd state
   and worktree/common-git-dir operations
@@ -52,6 +52,13 @@ def emit_text(content: str, stream: object = sys.stdout) -> None:
         pass
 
 
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+
+
+def local_script(name: str) -> str:
+    return str((SCRIPT_DIR / name).resolve())
+
+
 def repo_root_from(path: pathlib.Path) -> pathlib.Path:
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
@@ -86,7 +93,7 @@ def git_value(repo_root: pathlib.Path, args: list[str]) -> str:
 
 def proofd_status(repo_root: pathlib.Path) -> dict:
     result = subprocess.run(
-        [sys.executable, "tools/proofd.py", "--repo-root", str(repo_root), "status"],
+        [sys.executable, local_script("proofd.py"), "--repo-root", str(repo_root), "status"],
         cwd=str(repo_root),
         capture_output=True,
         text=True,
@@ -103,7 +110,7 @@ def proofd_status(repo_root: pathlib.Path) -> dict:
 def build_prompt(repo_root: pathlib.Path, workflow: str, workflow_args: list[str]) -> str:
     command = [
         sys.executable,
-        "tools/codex_handoff.py",
+        local_script("codex_handoff.py"),
         "--repo-root",
         str(repo_root),
         "--no-save",
@@ -126,7 +133,7 @@ def build_prompt(repo_root: pathlib.Path, workflow: str, workflow_args: list[str
 
 
 def default_sandbox(workflow: str) -> str:
-    if workflow in {"review", "plan"}:
+    if workflow == "review":
         return "read-only"
     if workflow in {"janitor", "review-janitor"}:
         return "danger-full-access"
@@ -205,7 +212,7 @@ def stamp_path(repo_root: pathlib.Path, prefix: str, suffix: str) -> pathlib.Pat
     return repo_root / "plans" / f"{prefix}-{stamp}.{suffix}"
 
 
-READ_ONLY_RESULT_WATCH_WORKFLOWS = {"plan", "review"}
+READ_ONLY_RESULT_WATCH_WORKFLOWS = {"review"}
 RESULT_FILE_GRACE_SECONDS = 8.0
 POLL_INTERVAL_SECONDS = 1.0
 
@@ -284,7 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--full-access", action="store_true", help="Run Codex with danger-full-access. Required for push/release workflows.")
     parser.add_argument("--model", default=None)
     parser.add_argument("--ephemeral", action="store_true")
-    parser.add_argument("workflow", choices=["review", "janitor", "build", "review-janitor", "plan"])
+    parser.add_argument("workflow", choices=["review", "janitor", "build", "review-janitor"])
     parser.add_argument("workflow_args", nargs=argparse.REMAINDER)
     return parser
 

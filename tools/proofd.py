@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-proofd: externalized proofs/rules tooling for Claude Tabs.
+proofd: externalized proofs/rules tooling for tagged project documentation.
 
 The code repo keeps only generated `.claude/rules/*.md`.
 Canonical rule data lives in a companion knowledge base root.
@@ -34,10 +34,11 @@ from urllib.parse import urlparse
 SCHEMA_VERSION = 1
 ENTRY_RE = re.compile(r"^- \[([A-Z]{2}-\d{2,4})\]\s+(.*)$")
 SOURCE_TAG_RE = re.compile(r"\[([A-Z]{2}-\d{2,4})\]")
-DEFAULT_SOURCE_DIRS = ["src", "src-tauri/src"]
-DEFAULT_SOURCE_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx", ".rs", ".css", ".scss"]
-DEFAULT_SOURCE_EXCLUDES = [".git", ".claude/worktrees"]
+DEFAULT_SOURCE_DIRS: list[str] = []
 DEFAULT_BATCH_SIZE = 20
+DEFAULT_SOURCE_EXTENSIONS = {".c", ".cc", ".cpp", ".cs", ".css", ".go", ".h", ".hpp", ".java", ".js", ".jsx", ".kt", ".kts", ".lua", ".mjs", ".php", ".py", ".rb", ".rs", ".sass", ".scala", ".scss", ".sh", ".sql", ".swift", ".ts", ".tsx", ".vue"}
+DEFAULT_SCAN_EXCLUDES = {".claude", ".git", ".idea", ".next", ".nuxt", ".pytest_cache", ".ruff_cache", ".svn", ".turbo", ".venv", "__pycache__", "bin", "build", "coverage", "dist", "node_modules", "out", "target", "tmp", "vendor", "venv"}
+PREFERRED_SOURCE_DIRS = ["src", "app", "lib", "server", "client", "frontend", "backend", "cmd", "internal", "pkg", "crates", "packages"]
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -83,15 +84,90 @@ def is_windows() -> bool:
     return os.name == "nt"
 
 
-def default_state_root() -> pathlib.Path:
+def preferred_state_root() -> pathlib.Path:
+    if is_windows():
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        return pathlib.Path(base) / "agent-proofs"
+    return pathlib.Path(os.environ.get("XDG_STATE_HOME", pathlib.Path.home() / ".local" / "state")) / "agent-proofs"
+
+
+def legacy_state_root() -> pathlib.Path:
     if is_windows():
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
         return pathlib.Path(base) / "proofd"
     return pathlib.Path(os.environ.get("XDG_STATE_HOME", pathlib.Path.home() / ".local" / "state")) / "proofd"
 
 
-def default_kb_root() -> pathlib.Path:
+def preferred_kb_root() -> pathlib.Path:
+    return pathlib.Path.home() / ".claude" / "agent-proofs-data" / "kb"
+
+
+def legacy_kb_root() -> pathlib.Path:
     return pathlib.Path.home() / ".proofd" / "kb"
+
+
+def dedupe_paths(paths: list[pathlib.Path]) -> list[pathlib.Path]:
+    ordered: list[pathlib.Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(path.resolve())
+    return ordered
+
+
+def state_root_has_repo(path: pathlib.Path, repo_ids: list[str]) -> bool:
+    db_path = path / "state.db"
+    if not db_path.exists():
+        return False
+    try:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            required_tables = {"prefix_registry", "tag_counters", "tag_stats", "verifications", "runs", "selections"}
+            if not (tables & required_tables):
+                return False
+            for repo_id in repo_ids:
+                for table in required_tables & tables:
+                    row = conn.execute(f"SELECT 1 FROM {table} WHERE repo_id = ? LIMIT 1", (repo_id,)).fetchone()
+                    if row:
+                        return True
+            return False
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+
+
+def kb_root_has_repo(path: pathlib.Path, repo_ids: list[str]) -> bool:
+    repos_dir = path / "repos"
+    for repo_id in repo_ids:
+        rules_dir = repos_dir / repo_id / "rules"
+        if any(rules_dir.glob("*.json")):
+            return True
+    return False
+
+
+def resolve_state_root(explicit: pathlib.Path | None, repo_ids: list[str]) -> pathlib.Path:
+    if explicit is not None:
+        return explicit.resolve()
+    candidates = dedupe_paths([preferred_state_root(), legacy_state_root()])
+    for candidate in candidates:
+        if state_root_has_repo(candidate, repo_ids):
+            return candidate
+    return candidates[0]
+
+
+def resolve_kb_root(explicit: pathlib.Path | None, repo_ids: list[str]) -> pathlib.Path:
+    if explicit is not None:
+        return explicit.resolve()
+    candidates = dedupe_paths([preferred_kb_root(), legacy_kb_root()])
+    for candidate in candidates:
+        if kb_root_has_repo(candidate, repo_ids):
+            return candidate
+    return candidates[0]
 
 
 def run_git(args: list[str], cwd: pathlib.Path) -> str:
@@ -239,6 +315,54 @@ def split_csv(value: str | None) -> list[str]:
     return [normalize_path(item) for item in value.split(",") if item.strip()]
 
 
+def split_anchor_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [normalize_anchor_path(item) for item in value.split(",") if item.strip()]
+
+
+def should_skip_scan_dir(name: str) -> bool:
+    return name in DEFAULT_SCAN_EXCLUDES or name.startswith(".worktree")
+
+
+# [PP-01] Explicit source roots still participate in source-tag scans even if
+# their top-level directory name is normally excluded from auto-detection.
+def scan_dir_parts(rel_path: str, source_dir: str) -> tuple[str, ...]:
+    rel_parts = pathlib.PurePosixPath(rel_path).parts
+    normalized_source_dir = normalize_path(source_dir)
+    if normalized_source_dir and normalized_source_dir != ".":
+        root_parts = pathlib.PurePosixPath(normalized_source_dir).parts
+        if tuple(rel_parts[: len(root_parts)]) == root_parts:
+            return rel_parts[len(root_parts) : -1]
+    return rel_parts[:-1]
+
+
+def detect_source_dirs(repo_root: pathlib.Path) -> list[str]:
+    detected: list[str] = []
+    for candidate in PREFERRED_SOURCE_DIRS:
+        path = repo_root / candidate
+        if path.exists() and path.is_dir():
+            detected.append(normalize_path(candidate))
+    if detected:
+        return detected
+
+    fallback: list[str] = []
+    for child in sorted(repo_root.iterdir(), key=lambda item: item.name.lower()):
+        if not child.is_dir():
+            continue
+        if should_skip_scan_dir(child.name) or child.name.startswith("."):
+            continue
+        fallback.append(normalize_path(child.name))
+    # [PP-01] Script-first repos still need source-tag scanning even when the
+    # primary code lives under a top-level `bin` directory.
+    bin_dir = repo_root / "bin"
+    if not fallback and bin_dir.exists() and bin_dir.is_dir():
+        for path in bin_dir.rglob("*"):
+            if path.is_file() and path.suffix.lower() in DEFAULT_SOURCE_EXTENSIONS:
+                return ["bin"]
+    return fallback or ["."]
+
+
 def file_matches(path: str, patterns: list[str]) -> bool:
     if not patterns:
         return True
@@ -252,14 +376,6 @@ def file_matches(path: str, patterns: list[str]) -> bool:
             if normalized == prefix or normalized.startswith(prefix + "/"):
                 return True
     return False
-
-
-def path_has_prefix(path: str, prefix: str) -> bool:
-    normalized = normalize_path(path).strip("/")
-    normalized_prefix = normalize_path(prefix).strip("/")
-    if not normalized_prefix:
-        return False
-    return normalized == normalized_prefix or normalized.startswith(normalized_prefix + "/")
 
 
 def parse_tag_number(tag_id: str) -> tuple[str, int]:
@@ -325,7 +441,7 @@ def sorted_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(entries, key=lambda entry: parse_tag_number(entry["tag_id"]))
 
 
-# [PP-02] Canonical proof storage strips manual file metadata; generated rule
+# [PP-03] Canonical proof storage strips manual file metadata; generated rule
 # files derive scope from source-tag locations only, and file-list details are ignored.
 def sanitize_entry_details(details: list[Any] | None) -> list[str]:
     sanitized: list[str] = []
@@ -525,9 +641,10 @@ class ProofStore:
         repo_key: str | None = None,
     ) -> None:
         self.repo_root = repo_root_from(repo_root)
-        self.state_root = ensure_dir((state_root or default_state_root()).resolve())
-        self.kb_root = ensure_dir((kb_root or default_kb_root()).resolve())
         self.identity = repo_identity(self.repo_root, explicit_repo_key=repo_key)
+        repo_ids = [self.identity["repo_id"], *legacy_repo_identifiers(self.repo_root, self.identity["slug"])]
+        self.state_root = ensure_dir(resolve_state_root(state_root, repo_ids))
+        self.kb_root = ensure_dir(resolve_kb_root(kb_root, repo_ids))
         self.db_path = self.state_root / "state.db"
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
@@ -893,8 +1010,7 @@ class ProofStore:
         metadata["default_output_dir"] = profile["output_dir"]
         metadata.setdefault("default_batch_size", DEFAULT_BATCH_SIZE)
         metadata.setdefault("source_dirs", DEFAULT_SOURCE_DIRS)
-        metadata.setdefault("source_extensions", DEFAULT_SOURCE_EXTENSIONS)
-        metadata.setdefault("source_excludes", DEFAULT_SOURCE_EXCLUDES)
+        metadata.setdefault("source_extensions", sorted(DEFAULT_SOURCE_EXTENSIONS))
         metadata.setdefault(
             "lint",
             {
@@ -955,55 +1071,6 @@ class ProofStore:
 
     def output_rules_dir(self) -> pathlib.Path:
         return self.repo_root / self.profile["output_dir"]
-
-    def source_exclude_prefixes(self, metadata: dict[str, Any] | None = None) -> list[str]:
-        metadata = metadata or self.repo_metadata()
-        prefixes = {normalize_path(value) for value in metadata.get("source_excludes", DEFAULT_SOURCE_EXCLUDES) if value}
-        try:
-            prefixes.add(normalize_path(str(self.output_rules_dir().relative_to(self.repo_root))))
-        except ValueError:
-            pass
-        return sorted(prefix.strip("/") for prefix in prefixes if prefix)
-
-    def source_extensions(self, metadata: dict[str, Any] | None = None) -> set[str]:
-        metadata = metadata or self.repo_metadata()
-        values = metadata.get("source_extensions", DEFAULT_SOURCE_EXTENSIONS)
-        normalized: set[str] = set()
-        for value in values:
-            text = str(value).strip().lower()
-            if not text:
-                continue
-            normalized.add(text if text.startswith(".") else f".{text}")
-        return normalized
-
-    def iter_source_files(self, metadata: dict[str, Any] | None = None) -> list[tuple[str, pathlib.Path]]:
-        metadata = metadata or self.repo_metadata()
-        source_dirs = metadata.get("source_dirs", DEFAULT_SOURCE_DIRS)
-        source_extensions = self.source_extensions(metadata)
-        exclude_prefixes = self.source_exclude_prefixes(metadata)
-        seen_paths: set[str] = set()
-        files: list[tuple[str, pathlib.Path]] = []
-        for source_dir in source_dirs:
-            root = self.repo_root / source_dir
-            if not root.exists():
-                continue
-            for path in root.rglob("*"):
-                if not path.is_file():
-                    continue
-                try:
-                    rel_path = normalize_path(str(path.relative_to(self.repo_root)))
-                except ValueError:
-                    continue
-                if rel_path in seen_paths:
-                    continue
-                if any(path_has_prefix(rel_path, prefix) for prefix in exclude_prefixes):
-                    continue
-                if source_extensions and path.suffix.lower() not in source_extensions:
-                    continue
-                seen_paths.add(rel_path)
-                files.append((rel_path, path))
-        files.sort(key=lambda item: item[0])
-        return files
 
     def canonical_rule_path(self, rule_id: str) -> pathlib.Path:
         return self.canonical_rules_dir() / f"{rule_id}.json"
@@ -1165,16 +1232,53 @@ class ProofStore:
         self._register_prefixes(rule)
         return tag_id
 
+    def configured_source_dirs(self) -> list[str]:
+        metadata = self.repo_metadata()
+        source_dirs = [normalize_path(item) for item in metadata.get("source_dirs", []) if str(item).strip()]
+        return source_dirs or detect_source_dirs(self.repo_root)
+
+    def configured_source_extensions(self) -> set[str]:
+        metadata = self.repo_metadata()
+        configured = metadata.get("source_extensions", [])
+        if configured:
+            return {str(item).lower() for item in configured}
+        return set(DEFAULT_SOURCE_EXTENSIONS)
+
+    def iter_source_files(self) -> itertools.chain[pathlib.Path]:
+        source_dirs = self.configured_source_dirs()
+        extensions = self.configured_source_extensions()
+        yielded: set[str] = set()
+        iterables: list[list[pathlib.Path]] = []
+        for source_dir in source_dirs:
+            root = self.repo_root if source_dir == "." else self.repo_root / source_dir
+            if not root.exists():
+                continue
+            files: list[pathlib.Path] = []
+            for path in root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if path.suffix.lower() not in extensions:
+                    continue
+                rel_path = normalize_path(str(path.relative_to(self.repo_root)))
+                if any(should_skip_scan_dir(part) for part in scan_dir_parts(rel_path, source_dir)):
+                    continue
+                if rel_path in yielded:
+                    continue
+                yielded.add(rel_path)
+                files.append(path)
+            iterables.append(files)
+        return itertools.chain.from_iterable(iterables)
+
     # [PP-01] Source-tag scanning retains exact line numbers so generated rules
     # and entry lookups can point agents at the real tag location.
     def scan_source_refs(self) -> dict[str, list[dict[str, Any]]]:
-        metadata = self.repo_metadata()
         hits: dict[str, list[dict[str, Any]]] = {}
-        for rel_path, path in self.iter_source_files(metadata):
+        for path in self.iter_source_files():
             try:
                 content = path.read_text(encoding="utf-8")
             except UnicodeDecodeError:
                 continue
+            rel_path = normalize_path(str(path.relative_to(self.repo_root)))
             for line_number, line in enumerate(content.splitlines(), start=1):
                 for match in SOURCE_TAG_RE.finditer(line):
                     tag_id = match.group(1)
@@ -1314,7 +1418,7 @@ class ProofStore:
         entry = {
             "tag_id": tag_id,
             "statement": statement.strip(),
-            "details": sanitize_entry_details(details),
+            "details": details or [],
             "notes": [],
             "prefix": tag_id.split("-", 1)[0],
         }
@@ -1341,13 +1445,13 @@ class ProofStore:
         if statement is not None:
             mutable_entry["statement"] = statement.strip()
         if details is not None:
-            mutable_entry["details"] = sanitize_entry_details(details)
+            mutable_entry["details"] = details
         self.save_rule(rule, layer=layer, branch=branch)
         return rule, mutable_entry
 
     def entry_files(self, tag_id: str, branch: str | None = None) -> dict[str, Any]:
         branch = branch or current_branch(self.repo_root)
-        rule, _ = self.find_entry(tag_id, branch=branch)
+        rule, entry = self.find_entry(tag_id, branch=branch)
         source_refs = self.scan_source_refs().get(tag_id, [])
         source_hits = source_refs_to_paths({tag_id: source_refs}).get(tag_id, [])
         return {
@@ -1864,7 +1968,7 @@ class ProofStore:
                 ]
                 if refs:
                     output.append(f"  - source: {format_source_ref_locations(refs)}")
-                for detail in entry.get("details", []):
+                for detail in [detail for detail in entry.get("details", []) if not detail.lower().startswith("files:")]:
                     output.append(f"  - {detail}")
         if len(output) == 1:
             output.extend(["", "_No matching rules._"])
@@ -1940,7 +2044,7 @@ class ProofStore:
         }
 
     def lint(self, branch: str | None = None) -> dict[str, Any]:
-        # [PP-02] Lint warns when rules have no source references so canonical
+        # [PP-03] Lint warns when rules have no source references so canonical
         # entries stay maintainable while generated output stays file-scoped.
         branch = branch or current_branch(self.repo_root)
         rules = self.load_rules(branch)
@@ -1951,7 +2055,8 @@ class ProofStore:
         warnings: list[str] = []
         entries_by_tag: dict[str, str] = {}
         source_hits = self.scan_source_tags()
-        tracked_files = [rel_path for rel_path, _ in self.iter_source_files(metadata)]
+
+        tracked_files = [normalize_path(str(path.relative_to(self.repo_root))) for path in self.iter_source_files()]
 
         for rule in sorted(rules.values(), key=lambda item: item["rule_id"]):
             entry_count = len(rule["entries"])

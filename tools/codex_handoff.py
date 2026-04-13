@@ -2,9 +2,9 @@
 """
 Generate Codex handoff briefs for Claude workflow commands.
 
-The briefs are designed for `tools/codex_delegate.py`, which launches
-`codex exec` as a subprocess from Claude. They can also be saved and
-used manually when needed.
+The briefs are designed for the installed `codex_delegate.py`, which
+launches `codex exec` as a subprocess from Claude. They can also be
+saved and used manually when needed.
 """
 
 from __future__ import annotations
@@ -32,6 +32,15 @@ def child_env() -> dict[str, str]:
     return env
 
 
+SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
+
+
+def script_command(name: str) -> str:
+    return f'python "{(SCRIPT_DIR / name).resolve().as_posix()}"'
+
+
+PROOFD_CMD = script_command("proofd.py")
+DELEGATE_CMD = script_command("codex_delegate.py")
 PROOFD_CONTEXT_MAX_FILES = 24
 PATH_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+")
 BARE_FILE_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]+\.[A-Za-z0-9]{1,8}(?![A-Za-z0-9_.-])")
@@ -137,7 +146,7 @@ def proofd_context(repo_root: pathlib.Path, paths: list[str]) -> str:
     if not selected:
         return ""
     result = subprocess.run(
-        [sys.executable, "tools/proofd.py", "--repo-root", str(repo_root), "context", *selected],
+        [sys.executable, str((SCRIPT_DIR / "proofd.py").resolve()), "--repo-root", str(repo_root), "context", *selected],
         cwd=str(repo_root),
         capture_output=True,
         text=True,
@@ -156,7 +165,7 @@ def proofd_select_matching(repo_root: pathlib.Path, paths: list[str]) -> str:
     if not selected:
         return ""
     result = subprocess.run(
-        [sys.executable, "tools/proofd.py", "--repo-root", str(repo_root), "select-matching", *selected],
+        [sys.executable, str((SCRIPT_DIR / "proofd.py").resolve()), "--repo-root", str(repo_root), "select-matching", *selected],
         cwd=str(repo_root),
         capture_output=True,
         text=True,
@@ -200,7 +209,6 @@ def workflow_label(workflow: str) -> str:
         "janitor": "/j",
         "build": "/b",
         "review-janitor": "/rj",
-        "plan": "plan-critic",
     }
     return mapping.get(workflow, workflow)
 
@@ -213,7 +221,7 @@ def header(repo_root: pathlib.Path, workflow: str, mode: str) -> list[str]:
         f"- Branch: `{current_branch(repo_root)}`",
         f"- Requested by: Claude `{workflow_label(workflow)}` workflow",
         f"- Mode: `{mode}`",
-        "- Execution: intended for `python tools/codex_delegate.py ...` in the current worktree",
+        f"- Execution: intended for `{DELEGATE_CMD} ...` in the current worktree",
         "- Workspace: the current worktree may contain uncommitted changes; treat that state as authoritative input",
         "",
     ]
@@ -270,7 +278,7 @@ def rule_context_lines(repo_root: pathlib.Path, paths: list[str], read_only: boo
             [
                 "",
                 "If you need more rule context, request it explicitly with either:",
-                "- `python tools/proofd.py context <paths...>`",
+                f"- `{PROOFD_CMD} context <paths...>`",
                 "- the `proofd_context` MCP tool if `proofd` is already configured in this Codex environment",
             ]
         )
@@ -293,7 +301,7 @@ def proof_selection_lines(repo_root: pathlib.Path, paths: list[str]) -> list[str
     else:
         lines.extend(
             [
-                "No preloaded `select-matching` output was available. Run `python tools/proofd.py select-matching <files...>` before creating or updating proofs.",
+                f"No preloaded `select-matching` output was available. Run `{PROOFD_CMD} select-matching <files...>` before creating or updating proofs.",
             ]
         )
     lines.append("")
@@ -363,7 +371,7 @@ def janitor_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
     lines.extend(
         [
             "## Objective",
-            "Run the janitor workflow in Codex: prove matching rules, create missing tags through proofd, and lint the result. Only refresh generated rules if the workflow is explicitly finalizing or releasing proof changes.",
+            "Run the janitor workflow in Codex: prove matching rules, create missing tags through proofd, sync generated rules, and lint the result.",
             "",
             f"Scope: `{args.scope}`",
             "",
@@ -377,19 +385,18 @@ def janitor_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
             "## Instructions",
             "1. Determine the actual changed file list for the requested scope.",
             "2. Start with the preloaded proofd context and the preloaded `select-matching` output above.",
-            "3. If you need a fresh selection, run `python tools/proofd.py select-matching <files...>`.",
+            f"3. If you need a fresh selection, run `{PROOFD_CMD} select-matching <files...>`.",
             "4. Prove each selected entry against source code.",
-            "5. Record outcomes with `python tools/proofd.py record-verification ...`.",
+            f"5. Record outcomes with `{PROOFD_CMD} record-verification ...`.",
             "6. If documentation is missing, create rules or entries through `proofd` and only then add the source-code tag anchor.",
             "7. If an existing source tag already covers the implementation site, reuse and cite it instead of creating a duplicate tag.",
             "8. Limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments. Do not make unrelated product-code changes.",
             "9. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
-            "10. Run `python tools/proofd.py lint`.",
-            "11. Only run `python tools/proofd.py sync` if the workflow explicitly includes release/finalization or the user asked to refresh generated rules.",
-            "12. `sync` regenerates the tracked shared `.claude/rules/*.md` snapshot used for Claude context injection and worktree symlinks. If it changes files, include them in the final repo commit instead of treating them as disposable.",
-            "13. The canonical proof update still lives in proofd KB/state plus any source tag comments you changed. Report both the proof-state changes and any tracked rule snapshot changes directly.",
-            "14. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle finalization after the janitor pass returns.",
-            "15. End with a report plus `## Cited`. If janitor is blocked, say so explicitly.",
+            f"10. Run `{PROOFD_CMD} sync` and `{PROOFD_CMD} lint`.",
+            "11. `sync` regenerates local `.claude/rules/*.md` files for Claude context injection. Those files are generated output; do not edit them manually.",
+            "12. If this repo tracks `.claude/rules`, include the refreshed snapshot in the branch. The canonical proof update still lives in proofd KB/state plus any source tag comments you changed.",
+            "13. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle finalization after the janitor pass returns.",
+            "14. End with a report plus `## Cited`. If janitor is blocked, say so explicitly.",
             "",
         ]
     )
@@ -415,14 +422,15 @@ def build_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
             "## Instructions",
             "1. Read `CLAUDE.md` for build commands and `DOCS/RELEASE.md` for release/version workflow.",
             "2. Request proofd context for any files you inspect or modify during the build flow. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
-            "3. If the requested flow includes validation, build, commit, or release work, start by running `python tools/proofd.py sync` so the tracked `.claude/rules` snapshot is current before finalization.",
-            "4. Execute only the requested build pipeline steps.",
-            "5. If commit is included, match recent commit style and include any `.claude/rules` updates produced by `sync`.",
-            "6. If release is included, validate before bump, push, or release creation.",
-            "7. This subprocess is non-interactive. Approval prompts are disabled; release-capable flows may be launched with full access by the wrapper so push and release steps can complete.",
-            "8. Record build duration and summarize what was done.",
-            "9. Do not log the run yourself. Claude will handle run logging after the subprocess returns.",
-            "10. End with a concise report suitable for the user.",
+            "3. Execute only the requested build pipeline steps.",
+            f"4. If commit or release is included and you are not using repo build scripts that already refresh rules, run `{PROOFD_CMD} sync` first.",
+            "5. Treat `.claude/rules/*.md` as generated but normal repo files: never edit them manually, and include the refreshed snapshot when it changes.",
+            "6. If commit is included, match recent commit style.",
+            "7. If release is included, validate before bump, push, or release creation.",
+            "8. This subprocess is non-interactive. Approval prompts are disabled; release-capable flows may be launched with full access by the wrapper so push and release steps can complete.",
+            "9. Record build duration and summarize what was done.",
+            "10. Do not log the run yourself. Claude will handle run logging after the subprocess returns.",
+            "11. End with a concise report suitable for the user.",
             "",
         ]
     )
@@ -458,63 +466,14 @@ def review_janitor_handoff(repo_root: pathlib.Path, args: argparse.Namespace) ->
             "1. Run the review pass first and keep it read-only.",
             "2. Then run the janitor or proof pass against the requested scope.",
             "3. Start the janitor phase with the preloaded proofd context and the preloaded `select-matching` output above.",
-            "4. If you need a fresh proof selection, run `python tools/proofd.py select-matching <files...>`.",
+            f"4. If you need a fresh proof selection, run `{PROOFD_CMD} select-matching <files...>`.",
             "5. During the janitor phase, limit writes to proof-maintenance work: proofd state, canonical or overlay rule data, generated `.claude/rules`, and source tag comments.",
             "6. If an existing source tag already covers the implementation site, reuse and cite it instead of creating a duplicate tag.",
             "7. If `proofd` MCP is already configured in this Codex environment you may use it; otherwise use the CLI.",
-            "8. Only run `python tools/proofd.py sync` if the workflow explicitly includes release/finalization or the user asked to refresh generated rules. If it changes `.claude/rules/*.md`, treat those as normal tracked repo updates for the eventual final commit.",
+            "8. When janitor runs `sync`, remember that `.claude/rules/*.md` is generated local output. Do not edit it manually, and if this repo tracks it, include the refreshed snapshot in the branch.",
             "9. Keep review findings and janitor or proof outcomes separate in the final report.",
             "10. Do not log, commit, merge, or exit the worktree from inside this subprocess. Claude will handle that after the combined pass returns.",
             "11. End each section with any cited tags used in that phase, and say explicitly if janitor was blocked.",
-            "",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def plan_handoff(repo_root: pathlib.Path, args: argparse.Namespace) -> str:
-    plan_path = pathlib.Path(args.plan_file).resolve()
-    plan_text = plan_path.read_text(encoding="utf-8")
-    user_path = pathlib.Path(args.user_correspondence_file).resolve()
-    user_text = user_path.read_text(encoding="utf-8")
-    context_files = plan_context_paths(repo_root, plan_text)
-    lines = header(repo_root, "plan", args.mode)
-    lines.extend(
-        [
-            "## Objective",
-            "Critique the attached implementation plan before it is presented to the user.",
-            "",
-            *rule_context_lines(repo_root, context_files, read_only=True),
-            "## Instructions",
-            "1. Read the user correspondence first and treat it as the source of truth for scope, constraints, non-goals, and acceptance criteria.",
-            "2. Read `CLAUDE.md` and inspect the codebase as needed.",
-            "3. Use the preloaded proofd context for the files or areas mentioned in the draft plan. If you still need more rule detail, prefer direct reads of `CLAUDE.md` and relevant `.claude/rules/*.md` files; only use MCP if it is already configured.",
-            "4. Do not edit files or implement the plan. This is a critique-only pass.",
-            "5. First judge whether the draft plan actually addresses the user's request and constraints before critiquing implementation details.",
-            "6. Critique the plan for user fit, abstraction, reuse, and risk.",
-            "7. Point out missing steps, risky assumptions, and existing code or tooling the plan should reuse.",
-        ]
-    )
-    if args.mode == "adversarial":
-        lines.append("8. Treat this as an adversarial critique. Challenge weak assumptions directly.")
-    else:
-        lines.append("8. Produce a normal plan-critic pass.")
-    lines.extend(
-        [
-            "",
-            f"## User Correspondence Source\n`{user_path}`",
-            "",
-            "## User Correspondence",
-            "```markdown",
-            user_text.rstrip(),
-            "```",
-            "",
-            f"## Draft Plan Source\n`{plan_path}`",
-            "",
-            "## Draft Plan",
-            "```markdown",
-            plan_text.rstrip(),
-            "```",
             "",
         ]
     )
@@ -546,11 +505,6 @@ def build_parser() -> argparse.ArgumentParser:
     build = subparsers.add_parser("build")
     build.add_argument("--steps", choices=["build-only", "commit-build", "build-release", "commit-build-release"], required=True)
 
-    plan = subparsers.add_parser("plan")
-    plan.add_argument("--plan-file", required=True)
-    plan.add_argument("--user-correspondence-file", required=True)
-    plan.add_argument("--mode", choices=["codex", "adversarial"], default="codex")
-
     return parser
 
 
@@ -568,8 +522,6 @@ def main() -> int:
         content = review_janitor_handoff(repo_root, args)
     elif args.workflow == "build":
         content = build_handoff(repo_root, args)
-    elif args.workflow == "plan":
-        content = plan_handoff(repo_root, args)
     else:
         raise RuntimeError(f"Unknown workflow: {args.workflow}")
 

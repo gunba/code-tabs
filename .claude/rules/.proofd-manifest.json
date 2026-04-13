@@ -61,7 +61,6 @@
     "src-store-sessions-ts-13276abb.md",
     "src-store-settings-ts-8fe4e3b5.md",
     "src-store-version-ts-294717d9.md",
-    "src-tauri-src-bin-discover-audit-rs-ad146f45.md",
     "src-tauri-src-commands-cli-rs-0f1145f1.md",
     "src-tauri-src-commands-config-rs-e4e187e0.md",
     "src-tauri-src-commands-data-rs-63acfe8b.md",
@@ -84,7 +83,6 @@
     "src-tauri-src-pty-unix-rs-b4f804b3.md",
     "src-tauri-src-session-types-rs-920df7b3.md",
     "src-types-session-ts-b2c31cff.md",
-    "src-types-tapevents-ts-79312c4c.md",
-    "tools-proofd-py-91e9dbef.md"
+    "src-types-tapevents-ts-79312c4c.md"
   ]
 }
