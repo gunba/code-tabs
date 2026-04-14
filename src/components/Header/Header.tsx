@@ -1,27 +1,60 @@
+import { useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSettingsStore } from "../../store/settings";
 import { useVersionStore } from "../../store/version";
 import "./Header.css";
 
+const DRAG_THRESHOLD_PX_SQ = 9; // 3px movement before we start a window drag
+
 // [VA-02] Header (Linux custom titlebar): app version + CLI version display with window controls.
-// data-tauri-drag-region alone is unreliable on Wayland (KDE/GNOME); an explicit startDragging()
-// on left-mousedown outside the controls cluster is the workaround.
+// data-tauri-drag-region is unreliable on Wayland (KDE/GNOME). Starting the window drag on
+// mousedown would kill double-click-to-maximize (compositor captures the gesture before click
+// events fire), so we defer startDragging() until the pointer actually moves past a threshold.
+// Double-click toggles maximize explicitly — the drag-region attribute's dblclick path is
+// part of what fails to fire on these compositors.
 export function Header() {
   const appVersion = useVersionStore((s) => s.appVersion);
   const cliVersion = useSettingsStore((s) => s.cliVersion);
+  const dragOriginRef = useRef<{ x: number; y: number } | null>(null);
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLElement>) => {
+  const onHeaderMouseDown = (e: React.MouseEvent<HTMLElement>) => {
     if (e.button !== 0) return;
-    const target = e.target as HTMLElement;
-    if (target.closest(".app-header-controls")) return;
-    getCurrentWindow().startDragging().catch(() => {});
+    if ((e.target as HTMLElement).closest(".app-header-controls")) return;
+    dragOriginRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const onHeaderMouseMove = (e: React.MouseEvent<HTMLElement>) => {
+    const origin = dragOriginRef.current;
+    if (!origin) return;
+    if (e.buttons === 0) {
+      dragOriginRef.current = null;
+      return;
+    }
+    const dx = e.clientX - origin.x;
+    const dy = e.clientY - origin.y;
+    if (dx * dx + dy * dy >= DRAG_THRESHOLD_PX_SQ) {
+      dragOriginRef.current = null;
+      getCurrentWindow().startDragging().catch(() => {});
+    }
+  };
+
+  const onHeaderMouseUp = () => {
+    dragOriginRef.current = null;
+  };
+
+  const onHeaderDoubleClick = (e: React.MouseEvent<HTMLElement>) => {
+    if ((e.target as HTMLElement).closest(".app-header-controls")) return;
+    getCurrentWindow().toggleMaximize().catch(() => {});
   };
 
   return (
     <header
       className="app-header"
       data-tauri-drag-region
-      onMouseDown={handleMouseDown}
+      onMouseDown={onHeaderMouseDown}
+      onMouseMove={onHeaderMouseMove}
+      onMouseUp={onHeaderMouseUp}
+      onDoubleClick={onHeaderDoubleClick}
     >
       <div className="app-header-title">
         <span className="app-header-name">
