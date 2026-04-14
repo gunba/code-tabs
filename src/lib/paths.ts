@@ -12,6 +12,7 @@ export const IS_WINDOWS =
   ("process" in globalThis && ((globalThis as Record<string, unknown>).process as Record<string, string>)?.platform === "win32") ||
   (navigator?.platform?.startsWith("Win") ?? false);
 
+// [PL-02] IS_LINUX: process.platform==="linux" || navigator.platform.startsWith("Linux"); mirrors IS_WINDOWS pattern
 export const IS_LINUX =
   ("process" in globalThis && ((globalThis as Record<string, unknown>).process as Record<string, string>)?.platform === "linux") ||
   (navigator?.platform?.startsWith("Linux") ?? false);

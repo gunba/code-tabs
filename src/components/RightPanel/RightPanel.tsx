@@ -25,6 +25,7 @@ export function RightPanel() {
   const mode = useSettingsStore((s) => s.activityViewMode);
   const setMode = useSettingsStore((s) => s.setActivityViewMode);
 
+  // [RI-03] Search tab hidden until hasExecutedSearch (runtime flag, not persisted); stale-selection redirects to activity
   useEffect(() => {
     if (!debugBuild && rightPanelTab === "debug") {
       setRightPanelTab("activity");

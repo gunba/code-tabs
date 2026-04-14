@@ -135,6 +135,7 @@ export default function App() {
     getCurrentWindow().setTitle(parts.join(" · ")).catch(() => {});
   }, [appVersion, cliVersion]);
 
+  // [PL-01] Linux custom titlebar: setDecorations(false) + <Header /> rendered above tab bar; Windows/macOS unchanged
   // Linux: hide native decorations so the custom <Header /> acts as the titlebar.
   // Windows/macOS keep native decorations (see tauri.conf.json). Wayland compositors
   // that reject setDecorations(false) silently fall back to native via the catch.

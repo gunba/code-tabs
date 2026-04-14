@@ -132,6 +132,7 @@ function FileTreeRow({
     );
   }
 
+  // [AP-06] Folder searched-color: main agent (agentId null) always wins; subagents only while in active set
   const searchedAgentId =
     node.activity?.kind === "searched" ? node.activity.agentId : undefined;
   // Main agent always wins (agentId null/undefined); subagents only retain the

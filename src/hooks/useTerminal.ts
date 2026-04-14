@@ -139,6 +139,7 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       });
     }
 
+    // [DF-11] xterm addons loaded on open: search, web-links, unicode11 (each in try/catch); unicode11 sets activeVersion="11"
     try {
       const search = new SearchAddon();
       term.loadAddon(search);
@@ -185,6 +186,7 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       });
     }
 
+    // [KB-12] Platform-gated paste blocker: capture-phase preventDefault on Windows only (double-paste fix)
     // Windows-only: Tauri permission dialog causes xterm.js to receive a synthetic
     // paste event on top of our custom Ctrl+V handler, producing double-paste.
     // Other platforms rely on xterm.js native paste handling plus our Ctrl+(Shift)+V
@@ -298,7 +300,8 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
           return true;
         }),
       );
-      // Windows: Claude Code uses process.title; xterm sees no OSC here.
+      // [TA-10] OSC 0 auto-rename: Linux/macOS Claude Code subagents emit title via OSC 0;
+      // Windows uses process.title and does not fire this path.
       lifecycleDisposables.push(
         term.onTitleChange((rawTitle) => {
           const title = rawTitle.trim();

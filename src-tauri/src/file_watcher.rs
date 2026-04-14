@@ -82,6 +82,7 @@ fn event_kind_str(kind: &EventKind) -> Option<&'static str> {
     }
 }
 
+/// [FW-01] Linux: non-recursive per-directory inotify watches via WalkBuilder; Mutex held across walk.
 /// Set up inotify watches for every non-ignored directory under `root`.
 /// Linux inotify is per-directory — a recursive watch on a large tree
 /// (e.g. .claude/worktrees with cargo targets) adds tens of thousands of
