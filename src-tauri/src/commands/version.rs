@@ -16,6 +16,22 @@ pub fn get_build_info() -> BuildInfo {
     }
 }
 
+// Returns true on Linux + KDE + Wayland — the combination where Tauri's `decorations: false`
+// is silently ignored by KWin (upstream tauri/wry bug, see GH issues #6162 / #6562). Frontend
+// uses this to skip the custom Header on that combo and let KDE's native titlebar show.
+#[tauri::command]
+pub fn linux_use_native_chrome() -> bool {
+    if !cfg!(target_os = "linux") {
+        return false;
+    }
+    let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
+    if session != "wayland" {
+        return false;
+    }
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_uppercase();
+    desktop.split(':').any(|s| s == "KDE")
+}
+
 #[tauri::command]
 pub async fn check_latest_cli_version() -> Result<String, String> {
     tokio::task::spawn_blocking(|| {

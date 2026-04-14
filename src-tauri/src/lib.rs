@@ -228,6 +228,7 @@ pub fn run() {
             commands::compute_file_diff,
             commands::read_file_for_snapshot,
             commands::get_build_info,
+            commands::linux_use_native_chrome,
             commands::check_latest_cli_version,
             commands::update_cli,
             observability::append_observability_data,

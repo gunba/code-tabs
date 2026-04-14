@@ -10,8 +10,8 @@ import "./RightPanel.css";
 
 type RightPanelTab = "activity" | "search" | "debug";
 
-// [RI-04] BASE_TABS ordered [search, activity, debug] so Search appears before Activity
-// when visible; Response/Session pills rendered after Activity don't shift Search position.
+// [RI-04] BASE_TABS ordered [search, activity, debug] so Search appears before Activity;
+// Response/Session pills rendered after Activity don't shift Search position.
 const BASE_TABS = [
   { id: "search" as const, label: "Search", icon: <IconSearch size={13} /> },
   { id: "activity" as const, label: "Activity", icon: <IconFolder size={13} /> },
@@ -20,33 +20,22 @@ const BASE_TABS = [
 
 export function RightPanel() {
   const debugBuild = useRuntimeStore((s) => s.observabilityInfo.debugBuild);
-  const hasExecutedSearch = useRuntimeStore((s) => s.hasExecutedSearch);
   const rightPanelTab = useSettingsStore((s) => s.rightPanelTab);
   const setRightPanelTab = useSettingsStore((s) => s.setRightPanelTab);
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const mode = useSettingsStore((s) => s.activityViewMode);
   const setMode = useSettingsStore((s) => s.setActivityViewMode);
 
-  // [RI-03] Search tab hidden until hasExecutedSearch (runtime flag, not persisted); stale-selection redirects to activity
   useEffect(() => {
     if (!debugBuild && rightPanelTab === "debug") {
       setRightPanelTab("activity");
     }
-    if (!hasExecutedSearch && rightPanelTab === "search") {
-      setRightPanelTab("activity");
-    }
-  }, [debugBuild, hasExecutedSearch, rightPanelTab, setRightPanelTab]);
+  }, [debugBuild, rightPanelTab, setRightPanelTab]);
 
-  const activeTab: RightPanelTab =
-    (!debugBuild && rightPanelTab === "debug") ||
-    (!hasExecutedSearch && rightPanelTab === "search")
-      ? "activity"
-      : rightPanelTab;
-  const tabs = BASE_TABS.filter((tab) => {
-    if (tab.id === "debug" && !debugBuild) return false;
-    if (tab.id === "search" && !hasExecutedSearch) return false;
-    return true;
-  });
+  const activeTab: RightPanelTab = !debugBuild && rightPanelTab === "debug"
+    ? "activity"
+    : rightPanelTab;
+  const tabs = BASE_TABS.filter((tab) => tab.id !== "debug" || debugBuild);
   // [RI-01] Response/Session pill is inline after Activity tab, visible only when activity tab active + session open
   const showPill = activeTab === "activity" && !!activeTabId;
 

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
-import { useRuntimeStore } from "../../store/runtime";
 import { sessionColor } from "../../lib/claude";
 import { dirToTabName } from "../../lib/paths";
 import { validateRegex } from "../../lib/searchBuffers";
@@ -97,7 +96,6 @@ export function SearchPanel() {
     }
 
     const gen = ++searchGenRef.current;
-    useRuntimeStore.getState().markSearchExecuted();
 
     try {
       const matches = await invoke<JsonlMatch[]>("search_jsonl_files", {

@@ -135,13 +135,20 @@ export default function App() {
     getCurrentWindow().setTitle(parts.join(" · ")).catch(() => {});
   }, [appVersion, cliVersion]);
 
-  // [PL-01] Linux custom titlebar: tauri.conf.json sets decorations:false globally so Wayland
-  // compositors honor it at window creation (runtime setDecorations(false) is ignored on KDE/GNOME
-  // Wayland). Non-Linux platforms re-enable native decorations at runtime for native frame parity.
+  // [PL-01] Linux custom titlebar: tauri.conf.json sets decorations:false globally so non-KDE
+  // Wayland compositors honor it at window creation. Non-Linux re-enables native decorations
+  // at runtime. KDE+Wayland is a known upstream Tauri bug (issues #6162/#6562 — KWin ignores
+  // decorations:false from wry's GTK-Wayland window), so on that combo we restore native
+  // decorations and skip our custom Header to avoid a duplicated titlebar.
+  const [useNativeChrome, setUseNativeChrome] = useState(false);
   useEffect(() => {
-    if (!IS_LINUX) {
-      getCurrentWindow().setDecorations(true).catch(() => {});
-    }
+    (async () => {
+      const native = IS_LINUX ? await invoke<boolean>("linux_use_native_chrome").catch(() => false) : true;
+      setUseNativeChrome(native);
+      if (native) {
+        await getCurrentWindow().setDecorations(true).catch(() => {});
+      }
+    })();
   }, []);
 
   // [SL-02] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T, uses saved defaults or last config
@@ -288,7 +295,6 @@ export default function App() {
       // Ctrl+Shift+F: open RightPanel search tab
       if (e.ctrlKey && e.shiftKey && e.key === "F") {
         e.preventDefault();
-        useRuntimeStore.getState().markSearchExecuted();
         useSettingsStore.getState().setRightPanelTab("search");
       }
 
@@ -377,7 +383,7 @@ export default function App() {
 
   return (
     <div className={`app${ctrlHeld ? " ctrl-held" : ""}`}>
-      {IS_LINUX && <Header />}
+      {IS_LINUX && !useNativeChrome && <Header />}
       {/* Tab bar */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
