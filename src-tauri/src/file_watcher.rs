@@ -1,24 +1,12 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::observability::record_backend_event;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Emitter};
-
-const IGNORED_DIRS: &[&str] = &[
-    ".git",
-    "node_modules",
-    "target",
-    "__pycache__",
-    ".next",
-    "dist",
-    "build",
-    ".claude",
-];
-
-const IGNORED_EXTENSIONS: &[&str] = &["pyc", "o", "swp", "swo"];
 
 const DEBOUNCE_MS: u64 = 200;
 
@@ -32,7 +20,7 @@ pub struct FsChangeEvent {
 }
 
 struct SessionWatcherHandle {
-    watcher: RecommendedWatcher,
+    watcher: Arc<Mutex<RecommendedWatcher>>,
 }
 
 pub struct FileWatcherState {
@@ -53,43 +41,36 @@ impl FileWatcherState {
     }
 }
 
-fn should_ignore(path: &Path, gitignore_patterns: &[String]) -> bool {
-    for component in path.components() {
-        let name = component.as_os_str().to_string_lossy();
-        if IGNORED_DIRS.iter().any(|d| *d == name.as_ref()) {
-            return true;
-        }
-        if name == ".DS_Store" {
-            return true;
-        }
-        for pattern in gitignore_patterns {
-            if glob_match::glob_match(pattern, &name) {
-                return true;
-            }
-        }
+/// Build a gitignore matcher rooted at `root`. Picks up the root .gitignore,
+/// .git/info/exclude, and the user's global core.excludesFile (via the ignore
+/// crate). Nested .gitignore files further down the tree are NOT consulted
+/// here; on Linux the walk handles them, and on other platforms nested-level
+/// ignores only cause spurious events (the top-level rules catch the big
+/// directories like target/ and node_modules/ that cause actual problems).
+fn build_matcher(root: &Path) -> Gitignore {
+    let mut builder = GitignoreBuilder::new(root);
+
+    let root_ignore = root.join(".gitignore");
+    if root_ignore.exists() {
+        let _ = builder.add(root_ignore);
     }
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        if IGNORED_EXTENSIONS.iter().any(|e| *e == ext) {
-            return true;
-        }
+
+    let info_exclude = root.join(".git").join("info").join("exclude");
+    if info_exclude.exists() {
+        let _ = builder.add(info_exclude);
     }
-    false
+
+    // Always ignore .git itself — git never tracks it and no one wants events for it.
+    let _ = builder.add_line(None, ".git/");
+
+    builder.build().unwrap_or_else(|_| Gitignore::empty())
 }
 
-fn parse_gitignore(root_dir: &Path) -> Vec<String> {
-    let gitignore_path = root_dir.join(".gitignore");
-    match std::fs::read_to_string(&gitignore_path) {
-        Ok(content) => content
-            .lines()
-            .map(|l| l.trim())
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(|line| {
-                let l = line.strip_suffix('/').unwrap_or(line);
-                l.to_string()
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    }
+fn is_ignored(matcher: &Gitignore, path: &Path, is_dir: bool) -> bool {
+    matches!(
+        matcher.matched_path_or_any_parents(path, is_dir),
+        ignore::Match::Ignore(_)
+    )
 }
 
 fn event_kind_str(kind: &EventKind) -> Option<&'static str> {
@@ -101,6 +82,53 @@ fn event_kind_str(kind: &EventKind) -> Option<&'static str> {
     }
 }
 
+/// Set up inotify watches for every non-ignored directory under `root`.
+/// Linux inotify is per-directory — a recursive watch on a large tree
+/// (e.g. .claude/worktrees with cargo targets) adds tens of thousands of
+/// watches and stalls the app for minutes. Walking with the ignore crate's
+/// WalkBuilder respects .gitignore, .git/info/exclude, global excludes,
+/// and nested .gitignore files, pruning the watch set to what the user
+/// actually cares about. New directories created after start are picked up
+/// in the event loop.
+#[cfg(target_os = "linux")]
+fn setup_watches(watcher: &Mutex<RecommendedWatcher>, root: &Path) -> Result<usize, String> {
+    use ignore::WalkBuilder;
+
+    let mut w = watcher.lock().map_err(|e| e.to_string())?;
+    let mut count = 0;
+    for entry in WalkBuilder::new(root).hidden(false).build() {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        if entry.file_type().map_or(false, |t| t.is_dir()) {
+            match w.watch(entry.path(), RecursiveMode::NonRecursive) {
+                Ok(()) => count += 1,
+                Err(e) => {
+                    log::warn!(
+                        "file_watcher: watch {} failed: {}",
+                        entry.path().display(),
+                        e
+                    );
+                }
+            }
+        }
+    }
+    Ok(count)
+}
+
+/// On Windows/macOS a single recursive watch handles the whole tree at the
+/// kernel level with no per-directory overhead, so walking is pure cost.
+#[cfg(not(target_os = "linux"))]
+fn setup_watches(watcher: &Mutex<RecommendedWatcher>, root: &Path) -> Result<usize, String> {
+    watcher
+        .lock()
+        .map_err(|e| e.to_string())?
+        .watch(root, RecursiveMode::Recursive)
+        .map_err(|e| format!("Failed to watch directory: {e}"))?;
+    Ok(1)
+}
+
 pub fn start_watcher(
     app_handle: AppHandle,
     session_id: String,
@@ -110,21 +138,20 @@ pub fn start_watcher(
     let mut watchers = state.watchers.lock().map_err(|e| e.to_string())?;
     watchers.remove(&session_id);
 
-    let gitignore_patterns = parse_gitignore(&root_dir);
+    let matcher = build_matcher(&root_dir);
 
     let (tx, rx) = mpsc::channel::<Result<Event, notify::Error>>();
 
-    let mut watcher = RecommendedWatcher::new(
+    let watcher = RecommendedWatcher::new(
         move |res| {
             let _ = tx.send(res);
         },
         Config::default(),
     )
     .map_err(|e| format!("Failed to create watcher: {e}"))?;
+    let watcher = Arc::new(Mutex::new(watcher));
 
-    watcher
-        .watch(&root_dir, RecursiveMode::Recursive)
-        .map_err(|e| format!("Failed to watch directory: {e}"))?;
+    let watch_count = setup_watches(&watcher, &root_dir)?;
 
     record_backend_event(
         &app_handle,
@@ -135,15 +162,14 @@ pub fn start_watcher(
         "Started file watcher",
         serde_json::json!({
             "rootDir": root_dir.to_string_lossy().to_string(),
-            "gitignorePatternCount": gitignore_patterns.len(),
+            "watchCount": watch_count,
         }),
     );
 
     let sid = session_id.clone();
-    let root = root_dir.clone();
-    let ignores = gitignore_patterns;
+    let watcher_weak = Arc::downgrade(&watcher);
     std::thread::spawn(move || {
-        event_loop(rx, &app_handle, &sid, &root, &ignores);
+        event_loop(rx, watcher_weak, app_handle, sid, matcher);
     });
 
     watchers.insert(session_id, SessionWatcherHandle { watcher });
@@ -152,10 +178,12 @@ pub fn start_watcher(
 
 fn event_loop(
     rx: mpsc::Receiver<Result<Event, notify::Error>>,
-    app: &AppHandle,
-    session_id: &str,
-    root_dir: &Path,
-    gitignore_patterns: &[String],
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))] watcher: Weak<
+        Mutex<RecommendedWatcher>,
+    >,
+    app: AppHandle,
+    session_id: String,
+    matcher: Gitignore,
 ) {
     loop {
         let first = match rx.recv() {
@@ -184,10 +212,19 @@ fn event_loop(
             match result {
                 Ok(event) => {
                     if let Some(kind_str) = event_kind_str(&event.kind) {
+                        let is_create = matches!(event.kind, EventKind::Create(_));
                         for path in &event.paths {
-                            let rel = path.strip_prefix(root_dir).unwrap_or(path);
-                            if should_ignore(rel, gitignore_patterns) {
+                            let is_dir = path.is_dir();
+                            if is_ignored(&matcher, path, is_dir) {
                                 continue;
+                            }
+                            #[cfg(target_os = "linux")]
+                            if is_create && is_dir {
+                                if let Some(w) = watcher.upgrade() {
+                                    if let Ok(mut w) = w.lock() {
+                                        let _ = w.watch(path, RecursiveMode::NonRecursive);
+                                    }
+                                }
                             }
                             seen.insert(path.clone(), kind_str);
                         }
@@ -196,10 +233,10 @@ fn event_loop(
                 Err(e) => {
                     log::warn!("File watcher error for session {session_id}: {e}");
                     record_backend_event(
-                        app,
+                        &app,
                         "WARN",
                         "watcher",
-                        Some(session_id),
+                        Some(&session_id),
                         "watcher.event_error",
                         "File watcher reported an error",
                         serde_json::json!({
@@ -223,7 +260,7 @@ fn event_loop(
         let unique_paths = seen.len();
         for (path, kind) in seen {
             let ev = FsChangeEvent {
-                session_id: session_id.to_string(),
+                session_id: session_id.clone(),
                 path: path.to_string_lossy().to_string(),
                 kind: kind.to_string(),
                 timestamp_ms: now,
@@ -233,14 +270,14 @@ fn event_loop(
             }
         }
         record_backend_event(
-            app,
+            &app,
             if batch_start.elapsed().as_millis() >= 100 {
                 "WARN"
             } else {
                 "DEBUG"
             },
             "watcher",
-            Some(session_id),
+            Some(&session_id),
             "watcher.batch_emitted",
             "Emitted debounced file watcher batch",
             serde_json::json!({
@@ -263,23 +300,25 @@ pub fn add_watch_path(
     path: &Path,
     state: &FileWatcherState,
 ) -> Result<(), String> {
-    let mut watchers = state.watchers.lock().map_err(|e| e.to_string())?;
-    if let Some(handle) = watchers.get_mut(session_id) {
-        let mode = if path.is_dir() {
-            RecursiveMode::NonRecursive
-        } else if let Some(parent) = path.parent() {
-            return handle
-                .watcher
-                .watch(parent, RecursiveMode::NonRecursive)
-                .map_err(|e| format!("Failed to watch path: {e}"));
-        } else {
-            return Err("Cannot determine parent directory for path".into());
-        };
-        handle
+    let watcher = {
+        let watchers = state.watchers.lock().map_err(|e| e.to_string())?;
+        watchers
+            .get(session_id)
+            .ok_or_else(|| format!("No watcher found for session {session_id}"))?
             .watcher
-            .watch(path, mode)
-            .map_err(|e| format!("Failed to watch path: {e}"))
+            .clone()
+    };
+
+    let (target, mode) = if path.is_dir() {
+        (path.to_path_buf(), RecursiveMode::NonRecursive)
+    } else if let Some(parent) = path.parent() {
+        (parent.to_path_buf(), RecursiveMode::NonRecursive)
     } else {
-        Err(format!("No watcher found for session {session_id}"))
-    }
+        return Err("Cannot determine parent directory for path".into());
+    };
+
+    let mut guard = watcher.lock().map_err(|e| e.to_string())?;
+    guard
+        .watch(&target, mode)
+        .map_err(|e| format!("Failed to watch path: {e}"))
 }
