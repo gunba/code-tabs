@@ -48,6 +48,7 @@ rand = "0.8"
 futures-util = "0.3"
 similar = "2"
 scraper = "0.23"
+tauri-plugin-clipboard-manager = "2.3.2"
 
 [dev-dependencies]
 tempfile = "3"

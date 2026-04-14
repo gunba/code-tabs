@@ -6,6 +6,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
+import { readText as clipboardReadText } from "@tauri-apps/plugin-clipboard-manager";
 import { getTerminalTheme } from "../lib/theme";
 import { dlog } from "../lib/debugLog";
 import { startTraceSpan, traceSync } from "../lib/perfTrace";
@@ -188,8 +189,9 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
 
     // [KB-12] Platform-gated paste blocker: capture-phase preventDefault on Windows + Linux.
     // Windows: avoids Tauri permission-dialog double-paste. Linux: ensures Ctrl+V sends ^V to the
-    // PTY cleanly so Claude Code runs its own wl-paste/xclip native clipboard read (covers both
-    // text AND image paste). macOS left alone — native paste handling works.
+    // PTY cleanly so Claude Code's native image-paste handler (wl-paste/xclip) runs. Linux text
+    // paste uses Ctrl+Shift+V, which reads via Tauri's clipboard plugin and writes via bracketed
+    // paste. macOS left alone — native paste handling works.
     pasteBlockCleanupRef.current?.();
     if (IS_WINDOWS || IS_LINUX) {
       const handlePaste = (e: ClipboardEvent) => {
@@ -360,12 +362,14 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
             return false; // We handled it — don't send to PTY
           }
         }
-        // Ctrl+Shift+V — Linux primary paste shortcut (works on all platforms)
+        // Ctrl+Shift+V — cross-platform text paste. Reads via Tauri clipboard plugin
+        // (navigator.clipboard.readText silently fails on webkit2gtk/Wayland). Text is
+        // delivered to the PTY via xterm's bracketed paste, which Claude Code's TUI reads.
         if (ev.ctrlKey && ev.shiftKey && (ev.key === "v" || ev.key === "V") && ev.type === "keydown") {
-          navigator.clipboard.readText().then((text) => {
+          clipboardReadText().then((text) => {
             dlog("terminal", sessionIdRef.current, "terminal paste requested (ctrl+shift+v)", "DEBUG", {
               event: "terminal.paste",
-              data: { length: text.length, text },
+              data: { length: text?.length ?? 0, text },
             });
             if (text) term!.paste(text);
           }).catch((err) => {
@@ -378,14 +382,14 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
         }
         // Handle Ctrl+V paste — read clipboard and insert into terminal
         if (ev.ctrlKey && !ev.shiftKey && ev.key === "v" && ev.type === "keydown") {
-          // Linux: let xterm send ^V to PTY so Claude Code runs its native wl-paste read
-          // (covers text + image paste). Paste blocker above prevents xterm's paste-event double-paste.
+          // Linux: let xterm send ^V to PTY so Claude Code's chat:imagePaste keybind runs
+          // its native wl-paste image read (text paste on Linux goes through Ctrl+Shift+V).
           if (IS_LINUX) return true;
-          navigator.clipboard.readText().then((text) => {
+          clipboardReadText().then((text) => {
             dlog("terminal", sessionIdRef.current, "terminal paste requested", "DEBUG", {
               event: "terminal.paste",
               data: {
-                length: text.length,
+                length: text?.length ?? 0,
                 text,
               },
             });
