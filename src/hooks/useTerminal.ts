@@ -12,7 +12,7 @@ import { startTraceSpan, traceSync } from "../lib/perfTrace";
 import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { getResumeId } from "../lib/claude";
-import { IS_WINDOWS } from "../lib/paths";
+import { IS_WINDOWS, IS_LINUX } from "../lib/paths";
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
@@ -186,13 +186,12 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       });
     }
 
-    // [KB-12] Platform-gated paste blocker: capture-phase preventDefault on Windows only (double-paste fix)
-    // Windows-only: Tauri permission dialog causes xterm.js to receive a synthetic
-    // paste event on top of our custom Ctrl+V handler, producing double-paste.
-    // Other platforms rely on xterm.js native paste handling plus our Ctrl+(Shift)+V
-    // handler below, so no blocker is needed.
+    // [KB-12] Platform-gated paste blocker: capture-phase preventDefault on Windows + Linux.
+    // Windows: avoids Tauri permission-dialog double-paste. Linux: ensures Ctrl+V sends ^V to the
+    // PTY cleanly so Claude Code runs its own wl-paste/xclip native clipboard read (covers both
+    // text AND image paste). macOS left alone — native paste handling works.
     pasteBlockCleanupRef.current?.();
-    if (IS_WINDOWS) {
+    if (IS_WINDOWS || IS_LINUX) {
       const handlePaste = (e: ClipboardEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -301,16 +300,18 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
         }),
       );
       // [TA-10] OSC 0 auto-rename: Linux/macOS Claude Code subagents emit title via OSC 0;
-      // Windows uses process.title and does not fire this path.
+      // Windows uses process.title and does not fire this path. Strip Claude Code's state-prefix
+      // chars (spinners, bullets) and skip the "Claude Code" default placeholder so tab names
+      // reflect only the Haiku-generated session title.
       lifecycleDisposables.push(
         term.onTitleChange((rawTitle) => {
-          const title = rawTitle.trim();
+          const title = rawTitle.replace(/^[^\p{L}\p{N}]+/u, "").trim();
           const sid = sessionIdRef.current;
           dlog("terminal", sid, "terminal title changed", "DEBUG", {
             event: "terminal.title_change",
-            data: { title },
+            data: { rawTitle, title },
           });
-          if (!sid || !title || title === "Claude Tabs") return;
+          if (!sid || !title || title === "Claude Tabs" || title === "Claude Code") return;
           const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
           if (session && title !== session.name) {
             useSessionStore.getState().renameSession(sid, title);
@@ -377,6 +378,9 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
         }
         // Handle Ctrl+V paste — read clipboard and insert into terminal
         if (ev.ctrlKey && !ev.shiftKey && ev.key === "v" && ev.type === "keydown") {
+          // Linux: let xterm send ^V to PTY so Claude Code runs its native wl-paste read
+          // (covers text + image paste). Paste blocker above prevents xterm's paste-event double-paste.
+          if (IS_LINUX) return true;
           navigator.clipboard.readText().then((text) => {
             dlog("terminal", sessionIdRef.current, "terminal paste requested", "DEBUG", {
               event: "terminal.paste",
