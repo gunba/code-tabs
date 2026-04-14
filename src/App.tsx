@@ -278,6 +278,7 @@ export default function App() {
       // Ctrl+Shift+F: open RightPanel search tab
       if (e.ctrlKey && e.shiftKey && e.key === "F") {
         e.preventDefault();
+        useRuntimeStore.getState().markSearchExecuted();
         useSettingsStore.getState().setRightPanelTab("search");
       }
 
@@ -562,7 +563,10 @@ export default function App() {
           </button>
           <button
             className="tab-search"
-            onClick={() => useSettingsStore.getState().setRightPanelTab("search")}
+            onClick={() => {
+              useRuntimeStore.getState().markSearchExecuted();
+              useSettingsStore.getState().setRightPanelTab("search");
+            }}
             title="Search conversations (Ctrl+Shift+F)"
           >
             <IconSearch size={16} />

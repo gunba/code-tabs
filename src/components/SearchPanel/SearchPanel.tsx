@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
+import { useRuntimeStore } from "../../store/runtime";
 import { sessionColor } from "../../lib/claude";
 import { dirToTabName } from "../../lib/paths";
 import { validateRegex } from "../../lib/searchBuffers";
@@ -122,6 +123,7 @@ export function SearchPanel() {
 
       setResults(mapped);
       setActiveIndex(mapped.length > 0 ? 0 : -1);
+      useRuntimeStore.getState().markSearchExecuted();
       dlog("search", null, `Search "${query}" → ${mapped.length} matches across ${sessionList.length} sessions`);
     } catch (err) {
       if (gen !== searchGenRef.current) return;
