@@ -10,6 +10,8 @@ import "./RightPanel.css";
 
 type RightPanelTab = "activity" | "search" | "debug";
 
+// [RI-04] BASE_TABS ordered [search, activity, debug] so Search appears before Activity
+// when visible; Response/Session pills rendered after Activity don't shift Search position.
 const BASE_TABS = [
   { id: "search" as const, label: "Search", icon: <IconSearch size={13} /> },
   { id: "activity" as const, label: "Activity", icon: <IconFolder size={13} /> },

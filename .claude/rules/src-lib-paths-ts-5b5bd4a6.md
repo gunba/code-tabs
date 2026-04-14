@@ -7,13 +7,13 @@ paths:
 
 Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
+## Activity Panel
+
+- [AP-01 L32] canonicalizePath() in paths.ts converts any path to a stable forward-slash form for identity comparisons: backslashes -> forward slashes, MSYS-style /c/Users/ -> C:/Users/, drive letter normalized to uppercase, trailing slashes stripped. Used at ingress in useTapEventProcessor (ToolInput file_path, InstructionsLoadedEvent, PermissionRejected) and the passive git change scan (absolutized paths from git_list_changes) to ensure cross-platform path identity.
+
 ## Config Implementation
 
 - [CI-02 L165] formatScopePath() normalizes backslashes to forward slashes and abbreviates project-scope paths via abbreviatePath(). User-scope paths (~/...) pass through unchanged.
-
-## Activity Panel
-
-- [AP-01 L32] canonicalizePath() in paths.ts converts any path to a stable forward-slash form for identity comparisons: backslashes -> forward slashes, MSYS-style /c/Users/ -> C:/Users/, drive letter normalized to uppercase, trailing slashes stripped. Used at ingress in useTapEventProcessor (ToolInput file_path, InstructionsLoadedEvent, PermissionRejected) and useFileWatcher (fs-change events) to ensure cross-platform path identity.
 
 ## Config Schema and Providers
 

@@ -3,6 +3,7 @@ import {
   escapeRegex,
   diffLines,
   generateRulesFromDiff,
+  generateRulesAndConflicts,
   applyRulesToText,
   unescapeRegex,
   classifyRule,
@@ -449,5 +450,62 @@ describe("classifyRule", () => {
     const info = classifyRule(rule);
     expect(info.type).toBe("remove");
     expect(info.displayLeft).toBe("WARNING:.*");
+  });
+});
+
+// ── generateRulesAndConflicts ───────────────────────────────────────
+
+describe("generateRulesAndConflicts", () => {
+  it("returns empty changeset when original equals edited", () => {
+    const result = generateRulesAndConflicts("hello", "hello", []);
+    expect(result.adds).toEqual([]);
+    expect(result.deletes).toEqual([]);
+    expect(result.unresolvedDrift).toBe(false);
+  });
+
+  it("produces adds only when there are no enabled rules", () => {
+    const result = generateRulesAndConflicts("a\nold\nb", "a\nnew\nb", []);
+    expect(result.adds.length).toBe(1);
+    expect(result.deletes).toEqual([]);
+    expect(result.unresolvedDrift).toBe(false);
+  });
+
+  it("keeps unrelated enabled rules", () => {
+    const unrelated: SystemPromptRule = {
+      id: "u1", name: "foo->bar", pattern: "Foo",
+      replacement: "Bar", flags: "g", enabled: true,
+    };
+    const result = generateRulesAndConflicts("a\nold\nb", "a\nnew\nb", [unrelated]);
+    expect(result.deletes).toEqual([]);
+    expect(result.adds.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("flags existing rule for deletion when it would prevent the desired outcome", () => {
+    // Canonical conflict case from the design.
+    const existing: SystemPromptRule = {
+      id: "e1", name: "Claude->Assistant", pattern: "Claude",
+      replacement: "Assistant", flags: "g", enabled: true,
+    };
+    const raw = "Hello Claude, your name is Claude.";
+    const edited = "Hello AI, your name is Assistant.";
+    const result = generateRulesAndConflicts(raw, edited, [existing]);
+    expect(result.deletes.map((r) => r.id)).toEqual(["e1"]);
+    expect(result.adds.length).toBeGreaterThanOrEqual(1);
+    // Applying the final (survivor + adds) set to raw should produce edited.
+    const finalRules = [
+      ...[existing].filter((r) => !result.deletes.some((d) => d.id === r.id)),
+      ...result.adds.map((r) => ({ ...r, enabled: true })),
+    ];
+    expect(applyRulesToText(raw, finalRules)).toBe(edited);
+    expect(result.unresolvedDrift).toBe(false);
+  });
+
+  it("sets unresolvedDrift when the ruleset can't fully reproduce edited", () => {
+    // Pure addition with no preceding context line is skipped by
+    // generateRulesFromDiff, so the changeset can't reach `edited`.
+    const result = generateRulesAndConflicts("", "new line", []);
+    expect(result.adds).toEqual([]);
+    expect(result.deletes).toEqual([]);
+    expect(result.unresolvedDrift).toBe(true);
   });
 });

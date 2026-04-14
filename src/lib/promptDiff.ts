@@ -274,3 +274,82 @@ export function generateRulesFromDiff(
 
   return rules;
 }
+
+// ── Conflict detection ─────────────────────────────────────────────
+
+export interface GeneratedChangeset {
+  adds: SystemPromptRule[];
+  /** Existing enabled rules that would prevent the pipeline from producing `edited` from `original`. */
+  deletes: SystemPromptRule[];
+  /** True when the final (survivor + adds) ruleset still can't exactly reproduce `edited`. */
+  unresolvedDrift: boolean;
+}
+
+/** Number of non-matching diff lines between two strings; 0 means equal. */
+function diffDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  return diffLines(a, b).filter((l) => l.type !== "same").length;
+}
+
+// [CM-31] generateRulesAndConflicts: greedy minimal-removal simulation — finds adds + deletes
+// to transform original -> edited given existing enabled rules. Returns GeneratedChangeset.
+/**
+ * Generate rules to transform `original` → `edited` AND identify existing
+ * enabled rules that would block the pipeline from producing that outcome.
+ *
+ * Greedy minimal-removal simulation: repeatedly remove the enabled rule whose
+ * absence strictly lowers the pipeline's distance from `edited`; stop when no
+ * further improvement is possible. After convergence, regenerate the additions
+ * against the survivor set so the effect-equivalence dedup in
+ * generateRulesFromDiff doesn't hide a now-needed rule.
+ */
+export function generateRulesAndConflicts(
+  original: string,
+  edited: string,
+  existingRules: SystemPromptRule[],
+): GeneratedChangeset {
+  const enabled = existingRules.filter((r) => r.enabled && r.pattern);
+  let adds = generateRulesFromDiff(original, edited, existingRules);
+
+  const simulate = (kept: SystemPromptRule[], extra: SystemPromptRule[]): string =>
+    applyRulesToText(original, [...kept, ...extra.map((r) => ({ ...r, enabled: true }))]);
+
+  // Quick exit: existing + new already produces edited.
+  if (simulate(enabled, adds) === edited) {
+    return { adds, deletes: [], unresolvedDrift: false };
+  }
+
+  let kept = [...enabled];
+  const deletes: SystemPromptRule[] = [];
+  let best = diffDistance(simulate(kept, adds), edited);
+
+  while (best > 0 && kept.length > 0) {
+    let bestIdx = -1;
+    let bestScore = best;
+    for (let i = 0; i < kept.length; i++) {
+      const trial = kept.filter((_, j) => j !== i);
+      const s = diffDistance(simulate(trial, adds), edited);
+      if (s < bestScore) {
+        bestScore = s;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx < 0) break;
+    deletes.push(kept[bestIdx]);
+    kept = kept.filter((_, j) => j !== bestIdx);
+    best = bestScore;
+  }
+
+  // Regenerate adds against the survivor set so no still-needed hunk is skipped.
+  if (deletes.length > 0) {
+    const deleteIds = new Set(deletes.map((r) => r.id));
+    adds = generateRulesFromDiff(
+      original,
+      edited,
+      existingRules.filter((r) => !deleteIds.has(r.id)),
+    );
+  }
+
+  const finalSim = simulate(kept, adds);
+  return { adds, deletes, unresolvedDrift: finalSim !== edited };
+}

@@ -549,10 +549,13 @@ export function useTapEventProcessor(
 
     const unsub = tapEventBus.subscribe(sessionId, handleEvent);
 
+    // [AS-03] Passive git change detection on settled-idle: endTurn then git_list_changes;
+    // fenceTurnCount guards against merging into a new turn that started mid-scan.
     // End activity turns on settled-idle (accounts for subagent completion + hysteresis).
     // Also snapshot git-reported uncommitted changes: any tracked-file change TAP didn't
     // explicitly report (bash side-effects, external edits) lands in the activity store.
-    // Silent no-op outside a git repo.
+    // Silent no-op outside a git repo. We guard the post-invoke merge against a new turn
+    // starting mid-scan — if the user responds before git returns, discard the snapshot.
     const unsubSettled = settledStateManager.subscribe(
       (settledSid, kind) => {
         if (settledSid === sessionId && kind === "idle") {
@@ -560,21 +563,21 @@ export function useTapEventProcessor(
           activityStore.endTurn(sessionId);
           const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
           const cwd = session?.config.workingDir;
-          if (cwd) {
-            invoke<Array<{ path: string; kind: "created" | "modified" | "deleted" }>>(
-              "git_list_changes",
-              { workingDir: cwd },
-            ).then((changes) => {
-              for (const change of changes) {
-                activityStore.addFileActivity(
-                  sessionId,
-                  canonicalizePath(change.path),
-                  change.kind,
-                  { isExternal: true },
-                );
-              }
-            }).catch(() => {});
-          }
+          if (!cwd) return;
+          const fenceTurnCount = activityStore.sessions[sessionId]?.turns.length ?? 0;
+          invoke<Array<{ path: string; kind: "created" | "modified" | "deleted" }>>(
+            "git_list_changes",
+            { workingDir: cwd },
+          ).then((changes) => {
+            const store = useActivityStore.getState();
+            if ((store.sessions[sessionId]?.turns.length ?? 0) !== fenceTurnCount) return;
+            for (const change of changes) {
+              const canonical = canonicalizePath(change.path);
+              store.addFileActivity(sessionId, canonical, change.kind, {
+                isExternal: !canonical.startsWith(canonicalizePath(cwd)),
+              });
+            }
+          }).catch(() => {});
         }
       },
       () => {},

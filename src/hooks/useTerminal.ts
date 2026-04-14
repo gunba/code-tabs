@@ -311,7 +311,7 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
             event: "terminal.title_change",
             data: { rawTitle, title },
           });
-          if (!sid || !title || title === "Claude Tabs" || title === "Claude Code") return;
+          if (!sid || !title || title === "Claude Tabs" || title.startsWith("Claude Code")) return;
           const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
           if (session && title !== session.name) {
             useSessionStore.getState().renameSession(sid, title);

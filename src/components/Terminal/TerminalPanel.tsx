@@ -131,7 +131,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     session.state !== "dead" ? session.id : null
   );
 
-
   // Register inspector disconnect/reconnect callbacks for external debugger support
   useEffect(() => {
     registerInspectorCallbacks(session.id, {

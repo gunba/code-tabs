@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSettingsStore } from "../../store/settings";
 import { PillGroup } from "../PillGroup/PillGroup";
 import { IconClose } from "../Icons/Icons";
-import { diffLines, applyRulesToText, generateRulesFromDiff, classifyRule } from "../../lib/promptDiff";
-import type { DiffLine } from "../../lib/promptDiff";
+import { applyRulesToText, generateRulesAndConflicts, classifyRule } from "../../lib/promptDiff";
+import type { GeneratedChangeset } from "../../lib/promptDiff";
 import type { SystemPromptRule } from "../../types/session";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import "./PromptsTab.css";
@@ -22,68 +22,76 @@ function validatePattern(pattern: string, flags: string): string | null {
   }
 }
 
-/** Render a line-level diff with inline colored spans (no +/- markers). */
-function InlineDiffView({ diff }: { diff: DiffLine[] }) {
-  const hasChanges = diff.some((l) => l.type !== "same");
-  if (!hasChanges) {
-    return <div className="prompts-diff-empty">No changes from original prompt</div>;
-  }
-  return (
-    <pre className="prompts-inline-diff">
-      {diff.map((line, i) => {
-        if (line.type === "del") {
-          return (
-            <span key={i} className="prompts-inline-del">
-              {line.text}{"\n"}
-            </span>
-          );
-        }
-        if (line.type === "add") {
-          return (
-            <span key={i} className="prompts-inline-add">
-              {line.text}{"\n"}
-            </span>
-          );
-        }
-        return <span key={i}>{line.text}{"\n"}</span>;
-      })}
-    </pre>
-  );
-}
-
-/** Preview generated rules before committing. */
+/** Preview generated rules (adds + deletes) before committing. */
 function RulePreview({
-  rules,
+  changeset,
   onConfirm,
   onCancel,
 }: {
-  rules: SystemPromptRule[];
+  changeset: GeneratedChangeset;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { adds, deletes, unresolvedDrift } = changeset;
+  const confirmLabel = deletes.length > 0 ? "Apply Changes" : "Add Rules";
   return (
     <div className="prompts-rule-preview">
-      <div className="prompts-rule-preview-header">
-        {rules.length} rule{rules.length !== 1 ? "s" : ""} will be generated (disabled by default):
-      </div>
-      <div className="prompts-rule-preview-list">
-        {rules.map((r) => (
-          <div key={r.id} className="prompts-rule-preview-item">
-            <div className="prompts-rule-preview-name">{r.name}</div>
-            <div className="prompts-rule-preview-detail">
-              <span className="prompts-diff-del" style={{ padding: "0 4px" }}>{r.pattern.slice(0, 60)}</span>
-              {r.replacement && (
-                <>
-                  {" → "}
-                  <span className="prompts-diff-add" style={{ padding: "0 4px" }}>{r.replacement.slice(0, 60)}</span>
-                </>
-              )}
-            </div>
+      {adds.length > 0 && (
+        <>
+          <div className="prompts-rule-preview-header">
+            {adds.length} rule{adds.length !== 1 ? "s" : ""} to add (disabled by default):
           </div>
-        ))}
-      </div>
+          <div className="prompts-rule-preview-list">
+            {adds.map((r) => (
+              <div key={r.id} className="prompts-rule-preview-item">
+                <div className="prompts-rule-preview-name">{r.name}</div>
+                <div className="prompts-rule-preview-detail">
+                  <span className="prompts-diff-del" style={{ padding: "0 4px" }}>{r.pattern.slice(0, 60)}</span>
+                  {r.replacement && (
+                    <>
+                      {" \u2192 "}
+                      <span className="prompts-diff-add" style={{ padding: "0 4px" }}>{r.replacement.slice(0, 60)}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {deletes.length > 0 && (
+        <>
+          <div className="prompts-rule-preview-header">
+            {deletes.length} rule{deletes.length !== 1 ? "s" : ""} to remove (would conflict with desired outcome):
+          </div>
+          <div className="prompts-rule-preview-list">
+            {deletes.map((r) => {
+              const info = classifyRule(r);
+              return (
+                <div key={r.id} className="prompts-rule-preview-item prompts-rule-preview-item-delete">
+                  <div className="prompts-rule-preview-name">{r.name || "Unnamed rule"}</div>
+                  <div className="prompts-rule-preview-detail">
+                    <span className="prompts-diff-del" style={{ padding: "0 4px" }}>{info.displayLeft.slice(0, 60)}</span>
+                    {info.type !== "remove" && info.displayRight && (
+                      <>
+                        {" \u2192 "}
+                        <span className="prompts-diff-add" style={{ padding: "0 4px" }}>{info.displayRight.slice(0, 60)}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {unresolvedDrift && (
+        <div className="prompts-rule-preview-warning">
+          Some differences may still require manual rule edits after applying.
+        </div>
+      )}
       <div className="prompts-rule-preview-actions">
-        <button className="prompts-save-btn" onClick={onConfirm}>Add Rules</button>
+        <button className="prompts-save-btn" onClick={onConfirm}>{confirmLabel}</button>
         <button className="prompts-delete-btn" onClick={onCancel} style={{ padding: "4px 8px" }}>Cancel</button>
       </div>
     </div>
@@ -180,7 +188,7 @@ function RuleCardExpanded({
   );
 }
 
-// [CM-28] PromptsTab splits My Prompts, Observed Prompts, and Rules into separate subtabs; the observed editor can show a live diff while rules stay standalone.
+// [CM-28] PromptsTab splits My Prompts, Observed Prompts, and Rules into separate subtabs; the observed editor is always editable and generates rules (with conflict removal) on demand.
 const SUB_TABS: { value: "prompts" | "observed" | "rules"; label: string }[] = [
   { value: "prompts", label: "My Prompts" },
   { value: "observed", label: "Observed Prompts" },
@@ -216,9 +224,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
 
   // Observed prompt edit state
   const [observedEditText, setObservedEditText] = useState("");
-  const [pendingRules, setPendingRules] = useState<SystemPromptRule[] | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editBaseline, setEditBaseline] = useState("");
+  const [pendingRules, setPendingRules] = useState<GeneratedChangeset | null>(null);
 
   // Collapse expanded rule on tab switch
   useEffect(() => { setExpandedRuleId(null); }, [activeSubTab]);
@@ -237,9 +243,12 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
     }
   }, [selectedSavedPromptId, savedPrompts]);
 
-  // Reset observed editing state on selection change
+  // Reset observed editing state on selection change. Seeding observedEditText happens in the sidebar click handler; this effect clears state when nothing is selected.
   useEffect(() => {
-    setPendingRules(null); setIsEditing(false); setEditBaseline("");
+    setPendingRules(null);
+    if (!selectedObservedPromptId) {
+      setObservedEditText("");
+    }
   }, [selectedObservedPromptId]);
 
   // Derive observed prompt data — self-heal if selected prompt aged out
@@ -267,21 +276,6 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
     if (enabledRules.length === 0) return rawText;
     return applyRulesToText(rawText, enabledRules);
   }, [systemPromptRules]);
-
-  // Sync observedEditText when not editing; dismiss stale pending rules when baseline shifts
-  useEffect(() => {
-    if (selectedObservedPromptId && !isEditing) {
-      setObservedEditText(rulesAppliedText);
-      setEditBaseline(rulesAppliedText);
-    }
-    setPendingRules(null);
-  }, [selectedObservedPromptId, rulesAppliedText, isEditing]);
-
-  // Diff: original → current state
-  const observedDiff = useMemo((): DiffLine[] | null => {
-    if (!observedRawText || observedRawText === observedEditText) return null;
-    return diffLines(observedRawText, observedEditText);
-  }, [observedRawText, observedEditText]);
 
   const observedEdited = !!selectedObservedPromptId && observedEditText !== rulesAppliedText;
 
@@ -332,19 +326,22 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
 
   const handleGenerateRules = useCallback(() => {
     if (!observedEdited) return;
-    const generated = generateRulesFromDiff(observedRawText, observedEditText, systemPromptRules);
-    if (generated.length === 0) {
+    const changeset = generateRulesAndConflicts(observedRawText, observedEditText, systemPromptRules);
+    if (changeset.adds.length === 0 && changeset.deletes.length === 0) {
       onStatus({ type: "error", text: "No rules could be generated from these changes" });
       setTimeout(() => onStatus(null), 3000);
       return;
     }
-    setPendingRules(generated);
+    setPendingRules(changeset);
   }, [observedEdited, observedRawText, observedEditText, systemPromptRules, onStatus]);
 
   const handleConfirmRules = useCallback(() => {
     if (!pendingRules) return;
     const store = useSettingsStore.getState();
-    for (const rule of pendingRules) {
+    for (const rule of pendingRules.deletes) {
+      store.removeSystemPromptRule(rule.id);
+    }
+    for (const rule of pendingRules.adds) {
       store.addSystemPromptRule();
       const newest = useSettingsStore.getState().systemPromptRules;
       const last = newest[newest.length - 1];
@@ -358,24 +355,15 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
         });
       }
     }
+    const addCount = pendingRules.adds.length;
+    const delCount = pendingRules.deletes.length;
+    const parts: string[] = [];
+    if (addCount > 0) parts.push(`${addCount} rule${addCount !== 1 ? "s" : ""} added`);
+    if (delCount > 0) parts.push(`${delCount} rule${delCount !== 1 ? "s" : ""} removed`);
     setPendingRules(null);
-    setIsEditing(false);
-    onStatus({ type: "success", text: `${pendingRules.length} rule${pendingRules.length !== 1 ? "s" : ""} added (disabled)` });
+    onStatus({ type: "success", text: parts.join(", ") });
     setTimeout(() => onStatus(null), 3000);
   }, [pendingRules, onStatus]);
-
-  const handleStartEditing = useCallback(() => {
-    setEditBaseline(rulesAppliedText);
-    setObservedEditText(rulesAppliedText);
-    setIsEditing(true);
-  }, [rulesAppliedText]);
-
-  const handleDoneEditing = useCallback(() => {
-    setIsEditing(false);
-    if (observedEditText === editBaseline) {
-      setObservedEditText(rulesAppliedText);
-    }
-  }, [observedEditText, editBaseline, rulesAppliedText]);
 
   // Ctrl+S for saved prompts only
   useEffect(() => {
@@ -484,10 +472,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
                     onClick={() => {
                       if (p.id === selectedObservedPromptId) return;
                       setSelectedObservedPromptId(p.id);
-                      const applied = computeAppliedText(p.text);
-                      setObservedEditText(applied);
-                      setEditBaseline(applied);
-                      setIsEditing(false);
+                      setObservedEditText(computeAppliedText(p.text));
                       setPendingRules(null);
                     }}
                   >
@@ -502,7 +487,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
           <div className="prompts-editor">
             {!selectedObservedPromptId ? (
               <div className="prompts-empty">
-                Select an observed prompt from the sidebar to view its diff.
+                Select an observed prompt from the sidebar to edit it.
               </div>
             ) : (
               <>
@@ -514,54 +499,31 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
                         Generate Rules
                       </button>
                     )}
-                    {!pendingRules && (
-                      isEditing ? (
-                        <button className="prompts-edit-toggle" onClick={handleDoneEditing}>Done</button>
-                      ) : (
-                        <button className="prompts-edit-toggle" onClick={handleStartEditing}>Edit</button>
-                      )
-                    )}
                   </div>
                 </div>
 
                 <div className="prompts-observed-pane">
                   {pendingRules ? (
                     <RulePreview
-                      rules={pendingRules}
+                      changeset={pendingRules}
                       onConfirm={handleConfirmRules}
                       onCancel={() => setPendingRules(null)}
                     />
-                  ) : isEditing ? (
-                    <div className="prompts-observed-split">
-                      <textarea
-                        className="prompts-textarea"
-                        value={observedEditText}
-                        onChange={(e) => setObservedEditText(e.target.value)}
-                        spellCheck={false}
-                      />
-                      <div className="prompts-observed-split-diff">
-                        {observedDiff ? (
-                          <InlineDiffView diff={observedDiff} />
-                        ) : (
-                          <div className="prompts-diff-empty">No changes from original prompt</div>
-                        )}
-                      </div>
-                    </div>
-                  ) : observedDiff ? (
-                    <InlineDiffView diff={observedDiff} />
                   ) : (
-                    <pre className="prompts-inline-diff prompts-inline-diff-plain">{rulesAppliedText}</pre>
+                    <textarea
+                      className="prompts-textarea"
+                      value={observedEditText}
+                      onChange={(e) => setObservedEditText(e.target.value)}
+                      spellCheck={false}
+                    />
                   )}
                 </div>
 
                 <div className="prompts-editor-footer">
                   <span className="prompts-char-count">
-                    {(isEditing ? observedEditText : observedRawText).length.toLocaleString()} characters
+                    {observedEditText.length.toLocaleString()} characters
                   </span>
                   {observedEdited && <span className="prompts-unsaved">edited</span>}
-                  {isEditing && editBaseline !== rulesAppliedText && (
-                    <span className="prompts-unsaved">rules changed</span>
-                  )}
                 </div>
               </>
             )}

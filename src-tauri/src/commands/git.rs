@@ -23,7 +23,7 @@ pub struct GitChange {
     pub kind: &'static str,
 }
 
-// [RC-20] git_list_changes: passive git-backed change detection. Replaces the old notify-based
+// [RC-21] git_list_changes: passive git-backed change detection. Replaces the old notify-based
 // per-directory inotify watcher. Runs `git status --porcelain=v1 -z` in working_dir; returns
 // empty Vec when not a git repo or git fails. Called on settled-idle in useTapEventProcessor,
 // so any tracked-file change that TAP didn't explicitly report (bash side-effects, external
@@ -80,19 +80,20 @@ fn run_git_status(working_dir: &str) -> Vec<GitChange> {
 }
 
 fn classify(xy: &[u8]) -> &'static str {
-    // Untracked.
+    // Porcelain XY columns: X = index status, Y = working-tree status.
+    // Precedence: deletion wins (tracked file gone), then creation (staged-add — possibly
+    // also modified in worktree), then modified/renamed/copied, else unknown.
     if xy == b"??" {
         return "created";
     }
-    // Prefer deletion over modification over creation when both columns disagree.
     if xy.contains(&b'D') {
         return "deleted";
     }
-    if xy.contains(&b'M') || xy[0] == b'R' || xy[0] == b'C' {
-        return "modified";
-    }
     if xy[0] == b'A' {
         return "created";
+    }
+    if xy.contains(&b'M') || xy[0] == b'R' || xy[0] == b'C' {
+        return "modified";
     }
     ""
 }

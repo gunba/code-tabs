@@ -7,9 +7,10 @@ import "./Header.css";
 const DRAG_THRESHOLD_PX_SQ = 9; // 3px movement before we start a window drag
 
 // [VA-02] Header (Linux custom titlebar): app version + CLI version display with window controls.
-// data-tauri-drag-region is unreliable on Wayland (KDE/GNOME). Starting the window drag on
-// mousedown would kill double-click-to-maximize (compositor captures the gesture before click
-// events fire), so we defer startDragging() until the pointer actually moves past a threshold.
+// [PL-03] Header drag mechanism: data-tauri-drag-region removed; startDragging deferred until
+// pointer moves past DRAG_THRESHOLD_PX_SQ to preserve click/dblclick on Wayland. Explicit
+// dblclick -> toggleMaximize because drag-region dblclick fails on KDE/GNOME Wayland.
+// data-tauri-drag-region attribute was removed — startDragging + dblclick are the only drag mechanism.
 // Double-click toggles maximize explicitly — the drag-region attribute's dblclick path is
 // part of what fails to fire on these compositors.
 export function Header() {
@@ -50,7 +51,6 @@ export function Header() {
   return (
     <header
       className="app-header"
-      data-tauri-drag-region
       onMouseDown={onHeaderMouseDown}
       onMouseMove={onHeaderMouseMove}
       onMouseUp={onHeaderMouseUp}

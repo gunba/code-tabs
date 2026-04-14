@@ -499,86 +499,6 @@
   overflow: hidden;
 }
 
-.prompts-observed-split {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.prompts-observed-split > .prompts-textarea {
-  flex: 1;
-  min-height: 80px;
-}
-
-.prompts-observed-split-diff {
-  flex: 1;
-  min-height: 80px;
-  overflow-y: auto;
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-}
-
-.prompts-observed-split-diff > .prompts-inline-diff {
-  border: none;
-  border-radius: 0;
-}
-
-.prompts-observed-split-diff::-webkit-scrollbar { width: 5px; }
-.prompts-observed-split-diff::-webkit-scrollbar-track { background: transparent; }
-.prompts-observed-split-diff::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
-
-.prompts-inline-diff {
-  flex: 1;
-  overflow-y: auto;
-  margin: 0;
-  padding: 8px 10px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-}
-
-.prompts-inline-diff::-webkit-scrollbar { width: 5px; }
-.prompts-inline-diff::-webkit-scrollbar-track { background: transparent; }
-.prompts-inline-diff::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
-
-.prompts-inline-diff-plain {
-  color: var(--text-muted);
-}
-
-.prompts-inline-del {
-  background: rgba(255, 80, 80, 0.12);
-  color: var(--error);
-  text-decoration: line-through;
-}
-
-.prompts-inline-add {
-  background: rgba(80, 200, 80, 0.12);
-  color: var(--success);
-}
-
-.prompts-edit-toggle {
-  background: var(--bg-hover);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  color: var(--text-secondary);
-  font-size: 10px;
-  padding: 2px 8px;
-  cursor: pointer;
-}
-
-.prompts-edit-toggle:hover {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
 .prompts-diff-del {
   background: rgba(255, 80, 80, 0.12);
   color: var(--error);
@@ -587,14 +507,6 @@
 .prompts-diff-add {
   background: rgba(80, 200, 80, 0.12);
   color: var(--success);
-}
-
-.prompts-diff-empty {
-  padding: 16px;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-style: italic;
 }
 
 /* ── Rule preview ─────────────────────────────────────── */
@@ -626,6 +538,19 @@
   border-radius: 4px;
   padding: 6px 8px;
   font-size: 11px;
+}
+
+.prompts-rule-preview-item-delete {
+  border-left: 2px solid var(--error);
+}
+
+.prompts-rule-preview-warning {
+  font-size: 11px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-style: italic;
 }
 
 .prompts-rule-preview-name {
