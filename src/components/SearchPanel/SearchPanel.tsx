@@ -97,6 +97,7 @@ export function SearchPanel() {
     }
 
     const gen = ++searchGenRef.current;
+    useRuntimeStore.getState().markSearchExecuted();
 
     try {
       const matches = await invoke<JsonlMatch[]>("search_jsonl_files", {
@@ -123,7 +124,6 @@ export function SearchPanel() {
 
       setResults(mapped);
       setActiveIndex(mapped.length > 0 ? 0 : -1);
-      useRuntimeStore.getState().markSearchExecuted();
       dlog("search", null, `Search "${query}" → ${mapped.length} matches across ${sessionList.length} sessions`);
     } catch (err) {
       if (gen !== searchGenRef.current) return;

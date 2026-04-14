@@ -301,7 +301,7 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       // Windows: Claude Code uses process.title; xterm sees no OSC here.
       lifecycleDisposables.push(
         term.onTitleChange((rawTitle) => {
-          const title = rawTitle.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trim();
+          const title = rawTitle.trim();
           const sid = sessionIdRef.current;
           dlog("terminal", sid, "terminal title changed", "DEBUG", {
             event: "terminal.title_change",
