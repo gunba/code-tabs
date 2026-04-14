@@ -541,10 +541,43 @@ pub async fn send_notification(
         .map_err(|e| e.to_string())?
     }
 
-    #[cfg(not(target_os = "windows"))]
+    // [RT-01] Linux notifications use notify-rust directly so a default-action
+    // click can emit notification-clicked with session_id, matching the
+    // Windows WinRT Toast path. The FreeDesktop spec invokes an action named
+    // "default" when the notification body is clicked (KDE Plasma, GNOME
+    // Shell). wait_for_action blocks until the user clicks, dismisses, or the
+    // server times out — spawn_blocking keeps it off the async runtime.
+    #[cfg(target_os = "linux")]
+    {
+        tokio::task::spawn_blocking(move || {
+            use tauri::Emitter;
+            let app_for_cb = app.clone();
+            let handle = notify_rust::Notification::new()
+                .summary(&title)
+                .body(&body)
+                .action("default", "default")
+                .show()
+                .map_err(|e| format!("Notification failed: {e}"))?;
+            handle.wait_for_action(move |action| {
+                // "__closed" is emitted on dismiss/timeout; only emit the
+                // click event when the user actively invoked the default
+                // action.
+                if action != "__closed" {
+                    let _ = app_for_cb.emit("notification-clicked", session_id.clone());
+                }
+            });
+            Ok(())
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    }
+
+    // Non-Windows, non-Linux (macOS, BSD, etc.) — fall back to the Tauri
+    // plugin's basic show without click-to-switch.
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {
         use tauri_plugin_notification::NotificationExt;
-        let _ = session_id; // click-to-switch not supported on Linux
+        let _ = session_id;
         app.notification()
             .builder()
             .title(&title)

@@ -54,6 +54,12 @@ tempfile = "3"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# Linux notifications use notify-rust directly (not tauri_plugin_notification)
+# so we can wire click actions to emit notification-clicked, matching the
+# Windows tauri-winrt-notification path.
+[target.'cfg(target_os = "linux")'.dependencies]
+notify-rust = "4"
+
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.7"
 windows-sys = { version = "0.59", features = [

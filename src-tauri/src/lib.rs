@@ -92,7 +92,7 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     setup_child_reaper();
 
-    // [LX-01] WebKit2GTK 4.1 crashes (Wayland protocol Error 71 or silent
+    // [LP-01] WebKit2GTK 4.1 crashes (Wayland protocol Error 71 or silent
     // hang under XWayland) on many Linux GPU/driver combos when the
     // DMA-BUF renderer or accelerated compositing path is used. Force the
     // safe software paths so the binary launches consistently across

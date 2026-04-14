@@ -216,6 +216,16 @@ pub fn spawn(
             if libc::ioctl(0, libc::TIOCSCTTY, 0) < 0 {
                 return Err(io::Error::last_os_error());
             }
+            // [PT-22] Deliver SIGKILL to this child if the Tauri parent dies
+            // for any reason (including SIGKILL / hard crash). Must run AFTER
+            // setsid, which clears the parent-death signal. Persists across
+            // exec for non-setuid targets. Covers the direct CLI process;
+            // grandchildren spawned by the CLI are not covered by PDEATHSIG
+            // and would still leak on hard crash (separate follow-up).
+            #[cfg(target_os = "linux")]
+            if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0) < 0 {
+                return Err(io::Error::last_os_error());
+            }
             Ok(())
         });
 

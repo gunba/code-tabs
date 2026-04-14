@@ -7,6 +7,11 @@ paths:
 
 Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
+## Linux platform workarounds
+Startup env vars and runtime tweaks needed for webkit2gtk/Wayland/KDE to work reliably as a Tauri host.
+
+- [LP-01 L95] At Rust startup (lib.rs run()), force WEBKIT_DISABLE_DMABUF_RENDERER=1 and WEBKIT_DISABLE_COMPOSITING_MODE=1 before tauri::Builder runs so webkit2gtk falls back to software rendering. This works around Wayland protocol Error 71 and silent hangs under XWayland on many Linux GPU/driver combinations. Pre-existing env values are honored so power users can opt back in.
+
 ## Rust System Command Modules
 
 - [RC-11 L301] register_active_pid / unregister_active_pid -- Frontend registers OS PIDs of PTY children; RunEvent::Exit handler in lib.rs iterates ActivePids and calls kill_process_tree_sync for each.
