@@ -6,6 +6,9 @@ import "@xterm/xterm/css/xterm.css";
 import { getTerminalTheme } from "../lib/theme";
 import { dlog } from "../lib/debugLog";
 import { startTraceSpan, traceSync } from "../lib/perfTrace";
+import { useSessionStore } from "../store/sessions";
+import { useSettingsStore } from "../store/settings";
+import { getResumeId } from "../lib/claude";
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
@@ -236,6 +239,23 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
           term!.write('\x1b[?1003h\x1b[?1006h');
           onDataRef.current?.(XTVERSION_REPLY);
           return true;
+        }),
+      );
+      // Windows: Claude Code uses process.title; xterm sees no OSC here.
+      lifecycleDisposables.push(
+        term.onTitleChange((rawTitle) => {
+          const title = rawTitle.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "").trim();
+          const sid = sessionIdRef.current;
+          dlog("terminal", sid, "terminal title changed", "DEBUG", {
+            event: "terminal.title_change",
+            data: { title },
+          });
+          if (!sid || !title || title === "Claude Tabs") return;
+          const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+          if (session && title !== session.name) {
+            useSessionStore.getState().renameSession(sid, title);
+            useSettingsStore.getState().setSessionName(getResumeId(session), title);
+          }
         }),
       );
 
