@@ -92,21 +92,16 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     setup_child_reaper();
 
-    // [LP-01] WebKit2GTK 4.1 crashes (Wayland protocol Error 71 or silent
-    // hang under XWayland) on many Linux GPU/driver combos when the
-    // DMA-BUF renderer or accelerated compositing path is used. Force the
-    // safe software paths so the binary launches consistently across
-    // distros without requiring users to set env vars themselves. Honor
-    // any pre-set value so power users can opt back in.
+    // [LP-01] WebKit2GTK 4.1's DMA-BUF renderer path triggers Wayland protocol
+    // Error 71 and silent hangs under XWayland on many Linux GPU/driver combos
+    // — disable it. Accelerated compositing via EGL is kept enabled: disabling
+    // it too forces all paint through Cairo software rasterization, which adds
+    // 1–2 s of input lag on terminal repaints. Users hitting compositing-path
+    // crashes can opt in via `WEBKIT_DISABLE_COMPOSITING_MODE=1` in their env.
     #[cfg(target_os = "linux")]
     {
-        for (k, v) in [
-            ("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
-            ("WEBKIT_DISABLE_COMPOSITING_MODE", "1"),
-        ] {
-            if std::env::var_os(k).is_none() {
-                std::env::set_var(k, v);
-            }
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }
 
