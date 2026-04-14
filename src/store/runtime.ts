@@ -16,13 +16,16 @@ const DEFAULT_OBSERVABILITY_INFO: ObservabilityInfo = {
 interface RuntimeState {
   observabilityInfo: ObservabilityInfo;
   loaded: boolean;
+  hasExecutedSearch: boolean;
   loadRuntimeInfo: () => Promise<void>;
   openMainDevtools: () => Promise<void>;
+  markSearchExecuted: () => void;
 }
 
-export const useRuntimeStore = create<RuntimeState>((set) => ({
+export const useRuntimeStore = create<RuntimeState>((set, get) => ({
   observabilityInfo: DEFAULT_OBSERVABILITY_INFO,
   loaded: false,
+  hasExecutedSearch: false,
 
   loadRuntimeInfo: async () => {
     try {
@@ -40,5 +43,9 @@ export const useRuntimeStore = create<RuntimeState>((set) => ({
 
   openMainDevtools: async () => {
     await invoke("open_main_devtools");
+  },
+
+  markSearchExecuted: () => {
+    if (!get().hasExecutedSearch) set({ hasExecutedSearch: true });
   },
 }));

@@ -437,6 +437,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
   },
 
   removeSubagent: (sessionId, subagentId) => {
+    let removed = false;
     set((s) => {
       const map = new Map(s.subagents);
       const list = map.get(sessionId);
@@ -444,8 +445,12 @@ export const useSessionStore = create<SessionsState>((set) => ({
       const filtered = list.filter((sa) => sa.id !== subagentId);
       if (filtered.length === list.length) return s;
       map.set(sessionId, filtered);
+      removed = true;
       return { subagents: map };
     });
+    if (removed) {
+      useActivityStore.getState().clearAgentSearchActivity(sessionId, subagentId);
+    }
   },
 
   addSkillInvocation: (sessionId, invocation) => {

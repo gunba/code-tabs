@@ -18,6 +18,7 @@ const BASE_TABS = [
 
 export function RightPanel() {
   const debugBuild = useRuntimeStore((s) => s.observabilityInfo.debugBuild);
+  const hasExecutedSearch = useRuntimeStore((s) => s.hasExecutedSearch);
   const rightPanelTab = useSettingsStore((s) => s.rightPanelTab);
   const setRightPanelTab = useSettingsStore((s) => s.setRightPanelTab);
   const activeTabId = useSessionStore((s) => s.activeTabId);
@@ -28,12 +29,21 @@ export function RightPanel() {
     if (!debugBuild && rightPanelTab === "debug") {
       setRightPanelTab("activity");
     }
-  }, [debugBuild, rightPanelTab, setRightPanelTab]);
+    if (!hasExecutedSearch && rightPanelTab === "search") {
+      setRightPanelTab("activity");
+    }
+  }, [debugBuild, hasExecutedSearch, rightPanelTab, setRightPanelTab]);
 
-  const activeTab: RightPanelTab = !debugBuild && rightPanelTab === "debug"
-    ? "activity"
-    : rightPanelTab;
-  const tabs = debugBuild ? BASE_TABS : BASE_TABS.filter((tab) => tab.id !== "debug");
+  const activeTab: RightPanelTab =
+    (!debugBuild && rightPanelTab === "debug") ||
+    (!hasExecutedSearch && rightPanelTab === "search")
+      ? "activity"
+      : rightPanelTab;
+  const tabs = BASE_TABS.filter((tab) => {
+    if (tab.id === "debug" && !debugBuild) return false;
+    if (tab.id === "search" && !hasExecutedSearch) return false;
+    return true;
+  });
   // [RI-01] Response/Session pill is inline after Activity tab, visible only when activity tab active + session open
   const showPill = activeTab === "activity" && !!activeTabId;
 

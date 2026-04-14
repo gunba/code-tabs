@@ -9,6 +9,7 @@ import { startTraceSpan, traceSync } from "../lib/perfTrace";
 import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { getResumeId } from "../lib/claude";
+import { IS_WINDOWS } from "../lib/paths";
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
@@ -132,19 +133,23 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       });
     }
 
-    // Block xterm.js native paste handler — our custom Ctrl+V handler
-    // in attachCustomKeyEventHandler handles paste via navigator.clipboard.
-    // Without this, Tauri's permission dialog triggers a synthetic paste
-    // event that xterm.js also handles, causing double-paste.
+    // Windows-only: Tauri permission dialog causes xterm.js to receive a synthetic
+    // paste event on top of our custom Ctrl+V handler, producing double-paste.
+    // Other platforms rely on xterm.js native paste handling plus our Ctrl+(Shift)+V
+    // handler below, so no blocker is needed.
     pasteBlockCleanupRef.current?.();
-    const handlePaste = (e: ClipboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    el.addEventListener("paste", handlePaste, true); // Capture phase — intercept before xterm.js
-    pasteBlockCleanupRef.current = () => {
-      el.removeEventListener("paste", handlePaste, true);
-    };
+    if (IS_WINDOWS) {
+      const handlePaste = (e: ClipboardEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      el.addEventListener("paste", handlePaste, true); // Capture phase — intercept before xterm.js
+      pasteBlockCleanupRef.current = () => {
+        el.removeEventListener("paste", handlePaste, true);
+      };
+    } else {
+      pasteBlockCleanupRef.current = null;
+    }
 
     fit();
     return true;
@@ -270,7 +275,21 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
         if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .modal-overlay, .palette-overlay, .inspector-overlay')) {
           return false; // Suppress — modal is open
         }
-        if (ev.ctrlKey && ev.key === "c" && ev.type === "keydown") {
+        // Ctrl+Shift+C — Linux primary copy shortcut; copies selection if present.
+        // Always swallow to prevent xterm sending \x03 twice on Linux.
+        if (ev.ctrlKey && ev.shiftKey && (ev.key === "c" || ev.key === "C") && ev.type === "keydown") {
+          if (term!.hasSelection()) {
+            const selection = term!.getSelection();
+            dlog("terminal", sessionIdRef.current, "terminal selection copied (ctrl+shift+c)", "DEBUG", {
+              event: "terminal.copy_selection",
+              data: { length: selection.length, text: selection },
+            });
+            navigator.clipboard.writeText(selection);
+            term!.clearSelection();
+          }
+          return false;
+        }
+        if (ev.ctrlKey && !ev.shiftKey && ev.key === "c" && ev.type === "keydown") {
           if (term!.hasSelection()) {
             const selection = term!.getSelection();
             dlog("terminal", sessionIdRef.current, "terminal selection copied", "DEBUG", {
@@ -285,8 +304,24 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
             return false; // We handled it — don't send to PTY
           }
         }
+        // Ctrl+Shift+V — Linux primary paste shortcut (works on all platforms)
+        if (ev.ctrlKey && ev.shiftKey && (ev.key === "v" || ev.key === "V") && ev.type === "keydown") {
+          navigator.clipboard.readText().then((text) => {
+            dlog("terminal", sessionIdRef.current, "terminal paste requested (ctrl+shift+v)", "DEBUG", {
+              event: "terminal.paste",
+              data: { length: text.length, text },
+            });
+            if (text) term!.paste(text);
+          }).catch((err) => {
+            dlog("terminal", sessionIdRef.current, `clipboard paste failed: ${err}`, "WARN", {
+              event: "terminal.paste_failed",
+              data: { error: String(err) },
+            });
+          });
+          return false;
+        }
         // Handle Ctrl+V paste — read clipboard and insert into terminal
-        if (ev.ctrlKey && ev.key === "v" && ev.type === "keydown") {
+        if (ev.ctrlKey && !ev.shiftKey && ev.key === "v" && ev.type === "keydown") {
           navigator.clipboard.readText().then((text) => {
             dlog("terminal", sessionIdRef.current, "terminal paste requested", "DEBUG", {
               event: "terminal.paste",

@@ -12,6 +12,10 @@ export const IS_WINDOWS =
   ("process" in globalThis && ((globalThis as Record<string, unknown>).process as Record<string, string>)?.platform === "win32") ||
   (navigator?.platform?.startsWith("Win") ?? false);
 
+export const IS_LINUX =
+  ("process" in globalThis && ((globalThis as Record<string, unknown>).process as Record<string, string>)?.platform === "linux") ||
+  (navigator?.platform?.startsWith("Linux") ?? false);
+
 /** Normalize a path: consistent separators per platform, strip trailing. */
 export function normalizePath(p: string): string {
   if (IS_WINDOWS) {
