@@ -1,0 +1,75 @@
+/* Linux custom titlebar (shown only when decorations: false). */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 8px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.app-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app-header-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.app-header-sep {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.app-header-cli {
+  color: var(--text-secondary);
+}
+
+.app-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.app-header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.app-header-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.app-header-btn-close:hover {
+  background: var(--error);
+  color: #ffffff;
+}
+
+.app-header-btn:focus:not(:focus-visible) {
+  outline: none;
+}

@@ -30,7 +30,8 @@ import { getInspectorPort, disconnectInspectorForSession, reconnectInspectorForS
 import { focusTerminal } from "./lib/terminalRegistry";
 import { dlog, flushDebugLog } from "./lib/debugLog";
 import { IconStop, IconClose, IconReturn, IconGear, IconSearch } from "./components/Icons/Icons";
-import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym } from "./lib/paths";
+import { Header } from "./components/Header/Header";
+import { groupSessionsByDir, swapWithinGroup, parseWorktreePath, worktreeAcronym, IS_LINUX } from "./lib/paths";
 import type { Session, Subagent } from "./types/session";
 import { isSubagentActive } from "./types/session";
 import { getEffectiveState } from "./lib/claude";
@@ -133,6 +134,15 @@ export default function App() {
     if (cliVersion) parts.push(`CLI ${cliVersion}`);
     getCurrentWindow().setTitle(parts.join(" · ")).catch(() => {});
   }, [appVersion, cliVersion]);
+
+  // Linux: hide native decorations so the custom <Header /> acts as the titlebar.
+  // Windows/macOS keep native decorations (see tauri.conf.json). Wayland compositors
+  // that reject setDecorations(false) silently fall back to native via the catch.
+  useEffect(() => {
+    if (IS_LINUX) {
+      getCurrentWindow().setDecorations(false).catch(() => {});
+    }
+  }, []);
 
   // [SL-02] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T, uses saved defaults or last config
   const quickLaunch = useCallback(async () => {
@@ -367,6 +377,7 @@ export default function App() {
 
   return (
     <div className={`app${ctrlHeld ? " ctrl-held" : ""}`}>
+      {IS_LINUX && <Header />}
       {/* Tab bar */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
