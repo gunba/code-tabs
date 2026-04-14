@@ -37,6 +37,7 @@ interface ActivityState {
   markUserMessage: (sessionId: string) => void;
   addContextFile: (sessionId: string, entry: ContextFileEntry) => void;
   clearSession: (sessionId: string) => void;
+  clearAgentSearchActivity: (sessionId: string, agentId: string) => void;
   toggleExpandedPath: (sessionId: string, path: string) => void;
   mergeExpandedPaths: (sessionId: string, paths: Iterable<string>) => void;
 }
@@ -302,6 +303,47 @@ export const useActivityStore = create<ActivityState>()((set) => ({
       event: "activity.clear_session",
       warnAboveMs: 8,
       data: {},
+    })),
+
+  clearAgentSearchActivity: (sessionId, agentId) =>
+    set((state) => traceSync("activity.clear_agent_search", () => {
+      const activity = state.sessions[sessionId];
+      if (!activity) return state;
+      let changed = false;
+      const nextTurns: TurnActivity[] = [];
+      for (const turn of activity.turns) {
+        const filtered = turn.files.filter(
+          (f) => !(f.kind === "searched" && f.agentId === agentId && f.isFolder === true),
+        );
+        if (filtered.length !== turn.files.length) {
+          changed = true;
+          nextTurns.push({ ...turn, files: filtered });
+        } else {
+          nextTurns.push(turn);
+        }
+      }
+      const nextAllFiles: Record<string, FileActivity> = {};
+      for (const [key, entry] of Object.entries(activity.allFiles)) {
+        if (entry.kind === "searched" && entry.agentId === agentId && entry.isFolder === true) {
+          changed = true;
+        } else {
+          nextAllFiles[key] = entry;
+        }
+      }
+      if (!changed) return state;
+      const nextActivity: SessionActivity = {
+        ...activity,
+        turns: nextTurns,
+        allFiles: nextAllFiles,
+      };
+      recomputeStats(nextActivity);
+      return { sessions: { ...state.sessions, [sessionId]: nextActivity } };
+    }, {
+      module: "activity",
+      sessionId,
+      event: "activity.clear_agent_search",
+      warnAboveMs: 8,
+      data: { agentId },
     })),
 
   toggleExpandedPath: (sessionId, path) =>

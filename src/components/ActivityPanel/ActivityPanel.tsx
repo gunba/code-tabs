@@ -67,6 +67,7 @@ function FileTreeRow({
   contextInfo,
   onFileClick,
   showMascotInline,
+  activeSubagentIds,
 }: {
   node: FileTreeNode;
   depth: number;
@@ -77,6 +78,8 @@ function FileTreeRow({
   onFileClick: (path: string) => void;
   /** Whether to show the inline mascot (false when floating mascot covers this file). */
   showMascotInline: boolean;
+  /** Subagent ids currently tracked for this session (used to suppress stale 'searched' color). */
+  activeSubagentIds: Set<string>;
 }) {
   const indent = depth * INDENT_STEP;
   const primaryMascot = agents.length > 0 ? agents[0] : null;
@@ -129,7 +132,17 @@ function FileTreeRow({
     );
   }
 
-  const folderClasses = `file-tree-row file-tree-folder${node.isWorkspaceRoot ? " file-tree-workspace-root" : ""}${node.activity?.kind === "searched" ? " file-tree-searched" : ""}`;
+  const searchedAgentId =
+    node.activity?.kind === "searched" ? node.activity.agentId : undefined;
+  // Main agent always wins (agentId null/undefined); subagents only retain the
+  // searched class while they remain in the active subagent list.
+  const searchedAgentStillActive =
+    searchedAgentId === null || searchedAgentId === undefined
+      ? true
+      : activeSubagentIds.has(searchedAgentId);
+  const showSearched =
+    node.activity?.kind === "searched" && searchedAgentStillActive;
+  const folderClasses = `file-tree-row file-tree-folder${node.isWorkspaceRoot ? " file-tree-workspace-root" : ""}${showSearched ? " file-tree-searched" : ""}`;
 
   // Show inline mascot for subagents on searched folders
   const inlineMascot = showMascotInline && mascotState && primaryMascot;
@@ -229,6 +242,15 @@ export function ActivityPanel() {
     }
     return map;
   }, [activity]);
+
+  // Set of subagent ids currently tracked for this session. Used to suppress
+  // stale "searched" folder color after a subagent is removed from the list.
+  const activeSubagentIds = useMemo(() => {
+    const ids = new Set<string>();
+    const subs = activeTabId ? storeSubagents.get(activeTabId) ?? [] : [];
+    for (const sub of subs) ids.add(sub.id);
+    return ids;
+  }, [activeTabId, storeSubagents]);
 
   // Build map of file paths with agent presence (active tool calls + persistent positions)
   const activeAgentFiles = useMemo(() => {
@@ -479,6 +501,7 @@ export function ActivityPanel() {
                   contextInfo={row.node.isFile ? contextFileMap.get(row.node.fullPath) ?? null : null}
                   onFileClick={handleFileClick}
                   showMascotInline={!isFloatingTarget}
+                  activeSubagentIds={activeSubagentIds}
                 />
               );
             })}
