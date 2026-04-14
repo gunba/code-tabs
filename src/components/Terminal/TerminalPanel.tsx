@@ -170,7 +170,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     }
   }, [tapProcessor.claudeSessionId, session.id, session.config.sessionId, updateConfig]);
 
-  // Cache session config when inspector connects (for resume picker fallback)
+  // [SL-07] Cache session config when inspector connects (for resume picker fallback)
   useEffect(() => {
     if (inspector.connected && session.config.sessionId) {
       useSettingsStore.getState().cacheSessionConfig(session.config.sessionId, session.config);

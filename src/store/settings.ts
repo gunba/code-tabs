@@ -427,7 +427,7 @@ export const useSettingsStore = create<SettingsState>()(
             warnAboveMs: 1000,
             data: {},
           });
-          // Prune sessionNames and sessionConfigs to only IDs present in loaded sessions
+          // [SL-08] Prune sessionNames and sessionConfigs to only IDs present in loaded sessions
           const idSet = new Set(sessions.map((s) => s.id));
           set((prev) => {
             const names: Record<string, string> = {};

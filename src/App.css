@@ -485,6 +485,7 @@
   display: none;
 }
 
+/* [SR-04] Subagent cards: --bg-surface base; idle/dead fade at 0.45 opacity, interrupted names red, completed full opacity, selected gets accent-secondary tint + bottom bar */
 /* Subagent cards mirror tab structure but scaled down */
 .subagent-card {
   display: flex;

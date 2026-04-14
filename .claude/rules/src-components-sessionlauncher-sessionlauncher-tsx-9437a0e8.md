@@ -17,6 +17,9 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 - [SL-12 L235] Active flag indicators: pills highlight with accent color when their flag is present in the command line (reactive to manual edits in textarea)
 - [SL-10 L258] CLI command pills sorted by usage frequency (same heat gradient as Command Bar)
 - [SL-19 L305] Directory validation: before launching, SessionLauncher invokes dir_exists (Rust command) to confirm the working directory exists; shows 'Directory does not exist' error inline and blocks launch if not found
+- [SL-13 L392] Toggle behavior: clicking an active pill removes the flag; clicking an inactive pill adds it
+- [SL-15 L405] Utility mode mutual exclusion: clicking a non-session flag or subcommand replaces the entire command line (not toggle-into); session controls disabled and dimmed; clicking the flag again restores; reset button (↺) escapes utility mode
+- [SL-16 L683] Subcommand toggle: clicking a subcommand replaces command line with `claude <cmd>`; clicking again resets to generated command
 
 ## Provider Routing
 Session-bound provider routing, OpenAI Codex provider config, and auth-backed request translation.

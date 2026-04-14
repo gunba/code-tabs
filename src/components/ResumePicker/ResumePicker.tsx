@@ -89,6 +89,7 @@ interface ResumePickerProps {
 
 // ── Component ───────────────────────────────────────────────────────
 
+// [SL-03] Ctrl+Shift+R opens resume picker (660px modal, 520px list max-height); cards show blue top-bar + tint when Ctrl is held; resume banner uses orange accent (not blue)
 export function ResumePicker({ onClose }: ResumePickerProps) {
   const ctrlHeld = useCtrlKey();
   const createSession = useSessionStore((s) => s.createSession);
@@ -245,6 +246,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
       const latest = members[0];
 
       // Resolve display name: first member that has a sessionNames entry
+      // [SL-06] Custom names: tab renames from sessionNames shown as bold primary name; directory as secondary text
       let displayName: string | null = null;
       for (const m of members) {
         if (sessionNames[m.id]) {
@@ -254,6 +256,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
       }
 
       // Pick firstMessage: check root first, then descendants, skip suppressed
+      // [SL-04] Enriched data: each session card shows firstMessage, lastMessage, settings badges (model, skip-perms, permission mode, effort, agent), file size
       let firstMessage = "";
       if (ps.firstMessage && !SUPPRESSED_FIRST_MESSAGES.includes(ps.firstMessage)) {
         firstMessage = ps.firstMessage;

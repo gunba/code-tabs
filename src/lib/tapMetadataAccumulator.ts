@@ -163,6 +163,7 @@ export class TapMetadataAccumulator {
 
       case "UserInput":
       case "SlashCommand":
+        // [SR-03] nodeSummary captured from first top-level user input (ResumePicker uses it as dead-session summary)
         if (!this.nodeSummary) {
           this.nodeSummary = event.display.slice(0, 200);
         }

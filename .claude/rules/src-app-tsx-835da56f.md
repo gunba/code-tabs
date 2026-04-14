@@ -7,11 +7,6 @@ paths:
 
 Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
-## Session Launcher
-
-- [SL-02 L148,258] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T instantly launches without showing modal; uses saved defaults if set, otherwise falls back to last-used config (including folder)
-- [SL-01 L261] Modal for new session or resume — Ctrl+T opens fresh (clears resume/continue flags)
-
 ## Keyboard Shortcuts
 
 - [KB-01 L261] Ctrl+T — New session
@@ -48,6 +43,11 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 ## Platform
 
 - [PL-01 L138] Linux custom titlebar: when IS_LINUX is true, a startup useEffect calls getCurrentWindow().setDecorations(false) (errors silently caught for Wayland compositors that reject it), and <Header /> is conditionally rendered above the tab bar. Header.tsx is a 30px bar with version text (app + CLI) and min/max/close buttons wired to Tauri window APIs. tauri.conf.json keeps decorations:true (default); the JS-side setDecorations(false) overrides at runtime for Linux only. Windows and macOS are unchanged.
+
+## Session Launcher
+
+- [SL-02 L148,258] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T instantly launches without showing modal; uses saved defaults if set, otherwise falls back to last-used config (including folder)
+- [SL-01 L261] Modal for new session or resume — Ctrl+T opens fresh (clears resume/continue flags)
 
 ## Data Flow
 

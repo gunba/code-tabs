@@ -3,6 +3,7 @@ import { useSettingsStore } from "../../store/settings";
 import { useVersionStore } from "../../store/version";
 import "./Header.css";
 
+// [VA-02] Header (Linux custom titlebar): app version + CLI version display with window controls
 export function Header() {
   const appVersion = useVersionStore((s) => s.appVersion);
   const cliVersion = useSettingsStore((s) => s.cliVersion);

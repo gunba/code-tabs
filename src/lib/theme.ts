@@ -138,6 +138,7 @@ export function applyTheme(theme: Theme): void {
   root.style.setProperty("--scroll-thumb", c.scrollThumb);
   root.style.setProperty("--scroll-track", c.scrollTrack);
 
+  // [TH-03] Font system: --font-ui (Inter variable + system fallback) and --font-mono defined in index.html :root block as initial fallback (Cascadia Code + Fira Code + JetBrains Mono). applyTheme() overrides --font-mono at runtime. Inter woff2 bundled in src/assets/fonts/ with @font-face.
   // Font — match main terminal (TERMINAL_FONT_FAMILY in useTerminal.ts)
   root.style.setProperty("--font-mono", "'Pragmasevka', 'Roboto Mono', monospace");
 

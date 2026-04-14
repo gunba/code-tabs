@@ -17,13 +17,13 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 - [RS-02 L14] Resume target chain: `resumeSession || sessionId || id` (chains through multiple respawns)
 - [RS-03 L20] Check conversation existence via `nodeSummary || resumeSession` (in-memory, no JSONL)
 
-## Session Resume
-
-- [SR-08 L40] Worktree flag stripping on resume: `-w` and `--worktree` flags are stripped from extraFlags via `stripWorktreeFlags()` when resuming or respawning a session. Prevents creating a duplicate worktree — the session resumes in the existing worktree directory (workingDir was updated by inspector cwd detection [SI-20]).
-
 ## Dead Session Handling
 
 - [DS-03 L19] Auto-resume guarded by `canResumeSession()` (derived from `sessionId`, `resumeSession`, or `nodeSummary` — no JSONL check)
+
+## Session Resume
+
+- [SR-08 L40] Worktree flag stripping on resume: `-w` and `--worktree` flags are stripped from extraFlags via `stripWorktreeFlags()` when resuming or respawning a session. Prevents creating a duplicate worktree — the session resumes in the existing worktree directory (workingDir was updated by inspector cwd detection [SI-20]).
 
 ## Terminal UI
 

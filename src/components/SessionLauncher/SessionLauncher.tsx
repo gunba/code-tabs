@@ -389,6 +389,7 @@ export function SessionLauncher() {
     return () => window.removeEventListener("keydown", handler);
   }, [handleLaunch, dismissLauncher]);
 
+  // [SL-13] Toggle behavior: clicking active pill removes flag; clicking inactive pill adds it
   const handleCliPillClick = useCallback(({ flag, argName }: CliOption) => {
     setCommandLine((prev) => {
       const tokens = prev.split(/\s+/);
@@ -401,6 +402,7 @@ export function SessionLauncher() {
     });
   }, []);
 
+  // [SL-15] Utility mode mutual exclusion: non-session flag click replaces entire command line; clicking again restores; reset button (↻) escapes utility mode
   const handleNonSessionFlagClick = useCallback(({ flag }: CliOption) => {
     setCommandLine((prev) => {
       const tokens = prev.split(/\s+/);
@@ -678,6 +680,7 @@ export function SessionLauncher() {
                         key={cmd.name}
                         className={`launcher-cli-pill launcher-cli-pill-cmd${heatClass ? ` ${heatClass}` : ""}`}
                         onClick={() => setCommandLine((prev) => {
+                          // [SL-16] Subcommand toggle: clicking a subcommand replaces command line with `claude <cmd>`; clicking again resets to generated command
                           const base = buildFullCommand(config);
                           return prev.trim() === `claude ${cmd.name}` ? base : `claude ${cmd.name}`;
                         })}

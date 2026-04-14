@@ -229,6 +229,7 @@ pub async fn list_past_sessions() -> Result<Vec<serde_json::Value>, String> {
         .map_err(|e| e.to_string())?
 }
 
+// [RC-04] list_past_sessions_sync detects plan-mode forks by capturing sourceToolAssistantUUID during the head pass and resolving it during chain detection.
 fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("Could not determine home directory")?;
     let projects_dir = home.join(".claude").join("projects");

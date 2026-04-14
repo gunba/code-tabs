@@ -197,7 +197,7 @@ pub async fn pty_resize(
     #[cfg(windows)]
     session.conpty.resize(cols, rows)?;
 
-    // [PT-24] Lock-free on Unix: pty_exitstatus holds session.pty's std::sync::Mutex
+    // [PT-25] Lock-free on Unix: pty_exitstatus holds session.pty's std::sync::Mutex
     // for the whole session lifetime via child.wait(), so resize cannot take that
     // lock. The master fd is safe to ioctl concurrently.
     #[cfg(unix)]

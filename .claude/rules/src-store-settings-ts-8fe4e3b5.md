@@ -7,11 +7,6 @@ paths:
 
 Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
-## Session Launcher
-
-- [SL-20 L240] Recent dir pruning: pruneRecentDirs() called on app init; invokes dir_exists for each recentDir in parallel, removes any that no longer exist on disk
-- [SL-21 L271] Workspace-specific launch defaults: setSavedDefaults writes per-workspace entry into workspaceDefaults map (keyed by lowercased project root, worktree paths collapsed); SessionLauncher layers matching workspace defaults on mount and when switching workspace via browse or recent chip; no-entry workspace resets to global savedDefaults/lastConfig baseline; forkSession:false and other transient fields excluded from workspace entry
-
 ## RightPanel
 
 - [RI-02 L642] activityViewMode ('response' | 'session') is stored as a global persisted setting in useSettingsStore, not per-session in the activity store. setActivityViewMode() in useSettingsStore updates it. RightPanel reads mode and setMode from useSettingsStore (not useActivityStore). The value persists across sessions and app restarts via localStorage.
@@ -27,6 +22,12 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 ## Config Schema and Providers
 
 - [CM-10 L108] Settings schema cached in localStorage (binarySettingsSchema) to avoid re-scanning on every startup.
+
+## Session Launcher
+
+- [SL-20 L240] Recent dir pruning: pruneRecentDirs() called on app init; invokes dir_exists for each recentDir in parallel, removes any that no longer exist on disk
+- [SL-21 L271] Workspace-specific launch defaults: setSavedDefaults writes per-workspace entry into workspaceDefaults map (keyed by lowercased project root, worktree paths collapsed); SessionLauncher layers matching workspace defaults on mount and when switching workspace via browse or recent chip; no-entry workspace resets to global savedDefaults/lastConfig baseline; forkSession:false and other transient fields excluded from workspace entry
+- [SL-08 L430] Config pruning: both `sessionNames` and `sessionConfigs` maps pruned to only IDs present in loaded past sessions
 
 ## Provider Routing
 Session-bound provider routing, OpenAI Codex provider config, and auth-backed request translation.

@@ -13,10 +13,6 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 - [RS-01 L301] `triggerRespawn` cleans up old PTY/watchers/inspector, allocates new inspector port, increments respawn counter
 - [RS-07 L382] Spawn effect guards against dead sessions (session.state === 'dead') -- prevents restored dead sessions from auto-spawning with --session-id on startup. Respawns still work because triggerRespawn sets state to 'starting' before incrementing respawnCounter
 
-## Session Resume
-
-- [SR-01 L153] Resumed sessions show loading spinner until inspector connects (~1s) and confirms session is responsive
-
 ## State Metadata
 
 - [SI-22 L41] Duration timer: sole source is client-side useDurationTimer (1s setInterval in TerminalPanel, accumulates active-state time). TAP accumulator does NOT emit durationSecs -- TurnDuration events fall through to default:null. Timer resets accumulatedRef and lastTickRef on respawnCounter change to prevent stale values after respawn.
@@ -30,9 +26,17 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 - [PT-11 L301] triggerRespawn in TerminalPanel resets the live terminal/session state before launching the replacement: kills active PTY tree, clears inspector/tap registrations, unregisters file watcher, allocates a new inspector port, optionally merges new config/name, and increments respawnCounter so hooks re-fire for the new session.
 
+## Session Launcher
+
+- [SL-07 L173] Config caching: session configs cached in sessionConfigs map (localStorage) when inspector connects (model, permissionMode, dangerouslySkipPermissions, effort, agent, maxBudget, verbose, debug, projectDir, extraFlags, systemPrompt, appendSystemPrompt, allowedTools, disallowedTools, additionalDirs, mcpConfig); used as fallback when resuming sessions not in the dead tab map
+
 ## PTY Spawn
 
 - [TR-15 L449] Proxy env injection at PTY spawn: when proxyPort is set in settings store, TerminalPanel sets ANTHROPIC_BASE_URL=http://127.0.0.1:{port}/s/{sessionId} and binds the session to its selected providerId so the local proxy can route each Claude Code request through the right provider.
+
+## Session Resume
+
+- [SR-01 L153] Resumed sessions show loading spinner until inspector connects (~1s) and confirms session is responsive
 
 ## Terminal UI
 
