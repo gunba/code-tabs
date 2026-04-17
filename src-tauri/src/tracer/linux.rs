@@ -1,3 +1,4 @@
+// [PO-01] Linux tracer: seccomp-bpf filter (OnceLock) + PTRACE_SEIZE + dedicated tracer thread
 /// Linux process-tree tracer using seccomp-bpf + ptrace.
 ///
 /// Design
@@ -425,6 +426,7 @@ const O_TRUNC: u64 = 0o1000;
 const AT_FDCWD: i32 = -100;
 
 // ── Process node bookkeeping ─────────────────────────────────────────────
+// [PO-04] ProcessNode map: live (pid -> ProcessNode) for ancestry chain construction; EXEC refreshes, EXIT prunes
 
 #[derive(Clone, Debug)]
 struct ProcessNode {

@@ -519,6 +519,7 @@ pub fn update_system_prompt_rules(
 }
 
 // ── Rule match counts ──────────────────────────────────────────────
+// [CM-32] Per-session rule match counters: HashMap<ruleId, count>; incremented on each proxy match; get_rule_match_counts exposes it to frontend
 
 #[tauri::command]
 pub fn get_rule_match_counts(

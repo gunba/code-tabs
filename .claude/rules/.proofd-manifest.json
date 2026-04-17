@@ -39,7 +39,6 @@
     "src-hooks-usetapeventprocessor-ts-565d8ce5.md",
     "src-hooks-usetappipeline-ts-458df814.md",
     "src-hooks-useterminal-ts-fc81fe69.md",
-    "src-lib-bashfileparser-ts-30cce6af.md",
     "src-lib-claude-ts-72195795.md",
     "src-lib-debuglog-ts-8ab14025.md",
     "src-lib-filetree-ts-7b00dd53.md",
@@ -84,6 +83,9 @@
     "src-tauri-src-pty-mod-rs-dbeabb9a.md",
     "src-tauri-src-pty-unix-rs-b4f804b3.md",
     "src-tauri-src-session-types-rs-920df7b3.md",
+    "src-tauri-src-tracer-event-rs-30d505c1.md",
+    "src-tauri-src-tracer-linux-rs-eccf0a66.md",
+    "src-tauri-src-tracer-mod-rs-f4bd833f.md",
     "src-types-session-ts-b2c31cff.md",
     "src-types-tapevents-ts-79312c4c.md"
   ]

@@ -1,3 +1,5 @@
+// [PO-02] Tracer event flow: per-tab thread emits tracer://fs-event; frontend useTapEventProcessor subscribes and routes to addFileActivityFromTracer
+// [PO-05] TracerHandle lifecycle: dropping detaches tracer, tracee lifecycle owned by PTY
 /// Process-tree filesystem tracer.
 ///
 /// Replaces the old heuristic `bashFileParser.ts` and `git_list_changes`

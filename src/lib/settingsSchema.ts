@@ -155,6 +155,7 @@ export function parseJsonSchema(schema: JsonSchema): SettingField[] {
   return fields;
 }
 
+// [CM-33] Boolean setting default is true: defaultForType() returns true for boolean fields so 'Add' inserts opt-in values
 /** Get default value for a setting type */
 export function defaultForType(field: SettingField): any {
   if (field.choices && field.choices.length > 0) return field.choices[0];

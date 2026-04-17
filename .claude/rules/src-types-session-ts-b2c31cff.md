@@ -14,4 +14,6 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 ## Provider Routing
 Session-bound provider routing, OpenAI Codex provider config, and auth-backed request translation.
 
-- [PR-02 L325,373] OpenAI Codex is exposed as a predefined openai_codex provider with canonical primary/small models, 272k context mappings, and persisted-config migration backfills; ProvidersPane shows OAuth login/logout state, SessionLauncher blocks non-utility Codex launches until auth is available, and the Rust adapter translates Anthropic-style requests and streaming responses through the OpenAI Responses API.
+- [PR-13 L308] xhigh effort option: ANTHROPIC_EFFORTS in session.ts includes 'xhigh' (between 'high' and 'max') as a fifth effort level. SessionLauncher renders all five options; effortColor() in claude.ts maps xhigh to var(--rarity-legendary) (same as 'max'). Passed to CLI via --effort xhigh.
+  - src/types/session.ts:L312; src/lib/claude.ts:L117
+- [PR-02 L326,374] OpenAI Codex is exposed as a predefined openai_codex provider with canonical primary/small models, 272k context mappings, and persisted-config migration backfills; ProvidersPane shows OAuth login/logout state, SessionLauncher blocks non-utility Codex launches until auth is available, and the Rust adapter translates Anthropic-style requests and streaming responses through the OpenAI Responses API.

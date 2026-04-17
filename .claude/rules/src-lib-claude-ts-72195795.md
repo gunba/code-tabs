@@ -15,7 +15,7 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 ## Respawn & Resume
 
 - [RS-02 L14] Resume target chain: `resumeSession || sessionId || id` (chains through multiple respawns)
-- [RS-03 L20] Check conversation existence via `nodeSummary || resumeSession` (in-memory, no JSONL)
+- [RS-03 L20] Check conversation existence via resumeSession || nodeSummary || assistantMessageCount > 0 (in-memory, no JSONL). canResumeSession() in claude.ts returns true when any of these three conditions holds: config.resumeSession is set, metadata.nodeSummary is present, or metadata.assistantMessageCount > 0.
 
 ## Dead Session Handling
 

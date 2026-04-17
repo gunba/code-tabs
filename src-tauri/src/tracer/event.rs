@@ -1,3 +1,5 @@
+// [PO-02] FsEvent schema: tab_id, op (FsOp), path, pid, ppid, process_chain (ancestry), timestamp_ms
+// [PO-04] ProcessInfo in process_chain enables "bash -> python -> ripgrep touched foo.rs" display
 /// Filesystem event emitted by the process-tree tracer.
 ///
 /// Every event is attributed to the PTY tab that spawned the tracee root

@@ -226,6 +226,7 @@ export const useActivityStore = create<ActivityState>()((set) => ({
   // [AS-04] Tracer ingestion: drops events that duplicate a TAP-sourced
   // activity within TRACER_DEDUP_MS (TAP wins — it carries toolInputData
   // diffs). Otherwise adds with processChain populated so the UI can show
+  // [PO-03] TAP/tracer dedup: if TAP already recorded same path+kind within TRACER_DEDUP_MS, tracer only attaches processChain; otherwise creates new FileActivity
   // "bash → python → ripgrep touched foo.rs" ancestry.
   addFileActivityFromTracer: (sessionId, path, kind, processChain, isExternal) =>
     set((state) => traceSync("activity.add_file_tracer", () => {
