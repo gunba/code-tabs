@@ -159,7 +159,7 @@ export function parseJsonSchema(schema: JsonSchema): SettingField[] {
 export function defaultForType(field: SettingField): any {
   if (field.choices && field.choices.length > 0) return field.choices[0];
   switch (field.type) {
-    case "boolean": return false;
+    case "boolean": return true;
     case "string": return "";
     case "number": return 0;
     case "stringArray": return [];

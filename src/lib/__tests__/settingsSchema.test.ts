@@ -531,7 +531,7 @@ describe("defaultForType", () => {
   });
 
   it("returns correct defaults for each type", () => {
-    expect(defaultForType(makeField("boolean"))).toBe(false);
+    expect(defaultForType(makeField("boolean"))).toBe(true);
     expect(defaultForType(makeField("string"))).toBe("");
     expect(defaultForType(makeField("number"))).toBe(0);
     expect(defaultForType(makeField("stringArray"))).toEqual([]);
