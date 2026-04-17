@@ -65,6 +65,15 @@ pub(crate) fn detect_claude_cli_sync() -> Result<String, String> {
 }
 
 fn detect_claude_cli_details_sync() -> Result<(String, &'static str), String> {
+    // Escape hatch for environments where `where`/`which` is slow or blocked by
+    // policy. Takes precedence over PATH lookup and fallback candidates.
+    if let Ok(explicit) = std::env::var("CLAUDE_CLI_PATH") {
+        let trimmed = explicit.trim();
+        if !trimmed.is_empty() && std::path::Path::new(trimmed).exists() {
+            return Ok((trimmed.to_string(), "env_override"));
+        }
+    }
+
     let which_cmd = if cfg!(target_os = "windows") {
         "where"
     } else {

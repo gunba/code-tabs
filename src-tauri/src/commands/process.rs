@@ -282,9 +282,16 @@ fn is_descendant_of(pid: u32, ancestor: u32, tree: &[(u32, u32)]) -> bool {
 /// orphaned). Only kills true orphans from crashed/force-closed instances.
 #[tauri::command]
 pub async fn kill_orphan_sessions(session_ids: Vec<String>) -> Result<u32, String> {
-    tokio::task::spawn_blocking(move || kill_orphan_sessions_sync(&session_ids))
-        .await
-        .map_err(|e| e.to_string())?
+    let handle = tokio::task::spawn_blocking(move || kill_orphan_sessions_sync(&session_ids));
+    match tokio::time::timeout(std::time::Duration::from_secs(10), handle).await {
+        Ok(join_result) => join_result.map_err(|e| e.to_string())?,
+        Err(_) => {
+            // Process enumeration (wmic on Windows, pgrep on Unix) can hang on locked-down
+            // corporate machines. Skip cleanup rather than block app init forever.
+            log::warn!("kill_orphan_sessions timed out after 10s");
+            Ok(0)
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]
