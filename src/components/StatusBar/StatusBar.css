@@ -66,7 +66,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--success);
-  animation: status-dot-pulse 2s ease infinite;
+  animation: status-dot-pulse 2s steps(8) infinite;
 }
 
 @keyframes status-dot-pulse {
@@ -190,7 +190,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--warning);
-  animation: status-stall-pulse 1s ease infinite;
+  animation: status-stall-pulse 1s steps(4) infinite;
 }
 
 @keyframes status-stall-pulse {

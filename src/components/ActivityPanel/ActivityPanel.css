@@ -208,7 +208,7 @@
 .claude-mascot-reading .claude-mascot-img,
 .claude-mascot-writing .claude-mascot-img,
 .claude-mascot-searching .claude-mascot-img {
-  animation: mascot-rock 0.4s ease-in-out infinite alternate;
+  animation: mascot-rock 0.4s steps(4) infinite alternate;
   transform-origin: left center;
 }
 
@@ -230,7 +230,7 @@
 
 /* Idle: subtle bob */
 .claude-mascot-idle .claude-mascot-img {
-  animation: mascot-bob 3s ease-in-out infinite;
+  animation: mascot-bob 3s steps(8) infinite;
 }
 
 @keyframes mascot-bob {

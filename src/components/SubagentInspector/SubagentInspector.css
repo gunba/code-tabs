@@ -46,7 +46,7 @@
 .inspector-status-dot.state-toolUse,
 .inspector-status-dot.state-starting {
   background: var(--accent);
-  animation: dot-pulse 2s ease infinite;
+  animation: dot-pulse 2s steps(8) infinite;
 }
 
 .inspector-status-dot.state-idle {
@@ -426,7 +426,7 @@
   color: var(--text-muted);
   font-size: 16px;
   letter-spacing: 2px;
-  animation: pending-pulse 1.5s ease-in-out infinite;
+  animation: pending-pulse 1.5s steps(6) infinite;
 }
 
 @keyframes pending-pulse {
