@@ -1,6 +1,6 @@
 [package]
 name = "claude-tabs"
-version = "0.56.1"
+version = "0.57.0"
 edition = "2021"
 default-run = "claude-tabs"
 
