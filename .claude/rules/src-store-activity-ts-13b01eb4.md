@@ -9,7 +9,7 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## Activity Store Semantics
 
-- [AS-02 L332] mergeExpandedPaths() in useActivityStore auto-expands only folders not yet in seenFolderPaths, then adds them to seenFolderPaths. This ensures that user collapses on already-seen folders are never overridden on subsequent tree refreshes — only genuinely new folders trigger auto-expand. seenFolderPaths is part of SessionActivity and initialized as an empty Set via emptySessionActivity().
+- [AS-02 L330] mergeExpandedPaths() in useActivityStore auto-expands only folders not yet in seenFolderPaths, then adds them to seenFolderPaths. This ensures that user collapses on already-seen folders are never overridden on subsequent tree refreshes — only genuinely new folders trigger auto-expand. seenFolderPaths is part of SessionActivity and initialized as an empty Set via emptySessionActivity().
 
 ## Activity Panel
 

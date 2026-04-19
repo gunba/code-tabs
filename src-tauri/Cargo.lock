@@ -615,7 +615,7 @@ dependencies = [
 
 [[package]]
 name = "claude-tabs"
-version = "0.57.2"
+version = "0.57.3"
 dependencies = [
  "base64 0.22.1",
  "chrono",
