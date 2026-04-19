@@ -403,7 +403,7 @@ export function useTapEventProcessor(
             }
           }
 
-          // Bash — extract file ops by tokenizing the command string with shell-quote
+          // [DF-12] Bash — extract file ops by tokenizing the command string with shell-quote
           // and walking a small registry (rm/mv/cp/touch/mkdir/tee/redirects). This
           // is heuristic: subshells, var expansion, and globs are not handled. Path
           // existence is verified by the settled-idle validator before the entries

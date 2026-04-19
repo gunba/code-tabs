@@ -11,7 +11,7 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 - [RS-06 L230] Session-in-use auto-recovery: checks process ancestry to distinguish own orphans from external processes; own descendants (stale orphans from crashed tabs) killed automatically and resume retries
 - [RS-01 L293] triggerRespawn cleans up old PTY/inspector (no file watcher — removed), allocates new inspector port, increments respawn counter. Calls pty.cleanup(), inspector.disconnect(), stop_tap_server, unregisterPtyWriter/Kill/HandleId/InspectorPort, resets spawnedRef and earlyOutputRef.
-- [RS-07 L374] Spawn effect guards against dead sessions (session.state === 'dead') -- prevents restored dead sessions from auto-spawning with --session-id on startup. Respawns still work because triggerRespawn sets state to 'starting' before incrementing respawnCounter
+- [RS-07 L375] Spawn effect guards against dead sessions (session.state === 'dead') -- prevents restored dead sessions from auto-spawning with --session-id on startup. Respawns still work because triggerRespawn sets state to 'starting' before incrementing respawnCounter
 
 ## State Metadata
 
@@ -32,7 +32,7 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## PTY Spawn
 
-- [TR-15 L441] Proxy env injection at PTY spawn: when proxyPort is set in settings store, TerminalPanel sets ANTHROPIC_BASE_URL=http://127.0.0.1:{port}/s/{sessionId} and binds the session to its selected providerId so the local proxy can route each Claude Code request through the right provider.
+- [TR-15 L442] Proxy env injection at PTY spawn: when proxyPort is set in settings store, TerminalPanel sets ANTHROPIC_BASE_URL=http://127.0.0.1:{port}/s/{sessionId} and binds the session to its selected providerId so the local proxy can route each Claude Code request through the right provider.
 
 ## Session Resume
 
@@ -40,10 +40,10 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## Terminal UI
 
-- [TR-05 L595] Hidden tabs use CSS display: none -- never unmount/remount xterm.js (destroys state).
+- [TR-05 L596] Hidden tabs use CSS display: none -- never unmount/remount xterm.js (destroys state).
 
 ## Provider Routing
 Session-bound provider routing, OpenAI Codex provider config, and auth-backed request translation.
 
-- [PR-07 L415] OpenAI Codex launches set a provider-sized Claude Code compact window so 272k-cap providers compact with the same flat reserve instead of the unknown-model 200k fallback.
-- [PR-01 L441] TerminalPanel points Claude at a session-scoped proxy URL (/s/{sessionId}) and binds each session to providerId; the Rust proxy resolves that session-bound provider, applies provider-local modelMappings, and falls back to the default provider when no binding is present.
+- [PR-07 L416] OpenAI Codex launches set a provider-sized Claude Code compact window so 272k-cap providers compact with the same flat reserve instead of the unknown-model 200k fallback.
+- [PR-01 L442] TerminalPanel points Claude at a session-scoped proxy URL (/s/{sessionId}) and binds each session to providerId; the Rust proxy resolves that session-bound provider, applies provider-local modelMappings, and falls back to the default provider when no binding is present.

@@ -22,7 +22,7 @@ pub struct GitChange {
     pub status: String,
 }
 
-/// List uncommitted changes via `git status --porcelain=v1 -z`.
+/// [RC-21] List uncommitted changes via `git status --porcelain=v1 -z`.
 /// Returns absolute paths (joined to working_dir) plus a single-letter status:
 /// M=modified, A=added, D=deleted, R=renamed, ?=untracked.
 /// Empty result on error or non-repo (caller should gate via git_repo_check first).

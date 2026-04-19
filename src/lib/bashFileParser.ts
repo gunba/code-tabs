@@ -152,6 +152,7 @@ function parseStatement(tokens: ParseEntry[], cwd: string, ops: BashFileOp[]): v
   }
 }
 
+// [DF-12] Parse Bash command strings into file-mutation ops (rm/mv/cp/touch/mkdir/tee/ln + redirections)
 export function parseBashFiles(command: string, cwd: string): BashFileOp[] {
   if (!command) return [];
   let tokens: ParseEntry[];

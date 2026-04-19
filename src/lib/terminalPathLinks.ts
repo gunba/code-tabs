@@ -51,6 +51,7 @@ interface CreateOptions {
 // Small LRU; cleared externally when cwd changes.
 const EXISTENCE_CACHE_CAP = 500;
 
+// [TP-01] xterm.js ILinkProvider: detects file paths on terminal lines, validates existence via paths_exist, click=shell_open Ctrl/Cmd=reveal_in_file_manager
 export function createPathLinkProvider({ term, getCwd }: CreateOptions): {
   provider: ILinkProvider;
   clearCache: () => void;

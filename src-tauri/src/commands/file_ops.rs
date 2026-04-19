@@ -11,7 +11,7 @@ pub struct PathStatus {
     pub is_dir: bool,
 }
 
-/// Stat a batch of paths in parallel via spawn_blocking.
+/// [RC-23] Stat a batch of paths in parallel via spawn_blocking.
 /// Returns one entry per input path in the same order.
 #[tauri::command]
 pub async fn paths_exist(paths: Vec<String>) -> Vec<PathStatus> {

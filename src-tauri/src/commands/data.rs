@@ -876,6 +876,7 @@ pub fn shell_open(path: String) -> Result<(), String> {
     }
 }
 
+/// [RC-22] Open path in system file manager (Explorer /select on Windows, open -R on macOS, xdg-open on Linux)
 #[tauri::command]
 pub fn reveal_in_file_manager(path: String) -> Result<(), String> {
     reveal_path(std::path::Path::new(&path))
