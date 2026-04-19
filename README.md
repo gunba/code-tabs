@@ -6,91 +6,22 @@ A desktop app for managing multiple Claude Code CLI sessions in tabs. Rust backe
 
 ## Features
 
-### Terminal Tabs
-- Run multiple Claude Code sessions side by side with fixed-width tabs
-- Inline rename, drag-to-reorder, working-directory grouping
-- Dead tabs persist at reduced opacity; clicking a dead tab auto-respawns the session
-- Background buffering — hidden tabs accumulate PTY output and flush it as a single write on focus
-
-### Session Resume
-- Browse past conversations (Ctrl+Shift+R) with first/last message preview, model badges, and content search
-- Chain merging for plan-mode forks — linked sessions collapse into a single card
-- Config caching preserves model, permissions, effort, agent, budgets, and system prompt across resumes
-- Worktree flags (`-w`) auto-stripped on resume to prevent duplicate worktree creation
-
-### Session Launcher
-- Visual CLI builder with every flag as a clickable pill and live command preview
-- Permission mode selector, skip-perms toggle, model picker, effort dial
-- Quick launch (Ctrl+Shift+T) bypasses the modal using saved defaults
-- Utility mode for non-session commands (`--version`, `--help`, `--print`)
-- Auto-start toggles for TAP recording and terminal recording
-
-### Subagent Tracking
-- Live subagent status bar with elapsed time, token/cost attribution, and state indicators
-- Conversation inspector renders full subagent dialogue with markdown and tool blocks
-- Nested subagent support via agentId-based routing
-- Active cards pulse; idle subagents remain visible until session ends
-
-### Command Bar
-- Slash commands auto-discovered from your Claude Code installation (binary scan + plugin directories)
-- Usage-based sorting with WoW-rarity heat gradient (green -> blue -> purple -> orange)
-- Click types without sending; Ctrl+Click sends immediately
-- Per-session command history strip with re-send on click
-- Skill invocation results displayed in a separate strip with success/failure coloring
-
-### Configuration Manager (Ctrl+,)
-- 10-tab modal: Settings, Env Vars, Claude.md, Hooks, Plugins, Agents, Prompts, Skills, Providers, Recording
-- Three-scope editing: User (`~/.claude/`), Project (`.claude/`), Project Local (`.claude/.local`)
-- JSON settings editor with syntax highlighting, schema validation, and click-to-insert reference panel
-- CLAUDE.md editor with preview toggle per scope
-- Hooks CRUD with non-destructive saves (preserves unknown fields)
-- Plugin marketplace with search, sort, install/uninstall/toggle
-- Agent and skills editors with per-scope file management
-- Env var editor with searchable reference catalog
-- System prompt diffing and rule generation
-- Multi-provider routing configuration
-- TAP recording category toggles grouped by subsystem
-
-### Activity Panel (Ctrl+Shift+G)
-- Response/session file tree showing files the agent touched
-- Floating mascot tracks the main agent; subagents stay pinned to their last file
-- Context files and external file accesses are surfaced in the same tree
-- Click a file to open it directly from the panel
-
-### Debug & Inspection
-- Debug panel (Ctrl+Shift+D) with structured logging, severity coloring, and 2000-entry ring buffer
-- Cross-session terminal search (Ctrl+Shift+F) with regex support and 500-result cap
-- Context viewer showing captured system prompt blocks with token stats and cache boundaries
-- Inspector connection with WebSocket lifecycle, retry strategy, and port allocation (6400-6499)
-
-### TAP Event Pipeline
-- Push-based architecture: TCP socket receives raw entries, classifier produces ~45 typed events
-- State derived from events (no terminal polling): session state machine, metadata accumulation, subagent lifecycle
-- 22 flag-gated tap categories (console, fs, spawn, fetch, net, stream, etc.)
-
-### Status Bar
-- Model, API latency, subscription tier, region, session duration
-- Hook count, active subprocess count, permission mode
-- Context button opens system prompt viewer when available
-- All icons are inline SVG (no emoji)
-
-### Desktop Notifications
-- Background tab alerts on response complete, permission needed, or error
-- Click-to-focus: clicking a toast switches to the target tab
-- Rate-limited to 1 per session per 30 seconds
-- Custom WinRT toasts with click callbacks (not Tauri plugin)
-
-### Theme & Appearance
-- CSS variable color system with dark theme and native Windows decorations
-- Frosted glass modals (backdrop blur + color-mix)
-- Inter + Cascadia Code/Fira Code/JetBrains Mono font stack
-- xterm.js themes derived from CSS variables
-
-### Terminal
-- WebGL renderer with context loss recovery and canvas fallback
-- 1M fixed scrollback, DEC 2026 synchronized output, batch-debounced writes (4ms quiet / 50ms max)
-- Output filter strips OSC 52 (clipboard hijack), DCS sequences, and C1 controls
-- Scroll-to-last-message via prompt marker detection (Ctrl+middle-click)
+- **Multiple Claude Code sessions in tabs** — Run sessions side by side with fixed-width tabs, drag-to-reorder, working-directory grouping, and auto-respawn of dead tabs.
+- **Subagents as first-class terminals** — Live status bar tracks every nested agent with elapsed time, tokens, and cost; click to open the full inspector with conversation, edits, bash, and file tool calls.
+- **Multi-provider routing, including ChatGPT** — Bind sessions to OpenAI Codex or custom providers with request/response translation, model mapping, and per-session provider selection.
+- **Live tok/s, latency, and cost** — EMA-smoothed output throughput, API latency, network RTT, and per-session spend — all derived from TAP events, no terminal polling.
+- **Auto-discovers your Claude Code binary** — Scans the installed CLI for every slash command, env var, setting, skill, and plugin; an advisory audit diffs findings against the official docs to catch minifier drift.
+- **Session resume with chain merging** — Browse past conversations with previews, model badges, and content search; plan-mode forks collapse into a single card and config (model, permissions, effort, budgets, system prompt) is preserved across resumes.
+- **Configuration manager (Ctrl+,)** — 10-tab modal covering settings, env vars, CLAUDE.md, hooks, plugins, agents, prompts, skills, providers, and recording, editable across User / Project / Project Local scopes with schema-validated JSON and non-destructive saves.
+- **Visual CLI launcher** — Every Claude Code flag as a clickable pill with live command preview; quick-launch (Ctrl+Shift+T) bypasses the modal using saved defaults.
+- **Command bar with usage heat** — Slash commands ranked by how rarely you use them (green → blue → purple → orange), click to type, Ctrl+click to send, per-session history strip.
+- **Activity panel** — File tree of everything the agent touched this response, with a floating mascot that tracks the main agent and pinned markers for each subagent at their last edit site.
+- **Cross-session terminal search (Ctrl+Shift+F)** — Regex search across every live terminal buffer with a 500-result cap.
+- **System prompt / context viewer** — Inspect captured system prompt blocks with token stats and cache-boundary markers.
+- **TAP event pipeline** — Push-based TCP socket receives raw entries, a classifier produces ~45 typed events across 22 flag-gated categories; state is derived from events, not terminal scraping.
+- **API proxy with request compression** — Rewrites bash, grep, glob, and JSON request bodies to trim token usage before they hit the wire; tracks per-rule match counts.
+- **Desktop notifications with click-to-focus** — Rate-limited WinRT toasts on response complete, permission needed, or error; clicking jumps to the source tab.
+- **WebGL terminal** — 1M fixed scrollback, DEC 2026 synchronized output, batch-debounced writes, OSC 52 clipboard-hijack stripping, and scroll-to-last-message via prompt-marker detection.
 
 ## Install
 
@@ -133,15 +64,15 @@ npm run build:debug      # Debug build (no NSIS installer)
 | Ctrl+K | Command palette |
 | Ctrl+, | Configuration manager |
 | Ctrl+Shift+R | Resume past session |
-| Ctrl+Shift+D | Toggle debug panel |
 | Ctrl+Shift+F | Cross-session terminal search |
-| Ctrl+Shift+G | Activity panel |
 | Ctrl+Home / Ctrl+End | Scroll to top / bottom |
 | Ctrl+Wheel | Snap to top / bottom |
 | Ctrl+Middle-click | Scroll to last message |
 | Shift+Click tab | Relaunch with new options |
 | Right-click tab | Context menu (copy ID, rename, etc.) |
 | Escape | Dismiss (ordered: context menu, palette, side panel, config, resume, launcher, inspector) |
+
+Activity, Search, and Debug views are tabs in the right panel — click to switch, or hit Ctrl+Shift+F to jump straight to Search.
 
 ## Architecture
 
