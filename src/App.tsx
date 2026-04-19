@@ -659,40 +659,41 @@ export default function App() {
 
       {/* Main area: terminals */}
       <div className="app-main">
-        <div className="terminal-area">
-          {/* Terminal panels — always mounted, hidden via CSS (including dead ones so errors remain visible) */}
-          {regularSessions.map((session) => (
-            <TerminalPanel
-              key={session.id}
-              session={session}
-              visible={session.id === activeTabId}
-            />
-          ))}
+        <div className="terminal-column">
+          <div className="terminal-area">
+            {/* Terminal panels — always mounted, hidden via CSS (including dead ones so errors remain visible) */}
+            {regularSessions.map((session) => (
+              <TerminalPanel
+                key={session.id}
+                session={session}
+                visible={session.id === activeTabId}
+              />
+            ))}
 
-          {/* Subagent inspector overlay */}
-          {activeSubagent && (
-            <SubagentInspector
-              key={activeSubagent.id}
-              subagent={activeSubagent}
-              onClose={() => setInspectedSubagent(null)}
-            />
-          )}
+            {/* Subagent inspector overlay */}
+            {activeSubagent && (
+              <SubagentInspector
+                key={activeSubagent.id}
+                subagent={activeSubagent}
+                onClose={() => setInspectedSubagent(null)}
+              />
+            )}
 
-          {/* Empty state — no active terminal visible */}
-          {initialized && !regularSessions.some((s) => s.id === activeTabId) && (
-            <div className="empty-state">
-              <kbd>Ctrl+T</kbd> new session &middot; <kbd>Ctrl+Shift+R</kbd> resume from history
-            </div>
-          )}
+            {/* Empty state — no active terminal visible */}
+            {initialized && !regularSessions.some((s) => s.id === activeTabId) && (
+              <div className="empty-state">
+                <kbd>Ctrl+T</kbd> new session &middot; <kbd>Ctrl+Shift+R</kbd> resume from history
+              </div>
+            )}
+          </div>
+          <CommandBar
+            sessionId={activeTabId}
+            sessionState={activeSession?.state ?? "dead"}
+            ctrlHeld={ctrlHeld}
+          />
         </div>
         <RightPanel />
       </div>
-
-      <CommandBar
-        sessionId={activeTabId}
-        sessionState={activeSession?.state ?? "dead"}
-        ctrlHeld={ctrlHeld}
-      />
 
       <StatusBar onOpenContextViewer={() => setShowContextViewer(true)} />
 
