@@ -48,19 +48,11 @@ impl Read for FdReader {
     }
 }
 
-/// Unix PTY handle -- owns the master fd + child pid. The Child struct is
-/// not retained because the tracer thread consumes waitpid events for the
-/// tracee (ptrace requires that); instead, kill is issued via libc::kill
-/// on the process group, and exit status is delivered via a channel from
-/// the tracer when it observes WIFEXITED.
+/// Unix PTY handle -- owns the master fd + child handle.
 pub struct UnixPty {
     master_fd: RawFd,
     pid: u32,
-    exit_rx: std::sync::Mutex<Option<mpsc::Receiver<u32>>>,
-    /// Process-tree filesystem tracer attached to the root pid. Lives as
-    /// long as UnixPty; Drop detaches the tracer and terminates its
-    /// event loop.
-    _tracer: Option<crate::tracer::TracerHandle>,
+    child: std::sync::Mutex<Option<std::process::Child>>,
 }
 
 /// Resize the PTY by writing TIOCSWINSZ directly to the master fd.
@@ -106,14 +98,23 @@ impl UnixPty {
         Ok(())
     }
 
-    /// Wait for the child to exit (blocking). Returns exit code. The
-    /// tracer thread performs the actual waitpid (ptrace owns it) and
-    /// forwards the code via the exit channel; this blocks on that.
+    // [PT-26] wait() uses stdlib ExitStatusExt: signal N -> 128+N; Mutex<Option<Child>> take() guards double-wait.
+    /// Wait for the child to exit (blocking). Returns exit code.
     pub fn wait(&mut self) -> Result<u32, String> {
-        let mut slot = self.exit_rx.lock().unwrap();
-        let rx = slot.take().ok_or_else(|| "wait already consumed".to_string())?;
+        let mut slot = self.child.lock().unwrap();
+        let mut child = slot
+            .take()
+            .ok_or_else(|| "wait already consumed".to_string())?;
         drop(slot);
-        rx.recv().map_err(|e| format!("wait channel closed: {}", e))
+        let status = child.wait().map_err(|e| format!("wait failed: {}", e))?;
+        // Preserve the signaled-exit convention used elsewhere: 128 + signal.
+        use std::os::unix::process::ExitStatusExt;
+        let code = if let Some(sig) = status.signal() {
+            128 + sig as u32
+        } else {
+            status.code().unwrap_or(0) as u32
+        };
+        Ok(code)
     }
 }
 
@@ -166,18 +167,12 @@ pub struct SpawnResult {
     pub master_fd: RawFd,
 }
 
-/// Spawn a process attached to a new PTY.
-///
-/// The fork + exec happens on the *tracer thread* (see
-/// `tracer::linux::spawn_with_tracer`) — this guarantees the ptrace
-/// thread-affinity invariant (all ptrace calls must originate from the
-/// thread that became tracer via `PTRACE_TRACEME`). This function
-/// blocks until the child has reached its post-execve TRACEME stop and
-/// the tracer event loop is running, then returns the PTY handles and
-/// PID to the caller.
+/// Spawn a process attached to a new PTY via the standard stdlib
+/// `Command::spawn`. This function blocks until the child is live,
+/// then returns the PTY handles and PID to the caller. The child's
+/// exit status is reaped by the stdlib `Child` wrapper (retained in
+/// UnixPty via `wait`).
 pub fn spawn(
-    app: tauri::AppHandle,
-    tab_id: String,
     file: &str,
     args: &[String],
     cols: u16,
@@ -209,8 +204,6 @@ pub fn spawn(
     }
     let slave_stderr = unsafe { OwnedFd::from_raw_fd(slave_stderr_raw) };
 
-    // Build the Command but don't spawn it here — hand it to the tracer
-    // so fork happens on the tracer thread (thread-affinity invariant).
     // [PT-19] TERM/COLORTERM defaults injected before caller env so caller wins on conflict.
     // [PT-23] Advertise as xterm-ghostty so Claude Code's TUI uses sync output.
     let mut cmd = Command::new(file);
@@ -246,31 +239,12 @@ pub fn spawn(
             if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0) < 0 {
                 return Err(io::Error::last_os_error());
             }
-            // [PT-24] Install the seccomp-bpf filter that traps file syscalls
-            // with SECCOMP_RET_TRACE so the parent's tracer observes every
-            // open/create/delete/rename/truncate/chmod the tracee or any
-            // descendant performs. Also calls PTRACE_TRACEME so the child
-            // SIGTRAP-stops at the first instruction after execve, letting
-            // the tracer thread set options before any syscall runs.
-            #[cfg(target_os = "linux")]
-            crate::tracer::linux::install_in_pre_exec()?;
             Ok(())
         });
     }
 
-    // Hand the fully-prepared Command to the tracer, which forks + execs
-    // on its own dedicated thread and runs the event loop. The tracer
-    // also owns waitpid on the tracee (ptrace requires it), so it's the
-    // source of the eventual exit code — wired through `exit_tx` below
-    // into UnixPty::wait().
-    let sink = crate::tracer::linux::sink_from_app(app);
-    let (exit_tx, exit_rx) = mpsc::channel::<u32>();
-    let (pid, tracer_handle) = crate::tracer::linux::spawn_with_tracer(
-        cmd,
-        tab_id,
-        sink,
-        exit_tx,
-    )?;
+    let child = cmd.spawn().map_err(|e| format!("spawn failed: {}", e))?;
+    let pid = child.id();
 
     // Transfer master ownership into UnixPty's manual-Drop slot. FdWriter and
     // FdReader carry copies of the int but do not own — UnixPty.Drop is sole
@@ -297,14 +271,10 @@ pub fn spawn(
         }
     });
 
-    // Exit channel — the tracer loop forwards WIFEXITED / WIFSIGNALED
-    // into this when the root pid terminates. UnixPty::wait() blocks
-    // on it.
     let pty = UnixPty {
         master_fd,
         pid,
-        exit_rx: std::sync::Mutex::new(Some(exit_rx)),
-        _tracer: Some(crate::tracer::handle_from_linux(tracer_handle)),
+        child: std::sync::Mutex::new(Some(child)),
     };
 
     Ok(SpawnResult {

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useSessionStore } from "../store/sessions";
 import { useActivityStore } from "../store/activity";
 import { tapEventBus } from "../lib/tapEventBus";
@@ -17,51 +16,8 @@ import { traceSync } from "../lib/perfTrace";
 import { settledStateManager } from "../lib/settledState";
 import type { TapEvent } from "../types/tapEvents";
 import type { SessionState, PermissionMode } from "../types/session";
-import type { ToolInputDiffData, FileChangeKind, ProcessInfo } from "../types/activity";
+import type { ToolInputDiffData } from "../types/activity";
 import { getTapCategoryLabel, getTapCategoryMeta } from "../lib/tapCatalog";
-
-/** Payload of a `tracer://fs-event` emit from the Rust process-tree tracer. */
-interface TracerFsEvent {
-  tabId: string;
-  op:
-    | "read"
-    | "write"
-    | "create"
-    | "delete"
-    | "mkdir"
-    | "rmdir"
-    | "truncate"
-    | "chmod"
-    | "symlink"
-    | { rename: { from: string } };
-  path: string;
-  pid: number;
-  ppid: number;
-  processChain: ProcessInfo[];
-  timestampMs: number;
-}
-
-function tracerOpToKind(op: TracerFsEvent["op"]): FileChangeKind {
-  if (typeof op === "object" && "rename" in op) return "renamed";
-  switch (op) {
-    case "read":
-      return "read";
-    case "write":
-    case "truncate":
-    case "chmod":
-      return "modified";
-    case "create":
-    case "mkdir":
-    case "symlink":
-      return "created";
-    case "delete":
-    case "rmdir":
-      return "deleted";
-    default:
-      return "modified";
-  }
-}
-
 
 /** Return discriminating fields for key event types (for debug logs). */
 function eventDetail(event: TapEvent): string {
@@ -382,11 +338,9 @@ export function useTapEventProcessor(
             }
           }
 
-          // Bash file tracking is now handled by the process-tree tracer
-          // (src-tauri/src/tracer/*), which observes kernel syscalls on
-          // Claude and every descendant. See the tracer://fs-event listener
-          // below. The old bashFileParser heuristic has been removed —
-          // kernel-observed events are ground truth, not a regex guess.
+          // Bash file tracking is unimplemented — the syscall tracer that
+          // previously observed file ops by Claude's descendants has been
+          // removed, and the old bashFileParser heuristic is not coming back.
         }
 
         if (event.kind === "PermissionRejected") {
@@ -582,10 +536,7 @@ export function useTapEventProcessor(
     const unsub = tapEventBus.subscribe(sessionId, handleEvent);
 
     // [AS-03] End activity turns on settled-idle — still needed for
-    // the UI's Response mode boundary and stats recomputation. The
-    // settled-idle git_list_changes snapshot has been removed; file
-    // events now stream in real time via the process-tree tracer
-    // (src-tauri/src/tracer/*) → tracer://fs-event listener below.
+    // the UI's Response mode boundary and stats recomputation.
     const unsubSettled = settledStateManager.subscribe(
       (settledSid, kind) => {
         if (settledSid === sessionId && kind === "idle") {
@@ -595,70 +546,9 @@ export function useTapEventProcessor(
       () => {},
     );
 
-    // [AS-05] Tracer event bridge. Rust emits one FsEvent per
-    // kernel-observed file syscall; the envelope carries tabId so we
-    // only ingest events for this session. Dedup against TAP-sourced
-    // activities happens inside addFileActivityFromTracer.
-    let unsubTracer: UnlistenFn | null = null;
-    let tracerCancelled = false;
-    listen<TracerFsEvent>("tracer://fs-event", (payload) => {
-      const ev = payload.payload;
-      if (ev.tabId !== sessionId) return;
-      // [AS-07] Early drop before traceSync. Claude Code walks the
-      // entire workspace at boot (looking for .claude, CLAUDE.md, etc.)
-      // and can emit 70k+ tracer events in the first 5 seconds. Each
-      // call into addFileActivityFromTracer would otherwise pay the
-      // full traceSync cost (performance.now, span creation, dlog
-      // JSON serialize, observability.jsonl append) even though the
-      // store-side gate drops the event. Checking lastUserMessageAt
-      // here keeps those events out of the observability pipeline and
-      // off the React thread entirely, which is the difference
-      // between an immediately-usable prompt and multi-second input
-      // lag after Claude Code has booted.
-      const activity = useActivityStore.getState().sessions[sessionId];
-      if (!activity || activity.lastUserMessageAt === 0) return;
-      const currentTurn = activity.turns[activity.turns.length - 1];
-      if (!currentTurn || currentTurn.endedAt !== null) return;
-      const sess = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
-      const workDir = sess?.config.workingDir ?? "";
-      const canonical = canonicalizePath(ev.path);
-      const isExternal = workDir ? !normalizePath(canonical).startsWith(normalizePath(workDir)) : false;
-      useActivityStore.getState().addFileActivityFromTracer(
-        sessionId,
-        canonical,
-        tracerOpToKind(ev.op),
-        ev.processChain,
-        isExternal,
-      );
-      if (typeof ev.op === "object" && "rename" in ev.op) {
-        // Rename also implies deletion of the source path. Emit a
-        // matching "deleted" event so the activity tree reflects both
-        // sides of the rename, keyed to the same process chain.
-        const fromCanonical = canonicalizePath(ev.op.rename.from);
-        const fromIsExternal = workDir
-          ? !normalizePath(fromCanonical).startsWith(normalizePath(workDir))
-          : false;
-        useActivityStore.getState().addFileActivityFromTracer(
-          sessionId,
-          fromCanonical,
-          "deleted",
-          ev.processChain,
-          fromIsExternal,
-        );
-      }
-    }).then((u) => {
-      // Unmount may race with listen() promise resolution. If cleanup
-      // already ran, release the subscription immediately so nothing
-      // leaks past the session's lifetime.
-      if (tracerCancelled) u();
-      else unsubTracer = u;
-    });
-
     return () => {
       unsub();
       unsubSettled();
-      tracerCancelled = true;
-      unsubTracer?.();
       metaAcc.reset();
       subTracker.reset();
       metaAccRef.current = null;

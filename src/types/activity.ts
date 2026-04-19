@@ -1,12 +1,5 @@
 export type FileChangeKind = "created" | "modified" | "deleted" | "renamed" | "read" | "searched";
 
-/** One node in a tracer-observed process ancestry chain. */
-export interface ProcessInfo {
-  pid: number;
-  exe: string;
-  argv: string[];
-}
-
 export interface FileActivity {
   path: string;
   kind: FileChangeKind;
@@ -21,10 +14,6 @@ export interface FileActivity {
   toolInputData: ToolInputDiffData | null;
   /** True when this activity targets a folder (e.g., Grep/Glob searching a directory). */
   isFolder: boolean;
-  /** Tracer-observed ancestry from the touching process up to (but excluding)
-   *  the tab root, oldest-first. Undefined for activities sourced from TAP
-   *  tool-use events (no tracer chain available). */
-  processChain?: ProcessInfo[];
 }
 
 /** Data captured from ToolInput events for on-demand diff construction. */

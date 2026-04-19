@@ -6,7 +6,6 @@ mod proxy;
 mod pty;
 mod session;
 mod tap_server;
-pub mod tracer;
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -144,22 +143,6 @@ pub fn run() {
                     "arch": std::env::consts::ARCH,
                 }),
             );
-            // [PO-05] Pre-warm the seccomp BPF filter in the parent process.
-            // The design (src/tracer/linux.rs:6) requires the filter to be
-            // built exactly once at app startup — rebuilding it inside the
-            // forked child's pre_exec is async-signal-unsafe and can
-            // deadlock on allocator locks inherited from parent threads
-            // that were mid-malloc at fork time. Calling the OnceLock
-            // initializer here, from the main thread before any PTY is
-            // spawned, guarantees pre_exec only reads cached bytecode.
-            #[cfg(target_os = "linux")]
-            {
-                let filter = tracer::linux::seccomp_filter_bytes();
-                log::debug!(
-                    "tracer: seccomp filter prewarmed ({} BPF instructions)",
-                    filter.len()
-                );
-            }
             // [WN-01] Native Windows decorations — no custom titlebar; dark theme set in tauri.conf.json
             #[cfg(target_os = "windows")]
             {

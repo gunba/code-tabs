@@ -74,12 +74,8 @@ libc = "0.2"
 # Linux notifications use notify-rust directly (not tauri_plugin_notification)
 # so we can wire click actions to emit notification-clicked, matching the
 # Windows tauri-winrt-notification path.
-# seccompiler builds BPF programs for the process-tree filesystem tracer; used
-# to install a seccomp filter with SECCOMP_RET_TRACE on file syscalls in the
-# pre_exec hook, after which the parent attaches via PTRACE_SEIZE.
 [target.'cfg(target_os = "linux")'.dependencies]
 notify-rust = "4"
-seccompiler = "0.5"
 
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.7"
