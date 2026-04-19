@@ -7,6 +7,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
 import { readText as clipboardReadText } from "@tauri-apps/plugin-clipboard-manager";
+import { invoke } from "@tauri-apps/api/core";
 import { getTerminalTheme } from "../lib/theme";
 import { dlog } from "../lib/debugLog";
 import { startTraceSpan, traceSync } from "../lib/perfTrace";
@@ -14,6 +15,7 @@ import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { getResumeId } from "../lib/claude";
 import { IS_WINDOWS, IS_LINUX } from "../lib/paths";
+import { createPathLinkProvider } from "../lib/terminalPathLinks";
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', monospace";
 
@@ -24,6 +26,7 @@ interface UseTerminalOptions {
   onData?: (data: string) => void;
   onResize?: (cols: number, rows: number) => void;
   instanceKey?: number;
+  cwd?: string | null;
 }
 
 function escapePreview(text: string): string {
@@ -53,7 +56,7 @@ function isElementVisible(el: HTMLElement): boolean {
   return rect.width > 0 && rect.height > 0;
 }
 
-export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 0 }: UseTerminalOptions = {}) {
+export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 0, cwd = null }: UseTerminalOptions = {}) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
@@ -64,6 +67,8 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
   sessionIdRef.current = sessionId;
   const onDataRef = useRef<typeof onData>(onData);
   onDataRef.current = onData;
+  const cwdRef = useRef<string | null>(cwd);
+  cwdRef.current = cwd;
   const [ready, setReady] = useState(false);
   const [termGeneration, setTermGeneration] = useState(0);
 
@@ -71,6 +76,7 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const webLinksAddonRef = useRef<WebLinksAddon | null>(null);
   const unicode11AddonRef = useRef<Unicode11Addon | null>(null);
+  const pathLinkDisposableRef = useRef<{ dispose(): void } | null>(null);
 
   // [DF-10] FitAddon.fit() is called bare (no try/catch) so resize errors propagate to the caller.
   const fit = useCallback(() => {
@@ -157,7 +163,15 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
     }
 
     try {
-      const webLinks = new WebLinksAddon();
+      const webLinks = new WebLinksAddon((event, uri) => {
+        const reveal = event.ctrlKey || event.metaKey;
+        invoke(reveal ? "reveal_in_file_manager" : "shell_open", { path: uri }).catch((e) => {
+          dlog("terminal", sessionIdRef.current, `web link open failed: ${e}`, "WARN", {
+            event: "terminal.web_link_open_failed",
+            data: { uri, reveal, error: String(e) },
+          });
+        });
+      });
       term.loadAddon(webLinks);
       webLinksAddonRef.current = webLinks;
       dlog("terminal", sessionIdRef.current, "web-links addon enabled", "DEBUG", {
@@ -167,6 +181,24 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
     } catch {
       dlog("terminal", sessionIdRef.current, "web-links addon unavailable", "DEBUG", {
         event: "terminal.web_links_unavailable",
+        data: {},
+      });
+    }
+
+    try {
+      pathLinkDisposableRef.current?.dispose();
+      const { provider } = createPathLinkProvider({
+        term,
+        getCwd: () => cwdRef.current,
+      });
+      pathLinkDisposableRef.current = term.registerLinkProvider(provider);
+      dlog("terminal", sessionIdRef.current, "path link provider enabled", "DEBUG", {
+        event: "terminal.path_link_provider_enabled",
+        data: {},
+      });
+    } catch {
+      dlog("terminal", sessionIdRef.current, "path link provider unavailable", "DEBUG", {
+        event: "terminal.path_link_provider_unavailable",
         data: {},
       });
     }
@@ -464,6 +496,8 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       searchAddonRef.current = null;
       webLinksAddonRef.current?.dispose();
       webLinksAddonRef.current = null;
+      pathLinkDisposableRef.current?.dispose();
+      pathLinkDisposableRef.current = null;
       unicode11AddonRef.current?.dispose();
       unicode11AddonRef.current = null;
       term?.dispose();

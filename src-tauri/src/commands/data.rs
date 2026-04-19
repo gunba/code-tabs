@@ -876,6 +876,11 @@ pub fn shell_open(path: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+pub fn reveal_in_file_manager(path: String) -> Result<(), String> {
+    reveal_path(std::path::Path::new(&path))
+}
+
 /// [SL-19] [SL-20] Check whether a path exists and is a directory.
 #[tauri::command]
 pub fn dir_exists(path: String) -> bool {

@@ -359,6 +359,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     onData: handleTermData,
     onResize: handleResize,
     instanceKey: respawnCounter,
+    cwd: session.config.workingDir ?? null,
   });
   terminalRef.current = terminal;
 
