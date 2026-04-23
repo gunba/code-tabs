@@ -98,6 +98,8 @@ interface SettingsState {
   lastConfig: SessionConfig;
   savedDefaults: SessionConfig | null;
   workspaceDefaults: Record<string, Partial<SessionConfig>>;
+  /** Per-workspace scratchpad notes, keyed by lowercased normalized project root. */
+  workspaceNotes: Record<string, string>;
   showLauncher: boolean;
   launcherGeneration: number;
   themeName: string;
@@ -138,6 +140,7 @@ interface SettingsState {
   removePreset: (id: string) => void;
   setLastConfig: (config: SessionConfig) => void;
   setSavedDefaults: (config: SessionConfig) => void;
+  setWorkspaceNotes: (key: string, notes: string) => void;
   setShowLauncher: (show: boolean) => void;
   setThemeName: (name: string) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
@@ -181,6 +184,7 @@ export const useSettingsStore = create<SettingsState>()(
       lastConfig: DEFAULT_SESSION_CONFIG,
       savedDefaults: null,
       workspaceDefaults: {},
+      workspaceNotes: {},
       showLauncher: false,
       launcherGeneration: 0,
       themeName: "Claude",
@@ -307,6 +311,17 @@ export const useSettingsStore = create<SettingsState>()(
             ? { ...s.workspaceDefaults, [wsKey]: wsDefaults }
             : s.workspaceDefaults,
         };
+      }),
+
+      setWorkspaceNotes: (key, notes) => set((s) => {
+        if (!key) return s;
+        const next = { ...s.workspaceNotes };
+        if (notes.length === 0) {
+          delete next[key];
+        } else {
+          next[key] = notes;
+        }
+        return { workspaceNotes: next };
       }),
 
       setShowLauncher: (show) => set((s) => ({
@@ -646,7 +661,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "claude-tabs-settings",
-      version: 15,
+      version: 16,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
@@ -809,6 +824,9 @@ export const useSettingsStore = create<SettingsState>()(
           // rightPanelTab is transient (not persisted), so only clean up the stale key.
           delete state.activityViewMode;
         }
+        if (version < 16) {
+          if (!state.workspaceNotes) state.workspaceNotes = {};
+        }
         return state;
       },
       // Don't persist transient UI state
@@ -818,6 +836,7 @@ export const useSettingsStore = create<SettingsState>()(
         lastConfig: state.lastConfig,
         savedDefaults: state.savedDefaults,
         workspaceDefaults: state.workspaceDefaults,
+        workspaceNotes: state.workspaceNotes,
         themeName: state.themeName,
         notificationsEnabled: state.notificationsEnabled,
         cliVersion: state.cliVersion,

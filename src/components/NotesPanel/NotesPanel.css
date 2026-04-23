@@ -10,6 +10,55 @@
   overflow: hidden;
 }
 
+.notes-panel-subtabs {
+  display: flex;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.notes-panel-subtab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 10px;
+  border: none;
+  border-right: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, box-shadow 0.15s;
+}
+
+.notes-panel-subtab:last-child {
+  border-right: none;
+}
+
+.notes-panel-subtab:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+}
+
+.notes-panel-subtab-active {
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.notes-panel-scope {
+  padding: 4px 12px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .notes-panel-empty {
   color: var(--text-muted);
   font-size: 11px;
