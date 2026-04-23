@@ -483,6 +483,125 @@ pub fn list_skills(
     Ok(entries)
 }
 
+/// Path to the user-level Claude state file where Claude Code stores `mcpServers`
+/// (user-scope at top level, project-scope under `projects.<abs-path>.mcpServers`).
+fn claude_json_path() -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    Ok(home.join(".claude.json"))
+}
+
+fn read_claude_json() -> Result<serde_json::Value, String> {
+    let path = claude_json_path()?;
+    if !path.exists() {
+        return Ok(serde_json::json!({}));
+    }
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    if content.trim().is_empty() {
+        return Ok(serde_json::json!({}));
+    }
+    serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse {}: {}", path.display(), e))
+}
+
+fn extract_mcp_servers(data: &serde_json::Value, scope: &str, working_dir: &str) -> serde_json::Value {
+    match scope {
+        "user" => data
+            .get("mcpServers")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+        "project" => data
+            .get("projects")
+            .and_then(|p| p.get(working_dir))
+            .and_then(|p| p.get("mcpServers"))
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+        _ => serde_json::json!({}),
+    }
+}
+
+/// Read MCP servers from `~/.claude.json`.
+/// - user scope: top-level `mcpServers`
+/// - project scope: `projects[<working_dir>].mcpServers`
+/// Returns a JSON object string (never null). Empty object `{}` if absent.
+#[tauri::command]
+pub fn read_mcp_servers(scope: String, working_dir: String) -> Result<String, String> {
+    if scope == "project" && working_dir.is_empty() {
+        return Err("working_dir required for project scope".into());
+    }
+    let data = read_claude_json()?;
+    let servers = extract_mcp_servers(&data, &scope, &working_dir);
+    serde_json::to_string(&servers).map_err(|e| e.to_string())
+}
+
+/// Write MCP servers into `~/.claude.json` at the scope-appropriate key.
+/// Preserves all other keys in the file and in the project entry.
+#[tauri::command]
+pub fn write_mcp_servers(
+    scope: String,
+    working_dir: String,
+    servers_json: String,
+) -> Result<(), String> {
+    if scope == "project" && working_dir.is_empty() {
+        return Err("working_dir required for project scope".into());
+    }
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(&servers_json).map_err(|e| format!("Invalid servers JSON: {}", e))?;
+    if !parsed.is_object() {
+        return Err("servers_json must be a JSON object".into());
+    }
+    let is_empty = parsed.as_object().map(|m| m.is_empty()).unwrap_or(true);
+
+    let path = claude_json_path()?;
+    let mut data = read_claude_json()?;
+    if !data.is_object() {
+        data = serde_json::json!({});
+    }
+
+    match scope.as_str() {
+        "user" => {
+            let obj = data.as_object_mut().unwrap();
+            if is_empty {
+                obj.remove("mcpServers");
+            } else {
+                obj.insert("mcpServers".into(), parsed);
+            }
+        }
+        "project" => {
+            let obj = data.as_object_mut().unwrap();
+            let projects = obj
+                .entry("projects".to_string())
+                .or_insert_with(|| serde_json::json!({}));
+            if !projects.is_object() {
+                *projects = serde_json::json!({});
+            }
+            let projects_map = projects.as_object_mut().unwrap();
+            let entry = projects_map
+                .entry(working_dir.clone())
+                .or_insert_with(|| serde_json::json!({}));
+            if !entry.is_object() {
+                *entry = serde_json::json!({});
+            }
+            let entry_map = entry.as_object_mut().unwrap();
+            if is_empty {
+                entry_map.remove("mcpServers");
+            } else {
+                entry_map.insert("mcpServers".into(), parsed);
+            }
+        }
+        _ => return Err("Invalid scope".into()),
+    }
+
+    let output = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+    std::fs::write(&path, output).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+}
+
 // [RC-20] Hardcoded DNS resolution of api.anthropic.com, 5s timeout, no user input
 /// Resolve api.anthropic.com to its IP address (Cloudflare edge).
 /// Hardcoded hostname — no user-supplied input. 5s timeout.
@@ -592,5 +711,47 @@ mod tests {
     fn list_skill_dirs_missing_dir_returns_empty() {
         let missing = std::env::temp_dir().join(format!("ct_no_such_{}", std::process::id()));
         assert!(list_skill_dirs(&missing).is_empty());
+    }
+
+    #[test]
+    fn extract_mcp_user_scope_returns_top_level() {
+        let data = serde_json::json!({
+            "mcpServers": { "ato": { "command": "ato-mcp", "args": ["serve"] } },
+            "projects": { "/tmp/p": { "mcpServers": { "other": { "command": "x" } } } },
+        });
+        let got = extract_mcp_servers(&data, "user", "");
+        assert_eq!(
+            got,
+            serde_json::json!({ "ato": { "command": "ato-mcp", "args": ["serve"] } })
+        );
+    }
+
+    #[test]
+    fn extract_mcp_project_scope_returns_project_entry() {
+        let data = serde_json::json!({
+            "mcpServers": { "user-only": { "command": "x" } },
+            "projects": { "/tmp/p": { "mcpServers": { "proj": { "command": "y" } } } },
+        });
+        let got = extract_mcp_servers(&data, "project", "/tmp/p");
+        assert_eq!(got, serde_json::json!({ "proj": { "command": "y" } }));
+    }
+
+    #[test]
+    fn extract_mcp_missing_keys_yield_empty_object() {
+        let data = serde_json::json!({});
+        assert_eq!(extract_mcp_servers(&data, "user", ""), serde_json::json!({}));
+        assert_eq!(
+            extract_mcp_servers(&data, "project", "/tmp/p"),
+            serde_json::json!({})
+        );
+    }
+
+    #[test]
+    fn extract_mcp_project_scope_unknown_dir_yields_empty() {
+        let data = serde_json::json!({
+            "projects": { "/tmp/other": { "mcpServers": { "x": {} } } },
+        });
+        let got = extract_mcp_servers(&data, "project", "/tmp/p");
+        assert_eq!(got, serde_json::json!({}));
     }
 }

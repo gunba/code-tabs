@@ -125,11 +125,9 @@ export function McpPane({ scope, projectDir, onStatus }: PaneComponentProps) {
 
   const loadServers = useCallback(async () => {
     try {
-      const raw = await invoke<string>("read_config_file", {
-        scope, workingDir, fileType: "settings",
-      });
+      const raw = await invoke<string>("read_mcp_servers", { scope, workingDir });
       const parsed = raw ? JSON.parse(raw) : {};
-      setServers((parsed.mcpServers as Record<string, McpServerEntry>) || {});
+      setServers((parsed as Record<string, McpServerEntry>) || {});
     } catch {
       setServers({});
     }
@@ -139,23 +137,9 @@ export function McpPane({ scope, projectDir, onStatus }: PaneComponentProps) {
 
   const saveServers = useCallback(async (updated: Record<string, McpServerEntry>) => {
     try {
-      let current: Record<string, unknown> = {};
-      try {
-        const raw = await invoke<string>("read_config_file", {
-          scope, workingDir, fileType: "settings",
-        });
-        if (raw) current = JSON.parse(raw);
-      } catch { /* empty file */ }
-
-      if (Object.keys(updated).length > 0) {
-        current.mcpServers = updated;
-      } else {
-        delete current.mcpServers;
-      }
-
-      await invoke("write_config_file", {
-        scope, workingDir, fileType: "settings",
-        content: JSON.stringify(current, null, 2),
+      await invoke("write_mcp_servers", {
+        scope, workingDir,
+        serversJson: JSON.stringify(updated),
       });
       onStatus({ text: "MCP servers saved", type: "success" });
       setTimeout(() => onStatus(null), 2000);
