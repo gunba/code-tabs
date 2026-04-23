@@ -237,6 +237,7 @@ pub fn run() {
             commands::git_repo_check,
             commands::git_list_changes,
             commands::paths_exist,
+            commands::resolve_paths,
             commands::compute_file_diff,
             commands::read_file_for_snapshot,
             commands::get_build_info,
