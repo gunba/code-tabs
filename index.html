@@ -16,6 +16,17 @@
         src: local('Pragmasevka'), local('Pragmasevka Nerd Font'), local('Pragmasevka NF');
         font-display: swap;
       }
+      /* Emoji fallback restricted to actual emoji codepoints so Noto Color Emoji
+         cannot claim plain digits/letters and render them with its gradient style. */
+      @font-face {
+        font-family: 'ClaudeEmoji';
+        src: local('Segoe UI Emoji'), local('Apple Color Emoji'), local('Noto Color Emoji'), local('Twemoji Mozilla');
+        unicode-range:
+          U+200D, U+20E3, U+FE0F,
+          U+2300-23FF, U+2600-26FF, U+2700-27BF, U+2B00-2BFF,
+          U+1F000-1F9FF, U+1FA00-1FAFF, U+1FB00-1FBFF,
+          U+E0020-E007F;
+      }
       :root {
         --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
         --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;

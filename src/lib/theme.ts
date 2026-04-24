@@ -140,7 +140,7 @@ export function applyTheme(theme: Theme): void {
 
   // [TH-03] Font system: --font-ui (Inter variable + system fallback) and --font-mono defined in index.html :root block as initial fallback (Cascadia Code + Fira Code + JetBrains Mono). applyTheme() overrides --font-mono at runtime. Inter woff2 bundled in src/assets/fonts/ with @font-face.
   // Font — match main terminal (TERMINAL_FONT_FAMILY in useTerminal.ts)
-  root.style.setProperty("--font-mono", "'Pragmasevka', 'Roboto Mono', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', monospace");
+  root.style.setProperty("--font-mono", "'Pragmasevka', 'Roboto Mono', 'ClaudeEmoji', monospace");
 
   // [CB-12] Rarity CSS variables (WoW item quality — fixed cross-theme)
   root.style.setProperty("--rarity-common", "#ffffff");

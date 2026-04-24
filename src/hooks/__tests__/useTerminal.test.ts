@@ -30,6 +30,6 @@ import { TERMINAL_FONT_FAMILY } from "../useTerminal";
 
 describe("TERMINAL_FONT_FAMILY", () => {
   it("is the default monospace stack", () => {
-    expect(TERMINAL_FONT_FAMILY).toBe("'Pragmasevka', 'Roboto Mono', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', monospace");
+    expect(TERMINAL_FONT_FAMILY).toBe("'Pragmasevka', 'Roboto Mono', 'ClaudeEmoji', monospace");
   });
 });

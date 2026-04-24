@@ -17,7 +17,7 @@ import { getResumeId } from "../lib/claude";
 import { IS_WINDOWS, IS_LINUX } from "../lib/paths";
 import { createPathLinkProvider } from "../lib/terminalPathLinks";
 
-export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', monospace";
+export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', 'ClaudeEmoji', monospace";
 
 const XTVERSION_REPLY = "\x1bP>|xterm.js(6.0.0)\x1b\\";
 
