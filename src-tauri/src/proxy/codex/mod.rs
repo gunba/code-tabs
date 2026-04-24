@@ -931,7 +931,22 @@ fn is_quota_probe(body: &[u8]) -> bool {
     if msg.get("role").and_then(|r| r.as_str()) != Some("user") {
         return false;
     }
-    msg.get("content").and_then(|c| c.as_str()) == Some("quota")
+    let Some(content) = msg.get("content") else {
+        return false;
+    };
+    // Anthropic accepts both a bare string and a content-block array.
+    if content.as_str() == Some("quota") {
+        return true;
+    }
+    let Some(blocks) = content.as_array() else {
+        return false;
+    };
+    if blocks.len() != 1 {
+        return false;
+    }
+    let block = &blocks[0];
+    block.get("type").and_then(|t| t.as_str()) == Some("text")
+        && block.get("text").and_then(|t| t.as_str()) == Some("quota")
 }
 
 async fn send_quota_probe_response(
@@ -1222,5 +1237,30 @@ mod tests {
     #[test]
     fn test_is_quota_probe_rejects_malformed_json() {
         assert!(!is_quota_probe(b"not json"));
+    }
+
+    #[test]
+    fn test_is_quota_probe_matches_array_content_block() {
+        // Anthropic SDK also sends `content` as a content-block array.
+        let body = br#"{"max_tokens":1,"messages":[{"role":"user","content":[{"type":"text","text":"quota"}]}],"model":"claude-haiku-4-5"}"#;
+        assert!(is_quota_probe(body));
+    }
+
+    #[test]
+    fn test_is_quota_probe_rejects_array_with_wrong_text() {
+        let body = br#"{"max_tokens":1,"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}],"model":"claude-haiku-4-5"}"#;
+        assert!(!is_quota_probe(body));
+    }
+
+    #[test]
+    fn test_is_quota_probe_rejects_non_text_block() {
+        let body = br#"{"max_tokens":1,"messages":[{"role":"user","content":[{"type":"image","source":{}}]}],"model":"claude-haiku-4-5"}"#;
+        assert!(!is_quota_probe(body));
+    }
+
+    #[test]
+    fn test_is_quota_probe_rejects_multi_block_content() {
+        let body = br#"{"max_tokens":1,"messages":[{"role":"user","content":[{"type":"text","text":"quota"},{"type":"text","text":"extra"}]}],"model":"claude-haiku-4-5"}"#;
+        assert!(!is_quota_probe(body));
     }
 }

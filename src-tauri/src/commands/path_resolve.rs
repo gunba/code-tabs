@@ -9,6 +9,7 @@ use regex::Regex;
 const INDEX_TTL: Duration = Duration::from_secs(60);
 const MAX_INDEXED_FILES: usize = 100_000;
 const MAX_WALK_DEPTH: usize = 12;
+const MAX_CACHED_INDICES: usize = 16;
 
 // Dirs skipped even if not gitignored. Hidden dirs (.git, .next, .cache)
 // are already filtered by WalkBuilder::hidden(true), so keep this list to
@@ -137,6 +138,23 @@ fn get_or_build_index(cwd: &str) -> Arc<CwdIndex> {
     let fresh = Arc::new(build_index(Path::new(cwd)));
     let mut cache = INDEX_CACHE.lock().unwrap();
     cache.insert(cwd.to_string(), Arc::clone(&fresh));
+    // Bound memory: drop expired entries, then if still over the cap, evict
+    // the entry with the oldest built_at. A long-running app navigating many
+    // worktrees would otherwise accumulate one ~100k-entry index per unique cwd.
+    if cache.len() > MAX_CACHED_INDICES {
+        cache.retain(|_, v| v.built_at.elapsed() < INDEX_TTL);
+    }
+    while cache.len() > MAX_CACHED_INDICES {
+        if let Some(oldest) = cache
+            .iter()
+            .min_by_key(|(_, v)| v.built_at)
+            .map(|(k, _)| k.clone())
+        {
+            cache.remove(&oldest);
+        } else {
+            break;
+        }
+    }
     fresh
 }
 
@@ -426,5 +444,33 @@ mod tests {
         );
         assert!(same_path(out[0].abs_path.as_deref().unwrap(), &a));
         assert!(same_path(out[1].abs_path.as_deref().unwrap(), &b));
+    }
+
+    #[test]
+    fn index_cache_bounded_by_max_cached_indices() {
+        // Push MAX_CACHED_INDICES + 8 unique cwd indices through the cache.
+        // Oldest entries must be evicted; final size must be <= MAX_CACHED_INDICES.
+        let base = tempdir().unwrap();
+        let entries_to_push = MAX_CACHED_INDICES + 8;
+        let mut cwds = Vec::with_capacity(entries_to_push);
+        for i in 0..entries_to_push {
+            let sub = base.path().join(format!("cwd_{i}"));
+            std::fs::create_dir_all(&sub).unwrap();
+            let cwd = sub.to_string_lossy().into_owned();
+            let _ = get_or_build_index(&cwd);
+            cwds.push(cwd);
+        }
+        let size = INDEX_CACHE.lock().unwrap().len();
+        assert!(
+            size <= MAX_CACHED_INDICES,
+            "cache grew to {size}, expected <= {MAX_CACHED_INDICES}"
+        );
+        // Drop our own keys so later tests share the bound without leftovers.
+        {
+            let mut cache = INDEX_CACHE.lock().unwrap();
+            for k in &cwds {
+                cache.remove(k);
+            }
+        }
     }
 }

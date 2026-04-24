@@ -258,12 +258,21 @@ export function forceSessionColor(sessionId: string, colorIndex: number): void {
  *   next 25%             -> 3 (epic/purple)
  *   next 25%             -> 2 (rare/blue)
  *   bottom 25%           -> 1 (uncommon/green)
+ * For totalUsed < 5 the quartile formula would collapse the middle tiers
+ * (e.g. totalUsed==2 skips rare+epic), so we fall back to a direct
+ * rank-to-tier mapping that keeps tiers consecutive: [4], [4,3], [4,3,2],
+ * [4,3,2,1].
  * rank is 0-indexed from the top of the usage-sorted list (0 = most used).
  * totalUsed is the number of commands with count > 0.
  */
 export function computeHeatLevel(count: number, rank: number, totalUsed: number): 0 | 1 | 2 | 3 | 4 {
   if (count <= 0 || totalUsed <= 0) return 0;
-  if (totalUsed === 1) return 4;
+  if (totalUsed <= 4) {
+    const tier = 4 - rank;
+    if (tier < 1) return 1;
+    if (tier > 4) return 4;
+    return tier as 1 | 2 | 3 | 4;
+  }
   const percentile = rank / (totalUsed - 1);
   if (percentile < 0.25) return 4;
   if (percentile < 0.50) return 3;

@@ -600,7 +600,40 @@ pub fn write_mcp_servers(
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
     }
-    std::fs::write(&path, output).map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+    atomic_write(&path, output.as_bytes())
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+}
+
+// [RT-02] Atomic write: same-directory temp file + rename. Prevents partial
+// ~/.claude.json reads when Claude Code CLI writes the same file concurrently.
+// std::fs::rename is atomic on Unix and uses MoveFileEx with REPLACE_EXISTING on
+// Windows; both require src/dst to be on the same filesystem, so the temp file
+// sits next to the target rather than in std::env::temp_dir.
+fn atomic_write(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
+    let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("config");
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp = parent.join(format!(
+        ".{}.tmp-{}-{}",
+        file_name,
+        std::process::id(),
+        nanos
+    ));
+    if let Err(e) = std::fs::write(&tmp, contents) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e);
+    }
+    Ok(())
 }
 
 // [RC-20] Hardcoded DNS resolution of api.anthropic.com, 5s timeout, no user input
@@ -754,5 +787,55 @@ mod tests {
         });
         let got = extract_mcp_servers(&data, "project", "/tmp/p");
         assert_eq!(got, serde_json::json!({}));
+    }
+
+    #[test]
+    fn atomic_write_leaves_no_temp_file_on_success() {
+        let tmp = std::env::temp_dir().join(format!(
+            "ct_atomic_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let target = tmp.join(".claude.json");
+        std::fs::write(&target, br#"{"old":true}"#).unwrap();
+        atomic_write(&target, br#"{"new":true}"#).unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), br#"{"new":true}"#);
+        let leftovers: Vec<_> = std::fs::read_dir(&tmp)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .contains(".claude.json.tmp-")
+            })
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "atomic_write left {} temp file(s) behind",
+            leftovers.len()
+        );
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn atomic_write_overwrites_existing_file() {
+        let tmp = std::env::temp_dir().join(format!(
+            "ct_atomic_overwrite_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let target = tmp.join("file.json");
+        std::fs::write(&target, b"first").unwrap();
+        atomic_write(&target, b"second").unwrap();
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "second");
+        std::fs::remove_dir_all(&tmp).ok();
     }
 }

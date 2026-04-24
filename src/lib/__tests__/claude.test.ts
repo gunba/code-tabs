@@ -163,6 +163,19 @@ describe("computeHeatLevel (WoW rarity: 0-4, rank-based)", () => {
     expect(computeHeatLevel(1, 3, 4)).toBe(1);
   });
 
+  it("keeps tiers consecutive for totalUsed == 2 (no collapsed middle)", () => {
+    // Previously totalUsed=2 gave [4, 1], skipping rare+epic. Now [4, 3].
+    expect(computeHeatLevel(10, 0, 2)).toBe(4);
+    expect(computeHeatLevel(1, 1, 2)).toBe(3);
+  });
+
+  it("keeps tiers consecutive for totalUsed == 3 (no skipped tier)", () => {
+    // Previously totalUsed=3 gave [4, 2, 1], skipping epic. Now [4, 3, 2].
+    expect(computeHeatLevel(10, 0, 3)).toBe(4);
+    expect(computeHeatLevel(5, 1, 3)).toBe(3);
+    expect(computeHeatLevel(1, 2, 3)).toBe(2);
+  });
+
   it("guarantees epic tier appears in skewed power-law usage", () => {
     // Real-world skew: /r=500, /j=50, /b=10, /x=3, /y=1 — old ratio-based impl
     // would put everything except /r into uncommon. Rank-based spreads them out.
