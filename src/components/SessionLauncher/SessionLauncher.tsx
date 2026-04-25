@@ -254,6 +254,20 @@ export function SessionLauncher() {
   const modelOptions = adapterModels;
   const effortOptions = adapterEfforts;
 
+  // When switching CLIs, the previously-selected model/effort may not exist
+  // on the new CLI. Drop back to "default" instead of leaving an empty box.
+  useEffect(() => {
+    if (config.model && adapterModels.length > 0 && !adapterModels.some((m) => m.value === config.model)) {
+      updateConfig("model", null);
+    }
+  }, [adapterModels, config.model, updateConfig]);
+
+  useEffect(() => {
+    if (config.effort && adapterEfforts.length > 0 && !adapterEfforts.some((e) => e.value === config.effort)) {
+      updateConfig("effort", null);
+    }
+  }, [adapterEfforts, config.effort, updateConfig]);
+
   const handleModelSelect = useCallback((value: string) => {
     updateConfig("model", value || null);
   }, [updateConfig]);
@@ -536,38 +550,29 @@ export function SessionLauncher() {
           </div>
         )}
 
-        {/* CLI selector pills — choose Claude Code or Codex per session */}
-        <div className="launcher-cli-row">
-          {claudePath && (
-            <button
-              type="button"
-              className={`launcher-cli-pill${config.cli === "claude" ? " launcher-cli-pill--active" : ""}`}
-              onClick={() => updateConfig("cli", "claude")}
-              disabled={isNonSessionCommand}
-            >
-              Claude Code
-            </button>
-          )}
-          {codexPath && (
-            <button
-              type="button"
-              className={`launcher-cli-pill${config.cli === "codex" ? " launcher-cli-pill--active" : ""}`}
-              onClick={() => updateConfig("cli", "codex")}
-              disabled={isNonSessionCommand}
-            >
-              Codex
-            </button>
-          )}
-        </div>
-        {!selectedCliInstalled && (
-          <div className="launcher-path-error">
-            {config.cli === "codex" ? "Codex" : "Claude Code"} is not installed.
-          </div>
-        )}
-
-        {/* Pill selectors — inline, wrapping */}
+        {/* Pill selectors — inline, wrapping. CLI choice lives in this row too. */}
         <div className={`launcher-pills-section${isNonSessionCommand ? " launcher-selects-disabled" : ""}`}>
           <div className="launcher-pills-row">
+            {claudePath && (
+              <button
+                type="button"
+                className={`launcher-cli-choice launcher-cli-choice--claude${config.cli === "claude" ? " launcher-cli-choice--active" : ""}`}
+                onClick={() => updateConfig("cli", "claude")}
+                disabled={isNonSessionCommand}
+              >
+                Claude Code
+              </button>
+            )}
+            {codexPath && (
+              <button
+                type="button"
+                className={`launcher-cli-choice launcher-cli-choice--codex${config.cli === "codex" ? " launcher-cli-choice--active" : ""}`}
+                onClick={() => updateConfig("cli", "codex")}
+                disabled={isNonSessionCommand}
+              >
+                Codex
+              </button>
+            )}
             <span className="launcher-pill-icon" title="Model"><IconModelDiamond size={13} /></span>
             <Dropdown
               className="launcher-select"
@@ -657,6 +662,11 @@ export function SessionLauncher() {
             </button>
           </div>
         </div>
+        {!selectedCliInstalled && (
+          <div className="launcher-path-error">
+            {config.cli === "codex" ? "Codex" : "Claude Code"} is not installed.
+          </div>
+        )}
 
         {/* CLI Options header (always shown) with TAP/TFC and save defaults */}
         <div className="launcher-section">
