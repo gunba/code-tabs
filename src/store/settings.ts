@@ -39,6 +39,15 @@ export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
       websocket: false, net: false, stream: false,
       fspromises: true, bunfile: true, abort: true,
       fswatch: false, textdecoder: false, events: false, envproxy: false,
+      "codex-session": true,
+      "codex-turn-context": true,
+      "codex-token-count": true,
+      "codex-tool-call-start": true,
+      "codex-tool-input": true,
+      "codex-tool-call-complete": true,
+      "codex-message": true,
+      "codex-thread-name-updated": true,
+      "codex-compacted": true,
     },
   },
   traffic: { enabled: true },
@@ -701,7 +710,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "claude-tabs-settings",
-      version: 17,
+      version: 18,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
@@ -811,6 +820,16 @@ export const useSettingsStore = create<SettingsState>()(
           if (workspaceDefaults) {
             for (const ws of Object.values(workspaceDefaults)) {
               if (!ws.cli) ws.cli = "claude";
+            }
+          }
+        }
+        if (version < 18) {
+          const rc = state.recordingConfig as { taps?: { categories?: Record<string, boolean> } } | undefined;
+          if (rc?.taps?.categories) {
+            for (const [key, enabled] of Object.entries(DEFAULT_RECORDING_CONFIG.taps.categories)) {
+              if (key.startsWith("codex-") && rc.taps.categories[key] === undefined) {
+                rc.taps.categories[key] = enabled;
+              }
             }
           }
         }

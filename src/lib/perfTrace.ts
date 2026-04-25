@@ -37,6 +37,7 @@ export interface TraceSpan {
 }
 
 const traces: TraceEntry[] = [];
+const MAX_TRACES = 5000;
 const t0 = performance.now();
 
 function sinceLoadMs(): number {
@@ -77,6 +78,9 @@ function recordTrace(
     data: options?.data,
   };
   traces.push(entry);
+  if (traces.length > MAX_TRACES) {
+    traces.splice(0, traces.length - MAX_TRACES);
+  }
 
   const payload: Record<string, unknown> = {
     name,
@@ -177,6 +181,10 @@ export function dumpTraces(): string {
 
 export function getTraces(): readonly TraceEntry[] {
   return traces;
+}
+
+export function getTraceStats(): { count: number; maxEntries: number } {
+  return { count: traces.length, maxEntries: MAX_TRACES };
 }
 
 // Dump on demand via console

@@ -30,6 +30,29 @@ export function unregisterTerminal(sessionId: string): void {
   terminals.delete(sessionId);
 }
 
+export function getRegisteredTerminalStats(): Array<{
+  sessionId: string;
+  cols: number;
+  rows: number;
+  bufferLength: number;
+  baseY: number;
+  viewportY: number;
+  altScreen: boolean;
+}> {
+  return [...terminals.entries()].map(([sessionId, term]) => {
+    const buf = term.buffer.active;
+    return {
+      sessionId,
+      cols: term.cols,
+      rows: term.rows,
+      bufferLength: buf.length,
+      baseY: buf.baseY,
+      viewportY: buf.viewportY,
+      altScreen: buf.type === "alternate",
+    };
+  });
+}
+
 /** Returns a Promise that resolves after the next xterm.js render for the given session. */
 export function waitForRender(sessionId: string, timeoutMs = 120): Promise<void> {
   return new Promise((resolve) => {

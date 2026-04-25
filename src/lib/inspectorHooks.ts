@@ -998,7 +998,13 @@ export const INSTALL_TAPS = `(function() {
 })()`;
 
 /** All tap category names. */
-export type TapCategory = "parse" | "stringify" | "console" | "fs" | "spawn" | "fetch" | "exit" | "timer" | "stdout" | "stderr" | "require" | "bun" | "websocket" | "net" | "stream" | "fspromises" | "bunfile" | "abort" | "fswatch" | "textdecoder" | "events" | "envproxy";
+export type TapCategory =
+  | "parse" | "stringify" | "console" | "fs" | "spawn" | "fetch" | "exit" | "timer"
+  | "stdout" | "stderr" | "require" | "bun" | "websocket" | "net" | "stream"
+  | "fspromises" | "bunfile" | "abort" | "fswatch" | "textdecoder" | "events" | "envproxy"
+  | "codex-session" | "codex-turn-context" | "codex-token-count" | "codex-tool-call-start"
+  | "codex-tool-input" | "codex-tool-call-complete" | "codex-message"
+  | "codex-thread-name-updated" | "codex-compacted";
 
 /**
  * Build a Runtime.evaluate expression to toggle a single tap category.

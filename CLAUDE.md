@@ -1,7 +1,8 @@
 # Code Tabs
 
 IMPORTANT: Working with an external application means we are developing around a moving target. Do not guess or assume how it works.
-- The Claude Code source itself (4/1/2026) is available here [/home/jordan/Desktop/Projects/claude_code/]. 
+IMPORTANT: We must maintain full support for both Windows and Linux. Consider any changes you make in respect of this goal.
+- The Claude Code source itself (4/1/2026, cannot update) is available here [/home/jordan/Desktop/Projects/claude_code/]. 
 - The Codex CLI source is available [/home/jordan/Desktop/Projects/codex-main/].
 - For anything else, ask the user to log some test data. Logs are at [AppData\Local\claude-tabs\sessions], depending on what logging the user has enabled. You can review these using the debug skill, ideally with a subagent.
 

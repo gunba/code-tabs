@@ -362,6 +362,8 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     onResize: handleResize,
     instanceKey: respawnCounter,
     cwd: session.config.workingDir ?? null,
+    scrollback: session.config.cli === "codex" ? 50_000 : 1_000_000,
+    enableWebgl: session.config.cli !== "codex",
   });
   terminalRef.current = terminal;
 

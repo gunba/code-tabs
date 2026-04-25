@@ -12,6 +12,9 @@ const MARKERS = [
   { id: 4, label: "4", color: "#6fbf8f" },
 ] as const;
 
+const MAX_LOG_SNAPSHOT = 4000;
+const MAX_RENDERED_ROWS = 1200;
+
 function formatTs(ts: number): string {
   const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, "0");
@@ -84,11 +87,11 @@ export function DebugPanel() {
         }
         prevGenRef.current = gen;
         if (sessionFilter === "all") {
-          setLogs(getDebugLog());
+          setLogs(getDebugLog(MAX_LOG_SNAPSHOT));
         } else if (sessionFilter === "global") {
-          setLogs([...getDebugLogForSession(null)]);
+          setLogs([...getDebugLogForSession(null)].slice(-MAX_LOG_SNAPSHOT));
         } else {
-          setLogs([...getDebugLogForSession(sessionFilter)]);
+          setLogs([...getDebugLogForSession(sessionFilter)].slice(-MAX_LOG_SNAPSHOT));
         }
       }
     }, 500);
@@ -167,6 +170,11 @@ export function DebugPanel() {
     }
     return result;
   }, [logs, sessionFilter, moduleFilter, sourceFilter, levelFilter, textFilter, showDebug]);
+
+  const rendered = useMemo(
+    () => filtered.length > MAX_RENDERED_ROWS ? filtered.slice(-MAX_RENDERED_ROWS) : filtered,
+    [filtered],
+  );
 
   const handleCopy = useCallback(() => {
     const text = filtered
@@ -352,13 +360,20 @@ export function DebugPanel() {
         {filtered.length === 0 ? (
           <div className="debug-panel-empty">No log entries</div>
         ) : (
-          filtered.map((entry, i) => {
+          <>
+          {filtered.length > rendered.length && (
+            <div className="debug-panel-truncated">
+              Showing latest {rendered.length} of {filtered.length} matching entries
+            </div>
+          )}
+          {rendered.map((entry) => {
             const borderColor = entry.sessionId
               ? (sessionInfo.get(entry.sessionId)?.color ?? sessionColor(entry.sessionId))
               : "var(--text-muted)";
+            const data = formatData(entry.data);
             return (
               <div
-                key={i}
+                key={entry.id}
                 className={levelClass(entry.level)}
                 style={{ borderLeftColor: borderColor }}
                 title={entry.tsIso}
@@ -366,12 +381,13 @@ export function DebugPanel() {
                 <span className="debug-ts">{formatTs(entry.ts)}</span>
                 <span className="debug-mod">[{entry.source}/{entry.module}:{entry.event}]</span>
                 {" "}{entry.message}
-                {formatData(entry.data) && (
-                  <span className="debug-data"> {" "}{formatData(entry.data)}</span>
+                {data && (
+                  <span className="debug-data"> {" "}{data}</span>
                 )}
               </div>
             );
-          })
+          })}
+          </>
         )}
       </div>
     </div>

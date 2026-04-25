@@ -24,7 +24,7 @@
 //!   { "timestamp": "ISO8601", "type": "session_meta" | "response_item"
 //!     | "event_msg" | "compacted" | "turn_context", "payload": {...} }
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -75,7 +75,7 @@ fn todays_sessions_dir() -> Option<PathBuf> {
 fn find_unclaimed_rollout(
     dir: &Path,
     spawn_time: SystemTime,
-    claimed: &std::collections::HashSet<PathBuf>,
+    claimed: &HashSet<PathBuf>,
 ) -> Option<PathBuf> {
     let entries = std::fs::read_dir(dir).ok()?;
     let mut best: Option<(PathBuf, SystemTime)> = None;
@@ -107,6 +107,17 @@ fn find_unclaimed_rollout(
     best.map(|(p, _)| p)
 }
 
+fn claim_unclaimed_rollout(
+    dir: &Path,
+    spawn_time: SystemTime,
+    claimed_rollouts: &Arc<std::sync::Mutex<HashSet<PathBuf>>>,
+) -> Option<PathBuf> {
+    let mut claimed = claimed_rollouts.lock().ok()?;
+    let path = find_unclaimed_rollout(dir, spawn_time, &claimed)?;
+    claimed.insert(path.clone());
+    Some(path)
+}
+
 /// Start a watcher that tails the rollout file for `session_id` and
 /// emits normalized events into `observability.jsonl`. Returns a
 /// handle that, when dropped, stops the watcher.
@@ -115,6 +126,7 @@ pub fn start_codex_rollout_watcher(
     app: tauri::AppHandle,
     session_id: String,
     spawn_time: SystemTime,
+    claimed_rollouts: Arc<std::sync::Mutex<HashSet<PathBuf>>>,
 ) -> CodexRolloutHandle {
     // Build the channel and the handle *before* spawning so the
     // caller can put the handle into its registry before the watcher
@@ -126,7 +138,13 @@ pub fn start_codex_rollout_watcher(
     let app_for_task = app.clone();
     tokio::spawn(async move {
         if let Err(e) =
-            run_watcher(app_for_task.clone(), session_id_for_task.clone(), spawn_time, stop_rx)
+            run_watcher(
+                app_for_task.clone(),
+                session_id_for_task.clone(),
+                spawn_time,
+                claimed_rollouts,
+                stop_rx,
+            )
                 .await
         {
             record_backend_event(
@@ -164,6 +182,7 @@ impl CodexRolloutHandle {
 #[derive(Default)]
 pub struct CodexRolloutState {
     watchers: std::sync::Mutex<HashMap<String, Arc<CodexRolloutHandle>>>,
+    claimed_rollouts: Arc<std::sync::Mutex<HashSet<PathBuf>>>,
 }
 
 // [CR-03] start_codex_rollout/stop_codex_rollout: CodexRolloutState registry keyed by session_id; handle inserted before spawn for stop-race safety
@@ -183,6 +202,7 @@ pub async fn start_codex_rollout(
         app.clone(),
         session_id.clone(),
         spawn_time,
+        state.claimed_rollouts.clone(),
     ));
     let prior = {
         let mut map = state
@@ -222,19 +242,18 @@ async fn run_watcher(
     app: tauri::AppHandle,
     session_id: String,
     spawn_time: SystemTime,
+    claimed_rollouts: Arc<std::sync::Mutex<HashSet<PathBuf>>>,
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
 ) -> Result<(), String> {
     let dir = todays_sessions_dir().ok_or("could not resolve $CODEX_HOME/sessions/today")?;
     std::fs::create_dir_all(&dir)
         .map_err(|e| format!("create rollout dir: {e}"))?;
 
-    let claimed: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
-
     // Try to attribute an existing fresh rollout first (handles the
     // race where Codex creates the file before our watcher arms).
-    let file_path = match find_unclaimed_rollout(&dir, spawn_time, &claimed) {
+    let file_path = match claim_unclaimed_rollout(&dir, spawn_time, &claimed_rollouts) {
         Some(p) => Some(p),
-        None => wait_for_new_rollout(&dir, spawn_time, &mut stop_rx).await?,
+        None => wait_for_new_rollout(&dir, spawn_time, &claimed_rollouts, &mut stop_rx).await?,
     };
     let file_path = match file_path {
         Some(p) => p,
@@ -267,6 +286,7 @@ async fn run_watcher(
 async fn wait_for_new_rollout(
     dir: &Path,
     spawn_time: SystemTime,
+    claimed_rollouts: &Arc<std::sync::Mutex<HashSet<PathBuf>>>,
     stop_rx: &mut tokio::sync::oneshot::Receiver<()>,
 ) -> Result<Option<PathBuf>, String> {
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
@@ -282,11 +302,10 @@ async fn wait_for_new_rollout(
         .watch(dir, RecursiveMode::NonRecursive)
         .map_err(|e| format!("notify watch {dir:?}: {e}"))?;
 
-    let claimed = std::collections::HashSet::new();
     loop {
         // Re-check on every signal — a single Create event may not
         // guarantee the file is fully created when we read.
-        if let Some(p) = find_unclaimed_rollout(dir, spawn_time, &claimed) {
+        if let Some(p) = claim_unclaimed_rollout(dir, spawn_time, claimed_rollouts) {
             return Ok(Some(p));
         }
         tokio::select! {
@@ -344,7 +363,12 @@ async fn tail_rollout(
             }
         }
         tokio::select! {
-            _ = rx.recv() => continue,
+            recv = rx.recv() => {
+                if recv.is_none() {
+                    return Err("notify watcher closed while tailing rollout".into());
+                }
+                continue;
+            }
             _ = &mut *stop_rx => return Ok(()),
         }
     }

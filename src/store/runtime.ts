@@ -5,6 +5,7 @@ import {
   startObservabilityBridge,
   type ObservabilityInfo,
 } from "../lib/debugLog";
+import { startFrontendPerfTelemetry, stopFrontendPerfTelemetry } from "../lib/perfTelemetry";
 
 const DEFAULT_OBSERVABILITY_INFO: ObservabilityInfo = {
   debugBuild: false,
@@ -31,9 +32,13 @@ export const useRuntimeStore = create<RuntimeState>((set) => ({
       set({ observabilityInfo: info, loaded: true });
       if (info.observabilityEnabled) {
         await startObservabilityBridge();
+        startFrontendPerfTelemetry();
+      } else {
+        stopFrontendPerfTelemetry();
       }
     } catch {
       configureObservability(DEFAULT_OBSERVABILITY_INFO);
+      stopFrontendPerfTelemetry();
       set({ observabilityInfo: DEFAULT_OBSERVABILITY_INFO, loaded: true });
     }
   },

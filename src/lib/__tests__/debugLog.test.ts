@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { dlog, getDebugLog, getDebugLogForSession, clearDebugLog, removeDebugLogSession, getDebugLogGeneration, setDebugCaptureEnabled, configureObservability } from "../debugLog";
 import type { DebugLogEntry } from "../debugLog";
 
-const MAX_BUFFER_ENTRIES = 15000;
+const MAX_BUFFER_ENTRIES = 3000;
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(() => Promise.resolve(0)),

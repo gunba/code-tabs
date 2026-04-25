@@ -43,6 +43,8 @@ export function useTapPipeline({
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
   const prevCatsRef = useRef<Set<string>>(new Set());
+  const prevRecordingEnabledRef = useRef(false);
+  const wasConnectedRef = useRef(false);
 
   // Read recording config from settings store
   const recordingConfig = useSettingsStore((s) => s.recordingConfig);
@@ -91,6 +93,38 @@ export function useTapPipeline({
       flushTimerRef.current = null;
     }
   }, []);
+
+  // Disk recording is independent of the Claude inspector connection. Claude
+  // entries arrive after hook installation; Codex entries arrive from the
+  // rollout watcher and still need periodic flushing even though no inspector
+  // WebSocket exists.
+  useEffect(() => {
+    if (!sessionId) return;
+    if (recordingEnabled) {
+      startFlushTimer();
+      if (!prevRecordingEnabledRef.current) {
+        const categoryLabels = [...activeCats.current].map((cat) => getTapCategoryLabel(cat));
+        dlog("tap", sessionId, `tap recording: ${categoryLabels.join(", ")}`, "LOG", {
+          event: "tap.recording_started",
+          data: { categories: categoryLabels },
+        });
+      }
+    } else {
+      stopFlushTimer();
+      flush();
+      if (prevRecordingEnabledRef.current) {
+        dlog("tap", sessionId, "tap recording stopped", "LOG", {
+          event: "tap.recording_stopped",
+          data: {},
+        });
+      }
+    }
+    prevRecordingEnabledRef.current = recordingEnabled;
+    return () => {
+      stopFlushTimer();
+      flush();
+    };
+  }, [sessionId, recordingEnabled, startFlushTimer, stopFlushTimer, flush]);
 
   // Listen for tap events from the Rust TCP server via session-scoped Tauri events
   useEffect(() => {
@@ -181,38 +215,23 @@ export function useTapPipeline({
       }
     }
 
-    // Start or stop disk flush timer based on recording state
-    if (recordingEnabled && !flushTimerRef.current) {
-      startFlushTimer();
-      const categoryLabels = [...next].map((cat) => getTapCategoryLabel(cat));
-      dlog("tap", sessionId, `tap recording: ${categoryLabels.join(", ")}`, "LOG", {
-        event: "tap.recording_started",
-        data: {
-          categories: categoryLabels,
-        },
-      });
-    } else if (!recordingEnabled && flushTimerRef.current) {
-      stopFlushTimer();
-      flush();
-      dlog("tap", sessionId, "tap recording stopped", "LOG", {
-        event: "tap.recording_stopped",
-        data: {},
-      });
-    }
-
     // Track effective state: only categories that are both configured AND recording is enabled
     prevCatsRef.current = recordingEnabled ? new Set(next) : new Set();
-  }, [recordingConfig, connected, sessionId, wsSend, startFlushTimer, stopFlushTimer, flush, recordingEnabled]);
+  }, [recordingConfig, connected, sessionId, wsSend, recordingEnabled]);
 
   // Cleanup on disconnect
   useEffect(() => {
-    if (!connected) {
-      stopFlushTimer();
+    if (connected) {
+      wasConnectedRef.current = true;
+      return;
+    }
+    if (wasConnectedRef.current) {
       flush();
       tapsInstalledRef.current = false;
       prevCatsRef.current = new Set();
+      wasConnectedRef.current = false;
     }
-  }, [connected, stopFlushTimer, flush]);
+  }, [connected, flush]);
 
   // Cleanup on unmount: disable optional flags, flush pending
   useEffect(() => {

@@ -45,6 +45,8 @@ interface UseTerminalOptions {
   onResize?: (cols: number, rows: number) => void;
   instanceKey?: number;
   cwd?: string | null;
+  scrollback?: number;
+  enableWebgl?: boolean;
 }
 
 function escapePreview(text: string): string {
@@ -74,7 +76,15 @@ function isElementVisible(el: HTMLElement): boolean {
   return rect.width > 0 && rect.height > 0;
 }
 
-export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 0, cwd = null }: UseTerminalOptions = {}) {
+export function useTerminal({
+  sessionId = null,
+  onData,
+  onResize,
+  instanceKey = 0,
+  cwd = null,
+  scrollback = 100_000,
+  enableWebgl = true,
+}: UseTerminalOptions = {}) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
@@ -139,27 +149,34 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       },
     });
 
-    // [DF-06] WebGL renderer — if context is lost, fall back to canvas (no retry)
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        dlog("terminal", sessionIdRef.current, "webgl context lost", "WARN", {
-          event: "terminal.webgl_context_lost",
+    if (enableWebgl) {
+      // [DF-06] WebGL renderer — if context is lost, fall back to canvas (no retry)
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          dlog("terminal", sessionIdRef.current, "webgl context lost", "WARN", {
+            event: "terminal.webgl_context_lost",
+            data: {},
+          });
+          webgl.dispose();
+          webglRef.current = null;
+        });
+        term.loadAddon(webgl);
+        webglRef.current = webgl;
+        dlog("terminal", sessionIdRef.current, "webgl renderer enabled", "DEBUG", {
+          event: "terminal.webgl_enabled",
           data: {},
         });
-        webgl.dispose();
-        webglRef.current = null;
-      });
-      term.loadAddon(webgl);
-      webglRef.current = webgl;
-      dlog("terminal", sessionIdRef.current, "webgl renderer enabled", "DEBUG", {
-        event: "terminal.webgl_enabled",
-        data: {},
-      });
-    } catch {
-      // WebGL not available — canvas fallback is automatic
-      dlog("terminal", sessionIdRef.current, "webgl renderer unavailable; using canvas fallback", "DEBUG", {
-        event: "terminal.webgl_unavailable",
+      } catch {
+        // WebGL not available — canvas fallback is automatic
+        dlog("terminal", sessionIdRef.current, "webgl renderer unavailable; using canvas fallback", "DEBUG", {
+          event: "terminal.webgl_unavailable",
+          data: {},
+        });
+      }
+    } else {
+      dlog("terminal", sessionIdRef.current, "webgl renderer disabled", "DEBUG", {
+        event: "terminal.webgl_disabled",
         data: {},
       });
     }
@@ -258,7 +275,7 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
 
     fit();
     return true;
-  }, [fit]);
+  }, [enableWebgl, fit]);
 
   // Create terminal instance once fonts are ready
   useEffect(() => {
@@ -273,14 +290,15 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       await document.fonts.ready;
       if (cancelled) return;
 
-      // [PT-06] Fixed 1M scrollback buffer — no dynamic resizing
-      // [DF-05] xterm.js 6.0 with DEC 2026 synchronized output, fixed 1M scrollback
+      // [PT-06] Fixed scrollback buffer per CLI — no dynamic resizing.
+      // Codex uses normal scrollback more heavily than Claude's alternate-screen TUI,
+      // so its cap is intentionally lower to avoid long-session xterm memory blowups.
       term = new Terminal({
         cursorBlink: true,
         fontSize: 14,
         fontFamily: TERMINAL_FONT_FAMILY,
         theme: getTerminalTheme(),
-        scrollback: 1_000_000,
+        scrollback,
       });
 
       lifecycleDisposables.push(
@@ -538,7 +556,7 @@ export function useTerminal({ sessionId = null, onData, onResize, instanceKey = 
       attachedRef.current = false;
       setReady(false);
     };
-  }, [fit, instanceKey, openTerminal]);
+  }, [enableWebgl, fit, instanceKey, openTerminal, scrollback]);
 
   // Wire up onData/onResize handlers (update when callbacks change)
   useEffect(() => {

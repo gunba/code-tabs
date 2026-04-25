@@ -32,7 +32,12 @@ export interface DebugLogEntry {
 }
 
 const GLOBAL_KEY = "__global__";
-const MAX_ENTRIES = 15000; // [DP-04] Ring buffer capacity per session
+const MAX_ENTRIES_PER_SESSION = 3000; // [DP-04] Ring buffer capacity per session
+const MAX_TOTAL_ENTRIES = 12000;
+const MAX_DATA_STRING_LENGTH = 2048;
+const MAX_MESSAGE_LENGTH = 4000;
+const MAX_ARRAY_ITEMS = 30;
+const MAX_OBJECT_KEYS = 40;
 const FLUSH_INTERVAL_MS = 1500;
 const FLUSH_THRESHOLD = 25;
 const buffers = new Map<string, DebugLogEntry[]>(); // [DP-13] Per-session ring buffers
@@ -40,6 +45,7 @@ const pendingByKey = new Map<string, string[]>();
 
 let generation = 0;
 let nextId = 1;
+let totalEntryCount = 0;
 let debugCaptureEnabled = true;
 let observabilityInfo: ObservabilityInfo = {
   debugBuild: false,
@@ -57,7 +63,7 @@ function bufferKey(sessionId: string | null): string {
   return sessionId ?? GLOBAL_KEY;
 }
 
-function truncateString(value: string, max = 16000): string {
+function truncateString(value: string, max = MAX_DATA_STRING_LENGTH): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max)}…`;
 }
@@ -88,16 +94,20 @@ function toSafeValue(
   }
   if (Array.isArray(value)) {
     if (depth >= 4) return `[Array(${value.length})]`;
-    return value.slice(0, 50).map((item) => toSafeValue(item, depth + 1, seen));
+    const items = value.slice(0, MAX_ARRAY_ITEMS).map((item) => toSafeValue(item, depth + 1, seen));
+    if (value.length > MAX_ARRAY_ITEMS) items.push(`[+${value.length - MAX_ARRAY_ITEMS} more]`);
+    return items;
   }
   if (typeof value === "object") {
     if (seen.has(value as object)) return "[Circular]";
     if (depth >= 4) return "[Object]";
     seen.add(value as object);
     const out: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>).slice(0, 50)) {
+    const entries = Object.entries(value as Record<string, unknown>);
+    for (const [key, entry] of entries.slice(0, MAX_OBJECT_KEYS)) {
       out[key] = toSafeValue(entry, depth + 1, seen);
     }
+    if (entries.length > MAX_OBJECT_KEYS) out.__truncatedKeys = entries.length - MAX_OBJECT_KEYS;
     return out;
   }
   return String(value);
@@ -157,9 +167,39 @@ function normalizeEntry(entry: Partial<DebugLogEntry> & Pick<DebugLogEntry, "lev
     source: entry.source ?? "frontend",
     sessionId: entry.sessionId ?? null,
     event: entry.event || "message",
-    message: entry.message,
+    message: truncateString(entry.message, MAX_MESSAGE_LENGTH),
     data: toSafeValue(entry.data ?? null),
   };
+}
+
+function trimTotalBuffers(): void {
+  while (totalEntryCount > MAX_TOTAL_ENTRIES) {
+    let oldestKey: string | null = null;
+    let oldestTs = Number.POSITIVE_INFINITY;
+    let oldestId = Number.POSITIVE_INFINITY;
+    for (const [key, buf] of buffers) {
+      const first = buf[0];
+      if (!first) continue;
+      if (first.ts < oldestTs || (first.ts === oldestTs && first.id < oldestId)) {
+        oldestKey = key;
+        oldestTs = first.ts;
+        oldestId = first.id;
+      }
+    }
+    if (!oldestKey) {
+      totalEntryCount = 0;
+      return;
+    }
+    const buf = buffers.get(oldestKey);
+    if (!buf || buf.length === 0) {
+      buffers.delete(oldestKey);
+      continue;
+    }
+    const removeCount = Math.min(buf.length, Math.max(1, totalEntryCount - MAX_TOTAL_ENTRIES));
+    buf.splice(0, removeCount);
+    totalEntryCount -= removeCount;
+    if (buf.length === 0) buffers.delete(oldestKey);
+  }
 }
 
 function pushEntry(entry: DebugLogEntry, persist: boolean): void {
@@ -176,7 +216,13 @@ function pushEntry(entry: DebugLogEntry, persist: boolean): void {
     buffers.set(key, buf);
   }
   buf.push(entry);
-  if (buf.length > MAX_ENTRIES) buf.splice(0, buf.length - MAX_ENTRIES);
+  totalEntryCount++;
+  if (buf.length > MAX_ENTRIES_PER_SESSION) {
+    const removeCount = buf.length - MAX_ENTRIES_PER_SESSION;
+    buf.splice(0, removeCount);
+    totalEntryCount -= removeCount;
+  }
+  trimTotalBuffers();
   generation++;
 
   if (persist) queuePersist(entry);
@@ -263,16 +309,20 @@ export function stopObservabilityBridge(): void {
 export function clearDebugLog(): void {
   buffers.clear();
   pendingByKey.clear();
+  totalEntryCount = 0;
   stopFlushTimer();
   generation++;
 }
 
-export function getDebugLog(): DebugLogEntry[] {
+export function getDebugLog(limit?: number): DebugLogEntry[] {
   const all: DebugLogEntry[] = [];
   for (const buf of buffers.values()) {
     for (let i = 0; i < buf.length; i++) all.push(buf[i]);
   }
   all.sort((a, b) => a.ts - b.ts || a.id - b.id);
+  if (typeof limit === "number" && limit > 0 && all.length > limit) {
+    return all.slice(all.length - limit);
+  }
   return all;
 }
 
@@ -281,7 +331,9 @@ export function getDebugLogForSession(sessionId: string | null): readonly DebugL
 }
 
 export function removeDebugLogSession(sessionId: string): void {
-  buffers.delete(bufferKey(sessionId));
+  const key = bufferKey(sessionId);
+  totalEntryCount -= buffers.get(key)?.length ?? 0;
+  buffers.delete(key);
   pendingByKey.delete(bufferKey(sessionId));
   generation++;
 }
@@ -292,4 +344,28 @@ export function getDebugLogGeneration(): number {
 
 export function setDebugCaptureEnabled(enabled: boolean): void {
   debugCaptureEnabled = enabled;
+}
+
+export interface DebugLogStats {
+  totalEntries: number;
+  totalPendingLines: number;
+  bufferCount: number;
+  maxEntriesPerSession: number;
+  maxTotalEntries: number;
+  entriesByBuffer: Array<{ key: string; entries: number; pendingLines: number }>;
+}
+
+export function getDebugLogStats(): DebugLogStats {
+  return {
+    totalEntries: totalEntryCount,
+    totalPendingLines: [...pendingByKey.values()].reduce((sum, lines) => sum + lines.length, 0),
+    bufferCount: buffers.size,
+    maxEntriesPerSession: MAX_ENTRIES_PER_SESSION,
+    maxTotalEntries: MAX_TOTAL_ENTRIES,
+    entriesByBuffer: [...buffers.entries()].map(([key, entries]) => ({
+      key,
+      entries: entries.length,
+      pendingLines: pendingByKey.get(key)?.length ?? 0,
+    })),
+  };
 }

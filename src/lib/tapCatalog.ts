@@ -65,6 +65,20 @@ export const TAP_CATEGORY_GROUPS: Array<{
     ],
   },
   {
+    label: "Codex Rollout",
+    categories: [
+      { key: "codex-session", label: "Codex Session", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl session_meta" },
+      { key: "codex-turn-context", label: "Codex Turn Context", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl turn_context" },
+      { key: "codex-token-count", label: "Codex Token Counts", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl token_count" },
+      { key: "codex-tool-call-start", label: "Codex Tool Starts", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl response_item function_call" },
+      { key: "codex-tool-input", label: "Codex Tool Inputs", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl tool arguments" },
+      { key: "codex-tool-call-complete", label: "Codex Tool Results", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl tool output" },
+      { key: "codex-message", label: "Codex Messages", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl messages" },
+      { key: "codex-thread-name-updated", label: "Codex Thread Names", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl thread_name_updated" },
+      { key: "codex-compacted", label: "Codex Compaction", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl compacted" },
+    ],
+  },
+  {
     label: "Internals",
     categories: [
       { key: "events", label: "Event Emitters", group: "internal", hookSource: "EventEmitter.prototype.emit()" },
