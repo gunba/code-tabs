@@ -20,6 +20,7 @@ import { createPathLinkProvider } from "../lib/terminalPathLinks";
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', 'ClaudeEmoji', monospace";
 
 const XTVERSION_REPLY = "\x1bP>|xterm.js(6.0.0)\x1b\\";
+// [TA-12] SHIFT_ENTER_SEQUENCE: kitty-protocol \x1b[13;2u; getTerminalKeySequenceOverride intercepts Shift+Enter before xterm default
 export const SHIFT_ENTER_SEQUENCE = "\x1b[13;2u";
 
 type TerminalKeyEventLike = Pick<KeyboardEvent, "type" | "key" | "code" | "shiftKey" | "ctrlKey" | "altKey" | "metaKey">;

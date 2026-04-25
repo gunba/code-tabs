@@ -18,6 +18,7 @@ interface OverallPayload {
 }
 
 /**
+ * [PM-06] Frontend pipeline: routes 'process-metrics' events via pidToSessionId; 'process-metrics-overall' sets global chip.
  * Subscribes to the Rust-side process metrics poller (src-tauri/src/metrics.rs).
  * Per-PID events are routed to the right session via the pidToSessionId map
  * populated by ptyProcess.ts on PTY spawn.

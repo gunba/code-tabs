@@ -2,6 +2,8 @@ import { getSessionTranscript, waitForRender, isAltScreen, scrollBufferToText } 
 import { writeToPty } from "./ptyRegistry";
 import { dlog } from "./debugLog";
 
+// [TA-11] scrollTuiToText: normalizeTargets/viewportIncludesTarget/scrollToTuiEdge helpers; no double-navigate; edge detection by viewport string equality
+
 const PAGE_UP = "\x1b[5~";
 const PAGE_DOWN = "\x1b[6~";
 

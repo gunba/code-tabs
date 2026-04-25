@@ -222,6 +222,7 @@ function SessionStatus({
           <span className="status-icon"><IconClock size={12} /></span>
           {formatDuration(session.metadata.durationSecs)}
         </span>
+        {/* [PM-07] CPU/mem chips: total(parent+children) with parent-vs-children hover tooltip; threshold coloring from formatMetrics */}
         {health?.tree && (() => {
           const t = health.tree;
           const totalCpu = t.parentCpu + t.childrenCpu;

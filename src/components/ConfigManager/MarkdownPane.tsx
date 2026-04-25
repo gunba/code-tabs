@@ -125,6 +125,7 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
         </div>
       ) : (
         <textarea
+          // [NU-01] Uncontrolled (defaultValue+onInput): browser owns value and native undo stack; key={seedKey} remounts on source change
           // Remount on each successful load so `defaultValue` reseeds. Mid-edit
           // the browser owns the value and the native undo stack.
           key={seedKey}

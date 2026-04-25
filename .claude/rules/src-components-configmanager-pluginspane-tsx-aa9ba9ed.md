@@ -9,4 +9,4 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## Config Editors
 
-- [CM-16 L97] PluginsTab: CLI-driven plugin manager (single-pane, no ThreePaneEditor). Installed plugins as cards with toggle switch (enable/disable) and uninstall. Marketplace grid with search filter, scope selector, sort by downloads/name. Install count formatting via formatTokenCount. Graceful fallback for older CLI versions.
+- [CM-16 L99] PluginsTab: CLI-driven plugin manager (single-pane, no ThreePaneEditor). Installed plugins as cards with toggle switch (enable/disable) and uninstall. Marketplace grid with search filter, scope selector, sort by downloads/name. Install count formatting via formatTokenCount. Graceful fallback for older CLI versions.

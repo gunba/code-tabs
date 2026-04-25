@@ -32,8 +32,8 @@ export interface DebugLogEntry {
 }
 
 const GLOBAL_KEY = "__global__";
-const MAX_ENTRIES_PER_SESSION = 3000; // [DP-04] Ring buffer capacity per session
-const MAX_TOTAL_ENTRIES = 12000;
+const MAX_ENTRIES_PER_SESSION = 3000; // [DP-04] Ring buffer capacity per session; 12000 total cap via MAX_TOTAL_ENTRIES
+const MAX_TOTAL_ENTRIES = 12000; // [DP-04] Cross-buffer total cap; enforced by trimTotalBuffers()
 const MAX_DATA_STRING_LENGTH = 2048;
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_ARRAY_ITEMS = 30;

@@ -273,6 +273,7 @@ impl CliAdapter for CodexAdapter {
     }
 }
 
+// [CC-05] system_prompt / append_system_prompt -> developer_instructions via -c override; quote_toml_value uses serde_json::to_string for correct Unicode/newline escaping
 fn codex_developer_instructions(cfg: &SessionConfig) -> Option<&str> {
     cfg.system_prompt
         .as_deref()

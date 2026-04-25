@@ -7,11 +7,15 @@ paths:
 
 Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
+## CLI Visual Identity
+
+- [CV-03 L56] Active tab bottom indicator: .tab-active uses box-shadow inset 0 -2px 0 var(--tab-active-accent). --tab-active-accent is a per-tab CSS custom property set to var(--accent-claude) for .tab-cli-claude and var(--accent-codex) for .tab-cli-codex. Also used in the ctrl-held double-bar style. Tab-strip badge colors (.tab-cli-badge-claude/.tab-cli-badge-codex) also use var(--cli-claude)/var(--cli-codex) instead of hardcoded hex.
+
 ## Session Resume
 
-- [SR-04 L500] Subagent cards (in App.tsx subagent bar) use --bg-surface base; idle/dead cards fade (opacity 0.45), interrupted cards color the name red (var(--error)), completed cards show full opacity with a checkmark. Selected cards get accent-secondary tint and bottom bar when their inspector is open.
+- [SR-04 L506] Subagent cards (in App.tsx subagent bar) use --bg-surface base; idle/dead cards fade (opacity 0.45), interrupted cards color the name red (var(--error)), completed cards show full opacity with a checkmark. Selected cards get accent-secondary tint and bottom bar when their inspector is open.
 
 ## Terminal UI
 
-- [TA-03 L205] .tab-activity CSS: single-line (white-space: nowrap, text-overflow: ellipsis), 10px font, font-weight 500, no clamp. Replaces old .tab-summary (2-line clamp, 9px). Saves ~10px vertical space, fixing meta label overflow at 66px tab height.
-- [TR-11 L575] Subagent card shows selected highlight (accent-secondary box-shadow + tinted background) when its inspector is open.
+- [TA-03 L211] .tab-activity CSS: single-line (white-space: nowrap, text-overflow: ellipsis), 10px font, font-weight 500, no clamp. Replaces old .tab-summary (2-line clamp, 9px). Saves ~10px vertical space, fixing meta label overflow at 66px tab height.
+- [TR-11 L581] Subagent card shows selected highlight (accent-secondary box-shadow + tinted background) when its inspector is open.

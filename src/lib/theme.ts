@@ -131,6 +131,7 @@ export function applyTheme(theme: Theme): void {
   root.style.setProperty("--accent-bg", c.accentBg);
   root.style.setProperty("--accent-secondary", c.accentSecondary);
   root.style.setProperty("--accent-tertiary", c.accentTertiary);
+  // [CV-01] CLI identity colors (--cli-claude / --cli-codex) live in the theme so every brand-tinted surface (status chips, active tab indicator, launcher selector) reads from one source.
   root.style.setProperty("--cli-claude", c.cliClaude);
   root.style.setProperty("--cli-claude-bg", c.cliClaudeBg);
   root.style.setProperty("--cli-codex", c.cliCodex);

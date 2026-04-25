@@ -40,6 +40,9 @@ struct AppProcessMetricsPayload {
     child_count: u32,
 }
 
+/// [PM-02] spawn_collector: background thread polling sysinfo every 1000ms; CpuRefreshKind::nothing() primes cpu count immediately; CPU% normalized by cpu_count
+/// [PM-04] Per-tick: parent->children HashMap O(N) build; sum_descendants BFS cycle-safe; emits process-metrics / app-process-metrics / process-metrics-overall per tick
+/// [PM-05] Overall real-root dedup: skips tracked PIDs whose ancestor is also tracked; bails on try_state None or poisoned lock
 /// Spawn the per-tab CPU/memory poller. Runs for the lifetime of the app.
 /// Reads tracked PIDs from `ActivePids` (registered by the frontend on PTY spawn),
 /// walks the full descendant tree, and emits two Tauri events per tick:

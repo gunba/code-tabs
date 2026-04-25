@@ -14,7 +14,7 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 - [SI-21 L10] INSTALL_TAPS exposes 22 flag-gated tap categories: parse, stringify, console, fs, spawn, fetch, exit, timer, stdout, stderr, require, bun, websocket, net, stream, fspromises, bunfile, abort, fswatch, textdecoder, events, envproxy.
   - Multi-op families such as console, fs, timer, bun, websocket, and stream emit a shared category plus an op field instead of encoding the operation in the category string.
   - Delivery uses Bun.connect TCP on TAP_PORT; status-line, system-prompt, spawn.exit, spawnSync, and execSync remain auxiliary emitted categories outside the flag list.
-- [IN-02 L11] INSTALL_TAPS JS expression in inspectorHooks.ts; wraps 15 function categories. TCP push-based delivery via Bun.connect to TAP_PORT. Status-line detection: stringify wrapper matches the serialized StatusLineCommandInput payload shape (session_id + cost.total_cost_usd + context_window.total_input_tokens) and pushes flattened fields to dedicated 'status-line' category (bypasses 2000-char snap truncation). Also contains WebFetch domain bypass, HTTPS/fetch timeout patches, and wrapAfter() helper for post-call hooks.
+- [IN-02 L11] INSTALL_TAPS JS expression in inspectorHooks.ts; wraps 22 flag-gated categories (plus always-on parse and stringify). TCP push-based delivery via Bun.connect to TAP_PORT. Status-line detection: stringify wrapper matches the serialized StatusLineCommandInput payload shape (session_id + cost.total_cost_usd + context_window.total_input_tokens) and pushes flattened fields to dedicated 'status-line' category (bypasses 2000-char snap truncation). Also contains WebFetch domain bypass, HTTPS/fetch timeout patches, and wrapAfter() helper for post-call hooks.
 
 ## State Metadata
 

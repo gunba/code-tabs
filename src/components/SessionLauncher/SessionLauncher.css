@@ -149,6 +149,7 @@
 /* CLI choice (Claude Code / Codex) — sits inline at the start of the
    model/effort row. Distinct class to avoid collision with the
    `.launcher-cli-pill` flag pills used in the CLI Options grid below. */
+/* [SL-22] .launcher-cli-choice: renamed from .launcher-cli-pill (toggle); active=orange(Claude)/teal(Codex); lives in .launcher-pills-row */
 .launcher-cli-choice {
   appearance: none;
   background: var(--bg-primary);

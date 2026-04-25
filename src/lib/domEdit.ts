@@ -8,6 +8,7 @@
 // a synthetic input event so React-mirrored state stays in sync — the undo
 // stack is lost in that path, but the data is not.
 
+// [DE-01] replaceTextareaValue / insertTextAtCursor: execCommand('insertText') for native undo; fallback to value splice + synthetic InputEvent
 export function replaceTextareaValue(el: HTMLTextAreaElement | null, next: string): void {
   if (!el) return;
   if (el.value === next) return;

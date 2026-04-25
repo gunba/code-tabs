@@ -1,3 +1,4 @@
+// [PM-06] formatMetrics: formatBytes, formatCpu, cpuColor (amber>=30%, red>=70%), memColor (amber>=500MB, red>=1GB)
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0B";
   if (bytes < 1024) return `${Math.round(bytes)}B`;

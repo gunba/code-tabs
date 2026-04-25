@@ -11,7 +11,7 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 - [RS-06 L231] Session-in-use auto-recovery: checks process ancestry to distinguish own orphans from external processes; own descendants (stale orphans from crashed tabs) killed automatically and resume retries
 - [RS-01 L294] triggerRespawn cleans up old PTY/inspector (no file watcher — removed), allocates new inspector port, increments respawn counter. Calls pty.cleanup(), inspector.disconnect(), stop_tap_server, unregisterPtyWriter/Kill/HandleId/InspectorPort, resets spawnedRef and earlyOutputRef.
-- [RS-07 L377] Spawn effect guards against dead sessions (session.state === 'dead') -- prevents restored dead sessions from auto-spawning with --session-id on startup. Respawns still work because triggerRespawn sets state to 'starting' before incrementing respawnCounter
+- [RS-07 L379] Spawn effect guards against dead sessions (session.state === 'dead') -- prevents restored dead sessions from auto-spawning with --session-id on startup. Respawns still work because triggerRespawn sets state to 'starting' before incrementing respawnCounter
 
 ## State Metadata
 
@@ -36,4 +36,4 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## Terminal UI
 
-- [TR-05 L630] Hidden tabs use CSS display: none -- never unmount/remount xterm.js (destroys state).
+- [TR-05 L639] Hidden tabs use CSS display: none -- never unmount/remount xterm.js (destroys state).

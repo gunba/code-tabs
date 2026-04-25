@@ -685,6 +685,7 @@ fn discover_codex_slash_commands_sync() -> Vec<CodexSlashCommand> {
     }
 }
 
+// [CL-02] Platform gate: /sandbox-add-read-dir Windows-only; expanded catalog 35+ commands
 fn codex_slash_command_visible_on_platform(cmd: &str) -> bool {
     match cmd {
         // Codex itself only registers /sandbox-add-read-dir on Windows

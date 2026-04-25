@@ -53,6 +53,7 @@
   height: 66px;
   overflow: hidden;
   box-sizing: border-box;
+  /* [CV-03] --tab-active-accent: Claude=var(--accent-claude), Codex=var(--accent-codex) */
   --tab-active-accent: var(--accent-claude);
 }
 
