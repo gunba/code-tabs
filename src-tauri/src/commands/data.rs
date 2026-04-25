@@ -493,6 +493,185 @@ fn extract_message_text(parsed: &serde_json::Value) -> Option<String> {
     None
 }
 
+fn utf16_len(text: &str) -> usize {
+    text.encode_utf16().count()
+}
+
+fn push_search_matches(
+    results: &mut Vec<serde_json::Value>,
+    re: &regex::Regex,
+    session_id: &str,
+    message_index: usize,
+    role: &str,
+    text: &str,
+    limit: usize,
+) {
+    for m in re.find_iter(text) {
+        if results.len() >= limit {
+            break;
+        }
+
+        let pos = m.start();
+        let matched_text = m.as_str();
+
+        // Build snippet centered on match
+        let snippet_half = 150;
+        let start = text.floor_char_boundary(pos.saturating_sub(snippet_half));
+        let end = text.ceil_char_boundary((m.end() + snippet_half).min(text.len()));
+        let mut snippet = String::new();
+        if start > 0 {
+            snippet.push_str("...");
+        }
+        snippet.push_str(&text[start..end]);
+        if end < text.len() {
+            snippet.push_str("...");
+        }
+
+        // Offsets are consumed by JavaScript, so report UTF-16 code units
+        // rather than Rust byte offsets.
+        let prefix_len = if start > 0 { 3 } else { 0 }; // "..." prefix
+        let match_offset_in_snippet = utf16_len(&text[start..pos]) + prefix_len;
+        let match_len = utf16_len(matched_text);
+
+        results.push(serde_json::json!({
+            "sessionId": session_id,
+            "messageIndex": message_index,
+            "role": role,
+            "matchOffset": match_offset_in_snippet,
+            "matchLength": match_len,
+            "matchedText": matched_text,
+            "snippet": snippet,
+        }));
+    }
+}
+
+fn codex_text_from_content(content: &serde_json::Value) -> Option<String> {
+    if let Some(text) = content.as_str() {
+        if !text.is_empty() {
+            return Some(text.to_string());
+        }
+    }
+
+    let arr = content.as_array()?;
+    let parts: Vec<&str> = arr
+        .iter()
+        .filter_map(|block| {
+            let block_type = block["type"].as_str().unwrap_or("");
+            if block_type == "input_text" || block_type == "output_text" || block_type == "text" {
+                block["text"].as_str()
+            } else {
+                None
+            }
+        })
+        .filter(|text| !text.is_empty())
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
+}
+
+fn extract_codex_message_text(parsed: &serde_json::Value) -> Option<(String, String)> {
+    if parsed["type"].as_str()? != "response_item" {
+        return None;
+    }
+    let payload = &parsed["payload"];
+    if payload["type"].as_str()? != "message" {
+        return None;
+    }
+    let role = match payload["role"].as_str()? {
+        "user" => "user",
+        "assistant" => "assistant",
+        _ => return None,
+    };
+    let text = codex_text_from_content(&payload["content"])?;
+    Some((role.to_string(), text))
+}
+
+fn codex_rollout_path_for_session(app_session_id: &str) -> Option<std::path::PathBuf> {
+    let dir = get_session_data_dir(app_session_id).ok()?;
+    let sidecar = dir.join("codex-rollout-path.txt");
+    if let Ok(raw) = std::fs::read_to_string(sidecar) {
+        let path = std::path::PathBuf::from(raw.trim());
+        if path.exists() {
+            return Some(path);
+        }
+    }
+
+    let file = std::fs::File::open(dir.join("observability.jsonl")).ok()?;
+    use std::io::BufRead;
+    let reader = std::io::BufReader::new(file);
+    let mut last_path: Option<std::path::PathBuf> = None;
+
+    for line in reader.lines().map_while(Result::ok) {
+        let parsed = match serde_json::from_str::<serde_json::Value>(&line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if parsed["event"].as_str() != Some("codex.rollout.attributed") {
+            continue;
+        }
+        if let Some(path) = parsed["data"]["path"].as_str() {
+            last_path = Some(std::path::PathBuf::from(path));
+        }
+    }
+
+    let path = last_path?;
+    if path.exists() {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn search_codex_rollout_file(
+    path: &std::path::Path,
+    app_session_id: &str,
+    re: &regex::Regex,
+    results: &mut Vec<serde_json::Value>,
+    limit: usize,
+) {
+    let metadata = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(_) => return,
+    };
+    if metadata.len() > MAX_CONTENT_SEARCH_FILE_SIZE {
+        return;
+    }
+
+    let file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
+
+    use std::io::BufRead;
+    let reader = std::io::BufReader::new(file);
+    let mut message_index: usize = 0;
+
+    for line in reader.lines() {
+        if results.len() >= limit {
+            break;
+        }
+
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        let parsed = match serde_json::from_str::<serde_json::Value>(&line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let (role, text) = match extract_codex_message_text(&parsed) {
+            Some(t) => t,
+            None => continue,
+        };
+
+        push_search_matches(results, re, app_session_id, message_index, &role, &text, limit);
+        message_index += 1;
+    }
+}
+
 // [RC-17] Search session content: walks ~/.claude/projects/, skips >20MB, 50-result cap
 /// Search conversation content across all past sessions.
 /// Returns up to 50 matches with a snippet centered on the match.
@@ -723,10 +902,19 @@ fn search_jsonl_files_sync(
             Some(s) => s,
             None => continue,
         };
+        let app_session_id = session["appSessionId"].as_str().unwrap_or(session_id);
+        let cli = session["cli"].as_str().unwrap_or("claude");
         let working_dir = match session["workingDir"].as_str() {
             Some(s) => s,
             None => continue,
         };
+
+        if cli == "codex" {
+            if let Some(path) = codex_rollout_path_for_session(app_session_id) {
+                search_codex_rollout_file(&path, app_session_id, &re, &mut results, limit);
+            }
+            continue;
+        }
 
         // Normalize working dir for lookup (forward slashes, lowercase on Windows)
         let normalized = working_dir.replace('\\', "/");
@@ -789,41 +977,7 @@ fn search_jsonl_files_sync(
                 }
             };
 
-            // Find all matches within this message
-            for m in re.find_iter(&text) {
-                if results.len() >= limit {
-                    break;
-                }
-
-                let pos = m.start();
-                let match_len = m.len();
-
-                // Build snippet centered on match
-                let snippet_half = 150;
-                let start = text.floor_char_boundary(pos.saturating_sub(snippet_half));
-                let end = text.ceil_char_boundary((pos + match_len + snippet_half).min(text.len()));
-                let mut snippet = String::new();
-                if start > 0 {
-                    snippet.push_str("...");
-                }
-                snippet.push_str(&text[start..end]);
-                if end < text.len() {
-                    snippet.push_str("...");
-                }
-
-                // Adjust matchOffset to be relative to snippet
-                let prefix_len = if start > 0 { 3 } else { 0 }; // "..." prefix
-                let match_offset_in_snippet = (pos - start) + prefix_len;
-
-                results.push(serde_json::json!({
-                    "sessionId": session_id,
-                    "messageIndex": message_index,
-                    "role": role,
-                    "matchOffset": match_offset_in_snippet,
-                    "matchLength": match_len,
-                    "snippet": snippet,
-                }));
-            }
+            push_search_matches(&mut results, &re, session_id, message_index, role, &text, limit);
 
             message_index += 1;
         }
@@ -834,7 +988,7 @@ fn search_jsonl_files_sync(
 
 #[cfg(test)]
 mod tests {
-    use super::extract_user_text;
+    use super::{extract_codex_message_text, extract_user_text, push_search_matches};
     use serde_json::json;
 
     #[test]
@@ -859,6 +1013,45 @@ mod tests {
         });
 
         assert_eq!(extract_user_text(&parsed), None);
+    }
+
+    #[test]
+    fn search_match_offsets_are_utf16_for_frontend() {
+        let re = regex::Regex::new("useless").unwrap();
+        let mut results = Vec::new();
+        push_search_matches(
+            &mut results,
+            &re,
+            "session-1",
+            0,
+            "user",
+            "🙂 useless tail",
+            10,
+        );
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["matchOffset"], 3);
+        assert_eq!(results[0]["matchLength"], 7);
+        assert_eq!(results[0]["matchedText"], "useless");
+    }
+
+    #[test]
+    fn extract_codex_message_text_reads_response_messages() {
+        let parsed = json!({
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "content": [
+                    { "type": "output_text", "text": "Codex answer" }
+                ]
+            }
+        });
+
+        assert_eq!(
+            extract_codex_message_text(&parsed),
+            Some(("assistant".to_string(), "Codex answer".to_string()))
+        );
     }
 }
 

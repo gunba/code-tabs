@@ -31,14 +31,21 @@ export function unregisterTerminal(sessionId: string): void {
 }
 
 /** Returns a Promise that resolves after the next xterm.js render for the given session. */
-export function waitForRender(sessionId: string): Promise<void> {
+export function waitForRender(sessionId: string, timeoutMs = 120): Promise<void> {
   return new Promise((resolve) => {
     const term = terminals.get(sessionId);
     if (!term) { resolve(); return; }
-    const d = term.onRender(() => {
-      d.dispose();
+    let done = false;
+    let disposable: { dispose(): void } | null = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      disposable?.dispose();
+      clearTimeout(timeout);
       resolve();
-    });
+    };
+    const timeout = setTimeout(finish, timeoutMs);
+    disposable = term.onRender(finish);
   });
 }
 
@@ -59,16 +66,17 @@ export function isAltScreen(sessionId: string): boolean {
  * line-wrapped matches. Offsets scroll by rows/3 so the match appears
  * roughly one-third from the top.
  */
-export function scrollBufferToText(sessionId: string, targetText: string): boolean {
+export function scrollBufferToText(sessionId: string, targetText: string | string[]): boolean {
   const term = terminals.get(sessionId);
   if (!term) return false;
 
   const buf = term.buffer.active;
-  const normalizedTarget = targetText
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-  if (!normalizedTarget) return false;
+  const normalizedTargets = (Array.isArray(targetText) ? targetText : [targetText])
+    .map((target) => target.replace(/\s+/g, " ").trim().toLowerCase())
+    .filter(Boolean);
+  if (!normalizedTargets.length) return false;
+
+  const includesTarget = (text: string) => normalizedTargets.some((target) => text.includes(target));
 
   const offset = Math.floor(term.rows / 3);
 
@@ -77,7 +85,7 @@ export function scrollBufferToText(sessionId: string, targetText: string): boole
     const line = buf.getLine(i);
     if (!line) continue;
     const text = line.translateToString(true).replace(/\s+/g, " ").trim().toLowerCase();
-    if (text.includes(normalizedTarget)) {
+    if (includesTarget(text)) {
       term.scrollToLine(Math.max(0, i - offset));
       return true;
     }
@@ -91,7 +99,7 @@ export function scrollBufferToText(sessionId: string, targetText: string): boole
     const combined = (
       line1.translateToString(true) + " " + line2.translateToString(true)
     ).replace(/\s+/g, " ").trim().toLowerCase();
-    if (combined.includes(normalizedTarget)) {
+    if (includesTarget(combined)) {
       term.scrollToLine(Math.max(0, i - offset));
       return true;
     }

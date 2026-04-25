@@ -1,20 +1,38 @@
-import { describe, it, expect } from "vitest";
-import { validateRegex } from "../searchBuffers";
+import { describe, expect, it } from "vitest";
+import { buildTerminalSearchTargets, findSnippetHighlight, validateRegex } from "../searchBuffers";
 
-// ── validateRegex ────────────────────────────────────────────────
-
-describe("validateRegex", () => {
-  it("returns null for valid pattern", () => {
-    expect(validateRegex("hel+o")).toBeNull();
+describe("searchBuffers", () => {
+  it("validates regex patterns", () => {
+    expect(validateRegex("use.*less")).toBeNull();
+    expect(validateRegex("(")).toContain("Invalid");
   });
 
-  it("returns error message for invalid pattern", () => {
-    const err = validateRegex("[invalid(");
-    expect(err).toBeTypeOf("string");
-    expect(err!.length).toBeGreaterThan(0);
+  it("falls back to text lookup when offsets are stale byte offsets", () => {
+    const highlight = findSnippetHighlight({
+      snippet: "🙂 useless result",
+      matchOffset: 6,
+      matchLength: 7,
+      query: "useless",
+      caseSensitive: false,
+      useRegex: false,
+    });
+
+    expect(highlight.before).toBe("🙂 ");
+    expect(highlight.matched).toBe("useless");
+    expect(highlight.after).toBe(" result");
   });
 
-  it("returns null for empty pattern", () => {
-    expect(validateRegex("")).toBeNull();
+  it("builds contextual terminal search targets with short fallbacks", () => {
+    const targets = buildTerminalSearchTargets({
+      snippet: "before useless after",
+      matchOffset: 7,
+      matchLength: 7,
+      matchedText: "useless",
+      query: "useless",
+      useRegex: false,
+    });
+
+    expect(targets[0]).toBe("before useless after");
+    expect(targets).toContain("useless");
   });
 });

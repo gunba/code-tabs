@@ -39,6 +39,12 @@
   margin-left: auto;
 }
 
+.search-panel-nav-status {
+  font-size: 9px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
 /* Search input row */
 .search-panel-input-row {
   display: flex;

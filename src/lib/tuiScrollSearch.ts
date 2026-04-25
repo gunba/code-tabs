@@ -3,12 +3,50 @@ import { writeToPty } from "./ptyRegistry";
 import { dlog } from "./debugLog";
 
 const PAGE_UP = "\x1b[5~";
-const CTRL_END = "\x1b[1;5F";
+const PAGE_DOWN = "\x1b[6~";
 
 // Strip ANSI escape codes and normalize whitespace for fuzzy viewport matching.
 function normalizeText(text: string): string {
   // eslint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeTargets(targetText: string | string[]): string[] {
+  return (Array.isArray(targetText) ? targetText : [targetText])
+    .map(normalizeText)
+    .filter(Boolean);
+}
+
+function viewportIncludesTarget(sessionId: string, normalizedTargets: string[]): boolean {
+  const currentText = getSessionTranscript(sessionId);
+  if (!currentText) return false;
+  const normalized = normalizeText(currentText);
+  return normalizedTargets.some((target) => normalized.includes(target));
+}
+
+async function scrollToTuiEdge(
+  sessionId: string,
+  key: string,
+  normalizedTargets: string[],
+  signal: AbortSignal,
+): Promise<boolean> {
+  let prevViewport = getSessionTranscript(sessionId) ?? "";
+  const MAX_SCROLLS = 500;
+
+  for (let i = 0; i < MAX_SCROLLS; i++) {
+    if (signal.aborted) return false;
+    writeToPty(sessionId, key);
+    await waitForRender(sessionId);
+    if (signal.aborted) return false;
+
+    if (viewportIncludesTarget(sessionId, normalizedTargets)) return true;
+
+    const viewport = getSessionTranscript(sessionId) ?? "";
+    if (viewport === prevViewport) return false;
+    prevViewport = viewport;
+  }
+
+  return false;
 }
 
 /**
@@ -22,7 +60,7 @@ function normalizeText(text: string): string {
  */
 export async function scrollTuiToText(
   sessionId: string,
-  targetText: string,
+  targetText: string | string[],
   signal: AbortSignal,
 ): Promise<boolean> {
   if (!isAltScreen(sessionId)) {
@@ -30,21 +68,21 @@ export async function scrollTuiToText(
     return scrollBufferToText(sessionId, targetText);
   }
 
-  const normalizedTarget = normalizeText(targetText);
-  if (!normalizedTarget) return false;
+  const normalizedTargets = normalizeTargets(targetText);
+  if (!normalizedTargets.length) return false;
 
   // Check if already visible
-  const currentText = getSessionTranscript(sessionId);
-  if (currentText && normalizeText(currentText).includes(normalizedTarget)) {
+  if (viewportIncludesTarget(sessionId, normalizedTargets)) {
     dlog("search", sessionId, "scrollTuiToText: target already visible in viewport");
     return true;
   }
 
-  // Jump to bottom first to establish a known position
-  writeToPty(sessionId, CTRL_END);
-  await waitForRender(sessionId);
-
-  if (signal.aborted) return false;
+  // Establish a known bottom position using TUI-native PageDown. Some TUIs
+  // interpret Ctrl+End differently, which made misses strand the viewport at top.
+  if (await scrollToTuiEdge(sessionId, PAGE_DOWN, normalizedTargets, signal)) {
+    dlog("search", sessionId, "scrollTuiToText: found while scrolling down");
+    return true;
+  }
 
   let prevViewport = "";
   const MAX_SCROLLS = 500; // Safety limit
@@ -62,7 +100,7 @@ export async function scrollTuiToText(
     const normalized = normalizeText(viewport);
 
     // Check if target text is now visible
-    if (normalized.includes(normalizedTarget)) {
+    if (normalizedTargets.some((target) => normalized.includes(target))) {
       dlog("search", sessionId, `scrollTuiToText: found after ${i + 1} scrolls`);
       return true;
     }
@@ -70,6 +108,9 @@ export async function scrollTuiToText(
     // Edge detection: viewport unchanged means we hit top
     if (viewport === prevViewport) {
       dlog("search", sessionId, `scrollTuiToText: hit edge after ${i + 1} scrolls`);
+      if (!signal.aborted) {
+        await scrollToTuiEdge(sessionId, PAGE_DOWN, [], signal);
+      }
       return false;
     }
 
@@ -77,5 +118,8 @@ export async function scrollTuiToText(
   }
 
   dlog("search", sessionId, "scrollTuiToText: hit scroll limit", "WARN");
+  if (!signal.aborted) {
+    await scrollToTuiEdge(sessionId, PAGE_DOWN, [], signal);
+  }
   return false;
 }

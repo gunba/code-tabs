@@ -241,6 +241,13 @@ async fn run_watcher(
         None => return Ok(()), // stop signaled
     };
 
+    if let Ok(dir) = crate::commands::data::get_session_data_dir(&session_id) {
+        let _ = std::fs::write(
+            dir.join("codex-rollout-path.txt"),
+            file_path.to_string_lossy().as_bytes(),
+        );
+    }
+
     record_backend_event(
         &app,
         "DEBUG",
