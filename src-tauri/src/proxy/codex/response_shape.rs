@@ -2,11 +2,10 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 const WORKTREE_AGENT_SHAPING_POLICY: &str = "suppress_additional_worktree_agent_calls";
-// [PR-04] Codex Read tool calls are normalized to model-family limits before
-// they are emitted back to Claude Code as tool_use blocks.
+// [PR-04] Codex Read tool calls with explicitly excessive limits are clamped
+// before they are emitted back to Claude Code as tool_use blocks.
 const READ_LIMIT_SHAPING_POLICY: &str = "clamp_read_limits";
-const OPUS_READ_LIMIT: u64 = 600;
-const DEFAULT_READ_LIMIT: u64 = 300;
+const MAX_EXPLICIT_READ_LIMIT: u64 = 2_000;
 
 #[derive(Debug, Clone)]
 pub struct ToolCallEmission {
@@ -18,7 +17,7 @@ pub struct ToolCallEmission {
 }
 
 impl ToolCallEmission {
-    fn from_output_item(item: &Value, original_model: &str) -> Self {
+    fn from_output_item(item: &Value, _original_model: &str) -> Self {
         let call_id = item
             .get("call_id")
             .and_then(|v| v.as_str())
@@ -36,7 +35,7 @@ impl ToolCallEmission {
         let mut input: Value = serde_json::from_str(arguments).unwrap_or_else(|_| json!({}));
         let is_worktree_agent = name.eq_ignore_ascii_case("agent")
             && input.get("isolation").and_then(|v| v.as_str()) == Some("worktree");
-        let is_adjusted = normalize_read_limit(&name, &mut input, original_model);
+        let is_adjusted = normalize_read_limit(&name, &mut input);
 
         Self {
             id: call_id,
@@ -102,15 +101,6 @@ pub struct ResponseTranslationSummary {
     pub shaping_policy: Option<String>,
 }
 
-fn read_limit_for_model(original_model: &str) -> u64 {
-    let lower = original_model.to_ascii_lowercase();
-    if lower.contains("best") || lower.contains("opusplan") || lower.contains("opus") {
-        OPUS_READ_LIMIT
-    } else {
-        DEFAULT_READ_LIMIT
-    }
-}
-
 fn should_normalize_read_limit(input: &Value) -> bool {
     !input
         .get("pages")
@@ -119,21 +109,23 @@ fn should_normalize_read_limit(input: &Value) -> bool {
         .unwrap_or(false)
 }
 
-fn normalize_read_limit(name: &str, input: &mut Value, original_model: &str) -> bool {
+fn normalize_read_limit(name: &str, input: &mut Value) -> bool {
     if !name.eq_ignore_ascii_case("Read") || !should_normalize_read_limit(input) {
         return false;
     }
 
-    let max_limit = read_limit_for_model(original_model);
     let current_limit = input.get("limit").and_then(|v| v.as_u64());
-    if current_limit.is_some_and(|limit| limit <= max_limit) {
+    let Some(current_limit) = current_limit else {
+        return false;
+    };
+    if current_limit <= MAX_EXPLICIT_READ_LIMIT {
         return false;
     }
 
     let Some(obj) = input.as_object_mut() else {
         return false;
     };
-    obj.insert("limit".to_string(), json!(max_limit));
+    obj.insert("limit".to_string(), json!(MAX_EXPLICIT_READ_LIMIT));
     true
 }
 
@@ -278,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn test_shape_function_calls_clamps_read_limits_by_model_family() {
+    fn test_shape_function_calls_preserves_reasonable_explicit_read_limits() {
         let calls = vec![json!({
             "type": "function_call",
             "call_id": "read-1",
@@ -286,21 +278,33 @@ mod tests {
             "arguments": "{\"file_path\":\"README.md\",\"limit\":900,\"offset\":1,\"pages\":\"\"}",
         })];
 
-        let opus = shape_function_calls(&calls, "best");
-        let sonnet = shape_function_calls(&calls, "sonnet");
+        let shaped = shape_function_calls(&calls, "sonnet");
 
-        assert_eq!(opus.decisions[0].call.input["limit"], 600);
-        assert_eq!(sonnet.decisions[0].call.input["limit"], 300);
-        assert_eq!(opus.summary.adjusted_tool_call_ids, vec!["read-1"]);
-        assert_eq!(sonnet.summary.adjusted_tool_call_ids, vec!["read-1"]);
+        assert_eq!(shaped.decisions[0].call.input["limit"], 900);
+        assert_eq!(shaped.summary.adjusted_tool_call_count, 0);
+    }
+
+    #[test]
+    fn test_shape_function_calls_clamps_excessive_explicit_read_limits() {
+        let calls = vec![json!({
+            "type": "function_call",
+            "call_id": "read-1",
+            "name": "Read",
+            "arguments": "{\"file_path\":\"README.md\",\"limit\":5000,\"offset\":1,\"pages\":\"\"}",
+        })];
+
+        let shaped = shape_function_calls(&calls, "sonnet");
+
+        assert_eq!(shaped.decisions[0].call.input["limit"], 2_000);
+        assert_eq!(shaped.summary.adjusted_tool_call_ids, vec!["read-1"]);
         assert_eq!(
-            sonnet.summary.shaping_policy.as_deref(),
+            shaped.summary.shaping_policy.as_deref(),
             Some(READ_LIMIT_SHAPING_POLICY)
         );
     }
 
     #[test]
-    fn test_shape_function_calls_injects_read_limit_when_missing() {
+    fn test_shape_function_calls_preserves_missing_read_limit() {
         let calls = vec![json!({
             "type": "function_call",
             "call_id": "read-1",
@@ -310,7 +314,7 @@ mod tests {
 
         let shaped = shape_function_calls(&calls, "haiku");
 
-        assert_eq!(shaped.decisions[0].call.input["limit"], 300);
-        assert_eq!(shaped.summary.adjusted_tool_call_count, 1);
+        assert!(shaped.decisions[0].call.input.get("limit").is_none());
+        assert_eq!(shaped.summary.adjusted_tool_call_count, 0);
     }
 }

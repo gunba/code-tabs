@@ -288,7 +288,7 @@ mod tests {
         let codex_resp = json!({
             "id": "resp_read_limit",
             "output": [
-                {"type": "function_call", "call_id": "read-1", "name": "Read", "arguments": "{\"file_path\":\"README.md\",\"limit\":900,\"offset\":1,\"pages\":\"\"}"}
+                {"type": "function_call", "call_id": "read-1", "name": "Read", "arguments": "{\"file_path\":\"README.md\",\"limit\":5000,\"offset\":1,\"pages\":\"\"}"}
             ],
             "usage": {"input_tokens": 20, "output_tokens": 10},
             "status": "completed",
@@ -300,7 +300,7 @@ mod tests {
         .unwrap();
         let resp: Value = serde_json::from_slice(&translated.body).unwrap();
 
-        assert_eq!(resp["content"][0]["input"]["limit"], 300);
+        assert_eq!(resp["content"][0]["input"]["limit"], 2_000);
         assert_eq!(translated.summary.adjusted_tool_call_count, 1);
         assert_eq!(translated.summary.adjusted_tool_call_ids, vec!["read-1"]);
     }

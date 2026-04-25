@@ -1,8 +1,17 @@
 use std::collections::HashMap;
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use super::super::compress;
+
+const CLAUDE_CODE_OPENAI_ADAPTER: &str = concat!(
+    "You are running inside Claude Code through an OpenAI model transport. ",
+    "Use the provided Claude Code tools exactly as named. ",
+    "Prefer Edit or Write for file changes when appropriate. ",
+    "Do not wait for a separate apply_patch tool. ",
+    "Read only the minimal context needed, and avoid repeated partial reads ",
+    "when one whole-file read is available."
+);
 
 fn map_reasoning_effort(value: &str) -> &'static str {
     match value.trim().to_ascii_lowercase().as_str() {
@@ -46,6 +55,17 @@ pub fn translate_request(
     codex_model: &str,
     compression_enabled: bool,
 ) -> Result<Vec<u8>, String> {
+    translate_request_with_session(body, codex_model, compression_enabled, None, None)
+}
+
+/// Translate an Anthropic Messages API request body into an OpenAI Codex request body.
+pub fn translate_request_with_session(
+    body: &[u8],
+    codex_model: &str,
+    compression_enabled: bool,
+    session_id: Option<&str>,
+    installation_id: Option<&str>,
+) -> Result<Vec<u8>, String> {
     let req: Value =
         serde_json::from_slice(body).map_err(|e| format!("Failed to parse request: {e}"))?;
 
@@ -53,14 +73,24 @@ pub fn translate_request(
         "model": codex_model,
         "stream": req.get("stream").and_then(|v| v.as_bool()).unwrap_or(true),
         "store": false,
+        "parallel_tool_calls": true,
     });
 
     // system → instructions
-    if let Some(system) = req.get("system") {
-        let instructions = sanitize_system_instructions(&extract_system_text(system));
-        if !instructions.is_empty() {
-            codex_req["instructions"] = json!(instructions);
-        }
+    let system_text = req
+        .get("system")
+        .map(extract_system_text)
+        .unwrap_or_default();
+    let instructions = build_openai_instructions(&system_text);
+    if !instructions.is_empty() {
+        codex_req["instructions"] = json!(instructions);
+    }
+
+    if let Some(session_id) = non_empty(session_id) {
+        codex_req["prompt_cache_key"] = json!(format!("claude-tabs:{session_id}"));
+    }
+    if let Some(metadata) = build_client_metadata(session_id, installation_id) {
+        codex_req["client_metadata"] = metadata;
     }
 
     // Keep the request body to the minimal shape used by the known-good
@@ -104,6 +134,44 @@ pub fn translate_request(
     }
 
     serde_json::to_vec(&codex_req).map_err(|e| format!("Failed to serialize: {e}"))
+}
+
+fn non_empty(value: Option<&str>) -> Option<&str> {
+    value.map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn build_client_metadata(session_id: Option<&str>, installation_id: Option<&str>) -> Option<Value> {
+    let mut metadata = Map::new();
+    if let Some(installation_id) = non_empty(installation_id) {
+        metadata.insert(
+            "x-codex-installation-id".to_string(),
+            Value::String(installation_id.to_string()),
+        );
+    }
+    if let Some(session_id) = non_empty(session_id) {
+        metadata.insert(
+            "x-codex-session-id".to_string(),
+            Value::String(session_id.to_string()),
+        );
+    }
+
+    if metadata.is_empty() {
+        None
+    } else {
+        metadata.insert(
+            "originator".to_string(),
+            Value::String("claude_tabs".to_string()),
+        );
+        Some(Value::Object(metadata))
+    }
+}
+
+fn build_openai_instructions(system_text: &str) -> String {
+    let sanitized = sanitize_system_instructions(system_text);
+    if sanitized.trim().is_empty() {
+        return CLAUDE_CODE_OPENAI_ADAPTER.to_string();
+    }
+    format!("{sanitized}\n\n{CLAUDE_CODE_OPENAI_ADAPTER}")
 }
 
 fn extract_system_text(system: &Value) -> String {
@@ -233,6 +301,11 @@ fn translate_message(
                 } else {
                     raw_output
                 };
+                let output = if block.get("is_error").and_then(|v| v.as_bool()) == Some(true) {
+                    format!("[Tool error]\n{output}")
+                } else {
+                    output
+                };
                 items.push(json!({
                     "type": "function_call_output",
                     "call_id": tool_use_id,
@@ -335,12 +408,47 @@ mod tests {
             translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.5", false).unwrap();
         let translated: Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(translated["model"], "gpt-5.5");
-        assert_eq!(translated["instructions"], "You are a helpful assistant");
+        assert_eq!(
+            translated["instructions"],
+            format!("You are a helpful assistant\n\n{CLAUDE_CODE_OPENAI_ADAPTER}")
+        );
         assert_eq!(translated["stream"], true);
+        assert_eq!(translated["parallel_tool_calls"], true);
         assert!(translated.get("max_tokens").is_none());
         assert_eq!(translated["input"][0]["role"], "user");
         assert_eq!(translated["input"][0]["content"][0]["type"], "input_text");
         assert_eq!(translated["input"][0]["content"][0]["text"], "Hello");
+    }
+
+    #[test]
+    fn test_session_context_adds_codex_cache_and_metadata_fields() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ],
+            "stream": true,
+        });
+        let result = translate_request_with_session(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "gpt-5.5",
+            false,
+            Some("session-123"),
+            Some("install-456"),
+        )
+        .unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert_eq!(translated["prompt_cache_key"], "claude-tabs:session-123");
+        assert_eq!(
+            translated["client_metadata"]["x-codex-installation-id"],
+            "install-456"
+        );
+        assert_eq!(
+            translated["client_metadata"]["x-codex-session-id"],
+            "session-123"
+        );
+        assert_eq!(translated["client_metadata"]["originator"], "claude_tabs");
     }
 
     #[test]
@@ -359,7 +467,10 @@ mod tests {
 
         assert_eq!(
             translated["instructions"],
-            "You are a helpful assistant\nKeep answers concise."
+            format!(
+                "You are a helpful assistant\nKeep answers concise.\n\n{}",
+                CLAUDE_CODE_OPENAI_ADAPTER
+            )
         );
     }
 
@@ -383,12 +494,15 @@ mod tests {
 
         assert_eq!(
             translated["instructions"],
-            "You are a helpful assistant\nKeep answers concise."
+            format!(
+                "You are a helpful assistant\nKeep answers concise.\n\n{}",
+                CLAUDE_CODE_OPENAI_ADAPTER
+            )
         );
     }
 
     #[test]
-    fn test_billing_header_only_prompt_is_omitted() {
+    fn test_billing_header_only_prompt_uses_adapter_instruction() {
         let body = json!({
             "model": "claude-opus-4-6",
             "system": "x-anthropic-billing-header: cc_version=2.1.92.26f; cc_entrypoint=cli; cch=ce585;",
@@ -401,7 +515,7 @@ mod tests {
             translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.5", false).unwrap();
         let translated: Value = serde_json::from_slice(&result).unwrap();
 
-        assert!(translated.get("instructions").is_none());
+        assert_eq!(translated["instructions"], CLAUDE_CODE_OPENAI_ADAPTER);
     }
 
     #[test]
@@ -420,7 +534,10 @@ mod tests {
 
         assert_eq!(
             translated["instructions"],
-            "You are a helpful assistant\nKeep answers concise."
+            format!(
+                "You are a helpful assistant\nKeep answers concise.\n\n{}",
+                CLAUDE_CODE_OPENAI_ADAPTER
+            )
         );
     }
 
@@ -450,6 +567,32 @@ mod tests {
         assert_eq!(translated["input"][1]["type"], "function_call_output");
         assert_eq!(translated["input"][1]["call_id"], "t1");
         assert_eq!(translated["input"][1]["output"], "file contents");
+    }
+
+    #[test]
+    fn test_tool_result_error_marker_is_preserved() {
+        let body = json!({
+            "model": "claude-opus-4-6",
+            "messages": [
+                {"role": "user", "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "t1",
+                        "content": "Permission denied",
+                        "is_error": true
+                    }
+                ]}
+            ],
+            "stream": true,
+        });
+        let result =
+            translate_request(serde_json::to_vec(&body).unwrap().as_slice(), "gpt-5.5", false).unwrap();
+        let translated: Value = serde_json::from_slice(&result).unwrap();
+
+        assert_eq!(
+            translated["input"][0]["output"],
+            "[Tool error]\nPermission denied"
+        );
     }
 
     #[test]

@@ -596,11 +596,11 @@ mod tests {
     fn test_stream_finalize_clamps_read_limits() {
         let mut t = StreamTranslator::new("sonnet");
         let output = t.process_line(
-            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[{\"type\":\"function_call\",\"call_id\":\"read-1\",\"name\":\"Read\",\"arguments\":\"{\\\"file_path\\\":\\\"README.md\\\",\\\"limit\\\":900,\\\"offset\\\":1,\\\"pages\\\":\\\"\\\"}\"}]}}"
+            "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"output\":[{\"type\":\"function_call\",\"call_id\":\"read-1\",\"name\":\"Read\",\"arguments\":\"{\\\"file_path\\\":\\\"README.md\\\",\\\"limit\\\":5000,\\\"offset\\\":1,\\\"pages\\\":\\\"\\\"}\"}]}}"
         );
         let text = String::from_utf8_lossy(&output);
 
-        assert!(text.contains("\\\"limit\\\":300"));
+        assert!(text.contains("\\\"limit\\\":2000"));
 
         let summary = t.final_summary().unwrap();
         assert_eq!(summary.adjusted_tool_call_count, 1);

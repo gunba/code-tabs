@@ -17,6 +17,8 @@ use tokio::io::AsyncWriteExt;
 
 const CODEX_API_URL: &str = "https://chatgpt.com/backend-api/codex/responses";
 const CODEX_CLI_ORIGINATOR: &str = "codex_cli_rs";
+const CODEX_INSTALLATION_ID_FILE: &str = "codex_installation_id";
+const RESPONSES_TIMING_METRICS_HEADER: &str = "x-responsesapi-include-timing-metrics";
 
 /// [PR-06] Codex upstream requests send CLI-style identity headers so
 /// OpenAI usage/reporting can classify interactive Claude Tabs traffic
@@ -33,12 +35,32 @@ fn codex_identity_headers(session_id: Option<&str>) -> Vec<(&'static str, String
                 std::env::consts::ARCH,
             ),
         ),
+        (RESPONSES_TIMING_METRICS_HEADER, "true".to_string()),
     ];
     if let Some(id) = session_id.filter(|value| !value.is_empty()) {
         headers.push(("session_id", id.to_string()));
         headers.push(("x-client-request-id", id.to_string()));
     }
     headers
+}
+
+fn load_or_create_codex_installation_id() -> Option<String> {
+    let path = crate::commands::get_data_dir()
+        .ok()?
+        .join(CODEX_INSTALLATION_ID_FILE);
+    if let Ok(existing) = std::fs::read_to_string(&path) {
+        let existing = existing.trim();
+        if !existing.is_empty() {
+            return Some(existing.to_string());
+        }
+    }
+
+    let installation_id = uuid::Uuid::new_v4().to_string();
+    if std::fs::write(&path, &installation_id).is_ok() {
+        Some(installation_id)
+    } else {
+        None
+    }
 }
 
 /// [PR-04] Short Claude aliases resolve to the configured primary or small
@@ -372,7 +394,14 @@ pub async fn handle_request(
     );
 
     // Translate request
-    let codex_body = match translate_req::translate_request(body, &codex_model, compression_enabled) {
+    let codex_installation_id = load_or_create_codex_installation_id();
+    let codex_body = match translate_req::translate_request_with_session(
+        body,
+        &codex_model,
+        compression_enabled,
+        session_id,
+        codex_installation_id.as_deref(),
+    ) {
         Ok(b) => b,
         Err(e) => {
             record_backend_event(
@@ -1149,6 +1178,10 @@ mod tests {
         assert_eq!(
             header_value(&headers, "x-client-request-id"),
             Some("session-123")
+        );
+        assert_eq!(
+            header_value(&headers, RESPONSES_TIMING_METRICS_HEADER),
+            Some("true")
         );
 
         let user_agent = header_value(&headers, "user-agent").expect("missing user-agent");
