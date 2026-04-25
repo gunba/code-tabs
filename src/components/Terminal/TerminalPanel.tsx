@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTerminal } from "../../hooks/useTerminal";
 import { usePty } from "../../hooks/usePty";
 import { useSessionStore } from "../../store/sessions";
-import { buildClaudeArgs, getResumeId, canResumeSession, stripWorktreeFlags, findNearestLiveTab } from "../../lib/claude";
+import { getResumeId, canResumeSession, stripWorktreeFlags, findNearestLiveTab } from "../../lib/claude";
 import { dlog } from "../../lib/debugLog";
 import { allocateInspectorPort, registerInspectorPort, unregisterInspectorPort, registerInspectorCallbacks, unregisterInspectorCallbacks } from "../../lib/inspectorPort";
 import { useInspectorConnection } from "../../hooks/useInspectorConnection";
@@ -15,7 +15,6 @@ import { useSettingsStore } from "../../store/settings";
 import { useRuntimeStore } from "../../store/runtime";
 import { normalizePath } from "../../lib/paths";
 import type { Session, SessionConfig, SessionState } from "../../types/session";
-import { getAutoCompactThreshold, getLaunchEnvForProvider, getLaunchModelForProvider, getProviderContextWindow } from "../../lib/providerLaunch";
 import { startTraceSpan, traceAsync } from "../../lib/perfTrace";
 import "./TerminalPanel.css";
 
@@ -81,7 +80,6 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const renameSession = useSessionStore((s) => s.renameSession);
   const killRequest = useSessionStore((s) => s.killRequest);
   const clearKillRequest = useSessionStore((s) => s.clearKillRequest);
-  const providerConfig = useSettingsStore((s) => s.providerConfig);
   const spawnedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [respawnCounter, setRespawnCounter] = useState(0);
@@ -227,6 +225,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       terminalRef.current?.write('\x1b[?1003l\x1b[?1006l');
       // Stop TCP tap server immediately (before any early-return paths)
       invoke("stop_tap_server", { sessionId: session.id }).catch(() => {});
+      invoke("stop_codex_rollout", { sessionId: session.id }).catch(() => {});
       // [DS-07] [RS-06] Session-in-use auto-recovery: kill own orphans, retry; show overlay for external
       if (sessionInUseRef.current && !sessionInUseRetried.current) {
         sessionInUseRef.current = false;
@@ -303,6 +302,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     pty.cleanup();
     inspector.disconnect();
     invoke("stop_tap_server", { sessionId: session.id }).catch(() => {});
+    invoke("stop_codex_rollout", { sessionId: session.id }).catch(() => {});
     unregisterPtyWriter(session.id);
     unregisterPtyKill(session.id);
     unregisterPtyHandleId(session.id);
@@ -372,9 +372,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     [terminal.attach]
   );
 
-  // [RS-07] Spawn PTY once; guards against dead sessions (prevents stale auto-spawn on startup)
+  // [RS-07] Spawn PTY once; guards against dead sessions (prevents stale auto-spawn on startup).
+  // Claude sessions wait for `claudePath` detection to complete; Codex sessions don't (the
+  // CodexAdapter discovers the binary inside build_cli_spawn).
   useEffect(() => {
-    if (spawnedRef.current || !claudePath || session.state === "dead" || !terminal.ready) return;
+    if (spawnedRef.current || session.state === "dead" || !terminal.ready) return;
+    if (session.config.cli === "claude" && !claudePath) return;
 
     const doSpawn = async () => {
       spawnedRef.current = true;
@@ -401,59 +404,64 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           data: { inspectorPort: inspPort },
         });
 
-        // Start TCP tap server for this session (before PTY spawn so port is ready)
+        // Start TCP tap server for this session (before PTY spawn so port is ready).
+        // Claude only — Codex sessions get observability via the rollout watcher
+        // (see start_codex_rollout below).
         let tapPort: number | null = null;
-        try {
-          tapPort = await invoke<number>("start_tap_server", { sessionId: session.id });
-          dlog("terminal", session.id, "tap server started", "DEBUG", {
-            event: "session.tap_server_started",
-            data: { tapPort },
-          });
-        } catch (err) {
-          dlog("terminal", session.id, `tap server failed: ${err}`, "WARN");
+        if (session.config.cli === "claude") {
+          try {
+            tapPort = await invoke<number>("start_tap_server", { sessionId: session.id });
+            dlog("terminal", session.id, "tap server started", "DEBUG", {
+              event: "session.tap_server_started",
+              data: { tapPort },
+            });
+          } catch (err) {
+            dlog("terminal", session.id, `tap server failed: ${err}`, "WARN");
+          }
         }
 
-        // [PR-07] Resolve the provider-sized launch model/env before invoking
-        // Claude Code so autocompact tracks the provider window instead of 200k.
-        const selectedProviderId = session.config.providerId ?? providerConfig.defaultProviderId;
-        const selectedProvider = providerConfig.providers.find((p) => p.id === selectedProviderId) ?? null;
-        const anthropicProvider = providerConfig.providers.find((p) => p.kind === "anthropic_compatible") ?? null;
-        const launchModel = getLaunchModelForProvider(
-          session.config.model,
-          selectedProvider,
-          anthropicProvider?.knownModels,
-        );
-        const launchConfig: SessionConfig = {
-          ...session.config,
-          model: launchModel,
-        };
-        const providerContextWindow = getProviderContextWindow(selectedProvider, session.config.model);
-        const compactThreshold = providerContextWindow ? getAutoCompactThreshold(providerContextWindow) : null;
-        const args = await buildClaudeArgs(launchConfig);
+        // Build launch config (Claude only — Codex spawns natively in batch 4).
+        const launchConfig: SessionConfig = { ...session.config };
+        // Adapter dispatch: build the right SpawnSpec for whichever
+        // CLI this session runs. ClaudeAdapter delegates to the
+        // existing build_claude_args; CodexAdapter translates into
+        // codex flags / subcommands.
+        const spawnSpec = await invoke<{
+          program: string;
+          args: string[];
+          envOverrides: Array<[string, string | null]>;
+          cwd: string;
+        }>("build_cli_spawn", { config: launchConfig });
+        const args = spawnSpec.args;
+        const program = spawnSpec.program;
         const { cols, rows } = terminal.getDimensions();
         const cwd = normalizePath(session.config.workingDir);
         // Pass BUN_INSPECT env for inspector-based hook injection,
-        // TAP_PORT for dedicated TCP event delivery
-        const env: Record<string, string> = {
-          BUN_INSPECT: `ws://127.0.0.1:${inspPort}/0`,
-          ...getLaunchEnvForProvider(selectedProvider, session.config.model),
-        };
-        if (tapPort) env.TAP_PORT = String(tapPort);
-        // [TR-15] [PR-01] Inject a session-scoped proxy URL and bind the session provider
-        const { proxyPort } = useSettingsStore.getState();
-        if (proxyPort) {
-          env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}/s/${session.id}`;
-          invoke("bind_session_provider", {
-            sessionId: session.id,
-            providerId: selectedProviderId,
-            requestModel: session.config.model,
-            launchModel,
-          }).catch(() => {});
+        // TAP_PORT for dedicated TCP event delivery. Claude tabs only.
+        const env: Record<string, string> = {};
+        if (session.config.cli === "claude") {
+          env.BUN_INSPECT = `ws://127.0.0.1:${inspPort}/0`;
+          if (tapPort) env.TAP_PORT = String(tapPort);
+          // System-prompt rewrite proxy (PromptsTab). Claude only.
+          const { proxyPort } = useSettingsStore.getState();
+          if (proxyPort) {
+            env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}/s/${session.id}`;
+          }
         }
-        dlog("terminal", session.id, "launching Claude session", "LOG", {
+        // Adapter-specific env overrides (e.g. RUST_LOG for Codex if
+        // the adapter ever needs them; currently empty).
+        for (const [k, v] of spawnSpec.envOverrides) {
+          if (v === null) {
+            delete env[k];
+          } else {
+            env[k] = v;
+          }
+        }
+        dlog("terminal", session.id, `launching ${session.config.cli} session`, "LOG", {
           event: "session.launch",
           data: {
-            claudePath,
+            cli: session.config.cli,
+            program,
             args,
             cwd,
             cols,
@@ -465,17 +473,21 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
             continueSession: session.config.continueSession,
             permissionMode: session.config.permissionMode,
             model: session.config.model,
-            launchModel,
-            providerId: selectedProviderId,
-            providerKind: selectedProvider?.kind ?? null,
-            providerContextWindow,
-            compactThreshold,
           },
         });
-        const handle = await pty.spawn(claudePath, args, cwd, cols, rows, env);
+        const handle = await pty.spawn(program, args, cwd, cols, rows, env);
         registerPtyWriter(session.id, handle.write);
         registerPtyKill(session.id, () => handle.kill());
         registerPtyHandleId(session.id, handle.pid);
+
+        // Codex observability: tail the rollout JSONL Codex writes to
+        // ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl during the TUI
+        // session and forward normalized events to observability.jsonl.
+        if (session.config.cli === "codex") {
+          invoke("start_codex_rollout", { sessionId: session.id }).catch((err) => {
+            dlog("terminal", session.id, `start_codex_rollout failed: ${err}`, "WARN");
+          });
+        }
         dlog("terminal", session.id, `spawned pid=${handle.pid} port=${inspPort} tapPort=${tapPort} cols=${cols} rows=${rows}`, "LOG", {
           event: "session.spawned",
           data: {
@@ -507,7 +519,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
 
     void doSpawn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claudePath, providerConfig.defaultProviderId, providerConfig.providers, session.config, session.id, session.state, respawnCounter, terminal.ready]);
+  }, [claudePath, session.config, session.id, session.state, respawnCounter, terminal.ready]);
 
   // Register terminal buffer reader and terminal instance for search/render-wait
   useEffect(() => {
@@ -527,6 +539,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     const id = session.id;
     return () => {
       invoke("stop_tap_server", { sessionId: id }).catch(() => {});
+      invoke("stop_codex_rollout", { sessionId: id }).catch(() => {});
       unregisterPtyWriter(id);
       unregisterPtyKill(id);
       unregisterPtyHandleId(id);

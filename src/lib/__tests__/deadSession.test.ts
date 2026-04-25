@@ -5,6 +5,7 @@ import { dirToTabName, normalizeForFilter } from "../paths";
 // ── Helpers ──────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: SessionConfig = {
+  cli: "claude",
   workingDir: "/test",
   model: null,
   permissionMode: "default",
@@ -27,7 +28,6 @@ const DEFAULT_CONFIG: SessionConfig = {
   extraFlags: null,
   sessionId: null,
   runMode: false,
-  providerId: null,
 };
 
 const DEFAULT_METADATA: SessionMetadata = {

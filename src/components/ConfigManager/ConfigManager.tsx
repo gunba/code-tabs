@@ -12,16 +12,16 @@ import { McpPane } from "./McpPane";
 import { AgentEditor } from "./AgentEditor";
 import { PromptsTab } from "./PromptsTab";
 import { SkillsEditor } from "./SkillsEditor";
-import { ProvidersPane } from "./ProvidersPane";
+import { PortContentPane } from "./PortContentPane";
 import { Dropdown } from "../Dropdown/Dropdown";
-import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconLightning, IconBraces, IconClose, IconCircleFilled, IconServer } from "../Icons/Icons";
+import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconBraces, IconClose, IconCircleFilled, IconServer } from "../Icons/Icons";
 import { RecordingPane } from "./RecordingPane";
 import { parseWorktreePath } from "../../lib/paths";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import { useRuntimeStore } from "../../store/runtime";
 import "./ConfigManager.css";
 
-type Tab = "settings" | "envvars" | "claudemd" | "hooks" | "plugins" | "mcp" | "agents" | "prompts" | "skills" | "providers" | "recording";
+type Tab = "settings" | "envvars" | "claudemd" | "hooks" | "plugins" | "mcp" | "agents" | "prompts" | "skills" | "port" | "recording";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <IconGear size={11} /> },
@@ -33,7 +33,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "agents", label: "Agents", icon: <IconBot size={11} /> },
   { id: "prompts", label: "Prompts", icon: <IconDocument size={11} /> },
   { id: "skills", label: "Skills & Commands", icon: <IconSkill size={11} /> },
-  { id: "providers", label: "Providers", icon: <IconLightning size={11} /> },
+  { id: "port", label: "Port content", icon: <IconPuzzle size={11} /> },
   { id: "recording", label: "Observability", icon: <IconCircleFilled size={11} /> },
 ];
 
@@ -165,7 +165,7 @@ export function ConfigManager() {
         {tab === "skills" && (
           <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} onStatus={setStatusMsg} tabId="skills" scopes={["user", "project"]} />
         )}
-        <ProvidersPane visible={tab === "providers"} onStatus={setStatusMsg} />
+        <PortContentPane visible={tab === "port"} projectDir={projectDir} onStatus={setStatusMsg} />
         {debugBuild && tab === "recording" && (
           <RecordingPane onStatus={setStatusMsg} />
         )}

@@ -1,9 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { trace, traceAsync } from "../lib/perfTrace";
 import { assignSessionColor, releaseSessionColor, findNearestLiveTab } from "../lib/claude";
-import { fetchAnthropicModelCatalog } from "../lib/modelCatalog";
 import { useActivityStore } from "./activity";
 import { dlog, removeDebugLogSession } from "../lib/debugLog";
 import type {
@@ -134,10 +132,11 @@ export const useSessionStore = create<SessionsState>((set) => ({
           }).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`, { module: "session", event: "session.init.orphans_killed", data: { count: n } }); })
            .catch((e) => dlog("session", null, `orphan cleanup failed: ${e}`, "ERR"))
         : Promise.resolve(),
-      // [PS-06] Proxy lifecycle: start API proxy, store port, listen for route events
+      // Slimmed proxy lifecycle: localhost system-prompt-rewrite passthrough.
+      // No provider config, no model translation, no compression. Codex
+      // sessions bypass the proxy entirely and call OpenAI directly.
       traceAsync("init: start_api_proxy", () => {
-        const { providerConfig } = useSettingsStore.getState();
-        return invoke<number>("start_api_proxy", { config: providerConfig })
+        return invoke<number>("start_api_proxy")
           .then((port) => {
             useSettingsStore.getState().setProxyPort(port);
             trace(`init: proxy started on port ${port}`, {
@@ -150,18 +149,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
             if (rules.length > 0) {
               invoke("update_system_prompt_rules", { rules }).catch(() => {});
             }
-            // Sync compression toggle to proxy
-            const { compressionEnabled } = useSettingsStore.getState();
-            invoke("set_compression_enabled", { enabled: compressionEnabled }).catch(() => {});
-            // Listen for routing events from the proxy for debug visibility
-            listen<{ model: string; provider: string; rewrite: string | null; path: string }>(
-              "proxy-route",
-              (ev) => {
-                const { model, provider, rewrite, path } = ev.payload;
-                const rw = rewrite ? ` → ${rewrite}` : "";
-                dlog("proxy", null, `${path} ${model}${rw} → ${provider}`);
-              },
-            );
           })
           .catch((e) => dlog("session", null, `proxy start failed: ${e}`, "ERR"));
       }, {
@@ -179,18 +166,6 @@ export const useSessionStore = create<SessionsState>((set) => ({
         data: { claudePath },
       });
     }
-
-    // Refresh Anthropic model catalog from docs (fire-and-forget, updates settings store)
-    fetchAnthropicModelCatalog().then(({ models }) => {
-      const { providerConfig, setProviderConfig } = useSettingsStore.getState();
-      const updated = providerConfig.providers.map((p) =>
-        p.kind === "anthropic_compatible" ? { ...p, knownModels: models } : p
-      );
-      if (JSON.stringify(updated) !== JSON.stringify(providerConfig.providers)) {
-        setProviderConfig({ ...providerConfig, providers: updated });
-        dlog("session", null, `model catalog refreshed: ${models.length} models`, "LOG");
-      }
-    }).catch(() => {});
   },
 
   createSession: async (name, config, opts = {}) => {

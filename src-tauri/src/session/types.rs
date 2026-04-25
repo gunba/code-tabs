@@ -1,6 +1,19 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CliKind {
+    Claude,
+    Codex,
+}
+
+impl Default for CliKind {
+    fn default() -> Self {
+        CliKind::Claude
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum SessionState {
@@ -31,6 +44,10 @@ pub struct SessionConfig {
     // [ST-01] launch_working_dir: directory at session launch; working_dir may change via worktree events
     #[serde(default)]
     pub launch_working_dir: Option<String>,
+    /// Which CLI this session runs. Defaults to Claude for migrated sessions.
+    // [CC-04] cli: CliKind field on SessionConfig; serde(default) -> Claude; replaces providerId
+    #[serde(default)]
+    pub cli: CliKind,
     pub model: Option<String>,
     pub permission_mode: PermissionMode,
     pub dangerously_skip_permissions: bool,
@@ -55,8 +72,6 @@ pub struct SessionConfig {
     pub session_id: Option<String>,
     #[serde(default)]
     pub run_mode: bool,
-    #[serde(default)]
-    pub provider_id: Option<String>,
 }
 
 impl Default for SessionConfig {
@@ -64,6 +79,7 @@ impl Default for SessionConfig {
         Self {
             working_dir: String::new(),
             launch_working_dir: None,
+            cli: CliKind::Claude,
             model: None,
             permission_mode: PermissionMode::Default,
             dangerously_skip_permissions: false,
@@ -85,7 +101,6 @@ impl Default for SessionConfig {
             extra_flags: None,
             session_id: None,
             run_mode: false,
-            provider_id: None,
         }
     }
 }
@@ -196,62 +211,7 @@ impl From<&Session> for SessionSnapshot {
     }
 }
 
-// ── Provider / Proxy types ──────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelMapping {
-    pub id: String,
-    pub pattern: String,
-    pub rewrite_model: Option<String>,
-    pub context_window: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProviderModel {
-    pub id: String,
-    pub label: String,
-    #[serde(default)]
-    pub family: Option<String>,
-    #[serde(default)]
-    pub context_window: Option<u64>,
-    #[serde(default)]
-    pub color: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ModelProvider {
-    pub id: String,
-    pub name: String,
-    #[serde(default = "default_anthropic_compatible")]
-    pub kind: String,
-    #[serde(default)]
-    pub predefined: bool,
-    #[serde(default)]
-    pub model_mappings: Vec<ModelMapping>,
-    #[serde(default)]
-    pub known_models: Vec<ProviderModel>,
-
-    // anthropic_compatible fields
-    #[serde(default)]
-    pub base_url: Option<String>,
-    #[serde(default)]
-    pub api_key: Option<String>,
-    #[serde(default)]
-    pub socks5_proxy: Option<String>,
-
-    // openai_codex fields
-    #[serde(default)]
-    pub codex_primary_model: Option<String>,
-    #[serde(default)]
-    pub codex_small_model: Option<String>,
-}
-
-fn default_anthropic_compatible() -> String {
-    "anthropic_compatible".into()
-}
+// ── System-prompt rule (used by the slimmed proxy + PromptsTab) ────
 
 fn default_true() -> bool {
     true
@@ -267,32 +227,4 @@ pub struct SystemPromptRule {
     pub flags: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProviderConfig {
-    pub providers: Vec<ModelProvider>,
-    pub default_provider_id: String,
-}
-
-impl Default for ProviderConfig {
-    fn default() -> Self {
-        Self {
-            providers: vec![ModelProvider {
-                id: "anthropic".into(),
-                name: "Anthropic".into(),
-                kind: "anthropic_compatible".into(),
-                predefined: false,
-                model_mappings: Vec::new(),
-                known_models: Vec::new(),
-                base_url: Some("https://api.anthropic.com".into()),
-                api_key: None,
-                socks5_proxy: None,
-                codex_primary_model: None,
-                codex_small_model: None,
-            }],
-            default_provider_id: "anthropic".into(),
-        }
-    }
 }

@@ -128,8 +128,35 @@ async function discover() {
   const toSlash = (arr: Array<{ cmd: string; desc: string }>): SlashCommand[] =>
     arr.filter((c) => typeof c.cmd === "string" && c.cmd.startsWith("/"));
 
-  // Merge all sources — binary scan has best descriptions, --help is fallback
-  const merged = mergeCommands(toSlash(builtins), toSlash(helpCmds), toSlash(plugins));
+  // Merge all sources — binary scan has best descriptions, --help is fallback.
+  let merged = mergeCommands(toSlash(builtins), toSlash(helpCmds), toSlash(plugins));
+
+  // Codex slash commands + Codex skills join the same merged pool so a
+  // user on a Codex tab sees them in the palette. The active session's
+  // CLI determines which subset the palette shows (filtered downstream).
+  try {
+    const codexBuiltins = await invoke<Array<{ cmd: string; desc: string }>>(
+      "discover_codex_slash_commands"
+    );
+    const codexSkills = await invoke<Array<{ cmd: string; desc: string }>>(
+      "discover_codex_skills",
+      { extraDirs: projectDirs }
+    );
+    merged = mergeCommands(merged, toSlash(codexBuiltins), toSlash(codexSkills));
+    dlog("discovery", null, "codex commands merged into palette", "LOG", {
+      event: "discovery.codex_commands_merged",
+      data: {
+        codexBuiltinCount: codexBuiltins.length,
+        codexSkillCount: codexSkills.length,
+      },
+    });
+  } catch (err) {
+    dlog("discovery", null, `codex command discovery failed: ${err}`, "DEBUG", {
+      event: "discovery.codex_commands_failed",
+      data: { error: String(err) },
+    });
+  }
+
   useSettingsStore.getState().setSlashCommands(merged);
   dlog("discovery", null, "slash command discovery merged", "LOG", {
     event: "discovery.slash_commands_merged",

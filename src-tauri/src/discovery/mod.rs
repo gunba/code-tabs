@@ -1392,7 +1392,7 @@ pub(crate) fn discover_plugin_commands_sync_with_home(
 /// Parse a single SKILL.md file. Implements Claude Code's resolution order:
 ///   name: frontmatter > parent directory name
 ///   description: frontmatter > first non-empty body line
-fn scan_skill_md(
+pub(crate) fn scan_skill_md(
     path: &std::path::Path,
     commands: &mut Vec<serde_json::Value>,
     rejections: &mut Vec<PluginScanRejection>,

@@ -198,3 +198,16 @@
   50% { opacity: 0.3; }
 }
 
+/* Per-tab CLI badge — small chip at the left of the status bar */
+.status-cli {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 6px;
+}
+.status-cli-claude {
+  color: #ff8000;
+}
+.status-cli-codex {
+  color: #10a37f;
+}
+

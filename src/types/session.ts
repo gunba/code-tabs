@@ -27,9 +27,13 @@ export type PermissionMode =
   | "planMode"
   | "auto";
 
+/** Which CLI a session runs. Per-session, no global mode. */
+export type CliKind = "claude" | "codex";
+
 export interface SessionConfig {
   workingDir: string;
   launchWorkingDir?: string;
+  cli: CliKind;
   model: string | null;
   permissionMode: PermissionMode;
   dangerouslySkipPermissions: boolean;
@@ -51,7 +55,6 @@ export interface SessionConfig {
   extraFlags: string | null;
   sessionId: string | null;
   runMode: boolean;
-  providerId: string | null;
 }
 
 export interface SessionMetadata {
@@ -248,54 +251,20 @@ export interface ContentSearchMatch {
   snippet: string;
 }
 
-// ── Provider / Proxy types ──────────────────────────────────────────
-
-export type ProviderKind = "anthropic_compatible" | "openai_codex";
-
-export interface ModelMapping {
-  id: string;
-  pattern: string;       // glob pattern matching model name (e.g., "claude-haiku-*")
-  rewriteModel?: string; // rewrite to this model name (undefined = keep original)
-  contextWindow?: number; // context window in tokens for the rewrite target
-}
-
-export interface ProviderModel {
-  id: string;            // model identifier sent to CLI/API (e.g., "opus", "gpt-5.5")
-  label: string;         // display name (e.g., "Opus", "GPT-5.5")
-  family?: string;       // grouping key for matching registry [1m] variants
-  contextWindow?: number; // default context window in tokens
-  color?: string;        // optional UI color
-}
+// ── System-prompt rule (used by the slimmed proxy + PromptsTab) ────
 
 export interface ProviderEffort {
   value: string;         // effort value sent to CLI (e.g., "low", "xhigh")
   label: string;         // display label (e.g., "Low", "xHigh")
 }
 
-export interface ModelProvider {
+export interface ProviderModel {
   id: string;
-  name: string;
-  kind: ProviderKind;
-  predefined: boolean;
-  modelMappings: ModelMapping[];
-  knownModels: ProviderModel[];
-
-  // anthropic_compatible fields
-  baseUrl?: string;
-  apiKey?: string | null;
-  socks5Proxy?: string | null;
-
-  // openai_codex fields
-  codexPrimaryModel?: string;
-  codexSmallModel?: string;
+  label: string;
+  family?: string;
+  contextWindow?: number;
+  color?: string;
 }
-
-export interface ProviderConfig {
-  providers: ModelProvider[];
-  defaultProviderId: string;
-}
-
-// ── Default provider catalogs ───────────────────────────────────────
 
 export const ANTHROPIC_MODELS: ProviderModel[] = [
   { id: "best",       label: "best",       family: "opus",   contextWindow: 200000, color: "#ff8000" },
@@ -315,93 +284,6 @@ export const ANTHROPIC_EFFORTS: ProviderEffort[] = [
   { value: "xhigh",  label: "xhigh" },
   { value: "max",    label: "max" },
 ];
-
-// Default Claude-family mappings for new custom providers.
-// Pattern column auto-fills with these so the user only specifies rewrites.
-export const DEFAULT_CLAUDE_MAPPINGS: ModelMapping[] = [
-  { id: "map-opus",    pattern: "claude-opus-*",   rewriteModel: "" },
-  { id: "map-sonnet",  pattern: "claude-sonnet-*", rewriteModel: "" },
-  { id: "map-haiku",   pattern: "claude-haiku-*",  rewriteModel: "" },
-  { id: "map-catchall", pattern: "*",              rewriteModel: "" },
-];
-
-// [PR-02] OpenAI Codex provider metadata ships with canonical 272k-cap model
-// definitions plus short-alias and Claude-family mappings for default config.
-export const OPENAI_CODEX_CONTEXT_WINDOW = 272000;
-export const OPENAI_CODEX_PRIMARY_MODEL = "gpt-5.5";
-export const OPENAI_CODEX_SMALL_MODEL = "gpt-5.5-mini";
-
-export function buildOpenAICodexModels(
-  primaryModel = OPENAI_CODEX_PRIMARY_MODEL,
-  smallModel = OPENAI_CODEX_SMALL_MODEL,
-): ProviderModel[] {
-  const models: ProviderModel[] = [
-    {
-      id: primaryModel,
-      label: primaryModel,
-      family: "codex-primary",
-      contextWindow: OPENAI_CODEX_CONTEXT_WINDOW,
-      color: "#10a37f",
-    },
-  ];
-  if (smallModel !== primaryModel) {
-    models.push({
-      id: smallModel,
-      label: smallModel,
-      family: "codex-small",
-      contextWindow: OPENAI_CODEX_CONTEXT_WINDOW,
-      color: "#76b900",
-    });
-  }
-  return models;
-}
-
-export function buildOpenAICodexMappings(
-  primaryModel = OPENAI_CODEX_PRIMARY_MODEL,
-  smallModel = OPENAI_CODEX_SMALL_MODEL,
-): ModelMapping[] {
-  return [
-    { id: "codex-best", pattern: "best*", rewriteModel: primaryModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-    { id: "codex-opus", pattern: "opus*", rewriteModel: primaryModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-    { id: "codex-opusplan", pattern: "opusplan*", rewriteModel: primaryModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-    { id: "codex-sonnet", pattern: "sonnet*", rewriteModel: primaryModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-    { id: "codex-haiku", pattern: "haiku*", rewriteModel: smallModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-    { id: "codex-claude-opus", pattern: "claude-opus-*", rewriteModel: primaryModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-    { id: "codex-claude-sonnet", pattern: "claude-sonnet-*", rewriteModel: primaryModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-    { id: "codex-claude-haiku", pattern: "claude-haiku-*", rewriteModel: smallModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-    { id: "codex-catchall", pattern: "*", rewriteModel: primaryModel, contextWindow: OPENAI_CODEX_CONTEXT_WINDOW },
-  ];
-}
-
-// [PR-02] Predefined OpenAI Codex provider maps Claude families onto
-// primary/small Codex models and ships in the default provider config.
-export const CODEX_PROVIDER: ModelProvider = {
-  id: "openai-codex",
-  name: "OpenAI",
-  kind: "openai_codex",
-  predefined: true,
-  codexPrimaryModel: OPENAI_CODEX_PRIMARY_MODEL,
-  codexSmallModel: OPENAI_CODEX_SMALL_MODEL,
-  knownModels: buildOpenAICodexModels(),
-  modelMappings: buildOpenAICodexMappings(),
-};
-
-export const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
-  providers: [
-    {
-      id: "anthropic",
-      name: "Anthropic",
-      kind: "anthropic_compatible",
-      predefined: false,
-      modelMappings: [],
-      knownModels: ANTHROPIC_MODELS,
-      baseUrl: "https://api.anthropic.com",
-      apiKey: null,
-    },
-    CODEX_PROVIDER,
-  ],
-  defaultProviderId: "anthropic",
-};
 
 export interface SystemPromptBlock {
   text: string;
@@ -438,6 +320,7 @@ export interface SystemPromptRule {
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   workingDir: "",
   launchWorkingDir: "",
+  cli: "claude",
   model: null,
   permissionMode: "default",
   dangerouslySkipPermissions: false,
@@ -459,5 +342,4 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   extraFlags: null,
   sessionId: null,
   runMode: false,
-  providerId: null,
 };

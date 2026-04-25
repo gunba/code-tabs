@@ -146,6 +146,39 @@
 
 /* ── Pill selectors (grouped rows) ────────────────────────── */
 
+/* CLI picker (Claude Code / Codex) — sits above the model/effort pills. */
+.launcher-cli-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.launcher-cli-pill {
+  appearance: none;
+  background: var(--surface-1, #2a2a2a);
+  color: var(--text-1, #ddd);
+  border: 1px solid var(--border-1, #3a3a3a);
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.launcher-cli-pill:hover:not(:disabled) {
+  background: var(--surface-2, #353535);
+}
+
+.launcher-cli-pill--active {
+  background: var(--accent-1, #5b8def);
+  border-color: var(--accent-1, #5b8def);
+  color: #fff;
+}
+
+.launcher-cli-pill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .launcher-pills-section {
   display: flex;
   flex-direction: column;

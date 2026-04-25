@@ -284,6 +284,7 @@ describe("setSavedDefaults with workspaceDefaults", () => {
     sessionId: null,
     runMode: false,
     providerId: null,
+    cli: "claude" as const,
     ...overrides,
   });
 

@@ -98,6 +98,13 @@ function SessionStatus({
     <>
       {/* LEFT: primary operational info */}
       <div className="status-bar-content">
+        {/* [CV-02] status-cli chip: status-cli-claude=orange, status-cli-codex=teal */}
+        <span
+          className={`status-item status-cli status-cli-${session.config.cli}`}
+          title={`CLI: ${session.config.cli === "codex" ? "Codex" : "Claude Code"}`}
+        >
+          {session.config.cli === "codex" ? "Codex" : "Claude"}
+        </span>
         <span className="status-item status-model" title={
           (m.apiRegion || m.pingRttMs > 0)
             ? `Cloudflare POP: ${m.apiRegion || "—"}` +

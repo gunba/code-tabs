@@ -5,6 +5,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::commands::data::{get_data_dir, get_session_data_dir, reveal_path};
 
+pub mod codex_rollout;
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObservabilityInfo {

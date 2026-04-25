@@ -59,6 +59,27 @@
   border-left: 2px solid var(--accent);
 }
 
+/* [CV-01] Per-CLI 3px left-edge stripe: tab-cli-claude=#ff8000, tab-cli-codex=#10a37f; ::before pseudo, pointer-events:none */
+/* Per-CLI 3px left-edge stripe so the user can tell at a glance whether
+   a tab is running Claude Code (orange) or Codex (teal). Sits inside
+   the tab so it doesn't disturb layout. */
+.tab.tab-cli-claude::before,
+.tab.tab-cli-codex::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  pointer-events: none;
+}
+.tab.tab-cli-claude::before {
+  background: #ff8000;
+}
+.tab.tab-cli-codex::before {
+  background: #10a37f;
+}
+
 .tab:hover {
   background: var(--bg-surface-hover);
   color: var(--text-primary);

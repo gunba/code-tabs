@@ -1,16 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
-import type { LaunchPreset, SessionConfig, PastSession, ProviderConfig, SystemPromptRule } from "../types/session";
-import {
-  DEFAULT_SESSION_CONFIG,
-  DEFAULT_PROVIDER_CONFIG,
-  CODEX_PROVIDER,
-  OPENAI_CODEX_PRIMARY_MODEL,
-  OPENAI_CODEX_SMALL_MODEL,
-  buildOpenAICodexMappings,
-  buildOpenAICodexModels,
-} from "../types/session";
+import type { LaunchPreset, SessionConfig, PastSession, SystemPromptRule } from "../types/session";
+import { DEFAULT_SESSION_CONFIG } from "../types/session";
 import { normalizePath, parseWorktreePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import type { EnvVarEntry } from "../lib/envVars";
@@ -124,13 +116,11 @@ interface SettingsState {
   sessionConfigs: Record<string, Partial<SessionConfig>>;
   observedPrompts: ObservedPrompt[];
   savedPrompts: Array<{ id: string; name: string; text: string }>;
-  providerConfig: ProviderConfig;
   proxyPort: number | null;
   apiIp: string | null;
   systemPromptRules: SystemPromptRule[];
   modelRegistry: Record<string, ModelRegistryEntry>;
   recordingConfig: RecordingConfig;
-  compressionEnabled: boolean;
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -163,7 +153,6 @@ interface SettingsState {
   addSavedPrompt: (name: string, text: string) => void;
   updateSavedPrompt: (id: string, updates: { name?: string; text?: string }) => void;
   removeSavedPrompt: (id: string) => void;
-  setProviderConfig: (config: ProviderConfig) => void;
   setProxyPort: (port: number | null) => void;
   setApiIp: (ip: string) => void;
   addSystemPromptRule: () => void;
@@ -172,7 +161,6 @@ interface SettingsState {
   reorderSystemPromptRules: (id: string, direction: -1 | 1) => void;
   updateModelRegistry: (entry: ModelRegistryEntry) => void;
   setRecordingConfig: (config: Partial<RecordingConfig>) => void;
-  setCompressionEnabled: (enabled: boolean) => void;
   toggleNoisyEventKind: (kind: string) => void;
 }
 
@@ -208,13 +196,11 @@ export const useSettingsStore = create<SettingsState>()(
       sessionConfigs: {},
       observedPrompts: [],
       savedPrompts: [],
-      providerConfig: DEFAULT_PROVIDER_CONFIG,
       proxyPort: null,
       apiIp: null,
       systemPromptRules: [],
       modelRegistry: {},
       recordingConfig: DEFAULT_RECORDING_CONFIG,
-      compressionEnabled: false,
 
       addRecentDir: (dir) =>
         set((s) => {
@@ -302,7 +288,6 @@ export const useSettingsStore = create<SettingsState>()(
           disallowedTools: stripped.disallowedTools,
           additionalDirs: stripped.additionalDirs,
           mcpConfig: stripped.mcpConfig,
-          providerId: stripped.providerId,
         };
 
         return {
@@ -415,7 +400,6 @@ export const useSettingsStore = create<SettingsState>()(
             disallowedTools: config.disallowedTools.length > 0 ? config.disallowedTools : undefined,
             additionalDirs: config.additionalDirs.length > 0 ? config.additionalDirs : undefined,
             mcpConfig: config.mcpConfig,
-            providerId: config.providerId,
           };
           // Strip undefined/null/default values to keep entries small
           for (const [k, v] of Object.entries(partial)) {
@@ -584,7 +568,6 @@ export const useSettingsStore = create<SettingsState>()(
         savedPrompts: s.savedPrompts.filter((p) => p.id !== id),
       })),
 
-      setProviderConfig: (config) => set({ providerConfig: config }),
       setProxyPort: (port) => set({ proxyPort: port }),
       setApiIp: (ip) => set({ apiIp: ip }),
 
@@ -645,11 +628,6 @@ export const useSettingsStore = create<SettingsState>()(
       setRecordingConfig: (config) => set((s) => ({
         recordingConfig: { ...s.recordingConfig, ...config },
       })),
-
-      setCompressionEnabled: (enabled) => {
-        set({ compressionEnabled: enabled });
-        invoke("set_compression_enabled", { enabled }).catch(() => {});
-      },
 
       toggleNoisyEventKind: (kind) => set((s) => {
         const current = s.recordingConfig.noisyEventKinds;
@@ -732,92 +710,12 @@ export const useSettingsStore = create<SettingsState>()(
         }
         // v8→v9: Convert global routes to per-provider modelMappings, add kind/predefined fields
         if (version < 9) {
-          const pc = state.providerConfig as Record<string, unknown> | undefined;
-          if (pc?.providers && Array.isArray(pc.providers)) {
-            const routes = (pc.routes as Array<{ id: string; pattern: string; rewriteModel?: string; providerId: string }>) ?? [];
-            for (const p of pc.providers as Array<Record<string, unknown>>) {
-              // Collect routes targeting this provider and convert to modelMappings
-              const mappings = routes
-                .filter((r) => r.providerId === p.id)
-                .map((r) => ({ id: r.id, pattern: r.pattern, rewriteModel: r.rewriteModel }));
-              p.modelMappings = mappings;
-              if (p.kind === undefined) p.kind = "anthropic_compatible";
-              if (p.predefined === undefined) p.predefined = false;
-            }
-            delete pc.routes;
-          }
-          // Add providerId to persisted session configs
-          if (state.lastConfig && typeof state.lastConfig === "object") {
-            (state.lastConfig as Record<string, unknown>).providerId ??= null;
-          }
-          if (state.savedDefaults && typeof state.savedDefaults === "object") {
-            (state.savedDefaults as Record<string, unknown>).providerId ??= null;
-          }
-        }
-        // ── Unconditional config sanitization (runs every load) ──────
-        {
-          const pc = state.providerConfig as { providers?: Array<Record<string, unknown>> } | undefined;
-          if (pc?.providers) {
-            // Inject predefined Codex provider if missing
-            if (!pc.providers.some((p) => p.id === "openai-codex")) {
-              pc.providers.push(CODEX_PROVIDER as never);
-            }
-            for (const p of pc.providers) {
-              // Force canonical names on predefined providers
-              if (p.id === "openai-codex") {
-                // [PR-02] Persisted OpenAI Codex configs are normalized back to
-                // canonical kind/models/mappings on load.
-                p.name = "OpenAI";
-                p.kind = "openai_codex";
-                p.predefined = true;
-                const primaryModel = typeof p.codexPrimaryModel === "string" && p.codexPrimaryModel
-                  ? p.codexPrimaryModel
-                  : OPENAI_CODEX_PRIMARY_MODEL;
-                const smallModel = typeof p.codexSmallModel === "string" && p.codexSmallModel
-                  ? p.codexSmallModel
-                  : OPENAI_CODEX_SMALL_MODEL;
-                const defaultMappings = buildOpenAICodexMappings(primaryModel, smallModel);
-                const defaultMappingById = new Map(defaultMappings.map((mapping) => [mapping.id, mapping]));
-                p.codexPrimaryModel = primaryModel;
-                p.codexSmallModel = smallModel;
-                p.knownModels = buildOpenAICodexModels(primaryModel, smallModel);
-                if (!Array.isArray(p.modelMappings) || p.modelMappings.length === 0) {
-                  p.modelMappings = defaultMappings;
-                } else {
-                  const migratedMappings = p.modelMappings.map((mapping) => {
-                    const defaultMapping = defaultMappingById.get(mapping.id);
-                    let pattern = mapping.pattern;
-                    if (mapping.id === "codex-opus" && pattern === "claude-opus-*") pattern = "opus*";
-                    if (mapping.id === "codex-sonnet" && pattern === "claude-sonnet-*") pattern = "sonnet*";
-                    if (mapping.id === "codex-haiku" && pattern === "claude-haiku-*") pattern = "haiku*";
-                    return {
-                      ...mapping,
-                      pattern,
-                      contextWindow: mapping.contextWindow ?? defaultMapping?.contextWindow,
-                    };
-                  });
-                  const existingIds = new Set(migratedMappings.map((mapping) => mapping.id));
-                  for (const defaultMapping of defaultMappings) {
-                    if (!existingIds.has(defaultMapping.id)) migratedMappings.push(defaultMapping);
-                  }
-                  p.modelMappings = migratedMappings;
-                }
-              }
-              if (p.id === "anthropic") {
-                p.name = "Anthropic";
-              }
-              // Backfill missing fields
-              if (!Array.isArray(p.knownModels)) p.knownModels = [];
-              if (!Array.isArray(p.modelMappings)) p.modelMappings = [];
-              // Custom providers: dropdown derives from mapping rewrites, not knownModels
-              if (p.id !== "anthropic" && p.kind !== "openai_codex") {
-                p.knownModels = [];
-              }
-            }
-          }
+          // v9 used to convert routes -> providerConfig.providers. Provider
+          // config is gone; persisted providerConfig keys are silently
+          // dropped on load (zustand ignores unknown fields).
         }
         if (version < 14) {
-          if (state.compressionEnabled === undefined) state.compressionEnabled = false;
+          // v14 added compressionEnabled; field removed in v17.
         }
         if (version < 15) {
           // activityViewMode was promoted to a top-level tab (rightPanelTab "response"|"session").
@@ -850,11 +748,9 @@ export const useSettingsStore = create<SettingsState>()(
         sessionNames: state.sessionNames,
         sessionConfigs: state.sessionConfigs,
         savedPrompts: state.savedPrompts,
-        providerConfig: state.providerConfig,
         systemPromptRules: state.systemPromptRules,
         modelRegistry: state.modelRegistry,
         recordingConfig: state.recordingConfig,
-        compressionEnabled: state.compressionEnabled,
       }),
     }
   )

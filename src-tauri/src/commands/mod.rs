@@ -1,4 +1,5 @@
 mod cli;
+pub(crate) mod codex_cli;
 mod config;
 pub(crate) mod data;
 mod file_ops;
@@ -9,6 +10,7 @@ mod session;
 mod version;
 
 pub use cli::*;
+pub use codex_cli::*;
 pub use config::*;
 pub use data::*;
 pub use file_ops::*;

@@ -1,0 +1,584 @@
+//! Codex session observability via rollout-file tailing.
+//!
+//! The user runs `codex` interactively in xterm — same shape as a
+//! Claude session. We can't attach to Codex over JSON-RPC the way
+//! `codex app-server` clients do (the app-server drives its own
+//! sessions; it doesn't observe a TUI session). What Codex *does* do
+//! during a TUI session is append every turn, tool call, token-count
+//! update, and approval to a per-session rollout JSONL at:
+//!
+//!   `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`
+//!
+//! That file is the structured event source. This module:
+//!   1. Watches the today's-date directory for new rollout files
+//!      created after the session spawn time.
+//!   2. Attributes the first matching file to the session.
+//!   3. Tails the file, parsing each line as a `RolloutItem` and
+//!      writing a normalized envelope into `observability.jsonl` via
+//!      `record_backend_event` — the same sink the Claude tap pipeline
+//!      uses.
+//!
+//! Wire shape per line in the rollout file (confirmed against
+//! `~/.codex/sessions/2025/11/18/...`):
+//!
+//!   { "timestamp": "ISO8601", "type": "session_meta" | "response_item"
+//!     | "event_msg" | "compacted" | "turn_context", "payload": {...} }
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::SystemTime;
+
+use notify::{EventKind, RecursiveMode, Watcher};
+use serde::Deserialize;
+use serde_json::Value;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::Mutex;
+
+use crate::observability::record_backend_event;
+
+#[derive(Debug, Deserialize)]
+struct RolloutLine {
+    #[serde(default)]
+    timestamp: Option<String>,
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    payload: Value,
+}
+
+/// Resolve `$CODEX_HOME` honoring the env override; default to
+/// `~/.codex`. Mirrors what the Codex binary itself does.
+fn codex_home() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("CODEX_HOME") {
+        if !p.is_empty() {
+            return Some(PathBuf::from(p));
+        }
+    }
+    dirs::home_dir().map(|h| h.join(".codex"))
+}
+
+/// `$CODEX_HOME/sessions/YYYY/MM/DD` for today (local time). We watch
+/// this directory because that's where the new rollout file will land.
+// [CR-01] Rollout JSONL path: $CODEX_HOME/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl; CODEX_HOME defaults to ~/.codex
+fn todays_sessions_dir() -> Option<PathBuf> {
+    let home = codex_home()?;
+    let now = chrono::Local::now();
+    Some(home.join(now.format("sessions/%Y/%m/%d").to_string()))
+}
+
+/// Pick a rollout file in `dir` whose mtime is ≥ `spawn_time` and
+/// hasn't been claimed yet. Used as the initial-attribution heuristic
+/// when the watcher starts: there may already be a fresh file from a
+/// race between PTY spawn and the watcher's first notify event.
+fn find_unclaimed_rollout(
+    dir: &Path,
+    spawn_time: SystemTime,
+    claimed: &std::collections::HashSet<PathBuf>,
+) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut best: Option<(PathBuf, SystemTime)> = None;
+    for ent in entries.flatten() {
+        let path = ent.path();
+        if claimed.contains(&path) {
+            continue;
+        }
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        if !name.starts_with("rollout-") || !name.ends_with(".jsonl") {
+            continue;
+        }
+        // A transient stat failure (file rolling over on a slow FS,
+        // ENOENT mid-iteration) must not abort attribution for the
+        // whole directory — only skip this entry.
+        let mtime = match ent.metadata().and_then(|m| m.modified()) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        if mtime < spawn_time {
+            continue;
+        }
+        match &best {
+            None => best = Some((path, mtime)),
+            Some((_, prev)) if mtime > *prev => best = Some((path, mtime)),
+            _ => {}
+        }
+    }
+    best.map(|(p, _)| p)
+}
+
+/// Start a watcher that tails the rollout file for `session_id` and
+/// emits normalized events into `observability.jsonl`. Returns a
+/// handle that, when dropped, stops the watcher.
+// [CR-02] notify-based watcher: find_unclaimed_rollout -> wait_for_new_rollout -> tail_rollout; handle inserted before spawn to prevent start/stop race
+pub fn start_codex_rollout_watcher(
+    app: tauri::AppHandle,
+    session_id: String,
+    spawn_time: SystemTime,
+) -> CodexRolloutHandle {
+    // Build the channel and the handle *before* spawning so the
+    // caller can put the handle into its registry before the watcher
+    // task gets a chance to run. Without this ordering, a respawn
+    // that calls stop immediately after start can race past an empty
+    // map and leave the new watcher running unsupervised.
+    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+    let session_id_for_task = session_id.clone();
+    let app_for_task = app.clone();
+    tokio::spawn(async move {
+        if let Err(e) =
+            run_watcher(app_for_task.clone(), session_id_for_task.clone(), spawn_time, stop_rx)
+                .await
+        {
+            record_backend_event(
+                &app_for_task,
+                "WARN",
+                "codex.rollout",
+                Some(&session_id_for_task),
+                "codex.rollout.watcher_failed",
+                "Codex rollout watcher exited with error",
+                serde_json::json!({ "error": e }),
+            );
+        }
+    });
+    let _ = session_id; // kept for symmetry with future logging hooks
+    CodexRolloutHandle {
+        stop_tx: Mutex::new(Some(stop_tx)),
+    }
+}
+
+pub struct CodexRolloutHandle {
+    stop_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+}
+
+impl CodexRolloutHandle {
+    pub async fn stop(&self) {
+        if let Some(tx) = self.stop_tx.lock().await.take() {
+            let _ = tx.send(());
+        }
+    }
+}
+
+/// App-state registry of active Codex rollout watchers, keyed by
+/// claude-tabs session id (NOT the Codex conversation id, which we
+/// don't know until the rollout file is attributed).
+#[derive(Default)]
+pub struct CodexRolloutState {
+    watchers: std::sync::Mutex<HashMap<String, Arc<CodexRolloutHandle>>>,
+}
+
+// [CR-03] start_codex_rollout/stop_codex_rollout: CodexRolloutState registry keyed by session_id; handle inserted before spawn for stop-race safety
+#[tauri::command]
+pub async fn start_codex_rollout(
+    session_id: String,
+    state: tauri::State<'_, CodexRolloutState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    let spawn_time = SystemTime::now();
+    // Insert the handle into the registry *before* the watcher task
+    // gets to run. tokio::spawn doesn't promise that the spawned
+    // future is suspended before the calling fn returns; serializing
+    // through the lock here means a follow-up stop_codex_rollout call
+    // sees the new handle instead of an empty slot.
+    let handle = Arc::new(start_codex_rollout_watcher(
+        app.clone(),
+        session_id.clone(),
+        spawn_time,
+    ));
+    let prior = {
+        let mut map = state
+            .watchers
+            .lock()
+            .map_err(|e| format!("watcher state poisoned: {e}"))?;
+        map.insert(session_id.clone(), handle)
+    };
+    if let Some(prev) = prior {
+        // Best-effort stop of any prior watcher for the same session
+        // (respawn case). Drop our reference; the spawned task ends.
+        let p = prev.clone();
+        tauri::async_runtime::spawn(async move { p.stop().await });
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn stop_codex_rollout(
+    session_id: String,
+    state: tauri::State<'_, CodexRolloutState>,
+) -> Result<(), String> {
+    let handle = {
+        let mut map = state
+            .watchers
+            .lock()
+            .map_err(|e| format!("watcher state poisoned: {e}"))?;
+        map.remove(&session_id)
+    };
+    if let Some(h) = handle {
+        h.stop().await;
+    }
+    Ok(())
+}
+
+async fn run_watcher(
+    app: tauri::AppHandle,
+    session_id: String,
+    spawn_time: SystemTime,
+    mut stop_rx: tokio::sync::oneshot::Receiver<()>,
+) -> Result<(), String> {
+    let dir = todays_sessions_dir().ok_or("could not resolve $CODEX_HOME/sessions/today")?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("create rollout dir: {e}"))?;
+
+    let claimed: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+
+    // Try to attribute an existing fresh rollout first (handles the
+    // race where Codex creates the file before our watcher arms).
+    let file_path = match find_unclaimed_rollout(&dir, spawn_time, &claimed) {
+        Some(p) => Some(p),
+        None => wait_for_new_rollout(&dir, spawn_time, &mut stop_rx).await?,
+    };
+    let file_path = match file_path {
+        Some(p) => p,
+        None => return Ok(()), // stop signaled
+    };
+
+    record_backend_event(
+        &app,
+        "DEBUG",
+        "codex.rollout",
+        Some(&session_id),
+        "codex.rollout.attributed",
+        "Attributed Codex rollout file to session",
+        serde_json::json!({ "path": file_path.to_string_lossy() }),
+    );
+
+    tail_rollout(&app, &session_id, &file_path, &mut stop_rx).await
+}
+
+/// Block until either (a) a new rollout-*.jsonl appears in `dir` with
+/// mtime ≥ spawn_time, or (b) `stop_rx` resolves. Returns Some(path) or
+/// None on stop.
+async fn wait_for_new_rollout(
+    dir: &Path,
+    spawn_time: SystemTime,
+    stop_rx: &mut tokio::sync::oneshot::Receiver<()>,
+) -> Result<Option<PathBuf>, String> {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(ev) = res {
+            if matches!(ev.kind, EventKind::Create(_) | EventKind::Modify(_)) {
+                let _ = tx.send(());
+            }
+        }
+    })
+    .map_err(|e| format!("notify watcher: {e}"))?;
+    watcher
+        .watch(dir, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("notify watch {dir:?}: {e}"))?;
+
+    let claimed = std::collections::HashSet::new();
+    loop {
+        // Re-check on every signal — a single Create event may not
+        // guarantee the file is fully created when we read.
+        if let Some(p) = find_unclaimed_rollout(dir, spawn_time, &claimed) {
+            return Ok(Some(p));
+        }
+        tokio::select! {
+            recv = rx.recv() => {
+                // None means the watcher's sender was dropped; without
+                // it we cannot make progress, so bail rather than spin.
+                if recv.is_none() {
+                    return Err("notify watcher closed before rollout file appeared".into());
+                }
+                continue;
+            }
+            _ = &mut *stop_rx => return Ok(None),
+        }
+    }
+}
+
+async fn tail_rollout(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    path: &Path,
+    stop_rx: &mut tokio::sync::oneshot::Receiver<()>,
+) -> Result<(), String> {
+    let file = tokio::fs::File::open(path)
+        .await
+        .map_err(|e| format!("open rollout {path:?}: {e}"))?;
+    let mut reader = BufReader::new(file);
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
+    let watch_path = path.to_path_buf();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+        if let Ok(ev) = res {
+            if matches!(ev.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+                let _ = tx.send(());
+            }
+        }
+    })
+    .map_err(|e| format!("notify watcher: {e}"))?;
+    watcher
+        .watch(&watch_path, RecursiveMode::NonRecursive)
+        .map_err(|e| format!("notify watch {watch_path:?}: {e}"))?;
+
+    let app_arc = Arc::new(app.clone());
+    loop {
+        // Drain whatever is currently readable.
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line).await {
+                Ok(0) => break, // EOF; wait for more
+                Ok(_) => {
+                    handle_rollout_line(&app_arc, session_id, line.trim_end());
+                }
+                Err(e) => {
+                    return Err(format!("read rollout: {e}"));
+                }
+            }
+        }
+        tokio::select! {
+            _ = rx.recv() => continue,
+            _ = &mut *stop_rx => return Ok(()),
+        }
+    }
+}
+
+fn handle_rollout_line(app: &tauri::AppHandle, session_id: &str, line: &str) {
+    if line.is_empty() {
+        return;
+    }
+    let parsed: RolloutLine = match serde_json::from_str(line) {
+        Ok(p) => p,
+        Err(e) => {
+            record_backend_event(
+                app,
+                "WARN",
+                "codex.rollout",
+                Some(session_id),
+                "codex.rollout.parse_failed",
+                "Failed to parse rollout line",
+                serde_json::json!({ "error": e.to_string(), "len": line.len() }),
+            );
+            return;
+        }
+    };
+    emit_normalized(app, session_id, &parsed);
+}
+
+/// Translate a `RolloutItem` into one (or more) `record_backend_event`
+/// calls. The taxonomy mirrors what tap classifier emits for Claude.
+fn emit_normalized(app: &tauri::AppHandle, session_id: &str, parsed: &RolloutLine) {
+    let ts = parsed.timestamp.clone().unwrap_or_default();
+    match parsed.kind.as_str() {
+        "session_meta" => {
+            let id = parsed.payload.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let cwd = parsed
+                .payload
+                .get("cwd")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let cli_version = parsed
+                .payload
+                .get("cli_version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.session_started",
+                "Codex session started",
+                serde_json::json!({
+                    "ts": ts,
+                    "codexSessionId": id,
+                    "cwd": cwd,
+                    "cliVersion": cli_version,
+                }),
+            );
+        }
+        "turn_context" => {
+            record_backend_event(
+                app,
+                "DEBUG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.turn_context",
+                "Turn context",
+                serde_json::json!({
+                    "ts": ts,
+                    "payload": &parsed.payload,
+                }),
+            );
+        }
+        "event_msg" => emit_event_msg(app, session_id, &ts, &parsed.payload),
+        "response_item" => emit_response_item(app, session_id, &ts, &parsed.payload),
+        "compacted" => {
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.compacted",
+                "Conversation compacted",
+                serde_json::json!({ "ts": ts, "payload": &parsed.payload }),
+            );
+        }
+        other => {
+            record_backend_event(
+                app,
+                "DEBUG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.rollout.unknown_kind",
+                "Unknown rollout item type",
+                serde_json::json!({ "ts": ts, "kind": other }),
+            );
+        }
+    }
+}
+
+fn emit_event_msg(app: &tauri::AppHandle, session_id: &str, ts: &str, payload: &Value) {
+    let kind = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    match kind {
+        "token_count" => {
+            // payload.info has total_token_usage and last_token_usage,
+            // each with input_tokens, cached_input_tokens, output_tokens,
+            // reasoning_output_tokens, total_tokens.
+            let info = payload.get("info").cloned().unwrap_or_default();
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.token_count",
+                "Token usage update",
+                serde_json::json!({ "ts": ts, "info": info }),
+            );
+        }
+        _ => {
+            record_backend_event(
+                app,
+                "DEBUG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.event_msg",
+                kind,
+                serde_json::json!({ "ts": ts, "payload": payload }),
+            );
+        }
+    }
+}
+
+fn emit_response_item(app: &tauri::AppHandle, session_id: &str, ts: &str, payload: &Value) {
+    let kind = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
+    match kind {
+        "function_call" => {
+            let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let call_id = payload.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.tool_call_start",
+                name,
+                serde_json::json!({
+                    "ts": ts,
+                    "callId": call_id,
+                    "name": name,
+                    "arguments": payload.get("arguments"),
+                }),
+            );
+        }
+        "function_call_output" => {
+            let call_id = payload.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.tool_call_complete",
+                "tool result",
+                serde_json::json!({
+                    "ts": ts,
+                    "callId": call_id,
+                    "output": payload.get("output"),
+                }),
+            );
+        }
+        "message" => {
+            let role = payload.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            record_backend_event(
+                app,
+                "DEBUG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.message",
+                role,
+                serde_json::json!({ "ts": ts, "payload": payload }),
+            );
+        }
+        _ => {
+            record_backend_event(
+                app,
+                "DEBUG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.response_item",
+                kind,
+                serde_json::json!({ "ts": ts, "payload": payload }),
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_session_meta_line() {
+        let line = r#"{"timestamp":"2025-11-18T09:40:36.766Z","type":"session_meta","payload":{"id":"019a9656-691d-7ff3-890e-3e6678ed46d8","cwd":"/proj","cli_version":"0.58.0"}}"#;
+        let parsed: RolloutLine = serde_json::from_str(line).unwrap();
+        assert_eq!(parsed.kind, "session_meta");
+        assert_eq!(parsed.payload.get("id").and_then(|v| v.as_str()), Some("019a9656-691d-7ff3-890e-3e6678ed46d8"));
+    }
+
+    #[test]
+    fn parses_token_count_event() {
+        let line = r#"{"timestamp":"2025-11-18T09:50:46.482Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":50,"output_tokens":20,"reasoning_output_tokens":10,"total_tokens":120}}}}"#;
+        let parsed: RolloutLine = serde_json::from_str(line).unwrap();
+        assert_eq!(parsed.kind, "event_msg");
+        let info = parsed.payload.get("info").unwrap();
+        assert_eq!(
+            info.get("total_token_usage")
+                .and_then(|t| t.get("total_tokens"))
+                .and_then(|v| v.as_i64()),
+            Some(120)
+        );
+    }
+
+    #[test]
+    fn find_unclaimed_rollout_picks_newest_after_spawn() {
+        let tmp = std::env::temp_dir().join(format!("ct-rollout-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        // Write a file that *predates* spawn time. Setting mtime via
+        // std::fs::File::set_modified (Rust 1.75+).
+        let old_path = tmp.join("rollout-2025-01-01T00-00-00-old.jsonl");
+        std::fs::write(&old_path, b"").unwrap();
+        let old_time = SystemTime::now() - std::time::Duration::from_secs(3600);
+        let file = std::fs::OpenOptions::new().write(true).open(&old_path).unwrap();
+        let _ = file.set_modified(old_time);
+
+        let spawn = SystemTime::now() - std::time::Duration::from_secs(60);
+        std::fs::write(tmp.join("rollout-2025-11-18T09-40-36-new.jsonl"), b"").unwrap();
+        let claimed = std::collections::HashSet::new();
+        let picked = find_unclaimed_rollout(&tmp, spawn, &claimed).expect("should find new file");
+        assert_eq!(
+            picked.file_name().and_then(|s| s.to_str()),
+            Some("rollout-2025-11-18T09-40-36-new.jsonl")
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+}

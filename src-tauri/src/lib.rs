@@ -1,7 +1,9 @@
 mod commands;
+mod cli_adapter;
 pub mod discovery;
 mod observability;
 mod path_utils;
+mod port;
 mod proxy;
 mod pty;
 mod session;
@@ -178,6 +180,7 @@ pub fn run() {
         .manage(Arc::new(Mutex::new(TapServerState::new())))
         .manage(pty::PtyState::default())
         .manage(ProxyState::new())
+        .manage(observability::codex_rollout::CodexRolloutState::default())
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
             commands::close_session,
@@ -251,18 +254,25 @@ pub fn run() {
             tap_server::start_tap_server,
             tap_server::stop_tap_server,
             proxy::start_api_proxy,
-            proxy::update_provider_config,
-            proxy::bind_session_provider,
-            proxy::unbind_session_provider,
-            proxy::codex_login,
-            proxy::codex_logout,
-            proxy::codex_auth_status,
             proxy::update_system_prompt_rules,
             proxy::get_rule_match_counts,
-            proxy::set_compression_enabled,
-            proxy::get_compression_enabled,
             proxy::start_traffic_log,
             proxy::stop_traffic_log,
+            commands::detect_codex_cli,
+            commands::check_codex_cli_version,
+            commands::discover_codex_models,
+            commands::discover_codex_cli_options,
+            commands::discover_codex_features,
+            commands::discover_codex_mcp_servers,
+            commands::discover_codex_skills,
+            commands::discover_codex_slash_commands,
+            cli_adapter::build_cli_spawn,
+            cli_adapter::cli_launch_options,
+            observability::codex_rollout::start_codex_rollout,
+            observability::codex_rollout::stop_codex_rollout,
+            port::port_skill,
+            port::port_memory,
+            port::port_mcp,
             pty::pty_spawn,
             pty::pty_read,
             pty::pty_write,

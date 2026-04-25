@@ -12,6 +12,7 @@ import {
   type PermissionMode,
   DEFAULT_SESSION_CONFIG,
   ANTHROPIC_EFFORTS,
+  ANTHROPIC_MODELS,
 } from "../../types/session";
 import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning, IconSkull, IconBulldozer, IconDocument } from "../Icons/Icons";
 import { PillGroup } from "../PillGroup/PillGroup";
@@ -57,7 +58,6 @@ export function SessionLauncher() {
   const commandUsage = useSettingsStore((s) => s.commandUsage);
   const savedPrompts = useSettingsStore((s) => s.savedPrompts);
   const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
-  const providerConfig = useSettingsStore((s) => s.providerConfig);
 
   // When resuming, use session-specific settings from lastConfig (set by handleConfigure);
   // otherwise savedDefaults (explicit "Save defaults") takes priority over lastConfig.
@@ -181,37 +181,39 @@ export function SessionLauncher() {
     updateConfig("permissionMode", value ?? "default");
   }, [updateConfig]);
 
-  const handleProviderChange = useCallback((value: string | null) => {
-    // Reset model and effort when switching providers — the old values may be invalid
-    setConfig((prev) => ({ ...prev, providerId: value, model: null, effort: null }));
-  }, []);
+  // Model + effort options come from the active CLI's adapter. Claude
+  // is hard-coded for the no-binary case; Codex is fetched from the
+  // running binary's `codex debug models`. Effects refresh when `cli`
+  // changes.
+  const [adapterModels, setAdapterModels] = useState<Array<{ value: string; label: string }>>([]);
+  const [adapterEfforts, setAdapterEfforts] = useState<Array<{ value: string; label: string }>>([]);
 
-  const showProviderSelector = providerConfig.providers.length > 1;
+  useEffect(() => {
+    let cancelled = false;
+    if (config.cli === "claude") {
+      setAdapterModels(ANTHROPIC_MODELS.map((m) => ({ value: m.id, label: m.id })));
+      setAdapterEfforts(ANTHROPIC_EFFORTS.map((e) => ({ value: e.value, label: e.label })));
+      return () => { cancelled = true; };
+    }
+    invoke<{ models: Array<{ id: string; displayName: string }>; effortLevels: Array<{ id: string; displayName: string }> }>(
+      "cli_launch_options",
+      { cli: config.cli }
+    )
+      .then((opts) => {
+        if (cancelled) return;
+        setAdapterModels(opts.models.map((m) => ({ value: m.id, label: m.displayName || m.id })));
+        setAdapterEfforts(opts.effortLevels.map((e) => ({ value: e.id, label: e.displayName || e.id })));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAdapterModels([]);
+        setAdapterEfforts([]);
+      });
+    return () => { cancelled = true; };
+  }, [config.cli]);
 
-  // Derive model and effort options from the selected provider
-  const selectedProviderId = config.providerId ?? providerConfig.defaultProviderId;
-  const selectedProvider = useMemo(() =>
-    providerConfig.providers.find((p) => p.id === selectedProviderId) ?? providerConfig.providers[0],
-    [providerConfig.providers, selectedProviderId]
-  );
-
-  const modelOptions = useMemo(() => {
-    if (!selectedProvider) return [];
-    // Always show Claude model names — the CLI is always Claude Code.
-    // Non-Anthropic providers rewrite models in the proxy, not the CLI args.
-    const anthropic = providerConfig.providers.find((p) => p.id === "anthropic");
-    const models = selectedProvider.id === "anthropic"
-      ? selectedProvider.knownModels
-      : (anthropic?.knownModels ?? []);
-    return models.map((m) => ({ value: m.id, label: m.id }));
-  }, [selectedProvider, providerConfig.providers]);
-
-  const effortOptions = useMemo(() => {
-    const isCodex = selectedProvider?.kind === "openai_codex";
-    return ANTHROPIC_EFFORTS
-      .filter((e) => !(isCodex && e.value === "max"))
-      .map((e) => ({ value: e.value, label: e.label }));
-  }, [selectedProvider?.kind]);
+  const modelOptions = adapterModels;
+  const effortOptions = adapterEfforts;
 
   const handleModelSelect = useCallback((value: string) => {
     updateConfig("model", value || null);
@@ -309,30 +311,9 @@ export function SessionLauncher() {
         return;
       }
     }
-    // [PR-02] Non-utility Codex launches require an authenticated provider session
-    const selectedProviderId = launchConfig.providerId ?? providerConfig.defaultProviderId;
-    const selectedProvider = providerConfig.providers.find((p) => p.id === selectedProviderId);
-    if (selectedProvider?.kind === "openai_codex" && !isNonSessionCommand) {
-      try {
-        const status = await invoke<{ logged_in: boolean }>("codex_auth_status");
-        if (!status.logged_in) {
-          setLaunchError("OpenAI login required. Log in via Settings > Providers.");
-          return;
-        }
-      } catch {
-        setLaunchError("Failed to check Codex auth status");
-        return;
-      }
-    }
     const finalConfig: SessionConfig = isNonSessionCommand
       ? { ...launchConfig, runMode: true, model: null, permissionMode: "default", effort: null, dangerouslySkipPermissions: false, projectDir: false }
       : { ...launchConfig, runMode: false };
-    // For non-Anthropic providers, ensure a model is set (CLI needs a Claude model name)
-    if (!isNonSessionCommand && selectedProvider && selectedProvider.id !== "anthropic" && !finalConfig.model) {
-      const anthropic = providerConfig.providers.find((p) => p.id === "anthropic");
-      const firstModel = anthropic?.knownModels[0]?.id;
-      if (firstModel) finalConfig.model = firstModel;
-    }
     const storedName = finalConfig.resumeSession
       ? useSettingsStore.getState().sessionNames[finalConfig.resumeSession]
       : undefined;
@@ -425,12 +406,14 @@ export function SessionLauncher() {
       <div className="launcher-overlay" onClick={dismissLauncher}>
         <div className="launcher" onClick={(e) => e.stopPropagation()}>
           <div className="launcher-error-content">
-            <h2>Claude CLI Not Found</h2>
+            <h2>No CLI installed</h2>
             <p className="launcher-error-msg">
-              Claude Code must be installed to use Claude Tabs.
+              Claude Tabs needs at least one of <code>claude</code> (Claude Code) or
+              <code> codex</code> (OpenAI Codex) on your <code>$PATH</code>.
             </p>
             <p>
-              Install it with: <code>npm install -g @anthropic-ai/claude-code</code>
+              Claude Code: <code>npm install -g @anthropic-ai/claude-code</code><br />
+              Codex: see <code>github.com/openai/codex</code>
             </p>
             <button className="btn-secondary launcher-error-close" onClick={dismissLauncher}>
               Close
@@ -505,19 +488,29 @@ export function SessionLauncher() {
           </div>
         )}
 
+        {/* CLI selector pills — choose Claude Code or Codex per session */}
+        <div className="launcher-cli-row">
+          <button
+            type="button"
+            className={`launcher-cli-pill${config.cli === "claude" ? " launcher-cli-pill--active" : ""}`}
+            onClick={() => updateConfig("cli", "claude")}
+            disabled={isNonSessionCommand}
+          >
+            Claude Code
+          </button>
+          <button
+            type="button"
+            className={`launcher-cli-pill${config.cli === "codex" ? " launcher-cli-pill--active" : ""}`}
+            onClick={() => updateConfig("cli", "codex")}
+            disabled={isNonSessionCommand}
+          >
+            Codex
+          </button>
+        </div>
+
         {/* Pill selectors — inline, wrapping */}
         <div className={`launcher-pills-section${isNonSessionCommand ? " launcher-selects-disabled" : ""}`}>
           <div className="launcher-pills-row">
-            {showProviderSelector && (
-              <Dropdown
-                className="launcher-select"
-                value={config.providerId ?? providerConfig.defaultProviderId}
-                onChange={(v) => handleProviderChange(v || null)}
-                disabled={isNonSessionCommand}
-                ariaLabel="Provider"
-                options={providerConfig.providers.map((p) => ({ value: p.id, label: p.name }))}
-              />
-            )}
             <span className="launcher-pill-icon" title="Model"><IconModelDiamond size={13} /></span>
             <Dropdown
               className="launcher-select"

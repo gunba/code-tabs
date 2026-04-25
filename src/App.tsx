@@ -442,7 +442,7 @@ export default function App() {
               return (
                 <div
                   key={session.id}
-                  className={`tab${isActive ? " tab-active" : ""}${isDead ? " tab-dead" : ""}${session.config.runMode ? " tab-run" : ""}${dragOverTabId === session.id ? " tab-drag-over" : ""}${settledTabs.get(session.id) === "idle" ? " tab-settled-idle" : ""}${settledTabs.get(session.id) === "actionNeeded" || settledTabs.get(session.id) === "waitingPermission" ? " tab-settled-action" : ""}`}
+                  className={`tab tab-cli-${session.config.cli}${isActive ? " tab-active" : ""}${isDead ? " tab-dead" : ""}${session.config.runMode ? " tab-run" : ""}${dragOverTabId === session.id ? " tab-drag-over" : ""}${settledTabs.get(session.id) === "idle" ? " tab-settled-idle" : ""}${settledTabs.get(session.id) === "actionNeeded" || settledTabs.get(session.id) === "waitingPermission" ? " tab-settled-action" : ""}`}
                   role="button"
                   tabIndex={0}
                   draggable
