@@ -20,6 +20,7 @@ interface McpServerEntry {
 }
 
 type Transport = "stdio" | "sse" | "http";
+type CopyMode = "missing" | "overwrite";
 
 interface FlatServer {
   name: string;
@@ -89,11 +90,48 @@ function buildEntry(form: FormState, cli: PaneComponentProps["cli"]): McpServerE
   // sse or http
   const entry: McpServerEntry = { url: form.url.trim() };
   if (cli === "claude") entry.type = form.transport as "sse" | "http";
+  else if (form.transport === "sse") entry.transport = "sse";
   const headers = parseKvPairs(form.headerText);
   if (Object.keys(headers).length > 0) {
     if (cli === "codex") entry.http_headers = headers;
     else entry.headers = headers;
   }
+  return entry;
+}
+
+function normalizeForCli(server: McpServerEntry, cli: PaneComponentProps["cli"]): McpServerEntry {
+  const transport = detectTransport(server);
+  if (transport === "stdio") {
+    const entry: McpServerEntry = { ...server };
+    delete entry.type;
+    delete entry.transport;
+    delete entry.url;
+    delete entry.headers;
+    delete entry.http_headers;
+    return entry;
+  }
+
+  const headers = server.headers ?? server.http_headers;
+  const entry: McpServerEntry = { ...server, url: server.url };
+  delete entry.command;
+  delete entry.args;
+  delete entry.env;
+
+  if (cli === "codex") {
+    delete entry.type;
+    delete entry.headers;
+    if (transport === "sse") entry.transport = "sse";
+    else delete entry.transport;
+    if (headers && Object.keys(headers).length > 0) entry.http_headers = headers;
+    else delete entry.http_headers;
+  } else {
+    delete entry.transport;
+    delete entry.http_headers;
+    entry.type = transport === "sse" ? "sse" : "http";
+    if (headers && Object.keys(headers).length > 0) entry.headers = headers;
+    else delete entry.headers;
+  }
+
   return entry;
 }
 
@@ -128,8 +166,11 @@ export function McpPane({ scope, projectDir, cli, onStatus }: PaneComponentProps
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>({ ...EMPTY_FORM });
   const [formSeedKey, setFormSeedKey] = useState(0);
+  const [copyMode, setCopyMode] = useState<CopyMode>("missing");
 
   const workingDir = scope === "user" ? "" : projectDir;
+  const peerCli = cli === "codex" ? "claude" : "codex";
+  const peerName = peerCli === "codex" ? "Codex" : "Claude";
 
   const loadServers = useCallback(async () => {
     try {
@@ -218,6 +259,41 @@ export function McpPane({ scope, projectDir, cli, onStatus }: PaneComponentProps
     setFormSeedKey((k) => k + 1);
   }, []);
 
+  const handleCopyFromPeer = useCallback(async () => {
+    try {
+      const raw = await invoke<string>(peerCli === "codex" ? "read_codex_mcp_servers" : "read_mcp_servers", {
+        scope,
+        workingDir,
+      });
+      const source = (raw ? JSON.parse(raw) : {}) as Record<string, McpServerEntry>;
+      const sourceEntries = Object.entries(source);
+      if (sourceEntries.length === 0) {
+        onStatus({ text: `No ${peerName} MCP servers found`, type: "error" });
+        return;
+      }
+      const updated: Record<string, McpServerEntry> = { ...servers };
+      let copied = 0;
+      let skipped = 0;
+      for (const [name, server] of sourceEntries) {
+        if (copyMode === "missing" && Object.prototype.hasOwnProperty.call(updated, name)) {
+          skipped += 1;
+          continue;
+        }
+        updated[name] = normalizeForCli(server, cli);
+        copied += 1;
+      }
+      await saveServers(updated);
+      setServers(updated);
+      onStatus({
+        text: `Copied ${copied} MCP server${copied === 1 ? "" : "s"} from ${peerName}${skipped ? ` (${skipped} skipped)` : ""}`,
+        type: "success",
+      });
+      setTimeout(() => onStatus(null), 2000);
+    } catch (err) {
+      onStatus({ text: `Copy failed: ${err}`, type: "error" });
+    }
+  }, [peerCli, peerName, scope, workingDir, servers, copyMode, cli, saveServers, onStatus]);
+
   const flatServers: FlatServer[] = Object.entries(servers).map(([name, server]) => ({ name, server }));
 
   return (
@@ -275,9 +351,24 @@ export function McpPane({ scope, projectDir, cli, onStatus }: PaneComponentProps
       </div>
 
       {!showForm && (
-        <button className="mcp-pane-add" onClick={handleAdd}>
-          + Add Server
-        </button>
+        <div className="mcp-pane-actions">
+          <button className="mcp-pane-add" onClick={handleAdd}>
+            + Add Server
+          </button>
+          <button className="mcp-pane-copy" onClick={handleCopyFromPeer}>
+            Copy from {peerName}
+          </button>
+          <Dropdown
+            className="mcp-pane-copy-mode"
+            value={copyMode}
+            onChange={(v) => setCopyMode(v as CopyMode)}
+            ariaLabel="MCP copy mode"
+            options={[
+              { value: "missing", label: "Missing only" },
+              { value: "overwrite", label: "Overwrite" },
+            ]}
+          />
+        </div>
       )}
 
       {showForm && (
@@ -311,6 +402,7 @@ export function McpPane({ scope, projectDir, cli, onStatus }: PaneComponentProps
               options={cli === "codex"
                 ? [
                     { value: "stdio", label: "stdio" },
+                    { value: "sse", label: "sse" },
                     { value: "http", label: "http" },
                   ]
                 : [

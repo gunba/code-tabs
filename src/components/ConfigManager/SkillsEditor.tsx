@@ -37,11 +37,14 @@ export function SkillsEditor({ scope, projectDir, cli, onStatus }: PaneComponent
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [seedKey, setSeedKey] = useState(0);
+  const [copying, setCopying] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const commandUsage = useSettingsStore((s) => s.commandUsage);
 
   const workingDir = scope === "user" ? "" : projectDir;
+  const peerCli = cli === "codex" ? "claude" : "codex";
+  const peerName = peerCli === "codex" ? "Codex" : "Claude";
 
   const loadEntries = useCallback(async () => {
     try {
@@ -179,6 +182,31 @@ export function SkillsEditor({ scope, projectDir, cli, onStatus }: PaneComponent
     }
   }, [selected, isNew, scope, workingDir, cli, loadEntries, onStatus]);
 
+  const handleCopyFromPeer = useCallback(async () => {
+    setCopying(true);
+    try {
+      const report = await invoke<{ copied: string[]; skipped: string[] }>("copy_cli_skills", {
+        scope,
+        workingDir,
+        sourceCli: peerCli,
+        destCli: cli,
+        overwrite: false,
+      });
+      await loadEntries();
+      const copied = report.copied.length;
+      const skipped = report.skipped.length;
+      onStatus({
+        text: `Copied ${copied} skill${copied === 1 ? "" : "s"} from ${peerName}${skipped ? ` (${skipped} skipped)` : ""}`,
+        type: "success",
+      });
+      setTimeout(() => onStatus(null), 2000);
+    } catch (err) {
+      onStatus({ text: `Copy failed: ${err}`, type: "error" });
+    } finally {
+      setCopying(false);
+    }
+  }, [scope, workingDir, peerCli, cli, peerName, loadEntries, onStatus]);
+
   const dirty = isNew ? newName.trim() !== "" && content !== "" : content !== savedContent;
 
   // Group entries: commands first, then skills.
@@ -235,6 +263,13 @@ export function SkillsEditor({ scope, projectDir, cli, onStatus }: PaneComponent
           onClick={() => { setSelected(NEW_SKILL); setNewName(""); }}
         >
           + new skill
+        </button>
+        <button
+          className="config-md-editor-item config-md-editor-copy"
+          onClick={handleCopyFromPeer}
+          disabled={copying}
+        >
+          Copy from {peerName}
         </button>
       </div>
 

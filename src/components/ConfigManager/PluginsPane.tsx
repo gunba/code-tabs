@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { formatTokenCount } from "../../lib/claude";
 import type { StatusMessage } from "../../lib/settingsSchema";
+import type { CliKind } from "../../types/session";
 import { Dropdown } from "../Dropdown/Dropdown";
 import "./PluginsPane.css";
 
@@ -36,6 +37,7 @@ interface PluginListResult {
 interface PluginsTabProps {
   visible: boolean;
   projectDir: string;
+  cli: CliKind;
   onStatus: (msg: StatusMessage | null) => void;
 }
 
@@ -96,7 +98,7 @@ function sortPlugins<T extends { pluginId?: string; name?: string; id?: string; 
 
 // [CM-16] CLI-driven plugin manager: single-pane, installed cards with toggle, marketplace grid
 
-export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: PluginsTabProps) {
+export function PluginsTab({ visible, projectDir, cli, onStatus }: PluginsTabProps) {
   const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
   const [available, setAvailable] = useState<AvailablePlugin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +117,15 @@ export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: Plugi
 
   const loadPlugins = useCallback(async () => {
     try {
+      if (cli === "codex") {
+        const result = await invoke<InstalledPlugin[]>("read_codex_plugins", { workingDir: projectDir });
+        setInstalled(result || []);
+        setAvailable([]);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
       const raw = await invoke<string>("plugin_list");
       let result: PluginListResult;
       try {
@@ -140,7 +151,7 @@ export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: Plugi
       }
     }
     setLoading(false);
-  }, []);
+  }, [cli, projectDir]);
 
   useEffect(() => {
     loadPlugins();
@@ -158,7 +169,7 @@ export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: Plugi
   const doPluginOp = useCallback(async (
     opName: string,
     pluginId: string,
-    op: () => Promise<string>,
+    op: () => Promise<unknown>,
   ) => {
     setPendingOp(pluginId);
     try {
@@ -173,21 +184,51 @@ export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: Plugi
   }, [loadPlugins, onStatus]);
 
   const handleInstall = useCallback((name: string) => {
+    if (cli === "codex") return;
     const scope = scopeFilter === "all" ? "user" : scopeFilter;
     doPluginOp("Install", name, () => invoke<string>("plugin_install", { name, scope }));
-  }, [doPluginOp, scopeFilter]);
+  }, [cli, doPluginOp, scopeFilter]);
 
-  const handleUninstall = useCallback((name: string) => {
-    doPluginOp("Uninstall", name, () => invoke<string>("plugin_uninstall", { name }));
-  }, [doPluginOp]);
+  const handleUninstall = useCallback((plugin: InstalledPlugin) => {
+    if (cli === "codex") {
+      const scope = plugin.scope || "user";
+      doPluginOp("Remove", plugin.id, () => invoke("remove_codex_plugin_config", {
+        id: plugin.id,
+        scope,
+        workingDir: scope === "project" ? projectDir : "",
+      }));
+      return;
+    }
+    doPluginOp("Uninstall", plugin.id, () => invoke<string>("plugin_uninstall", { name: plugin.id }));
+  }, [cli, doPluginOp, projectDir]);
 
-  const handleEnable = useCallback((name: string) => {
-    doPluginOp("Enable", name, () => invoke<string>("plugin_enable", { name }));
-  }, [doPluginOp]);
+  const handleEnable = useCallback((plugin: InstalledPlugin) => {
+    if (cli === "codex") {
+      const scope = plugin.scope || "user";
+      doPluginOp("Enable", plugin.id, () => invoke("set_codex_plugin_enabled", {
+        id: plugin.id,
+        scope,
+        workingDir: scope === "project" ? projectDir : "",
+        enabled: true,
+      }));
+      return;
+    }
+    doPluginOp("Enable", plugin.id, () => invoke<string>("plugin_enable", { name: plugin.id }));
+  }, [cli, doPluginOp, projectDir]);
 
-  const handleDisable = useCallback((name: string) => {
-    doPluginOp("Disable", name, () => invoke<string>("plugin_disable", { name }));
-  }, [doPluginOp]);
+  const handleDisable = useCallback((plugin: InstalledPlugin) => {
+    if (cli === "codex") {
+      const scope = plugin.scope || "user";
+      doPluginOp("Disable", plugin.id, () => invoke("set_codex_plugin_enabled", {
+        id: plugin.id,
+        scope,
+        workingDir: scope === "project" ? projectDir : "",
+        enabled: false,
+      }));
+      return;
+    }
+    doPluginOp("Disable", plugin.id, () => invoke<string>("plugin_disable", { name: plugin.id }));
+  }, [cli, doPluginOp, projectDir]);
 
   // Filter by scope, then sort: enabled first, then alphabetical
   const sortedInstalled = useMemo(() => {
@@ -283,7 +324,7 @@ export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: Plugi
                       <div className="plugin-tile-actions">
                         <button
                           className={`plugin-toggle-track${plugin.enabled ? " plugin-toggle-on" : ""}`}
-                          onClick={() => plugin.enabled ? handleDisable(plugin.id) : handleEnable(plugin.id)}
+                          onClick={() => plugin.enabled ? handleDisable(plugin) : handleEnable(plugin)}
                           disabled={!!pendingOp}
                           title={plugin.enabled ? "Disable" : "Enable"}
                         >
@@ -291,7 +332,7 @@ export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: Plugi
                         </button>
                         <button
                           className="hook-card-btn hook-card-btn-delete"
-                          onClick={() => handleUninstall(plugin.id)}
+                          onClick={() => handleUninstall(plugin)}
                           disabled={!!pendingOp}
                         >
                           Del
@@ -309,7 +350,7 @@ export function PluginsTab({ visible, projectDir: _projectDir, onStatus }: Plugi
       )}
 
       {/* Marketplace */}
-      {!error && (
+      {!error && cli === "claude" && (
         <div className="plugins-section">
           <div className="plugins-section-title">
             Marketplace

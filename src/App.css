@@ -129,13 +129,13 @@
 }
 
 .tab-cli-badge-claude {
-  color: #d4744a;
-  background: color-mix(in srgb, #d4744a 12%, transparent);
+  color: var(--cli-claude);
+  background: color-mix(in srgb, var(--cli-claude) 12%, transparent);
 }
 
 .tab-cli-badge-codex {
-  color: #10a37f;
-  background: color-mix(in srgb, #10a37f 12%, transparent);
+  color: var(--cli-codex);
+  background: color-mix(in srgb, var(--cli-codex) 12%, transparent);
 }
 
 /* ── Ctrl-held: unified blue top-bar + tint ──────────── */

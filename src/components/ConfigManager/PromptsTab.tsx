@@ -5,11 +5,12 @@ import { PillGroup } from "../PillGroup/PillGroup";
 import { IconClose } from "../Icons/Icons";
 import { applyRulesToText, generateRulesAndConflicts, classifyRule } from "../../lib/promptDiff";
 import type { GeneratedChangeset } from "../../lib/promptDiff";
-import type { SystemPromptRule } from "../../types/session";
+import type { CliKind, SystemPromptRule } from "../../types/session";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import "./PromptsTab.css";
 
 interface PromptsTabProps {
+  cli: CliKind;
   onStatus: (msg: StatusMessage | null) => void;
 }
 
@@ -217,7 +218,7 @@ const SUB_TABS: { value: "prompts" | "observed" | "rules"; label: string }[] = [
   { value: "rules", label: "Rules" },
 ];
 
-export function PromptsTab({ onStatus }: PromptsTabProps) {
+export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   const savedPrompts = useSettingsStore((s) => s.savedPrompts);
   const observedPrompts = useSettingsStore((s) => s.observedPrompts);
   const addSavedPrompt = useSettingsStore((s) => s.addSavedPrompt);
@@ -232,6 +233,10 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
 
   // Sub-tab navigation
   const [activeSubTab, setActiveSubTab] = useState<"prompts" | "observed" | "rules">("prompts");
+  const availableSubTabs = useMemo(
+    () => cli === "codex" ? SUB_TABS.filter((t) => t.value === "prompts") : SUB_TABS,
+    [cli],
+  );
 
   // My Prompts state
   const [selectedSavedPromptId, setSelectedSavedPromptId] = useState<string | null>(null);
@@ -262,7 +267,11 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
   useEffect(() => { setExpandedRuleId(null); }, [activeSubTab]);
 
   useEffect(() => {
-    if (activeSubTab !== "rules") return;
+    if (cli === "codex" && activeSubTab !== "prompts") setActiveSubTab("prompts");
+  }, [cli, activeSubTab]);
+
+  useEffect(() => {
+    if (cli !== "claude" || activeSubTab !== "rules") return;
     let cancelled = false;
     const fetch = () => {
       invoke<Record<string, number>>("get_rule_match_counts")
@@ -272,7 +281,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
     fetch();
     const id = window.setInterval(fetch, 2000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [activeSubTab]);
+  }, [cli, activeSubTab]);
 
   // Load saved prompt into editor. We only reseed (bump seedKey + remount the
   // inputs) when the underlying values genuinely differ from what's currently
@@ -454,7 +463,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
     <div className="prompts-tab">
       <div className="prompts-subtab-bar">
         <PillGroup
-          options={SUB_TABS}
+          options={availableSubTabs}
           selected={activeSubTab}
           onChange={(v) => v && setActiveSubTab(v)}
         />
@@ -515,7 +524,7 @@ export function PromptsTab({ onStatus }: PromptsTabProps) {
                   defaultValue={editText}
                   onInput={(e) => { setEditText(e.currentTarget.value); setDirty(true); }}
                   ref={textareaRef}
-                  placeholder="Enter your system prompt..."
+                  placeholder={cli === "codex" ? "Enter Codex developer instructions..." : "Enter your system prompt..."}
                   spellCheck={false}
                 />
                 <div className="prompts-editor-footer">

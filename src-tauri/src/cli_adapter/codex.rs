@@ -2,8 +2,9 @@
 //!
 //! Spawn-side: translate `SessionConfig` (Claude-shaped) into Codex CLI
 //! args. Codex's flag surface is intentionally narrower than Claude's
-//! (no `--allowedTools`, no `--system-prompt` flag — those live in
-//! `config.toml`/`AGENTS.md`), so this adapter passes through what
+//! (no `--allowedTools`, no `--system-prompt` flag). Prompt injection
+//! goes through Codex's `developer_instructions` config override; the
+//! adapter passes through what
 //! Codex understands and silently drops Claude-only fields.
 //!
 //! Discovery-side: defer to `commands::codex_cli` (runtime probes of the
@@ -94,6 +95,15 @@ impl CliAdapter for CodexAdapter {
             }
         }
 
+        // Codex exposes launch-time model-visible instructions as a config
+        // override, not as Claude's `--system-prompt`/`--append-system-prompt`
+        // flags. `developer_instructions` is additive to Codex's built-in
+        // developer messages, which is the closest supported equivalent.
+        if let Some(prompt) = codex_developer_instructions(cfg) {
+            args.push("-c".into());
+            args.push(format!("developer_instructions={}", quote_toml_value(prompt)));
+        }
+
         // Permission/sandbox mapping — locked. Document explicitly so
         // a future tightening of Codex defaults doesn't silently
         // weaken our `PermissionMode::PlanMode` translation.
@@ -154,9 +164,8 @@ impl CliAdapter for CodexAdapter {
         }
 
         // Claude-only fields silently dropped here:
-        //   system_prompt, append_system_prompt, allowed_tools,
-        //   disallowed_tools, mcp_config, max_budget, project_dir,
-        //   verbose, debug, session_id.
+        //   allowed_tools, disallowed_tools, mcp_config, max_budget,
+        //   project_dir, verbose, debug, session_id.
         // Codex equivalents live in ~/.codex/config.toml or AGENTS.md.
 
         let cwd = if cfg.working_dir.is_empty() {
@@ -264,6 +273,14 @@ impl CliAdapter for CodexAdapter {
     }
 }
 
+fn codex_developer_instructions(cfg: &SessionConfig) -> Option<&str> {
+    cfg.system_prompt
+        .as_deref()
+        .or(cfg.append_system_prompt.as_deref())
+        .map(str::trim)
+        .filter(|prompt| !prompt.is_empty())
+}
+
 /// Quote a value for inclusion in a TOML override (`-c key=value`). If
 /// the value parses as TOML on its own (e.g. an unquoted number or
 /// bool), Codex accepts it bare; we only need to quote strings.
@@ -275,7 +292,7 @@ fn quote_toml_value(v: &str) -> String {
         && !v.starts_with('[')
         && !v.starts_with('{');
     if needs_quote {
-        format!("\"{}\"", v.replace('"', "\\\""))
+        serde_json::to_string(v).unwrap_or_else(|_| format!("\"{}\"", v.replace('"', "\\\"")))
     } else {
         v.to_string()
     }
@@ -423,8 +440,26 @@ mod tests {
     }
 
     #[test]
+    fn prompt_maps_to_developer_instructions() {
+        let mut c = cfg();
+        c.system_prompt = Some("Be precise.\nUse short answers.".into());
+        assert_eq!(
+            codex_developer_instructions(&c),
+            Some("Be precise.\nUse short answers.")
+        );
+        assert_eq!(
+            format!(
+                "developer_instructions={}",
+                quote_toml_value(codex_developer_instructions(&c).unwrap())
+            ),
+            "developer_instructions=\"Be precise.\\nUse short answers.\""
+        );
+    }
+
+    #[test]
     fn quote_toml_value_quotes_strings_only() {
         assert_eq!(quote_toml_value("high"), "\"high\"");
+        assert_eq!(quote_toml_value("say \"hi\"\nnow"), "\"say \\\"hi\\\"\\nnow\"");
         assert_eq!(quote_toml_value("0.5"), "0.5");
         assert_eq!(quote_toml_value("true"), "true");
         assert_eq!(quote_toml_value("false"), "false");

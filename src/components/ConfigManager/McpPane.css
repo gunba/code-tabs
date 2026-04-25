@@ -22,7 +22,15 @@
 .mcp-pane-list::-webkit-scrollbar-track { background: transparent; }
 .mcp-pane-list::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 2px; }
 
-.mcp-pane-add {
+.mcp-pane-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.mcp-pane-add,
+.mcp-pane-copy {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -31,13 +39,21 @@
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s;
-  width: 100%;
-  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.mcp-pane-add:hover {
+.mcp-pane-add {
+  flex: 1;
+}
+
+.mcp-pane-add:hover,
+.mcp-pane-copy:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.mcp-pane-copy-mode {
+  min-width: 120px;
 }
 
 .mcp-server-name {

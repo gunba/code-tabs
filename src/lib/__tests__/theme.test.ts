@@ -20,6 +20,10 @@ describe("CLAUDE_THEME", () => {
       "accentBg",
       "accentSecondary",
       "accentTertiary",
+      "cliClaude",
+      "cliClaudeBg",
+      "cliCodex",
+      "cliCodexBg",
       "success",
       "warning",
       "error",
@@ -45,6 +49,11 @@ describe("CLAUDE_THEME", () => {
 
   it("accent color is Claude's Cowork clay", () => {
     expect(CLAUDE_THEME.colors.accent).toBe("#d4744a");
+  });
+
+  it("provider colors are centralized", () => {
+    expect(CLAUDE_THEME.colors.cliClaude).toBe("#d4744a");
+    expect(CLAUDE_THEME.colors.cliCodex).toBe("#39c5cf");
   });
 
   it("warm dark background (not blue-tinted)", () => {

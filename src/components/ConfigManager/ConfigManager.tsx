@@ -12,7 +12,6 @@ import { McpPane } from "./McpPane";
 import { AgentEditor } from "./AgentEditor";
 import { PromptsTab } from "./PromptsTab";
 import { SkillsEditor } from "./SkillsEditor";
-import { PortContentPane } from "./PortContentPane";
 import { Dropdown } from "../Dropdown/Dropdown";
 import { IconGear, IconDocument, IconHook, IconPuzzle, IconBot, IconSkill, IconBraces, IconClose, IconCircleFilled, IconServer } from "../Icons/Icons";
 import { RecordingPane } from "./RecordingPane";
@@ -22,7 +21,7 @@ import { useRuntimeStore } from "../../store/runtime";
 import type { CliKind } from "../../types/session";
 import "./ConfigManager.css";
 
-type Tab = "settings" | "envvars" | "claudemd" | "hooks" | "plugins" | "mcp" | "agents" | "prompts" | "skills" | "port" | "recording";
+type Tab = "settings" | "envvars" | "claudemd" | "hooks" | "plugins" | "mcp" | "agents" | "prompts" | "skills" | "recording";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <IconGear size={11} /> },
@@ -34,11 +33,10 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "agents", label: "Agents", icon: <IconBot size={11} /> },
   { id: "prompts", label: "Prompts", icon: <IconDocument size={11} /> },
   { id: "skills", label: "Skills & Commands", icon: <IconSkill size={11} /> },
-  { id: "port", label: "Port content", icon: <IconPuzzle size={11} /> },
   { id: "recording", label: "Observability", icon: <IconCircleFilled size={11} /> },
 ];
 
-// [DL-01] ConfigManager Claude/Codex switch (only when both installed); visibleTabs filtered per CLI (Codex hides envvars/plugins/agents/prompts; port hidden unless both installed); ThreePaneEditor + PaneComponentProps thread cli; SettingsPane TOML-aware for Codex; SettingsTab hides project-local for Codex; HooksPane CODEX_HOOK_EVENTS + remaps project-local->project on save
+// [DL-01] ConfigManager Claude/Codex switch (only when both installed); visibleTabs filtered per CLI (Codex hides envvars/Claude file-agents); shared panes own their copy/import actions; ThreePaneEditor + PaneComponentProps thread cli; SettingsPane TOML-aware for Codex; SettingsTab hides project-local for Codex; HooksPane CODEX_HOOK_EVENTS + remaps project-local->project on save
 // [CM-11] 11-tab config modal (84vw, max 1500px, 78vh), store-controlled active tab
 // [CM-05] Tab routing: editor tabs plus dedicated Plugins/Prompts/Providers/Recording panes; MCP/Agents/Skills use 2-col ThreePaneEditor
 // [CM-18] Inline SVG icons per tab — monochrome, cross-platform
@@ -76,12 +74,11 @@ export function ConfigManager() {
     () => TABS.filter((t) => {
       if (!debugBuild && t.id === "recording") return false;
       if (configCli === "codex") {
-        return !["envvars", "plugins", "agents", "prompts"].includes(t.id)
-          && (t.id !== "port" || (claudePath && codexPath));
+        return !["envvars", "agents"].includes(t.id);
       }
-      return t.id !== "port" || (claudePath && codexPath);
+      return true;
     }),
-    [debugBuild, configCli, claudePath, codexPath],
+    [debugBuild, configCli],
   );
 
   // Sync tab from store when opened with a specific tab
@@ -92,6 +89,7 @@ export function ConfigManager() {
     if (showConfigManager && requestedTabChanged) {
       const valid = visibleTabs.some((t) => t.id === showConfigManager);
       if (valid) setTab(showConfigManager as Tab);
+      else if (showConfigManager === "port") setTab("skills");
       else if (showConfigManager === "recording") setTab("settings");
     }
   }, [showConfigManager, visibleTabs]);
@@ -142,14 +140,14 @@ export function ConfigManager() {
           {availableCliKinds.length > 1 ? (
             <div className="config-cli-switch" role="tablist" aria-label="Configuration target">
               <button
-                className={`config-cli-switch-btn${configCli === "claude" ? " active" : ""}`}
+                className={`config-cli-switch-btn config-cli-switch-btn-claude${configCli === "claude" ? " active" : ""}`}
                 onClick={() => setConfigCli("claude")}
                 type="button"
               >
                 Claude
               </button>
               <button
-                className={`config-cli-switch-btn${configCli === "codex" ? " active" : ""}`}
+                className={`config-cli-switch-btn config-cli-switch-btn-codex${configCli === "codex" ? " active" : ""}`}
                 onClick={() => setConfigCli("codex")}
                 type="button"
               >
@@ -157,7 +155,7 @@ export function ConfigManager() {
               </button>
             </div>
           ) : (
-            <span className="config-cli-label">{configCli === "codex" ? "Codex" : "Claude"}</span>
+            <span className={`config-cli-label config-cli-label-${configCli}`}>{configCli === "codex" ? "Codex" : "Claude"}</span>
           )}
         </div>
         <div className="config-tabs">
@@ -203,8 +201,8 @@ export function ConfigManager() {
         {tab === "hooks" && (
           <ThreePaneEditor component={HooksPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="hooks" scopes={codexTwoScopes} />
         )}
-        {configCli === "claude" && tab === "plugins" && (
-          <PluginsTab visible projectDir={projectDir} onStatus={setStatusMsg} />
+        {tab === "plugins" && (
+          <PluginsTab visible projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} />
         )}
         {tab === "mcp" && (
           <ThreePaneEditor component={McpPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="mcp" scopes={["user", "project"]} />
@@ -212,13 +210,12 @@ export function ConfigManager() {
         {configCli === "claude" && tab === "agents" && (
           <ThreePaneEditor component={AgentEditor} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="agents" scopes={["user", "project"]} />
         )}
-        {configCli === "claude" && tab === "prompts" && (
-          <PromptsTab onStatus={setStatusMsg} />
+        {tab === "prompts" && (
+          <PromptsTab cli={configCli} onStatus={setStatusMsg} />
         )}
         {tab === "skills" && (
           <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="skills" scopes={["user", "project"]} />
         )}
-        <PortContentPane visible={tab === "port"} projectDir={projectDir} onStatus={setStatusMsg} />
         {debugBuild && tab === "recording" && (
           <RecordingPane onStatus={setStatusMsg} />
         )}

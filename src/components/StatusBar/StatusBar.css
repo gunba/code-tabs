@@ -205,10 +205,10 @@
   padding: 0 6px;
 }
 .status-cli-claude {
-  color: #ff8000;
+  color: var(--cli-claude);
 }
 .status-cli-codex {
-  color: #10a37f;
+  color: var(--cli-codex);
 }
 
 /* CPU/Memory chips — color set inline based on threshold */
@@ -225,4 +225,3 @@
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-

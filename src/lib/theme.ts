@@ -32,6 +32,10 @@ export interface Theme {
     accentBg: string;        // Accent tinted background (active tab, selected button)
     accentSecondary: string; // Secondary accent (soft blue)
     accentTertiary: string;  // Tertiary accent (purple/magenta for tool banners)
+    cliClaude: string;       // Claude identity color
+    cliClaudeBg: string;     // Claude tinted background
+    cliCodex: string;        // Codex identity color
+    cliCodexBg: string;      // Codex tinted background
 
     // Semantic
     success: string;
@@ -76,6 +80,10 @@ export const CLAUDE_THEME: Theme = {
     accentHover: "#e08b67",     // Lighter clay
     accentBg: "#3d2a20",        // Very dark clay tint
     accentSecondary: "#6ea8e0", // Cowork blue accent: hsl(210, 65.5%, 67.1%)
+    cliClaude: "#d4744a",
+    cliClaudeBg: "#3d2a20",
+    cliCodex: "#39c5cf",
+    cliCodexBg: "#173a3d",
 
     // Semantic (Cowork dark mode)
     success: "#5cb85c",         // Cowork success: hsl(97, 59.1%, 46.1%)
@@ -123,6 +131,10 @@ export function applyTheme(theme: Theme): void {
   root.style.setProperty("--accent-bg", c.accentBg);
   root.style.setProperty("--accent-secondary", c.accentSecondary);
   root.style.setProperty("--accent-tertiary", c.accentTertiary);
+  root.style.setProperty("--cli-claude", c.cliClaude);
+  root.style.setProperty("--cli-claude-bg", c.cliClaudeBg);
+  root.style.setProperty("--cli-codex", c.cliCodex);
+  root.style.setProperty("--cli-codex-bg", c.cliCodexBg);
 
   root.style.setProperty("--success", c.success);
   root.style.setProperty("--warning", c.warning);
@@ -149,15 +161,16 @@ export function applyTheme(theme: Theme): void {
   root.style.setProperty("--rarity-epic", "#a335ee");
   root.style.setProperty("--rarity-legendary", "#ff8000");
 
-  // CLI provider brand colors (fixed cross-theme — match the tab badges)
-  root.style.setProperty("--accent-claude", "#d4744a");
-  root.style.setProperty("--accent-codex", "#10a37f");
+  // Legacy provider aliases kept for older component CSS.
+  root.style.setProperty("--accent-claude", c.cliClaude);
+  root.style.setProperty("--accent-codex", c.cliCodex);
 }
 
 /** Get terminal theme object from CSS custom properties */
 export function getTerminalTheme(): Record<string, string> {
   const s = getComputedStyle(document.documentElement);
   const get = (v: string) => s.getPropertyValue(v).trim();
+  const getOr = (v: string, fallback: string) => get(v) || fallback;
 
   return {
     background: get("--term-bg"),
@@ -170,7 +183,7 @@ export function getTerminalTheme(): Record<string, string> {
     yellow: get("--warning"),
     blue: get("--accent-secondary"),
     magenta: get("--accent-tertiary"),
-    cyan: "#39c5cf",
+    cyan: getOr("--cli-codex", "#39c5cf"),
     white: get("--text-secondary"),
     brightBlack: get("--text-muted"),
     brightRed: "#ffa198",

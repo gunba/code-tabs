@@ -69,8 +69,18 @@
 }
 
 .config-cli-switch-btn.active {
-  background: var(--accent-bg);
-  color: var(--accent);
+  background: var(--cli-active-bg);
+  color: var(--cli-active);
+}
+
+.config-cli-switch-btn-claude {
+  --cli-active: var(--cli-claude);
+  --cli-active-bg: var(--cli-claude-bg);
+}
+
+.config-cli-switch-btn-codex {
+  --cli-active: var(--cli-codex);
+  --cli-active-bg: var(--cli-codex-bg);
 }
 
 .config-cli-label {
@@ -79,6 +89,16 @@
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
   padding: 2px 6px;
+}
+
+.config-cli-label-claude {
+  color: var(--cli-claude);
+  background: color-mix(in srgb, var(--cli-claude) 10%, transparent);
+}
+
+.config-cli-label-codex {
+  color: var(--cli-codex);
+  background: color-mix(in srgb, var(--cli-codex) 10%, transparent);
 }
 
 .config-tabs {
@@ -284,6 +304,7 @@
 
 .pane-footer {
   display: flex;
+  gap: 6px;
   justify-content: flex-end;
   padding: 6px 10px;
   border-top: 1px solid var(--border-subtle);
@@ -310,6 +331,23 @@
 .pane-save-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.pane-secondary-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 2px 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.pane-secondary-btn:hover {
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
 }
 
 .pane-hint {
@@ -464,6 +502,11 @@
   color: var(--text-primary);
 }
 
+.config-md-editor-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .config-md-editor-item.active {
   border-color: var(--accent);
   color: var(--accent);
@@ -478,6 +521,10 @@
 
 .config-md-editor-new.active {
   border-style: solid;
+}
+
+.config-md-editor-copy {
+  margin-left: auto;
 }
 
 .config-md-editor-name-input {

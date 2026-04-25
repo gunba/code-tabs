@@ -1,5 +1,6 @@
 use super::data::get_data_dir;
 use crate::observability::record_backend_event;
+use serde::Serialize;
 use serde_json::json;
 use tauri::AppHandle;
 
@@ -544,6 +545,324 @@ pub fn write_config_file(
 
     std::fs::write(&path, &content)
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+}
+
+fn remove_existing_path(path: &std::path::Path) -> Result<(), String> {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(format!("Failed to inspect {}: {}", path.display(), e)),
+    };
+    if meta.is_dir() && !meta.file_type().is_symlink() {
+        std::fs::remove_dir_all(path)
+            .map_err(|e| format!("Failed to remove {}: {}", path.display(), e))
+    } else {
+        std::fs::remove_file(path)
+            .map_err(|e| format!("Failed to remove {}: {}", path.display(), e))
+    }
+}
+
+#[cfg(unix)]
+fn symlink_file_cross_platform(
+    source: &std::path::Path,
+    dest: &std::path::Path,
+) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(source, dest)
+}
+
+#[cfg(windows)]
+fn symlink_file_cross_platform(
+    source: &std::path::Path,
+    dest: &std::path::Path,
+) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(source, dest)
+}
+
+#[tauri::command]
+pub fn symlink_config_file(
+    scope: String,
+    working_dir: String,
+    source_file_type: String,
+    dest_file_type: String,
+    overwrite: bool,
+) -> Result<(), String> {
+    let source = resolve_config_path(&scope, &working_dir, &source_file_type)?;
+    let dest = resolve_config_path(&scope, &working_dir, &dest_file_type)?;
+
+    if !source.is_file() {
+        return Err(format!("Source file does not exist: {}", source.display()));
+    }
+    if dest.exists() || std::fs::symlink_metadata(&dest).is_ok() {
+        if !overwrite {
+            return Err(format!("Destination already exists: {}", dest.display()));
+        }
+        remove_existing_path(&dest)?;
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
+    }
+    symlink_file_cross_platform(&source, &dest).map_err(|e| {
+        format!(
+            "Failed to symlink {} -> {}: {}",
+            dest.display(),
+            source.display(),
+            e
+        )
+    })
+}
+
+#[derive(Serialize)]
+pub struct CopyCliSkillsReport {
+    copied: Vec<String>,
+    skipped: Vec<String>,
+}
+
+fn cli_skill_source_roots(
+    cli: &str,
+    scope: &str,
+    working_dir: &str,
+) -> Result<Vec<std::path::PathBuf>, String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    let roots = match (cli, scope) {
+        ("claude", "user") => vec![home.join(".claude").join("skills")],
+        ("claude", "project") => vec![std::path::Path::new(working_dir)
+            .join(".claude")
+            .join("skills")],
+        ("codex", "user") => vec![
+            home.join(".agents").join("skills"),
+            home.join(".codex").join("skills"),
+        ],
+        ("codex", "project") => vec![
+            std::path::Path::new(working_dir).join(".agents").join("skills"),
+            std::path::Path::new(working_dir).join(".codex").join("skills"),
+        ],
+        _ => return Err("Invalid CLI or scope".into()),
+    };
+    Ok(roots)
+}
+
+fn cli_skill_dest_root(
+    cli: &str,
+    scope: &str,
+    working_dir: &str,
+) -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    match (cli, scope) {
+        ("claude", "user") => Ok(home.join(".claude").join("skills")),
+        ("claude", "project") => Ok(std::path::Path::new(working_dir)
+            .join(".claude")
+            .join("skills")),
+        ("codex", "user") => Ok(home.join(".agents").join("skills")),
+        ("codex", "project") => Ok(std::path::Path::new(working_dir)
+            .join(".agents")
+            .join("skills")),
+        _ => Err("Invalid CLI or scope".into()),
+    }
+}
+
+fn discover_copyable_skills(
+    roots: &[std::path::PathBuf],
+) -> Vec<(String, std::path::PathBuf)> {
+    let mut skills = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for root in roots {
+        if !root.is_dir() {
+            continue;
+        }
+        let Ok(entries) = std::fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() || !path.join("SKILL.md").is_file() {
+                continue;
+            }
+            let Some(name) = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .and_then(safe_skill_segment)
+            else {
+                continue;
+            };
+            if seen.insert(name.to_string()) {
+                skills.push((name.to_string(), path));
+            }
+        }
+    }
+    skills.sort_by(|a, b| a.0.cmp(&b.0));
+    skills
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(dest)
+        .map_err(|e| format!("Failed to create {}: {}", dest.display(), e))?;
+    let entries = std::fs::read_dir(src)
+        .map_err(|e| format!("Failed to read {}: {}", src.display(), e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let src_path = entry.path();
+        let dest_path = dest.join(entry.file_name());
+        let meta = entry
+            .file_type()
+            .map_err(|e| format!("Failed to inspect {}: {}", src_path.display(), e))?;
+        if meta.is_dir() {
+            copy_dir_recursive(&src_path, &dest_path)?;
+        } else if meta.is_file() {
+            if let Some(parent) = dest_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
+            }
+            std::fs::copy(&src_path, &dest_path).map_err(|e| {
+                format!(
+                    "Failed to copy {} to {}: {}",
+                    src_path.display(),
+                    dest_path.display(),
+                    e
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn copy_cli_skills(
+    scope: String,
+    working_dir: String,
+    source_cli: String,
+    dest_cli: String,
+    overwrite: bool,
+) -> Result<CopyCliSkillsReport, String> {
+    if source_cli == dest_cli {
+        return Err("Source and destination CLI are the same".into());
+    }
+    if scope == "project" && working_dir.trim().is_empty() {
+        return Err("working_dir required for project scope".into());
+    }
+
+    let source_roots = cli_skill_source_roots(&source_cli, &scope, &working_dir)?;
+    let dest_root = cli_skill_dest_root(&dest_cli, &scope, &working_dir)?;
+    let mut copied = Vec::new();
+    let mut skipped = Vec::new();
+
+    for (name, source_dir) in discover_copyable_skills(&source_roots) {
+        let dest_dir = dest_root.join(&name);
+        if dest_dir.exists() {
+            if !overwrite {
+                skipped.push(name);
+                continue;
+            }
+            remove_existing_path(&dest_dir)?;
+        }
+        copy_dir_recursive(&source_dir, &dest_dir)?;
+        copied.push(name);
+    }
+
+    Ok(CopyCliSkillsReport { copied, skipped })
+}
+
+#[derive(Serialize)]
+pub struct CodexPluginConfigEntry {
+    id: String,
+    scope: String,
+    enabled: bool,
+}
+
+fn codex_plugin_entries_for_scope(
+    scope: &str,
+    working_dir: &str,
+) -> Result<Vec<CodexPluginConfigEntry>, String> {
+    let path = codex_config_path(scope, working_dir)?;
+    let config = read_codex_config_value(&path)?;
+    let Some(plugins) = config.get("plugins").and_then(|v| v.as_table()) else {
+        return Ok(Vec::new());
+    };
+    let mut entries = Vec::new();
+    for (id, value) in plugins {
+        let enabled = value
+            .as_bool()
+            .or_else(|| {
+                value
+                    .as_table()
+                    .and_then(|t| t.get("enabled"))
+                    .and_then(|v| v.as_bool())
+            })
+            .unwrap_or(true);
+        entries.push(CodexPluginConfigEntry {
+            id: id.clone(),
+            scope: scope.to_string(),
+            enabled,
+        });
+    }
+    entries.sort_by(|a, b| a.id.cmp(&b.id).then(a.scope.cmp(&b.scope)));
+    Ok(entries)
+}
+
+#[tauri::command]
+pub fn read_codex_plugins(working_dir: String) -> Result<Vec<CodexPluginConfigEntry>, String> {
+    let mut entries = codex_plugin_entries_for_scope("user", "")?;
+    if !working_dir.trim().is_empty() {
+        entries.extend(codex_plugin_entries_for_scope("project", &working_dir)?);
+    }
+    entries.sort_by(|a, b| a.id.cmp(&b.id).then(a.scope.cmp(&b.scope)));
+    Ok(entries)
+}
+
+fn mutate_codex_plugin_config(
+    scope: &str,
+    working_dir: &str,
+    id: &str,
+    f: impl FnOnce(&mut toml::value::Table),
+) -> Result<(), String> {
+    if id.trim().is_empty() {
+        return Err("Plugin id cannot be empty".into());
+    }
+    let path = codex_config_path(scope, working_dir)?;
+    let mut config = read_codex_config_value(&path)?;
+    let root = config
+        .as_table_mut()
+        .ok_or("Codex config root is not a table")?;
+    let plugins = root
+        .entry("plugins".to_string())
+        .or_insert_with(|| toml::Value::Table(toml::value::Table::new()))
+        .as_table_mut()
+        .ok_or("plugins is not a table")?;
+    f(plugins);
+    write_codex_config_value(&path, &config)
+}
+
+#[tauri::command]
+pub fn set_codex_plugin_enabled(
+    id: String,
+    scope: String,
+    working_dir: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let plugin_id = id.clone();
+    mutate_codex_plugin_config(&scope, &working_dir, &id, |plugins| {
+        let entry = plugins
+            .entry(plugin_id)
+            .or_insert_with(|| toml::Value::Table(toml::value::Table::new()));
+        if let Some(table) = entry.as_table_mut() {
+            table.insert("enabled".to_string(), toml::Value::Boolean(enabled));
+        } else {
+            let mut table = toml::value::Table::new();
+            table.insert("enabled".to_string(), toml::Value::Boolean(enabled));
+            *entry = toml::Value::Table(table);
+        }
+    })
+}
+
+#[tauri::command]
+pub fn remove_codex_plugin_config(
+    id: String,
+    scope: String,
+    working_dir: String,
+) -> Result<(), String> {
+    mutate_codex_plugin_config(&scope, &working_dir, &id, |plugins| {
+        plugins.remove(&id);
+    })
 }
 
 /// Merge, dedupe, sort, and write event kind strings to src/types/eventKinds.json.

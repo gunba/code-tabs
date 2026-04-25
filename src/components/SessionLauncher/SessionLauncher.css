@@ -169,15 +169,15 @@
 }
 
 .launcher-cli-choice--claude.launcher-cli-choice--active {
-  border-color: #ff8000;
-  color: #ff8000;
-  background: color-mix(in srgb, #ff8000 12%, transparent);
+  border-color: var(--cli-claude);
+  color: var(--cli-claude);
+  background: color-mix(in srgb, var(--cli-claude) 12%, transparent);
 }
 
 .launcher-cli-choice--codex.launcher-cli-choice--active {
-  border-color: #10a37f;
-  color: #10a37f;
-  background: color-mix(in srgb, #10a37f 12%, transparent);
+  border-color: var(--cli-codex);
+  color: var(--cli-codex);
+  background: color-mix(in srgb, var(--cli-codex) 12%, transparent);
 }
 
 .launcher-cli-choice:disabled {

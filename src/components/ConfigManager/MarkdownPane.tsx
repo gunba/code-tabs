@@ -28,13 +28,17 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
 
   const fileType = (cli === "codex" ? CODEX_SCOPE_TO_FILETYPE : CLAUDE_SCOPE_TO_FILETYPE)[scope];
   const docName = cli === "codex" ? "AGENTS.md" : "CLAUDE.md";
+  const peerCli = cli === "codex" ? "claude" : "codex";
+  const peerName = peerCli === "codex" ? "Codex" : "Claude";
+  const peerFileType = (peerCli === "codex" ? CODEX_SCOPE_TO_FILETYPE : CLAUDE_SCOPE_TO_FILETYPE)[scope];
+  const workingDir = scope === "user" ? "" : projectDir;
 
   const load = useCallback(async () => {
     let result = "";
     try {
       result = await invoke<string>("read_config_file", {
         scope,
-        workingDir: scope === "user" ? "" : projectDir,
+        workingDir,
         fileType,
       });
     } catch {
@@ -44,7 +48,7 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
     setCurrent(result);
     setSeedKey((k) => k + 1);
     setLoading(false);
-  }, [scope, projectDir, fileType]);
+  }, [scope, workingDir, fileType]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -53,7 +57,7 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
     try {
       await invoke("write_config_file", {
         scope,
-        workingDir: scope === "user" ? "" : projectDir,
+        workingDir,
         fileType,
         content: value,
       });
@@ -63,7 +67,51 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
     } catch (err) {
       onStatus({ text: `Save failed: ${err}`, type: "error" });
     }
-  }, [current, scope, projectDir, fileType, docName, onStatus]);
+  }, [current, scope, workingDir, fileType, docName, onStatus]);
+
+  const handleCopyFromPeer = useCallback(async () => {
+    try {
+      const result = await invoke<string>("read_config_file", {
+        scope,
+        workingDir,
+        fileType: peerFileType,
+      });
+      if (!result.trim()) {
+        onStatus({ text: `No ${peerName} instructions found`, type: "error" });
+        return;
+      }
+      await invoke("write_config_file", {
+        scope,
+        workingDir,
+        fileType,
+        content: result,
+      });
+      setSaved(result);
+      setCurrent(result);
+      setSeedKey((k) => k + 1);
+      onStatus({ text: `Copied instructions from ${peerName}`, type: "success" });
+      setTimeout(() => onStatus(null), 2000);
+    } catch (err) {
+      onStatus({ text: `Copy failed: ${err}`, type: "error" });
+    }
+  }, [scope, workingDir, peerFileType, peerName, fileType, onStatus]);
+
+  const handleLinkFromPeer = useCallback(async () => {
+    try {
+      await invoke("symlink_config_file", {
+        scope,
+        workingDir,
+        sourceFileType: peerFileType,
+        destFileType: fileType,
+        overwrite: true,
+      });
+      await load();
+      onStatus({ text: `Linked instructions from ${peerName}`, type: "success" });
+      setTimeout(() => onStatus(null), 2000);
+    } catch (err) {
+      onStatus({ text: `Link failed: ${err}`, type: "error" });
+    }
+  }, [scope, workingDir, peerFileType, fileType, peerName, load, onStatus]);
 
   const dirty = current !== saved;
 
@@ -101,6 +149,12 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
           onClick={() => setPreview(!preview)}
         >
           {preview ? "Edit" : "Preview"}
+        </button>
+        <button className="pane-secondary-btn" onClick={handleCopyFromPeer}>
+          Copy from {peerName}
+        </button>
+        <button className="pane-secondary-btn" onClick={handleLinkFromPeer}>
+          Link from {peerName}
         </button>
         <button className="pane-save-btn" onClick={handleSave} disabled={!dirty}>
           {dirty ? "Save" : "Saved"}
