@@ -276,7 +276,6 @@ export const ANTHROPIC_MODELS: ProviderModel[] = [
   { id: "haiku",      label: "haiku",      family: "haiku",  contextWindow: 200000, color: "#0070dd" },
 ];
 
-// [PR-13] xhigh effort: five-level effort list low/medium/high/xhigh/max; xhigh and max both map to --rarity-legendary color
 export const ANTHROPIC_EFFORTS: ProviderEffort[] = [
   { value: "low",    label: "low" },
   { value: "medium", label: "medium" },
