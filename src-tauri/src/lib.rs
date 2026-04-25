@@ -1,6 +1,7 @@
 mod commands;
 mod cli_adapter;
 pub mod discovery;
+mod metrics;
 mod observability;
 mod path_utils;
 mod port;
@@ -173,6 +174,7 @@ pub fn run() {
                     }
                 }
             }
+            metrics::spawn_collector(app.handle().clone());
             Ok(())
         })
         .manage(SessionManager::new())
@@ -210,6 +212,7 @@ pub fn run() {
             commands::scan_command_usage,
             commands::read_config_file,
             commands::write_config_file,
+            commands::symlink_config_file,
             commands::read_mcp_servers,
             commands::write_mcp_servers,
             commands::read_codex_mcp_servers,
@@ -218,6 +221,10 @@ pub fn run() {
             commands::list_agents,
             commands::list_skills,
             commands::list_codex_skill_files,
+            commands::copy_cli_skills,
+            commands::read_codex_plugins,
+            commands::set_codex_plugin_enabled,
+            commands::remove_codex_plugin_config,
             commands::resolve_skill_file,
             commands::resolve_activity_context_files,
             commands::register_active_pid,

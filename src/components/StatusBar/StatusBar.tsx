@@ -9,7 +9,7 @@ import {
   IconPencil, IconLightning, IconUnlock, IconClipboard,
   IconClock, IconBudget,
   IconWarning, IconHook, IconCircleFilled, IconCircleOutline,
-  IconGitBranch,
+  IconGitBranch, IconCpu, IconMemory,
 } from "../Icons/Icons";
 
 import type { Session, PermissionMode } from "../../types/session";
@@ -17,6 +17,7 @@ import { isSessionIdle } from "../../types/session";
 import { getEffectiveState } from "../../lib/claude";
 import { useRuntimeStore } from "../../store/runtime";
 import { useVersionStore } from "../../store/version";
+import { formatBytes, formatCpu, cpuColor, memColor } from "../../lib/formatMetrics";
 import "./StatusBar.css";
 
 function formatDuration(secs: number): string {
@@ -98,7 +99,7 @@ function SessionStatus({
     <>
       {/* LEFT: primary operational info */}
       <div className="status-bar-content">
-        {/* [CV-02] status-cli chip: status-cli-claude=orange, status-cli-codex=teal */}
+        {/* [CV-02] status-cli chip uses centralized provider colors */}
         <span
           className={`status-item status-cli status-cli-${session.config.cli}`}
           title={`CLI: ${session.config.cli === "codex" ? "Codex" : "Claude Code"}`}
@@ -216,11 +217,33 @@ function SessionStatus({
       <div className="status-right">
         <span className="status-item status-duration" title={
           `Duration: ${formatDuration(session.metadata.durationSecs)}` +
-          (health ? `\nMemory: ${Math.round(health.rss / 1_000_000)}MB · Heap: ${Math.round(health.heapUsed / 1_000_000)}MB · Uptime: ${formatDuration(Math.floor(health.uptime))}` : "")
+          (health && health.uptime > 0 ? `\nUptime: ${formatDuration(Math.floor(health.uptime))}` : "")
         }>
           <span className="status-icon"><IconClock size={12} /></span>
           {formatDuration(session.metadata.durationSecs)}
         </span>
+        {health?.tree && (() => {
+          const t = health.tree;
+          const totalCpu = t.parentCpu + t.childrenCpu;
+          const totalMem = t.parentMemBytes + t.childrenMemBytes;
+          const tip =
+            `CPU: ${formatCpu(totalCpu)} ` +
+            `(parent ${formatCpu(t.parentCpu)} · ${t.childCount} child${t.childCount === 1 ? "" : "ren"} ${formatCpu(t.childrenCpu)})\n` +
+            `Memory: ${formatBytes(totalMem)} ` +
+            `(parent ${formatBytes(t.parentMemBytes)} · children ${formatBytes(t.childrenMemBytes)})`;
+          return (
+            <>
+              <span className="status-item status-cpu" title={tip} style={{ color: cpuColor(totalCpu) }}>
+                <span className="status-icon"><IconCpu size={12} /></span>
+                {formatCpu(totalCpu)}
+              </span>
+              <span className="status-item status-mem" title={tip} style={{ color: memColor(totalMem) }}>
+                <span className="status-icon"><IconMemory size={12} /></span>
+                {formatBytes(totalMem)}
+              </span>
+            </>
+          );
+        })()}
         {wt && (
           <span className="status-item status-worktree" title={wt.worktreeName} style={{ color: "var(--accent-secondary)" }}>
             {worktreeAcronym(wt.worktreeName)}
@@ -359,6 +382,7 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
         return sum + inT + outT;
       }, 0);
   }, [aliveSessions]);
+  const overallMetrics = useSessionStore((s) => s.overallMetrics);
   return (
     <div className="status-bar">
       {activeSession ? (
@@ -405,6 +429,14 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
 
       {/* Far-right action buttons — always visible */}
       <div className="status-actions">
+        {overallMetrics && overallMetrics.processes > 0 && (
+          <span
+            className="status-item status-overall"
+            title={`All sessions: ${overallMetrics.processes} process${overallMetrics.processes === 1 ? "" : "es"} · CPU ${formatCpu(overallMetrics.cpu)} · Memory ${formatBytes(overallMetrics.memBytes)}`}
+          >
+            Σ {formatCpu(overallMetrics.cpu)} · {formatBytes(overallMetrics.memBytes)}
+          </span>
+        )}
         {activeSession?.metadata.capturedSystemPrompt && onOpenContextViewer && (
           <button
             className="status-item status-hooks-btn"

@@ -421,3 +421,24 @@ export function IconTraffic(props: IconProps) {
     </Icon>
   );
 }
+
+/** Chip outline with pin marks — CPU usage */
+export function IconCpu(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="4" width="8" height="8" rx="1" />
+      <rect x="6" y="6" width="4" height="4" rx="0.5" />
+      <path d="M6 2v2M10 2v2M6 12v2M10 12v2M2 6h2M2 10h2M12 6h2M12 10h2" />
+    </Icon>
+  );
+}
+
+/** Memory module — DIMM-style outline with notch and dividers */
+export function IconMemory(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2 5.5h12v5H10l-0.5 1h-3l-0.5-1H2z" />
+      <path d="M5 5.5v3M8 5.5v3M11 5.5v3" />
+    </Icon>
+  );
+}

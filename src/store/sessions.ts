@@ -28,7 +28,9 @@ interface SessionsState {
   hookChangeCounter: number;
   inspectorOffSessions: Set<string>;
   trafficRecording: Map<string, string>; // sessionId -> file path
-  processHealth: Map<string, { rss: number; heapUsed: number; uptime: number }>;
+  processHealth: Map<string, ProcessHealthEntry>;
+  pidToSessionId: Map<number, string>; // OS PID -> sessionId for metrics dispatch
+  overallMetrics: { cpu: number; memBytes: number; processes: number } | null;
   seenToolNames: Set<string>; // [TA-02] all unique tool names observed across sessions
   seenEventKinds: Set<string>; // all unique tap event kinds observed across sessions
 
@@ -56,8 +58,29 @@ interface SessionsState {
   removeSkillInvocation: (sessionId: string, invocationId: string) => void;
   addCommandHistory: (sessionId: string, command: string, ts: number) => void;
   updateProcessHealth: (id: string, data: { rss: number; heapUsed: number; uptime: number }) => void;
+  updateProcessTreeMetrics: (id: string, data: ProcessTreeMetrics) => void;
+  setOverallMetrics: (data: { cpu: number; memBytes: number; processes: number } | null) => void;
+  registerSessionPid: (sessionId: string, pid: number) => void;
+  unregisterSessionPid: (pid: number) => void;
   addSeenToolName: (name: string) => void;
   addSeenEventKind: (kind: string) => void;
+}
+
+export interface ProcessTreeMetrics {
+  parentCpu: number;       // 0..100, normalized by core count
+  parentMemBytes: number;
+  childrenCpu: number;     // 0..100, normalized by core count
+  childrenMemBytes: number;
+  childCount: number;
+}
+
+export interface ProcessHealthEntry {
+  // From CLI's ProcessHealth tap event
+  rss: number;
+  heapUsed: number;
+  uptime: number;
+  // From Rust sysinfo poller (optional — only present when the session's PID is registered)
+  tree?: ProcessTreeMetrics;
 }
 
 export const useSessionStore = create<SessionsState>((set) => ({
@@ -74,6 +97,8 @@ export const useSessionStore = create<SessionsState>((set) => ({
   inspectorOffSessions: new Set(),
   trafficRecording: new Map(),
   processHealth: new Map(),
+  pidToSessionId: new Map(),
+  overallMetrics: null,
   seenToolNames: new Set(),
   seenEventKinds: new Set(),
 
@@ -469,8 +494,46 @@ export const useSessionStore = create<SessionsState>((set) => ({
   updateProcessHealth: (id, data) => {
     set((s) => {
       const next = new Map(s.processHealth);
-      next.set(id, data);
+      const prev = next.get(id);
+      next.set(id, prev ? { ...prev, ...data } : { ...data });
       return { processHealth: next };
+    });
+  },
+
+  updateProcessTreeMetrics: (id, data) => {
+    set((s) => {
+      const next = new Map(s.processHealth);
+      const prev = next.get(id);
+      // Keep CLI-supplied rss/heapUsed/uptime if they exist; otherwise leave 0s
+      // until the CLI emits its first ProcessHealth tap event.
+      next.set(id, {
+        rss: prev?.rss ?? 0,
+        heapUsed: prev?.heapUsed ?? 0,
+        uptime: prev?.uptime ?? 0,
+        tree: data,
+      });
+      return { processHealth: next };
+    });
+  },
+
+  setOverallMetrics: (data) => {
+    set({ overallMetrics: data });
+  },
+
+  registerSessionPid: (sessionId, pid) => {
+    set((s) => {
+      const next = new Map(s.pidToSessionId);
+      next.set(pid, sessionId);
+      return { pidToSessionId: next };
+    });
+  },
+
+  unregisterSessionPid: (pid) => {
+    set((s) => {
+      if (!s.pidToSessionId.has(pid)) return s;
+      const next = new Map(s.pidToSessionId);
+      next.delete(pid);
+      return { pidToSessionId: next };
     });
   },
 }));

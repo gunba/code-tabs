@@ -73,6 +73,8 @@ futures-util = "0.3"
 similar = "2"
 scraper = "0.23"
 tauri-plugin-clipboard-manager = "2.3.2"
+# Cross-platform CPU/memory polling for the per-tab status bar metrics.
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 tempfile = "3"

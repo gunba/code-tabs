@@ -211,3 +211,18 @@
   color: #10a37f;
 }
 
+/* CPU/Memory chips — color set inline based on threshold */
+.status-cpu,
+.status-mem {
+  transition: color 0.15s ease;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sum-of-all-sessions chip on the far right */
+.status-overall {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+

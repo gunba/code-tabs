@@ -1,19 +1,24 @@
 // [PT-01] Direct PTY wrapper — calls Tauri IPC commands for PTY lifecycle.
 import { invoke } from "@tauri-apps/api/core";
 import { dlog } from "./debugLog";
+import { useSessionStore } from "../store/sessions";
 
 // [PT-07] Active PID registry for cleanup on app close
 
 const activePids = new Set<number>();
 
-export function registerActivePid(osPid: number): void {
+export function registerActivePid(osPid: number, sessionId?: string | null): void {
   activePids.add(osPid);
   invoke("register_active_pid", { pid: osPid }).catch(() => {});
+  if (sessionId) {
+    useSessionStore.getState().registerSessionPid(sessionId, osPid);
+  }
 }
 
 export function unregisterActivePid(osPid: number): void {
   activePids.delete(osPid);
   invoke("unregister_active_pid", { pid: osPid }).catch(() => {});
+  useSessionStore.getState().unregisterSessionPid(osPid);
 }
 
 /** [PS-04] Fire-and-forget kill all active PTY process trees. Called on beforeunload. */
@@ -89,7 +94,7 @@ export async function spawnPty(
   try {
     osPid = await invoke("pty_get_child_pid", { pid });
     if (osPid) {
-      registerActivePid(osPid);
+      registerActivePid(osPid, sessionId);
       dlog("pty", sessionId, "resolved PTY child pid", "DEBUG", {
         event: "pty.child_pid_resolved",
         data: { pid, osPid },

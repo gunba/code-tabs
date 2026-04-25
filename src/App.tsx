@@ -20,6 +20,7 @@ import { ContextViewer } from "./components/ContextViewer/ContextViewer";
 import { useCliWatcher } from "./hooks/useCliWatcher";
 import { useNotifications } from "./hooks/useNotifications";
 import { useCommandDiscovery } from "./hooks/useCommandDiscovery";
+import { useProcessMetrics } from "./hooks/useProcessMetrics";
 import { useCtrlKey } from "./hooks/useCtrlKey";
 import { useUiConfigStore } from "./lib/uiConfig";
 import { useVersionStore } from "./store/version";
@@ -79,6 +80,7 @@ export default function App() {
   useCliWatcher();
   useNotifications();
   useCommandDiscovery();
+  useProcessMetrics();
 
   // Feed settled-state manager from effective state changes.
   // Replaces per-consumer ad-hoc debounce with a unified hysteresis system.
