@@ -237,6 +237,12 @@ export interface CodexToolCallComplete extends TapEventBase {
   error: string | null;
 }
 
+export interface ContextFilesHintEvent extends TapEventBase {
+  kind: "ContextFilesHint";
+  contextKind: "mcp" | "plugin" | "config" | "rules";
+  label: string;
+}
+
 // ── Fetch events ──
 
 export interface ApiFetch extends TapEventBase {
@@ -666,6 +672,7 @@ export type TapEvent =
   | CodexTurnContext
   | CodexTokenCount
   | CodexToolCallComplete
+  | ContextFilesHintEvent
   // Fetch
   | ApiFetch
   | HttpPing

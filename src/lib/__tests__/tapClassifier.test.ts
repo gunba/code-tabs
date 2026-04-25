@@ -504,6 +504,89 @@ describe("classifyTapEntry — Codex rollout events", () => {
     });
   });
 
+  it("classifies Codex local_shell calls as Bash tool input", () => {
+    const event = classifyTapEntry({
+      ts: 6004,
+      cat: "codex-tool-input",
+      name: "local_shell",
+      callId: "call_local",
+      arguments: JSON.stringify({
+        command: "rg SkillInvocation src",
+        workdir: "/repo",
+      }),
+    });
+    expect(event).toMatchObject({
+      kind: "ToolInput",
+      toolName: "Bash",
+      input: { command: "rg SkillInvocation src" },
+    });
+  });
+
+  it("classifies Codex list_dir calls as Glob activity input", () => {
+    const event = classifyTapEntry({
+      ts: 6005,
+      cat: "codex-tool-input",
+      name: "list_dir",
+      callId: "call_dir",
+      arguments: JSON.stringify({ dir_path: "/repo/src" }),
+    });
+    expect(event).toMatchObject({
+      kind: "ToolInput",
+      toolName: "Glob",
+      input: { path: "/repo/src", pattern: "*" },
+    });
+  });
+
+  it("classifies Codex skill context messages as InstructionsLoadedEvent", () => {
+    const event = classifyTapEntry({
+      ts: 6006,
+      cat: "codex-message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "<skill>\n<name>demo</name>\n<path>skills/demo/SKILL.md</path>\nbody\n</skill>",
+      }],
+    });
+    expect(event).toMatchObject({
+      kind: "InstructionsLoadedEvent",
+      filePath: "skills/demo/SKILL.md",
+      memoryType: "skill",
+      loadReason: "demo",
+    });
+  });
+
+  it("classifies Codex AGENTS.md context messages as InstructionsLoadedEvent", () => {
+    const event = classifyTapEntry({
+      ts: 6007,
+      cat: "codex-message",
+      role: "user",
+      content: [{
+        type: "input_text",
+        text: "# AGENTS.md instructions for /repo\n\n<INSTRUCTIONS>\nbody\n</INSTRUCTIONS>",
+      }],
+    });
+    expect(event).toMatchObject({
+      kind: "InstructionsLoadedEvent",
+      filePath: "/repo/AGENTS.md",
+      memoryType: "project",
+      loadReason: "AGENTS.md",
+    });
+  });
+
+  it("classifies Codex thread names as CustomTitle", () => {
+    const event = classifyTapEntry({
+      ts: 6008,
+      cat: "codex-thread-name-updated",
+      threadName: "fix activity pane",
+      codexSessionId: "thread-1",
+    });
+    expect(event).toMatchObject({
+      kind: "CustomTitle",
+      title: "fix activity pane",
+      sessionId: "thread-1",
+    });
+  });
+
   it("classifies Codex assistant messages as end_turn ConversationMessage", () => {
     const event = classifyTapEntry({
       ts: 6002,
@@ -516,6 +599,22 @@ describe("classifyTapEntry — Codex rollout events", () => {
       messageType: "assistant",
       stopReason: "end_turn",
       textSnippet: "Done.",
+    });
+  });
+
+  it("keeps Codex commentary assistant messages from looking like end_turn", () => {
+    const event = classifyTapEntry({
+      ts: 6009,
+      cat: "codex-message",
+      role: "assistant",
+      phase: "commentary",
+      content: [{ type: "output_text", text: "Working on it." }],
+    });
+    expect(event).toMatchObject({
+      kind: "ConversationMessage",
+      messageType: "assistant",
+      stopReason: null,
+      textSnippet: "Working on it.",
     });
   });
 
@@ -598,6 +697,21 @@ describe("classifyTapEntry — permission events", () => {
       skill: "keybindings-help",
       success: true,
       allowedTools: ["Read"],
+    });
+  });
+
+  it("classifies standalone skill result telemetry → SkillInvocation", () => {
+    const entry: TapEntry = {
+      ts: 4803, cat: "stringify", len: 39,
+      snap: JSON.stringify({ success: true, commandName: "recall" }),
+    };
+    const event = classifyTapEntry(entry);
+    expect(event).toMatchObject({
+      kind: "SkillInvocation",
+      ts: 4803,
+      skill: "recall",
+      success: true,
+      allowedTools: [],
     });
   });
 

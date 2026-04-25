@@ -775,6 +775,329 @@ pub fn list_codex_skill_files(
     Ok(entries)
 }
 
+fn canonical_file_string(path: &std::path::Path) -> String {
+    std::fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .to_string()
+}
+
+fn push_existing_file(paths: &mut Vec<String>, path: std::path::PathBuf) {
+    if !path.is_file() {
+        return;
+    }
+    let s = canonical_file_string(&path);
+    if !paths.iter().any(|p| p == &s) {
+        paths.push(s);
+    }
+}
+
+fn expand_rule_reference(
+    raw: &str,
+    base_dir: &std::path::Path,
+    home: &std::path::Path,
+) -> std::path::PathBuf {
+    if let Some(rest) = raw.strip_prefix("~/") {
+        return home.join(rest);
+    }
+    let path = std::path::Path::new(raw);
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base_dir.join(path)
+    }
+}
+
+fn rule_import_from_token(token: &str) -> Option<&str> {
+    let token = token.trim();
+    let raw = token.strip_prefix('@')?;
+    let raw = raw.trim_matches(|c: char| {
+        matches!(
+            c,
+            '`' | '"' | '\'' | ')' | '(' | ']' | '[' | '<' | '>' | ',' | ';' | ':'
+        )
+    });
+    if raw.is_empty()
+        || raw.starts_with("http://")
+        || raw.starts_with("https://")
+        || raw.contains('\0')
+    {
+        None
+    } else {
+        Some(raw)
+    }
+}
+
+fn collect_rule_file(
+    paths: &mut Vec<String>,
+    path: std::path::PathBuf,
+    home: &std::path::Path,
+    visited: &mut std::collections::HashSet<String>,
+    depth: usize,
+) {
+    if depth > 4 || visited.len() > 64 || !path.is_file() {
+        return;
+    }
+    let canonical = canonical_file_string(&path);
+    if !visited.insert(canonical.clone()) {
+        return;
+    }
+    if !paths.iter().any(|p| p == &canonical) {
+        paths.push(canonical);
+    }
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new(""));
+    for line in content.lines() {
+        for token in line.split_whitespace() {
+            let Some(import_path) = rule_import_from_token(token) else {
+                continue;
+            };
+            collect_rule_file(
+                paths,
+                expand_rule_reference(import_path, base_dir, home),
+                home,
+                visited,
+                depth + 1,
+            );
+        }
+    }
+}
+
+fn safe_skill_segment(name: &str) -> Option<&str> {
+    let name = name.trim();
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains('/')
+        || name.contains('\\')
+    {
+        None
+    } else {
+        Some(name)
+    }
+}
+
+fn skill_lookup_names(skill_name: &str) -> Vec<String> {
+    let trimmed = skill_name.trim().trim_start_matches('$');
+    let mut names = Vec::new();
+    if !trimmed.is_empty() {
+        names.push(trimmed.to_string());
+    }
+    if let Some((_, suffix)) = trimmed.rsplit_once(':') {
+        if !suffix.is_empty() && !names.iter().any(|n| n == suffix) {
+            names.push(suffix.to_string());
+        }
+    }
+    names
+}
+
+fn skill_name_matches(candidate: &str, wanted: &[String]) -> bool {
+    wanted
+        .iter()
+        .any(|name| candidate == name || candidate.eq_ignore_ascii_case(name))
+}
+
+fn frontmatter_skill_name(content: &str) -> Option<String> {
+    let mut lines = content.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return None;
+    }
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            return None;
+        }
+        if let Some(rest) = trimmed.strip_prefix("name:") {
+            let name = rest.trim().trim_matches('"').trim_matches('\'').trim();
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn skill_file_matches(path: &std::path::Path, wanted: &[String]) -> bool {
+    if path.file_name().and_then(|s| s.to_str()) != Some("SKILL.md") {
+        return false;
+    }
+    if let Some(parent_name) = path.parent().and_then(|p| p.file_name()).and_then(|s| s.to_str()) {
+        if skill_name_matches(parent_name, wanted) {
+            return true;
+        }
+    }
+    if let Ok(content) = std::fs::read_to_string(path) {
+        if let Some(name) = frontmatter_skill_name(&content) {
+            return skill_name_matches(&name, wanted);
+        }
+    }
+    false
+}
+
+fn find_skill_recursive(
+    root: &std::path::Path,
+    wanted: &[String],
+    max_depth: usize,
+) -> Option<String> {
+    if !root.exists() {
+        return None;
+    }
+    let mut stack = vec![(root.to_path_buf(), 0usize)];
+    let mut visited = 0usize;
+    while let Some((dir, depth)) = stack.pop() {
+        if depth > max_depth || visited > 4_000 {
+            continue;
+        }
+        visited += 1;
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if skill_file_matches(&path, wanted) {
+                    return Some(canonical_file_string(&path));
+                }
+            } else if path.is_dir() {
+                stack.push((path, depth + 1));
+            }
+        }
+    }
+    None
+}
+
+fn skill_roots(
+    cli: &str,
+    working_dir: &str,
+) -> Result<(Vec<std::path::PathBuf>, Vec<std::path::PathBuf>), String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    let project = std::path::Path::new(working_dir);
+    let mut direct = Vec::new();
+    let mut recursive = Vec::new();
+    match cli {
+        "codex" => {
+            direct.push(project.join(".agents").join("skills"));
+            direct.push(project.join(".codex").join("skills"));
+            direct.push(home.join(".agents").join("skills"));
+            direct.push(home.join(".codex").join("skills"));
+            recursive.extend(direct.clone());
+            recursive.push(project.join(".agents").join("plugins"));
+            recursive.push(project.join(".codex").join("plugins"));
+            recursive.push(home.join(".codex").join("plugins").join("cache"));
+        }
+        _ => {
+            direct.push(project.join(".claude").join("skills"));
+            direct.push(home.join(".claude").join("skills"));
+            recursive.extend(direct.clone());
+            recursive.push(project.join(".claude").join("plugins"));
+            recursive.push(home.join(".claude").join("plugins"));
+        }
+    }
+    Ok((direct, recursive))
+}
+
+fn resolve_skill_file_inner(
+    cli: &str,
+    skill_name: &str,
+    working_dir: &str,
+) -> Result<Option<String>, String> {
+    let wanted = skill_lookup_names(skill_name);
+    if wanted.is_empty() {
+        return Ok(None);
+    }
+    let (direct_roots, recursive_roots) = skill_roots(cli, working_dir)?;
+
+    for root in &direct_roots {
+        for name in &wanted {
+            if let Some(segment) = safe_skill_segment(name) {
+                let candidate = root.join(segment).join("SKILL.md");
+                if candidate.is_file() {
+                    return Ok(Some(canonical_file_string(&candidate)));
+                }
+            }
+        }
+    }
+
+    for root in &recursive_roots {
+        if let Some(path) = find_skill_recursive(root, &wanted, 8) {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
+#[tauri::command]
+pub fn resolve_skill_file(
+    cli: String,
+    skill_name: String,
+    working_dir: String,
+) -> Result<Option<String>, String> {
+    resolve_skill_file_inner(&cli, &skill_name, &working_dir)
+}
+
+#[tauri::command]
+pub fn resolve_activity_context_files(
+    cli: String,
+    context_kind: String,
+    working_dir: String,
+) -> Result<Vec<String>, String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    let project = std::path::Path::new(&working_dir);
+    let mut paths = Vec::new();
+
+    match (cli.as_str(), context_kind.as_str()) {
+        ("codex", "mcp") | ("codex", "config") => {
+            push_existing_file(&mut paths, project.join(".codex").join("config.toml"));
+            push_existing_file(&mut paths, home.join(".codex").join("config.toml"));
+        }
+        ("codex", "rules") => {
+            let mut visited = std::collections::HashSet::new();
+            for dir in project.ancestors().take(8) {
+                collect_rule_file(&mut paths, dir.join("AGENTS.md"), &home, &mut visited, 0);
+            }
+        }
+        (_, "mcp") => {
+            push_existing_file(&mut paths, project.join(".mcp.json"));
+            push_existing_file(&mut paths, project.join(".claude").join("settings.local.json"));
+            push_existing_file(&mut paths, project.join(".claude").join("settings.json"));
+            push_existing_file(&mut paths, home.join(".claude").join("settings.json"));
+            push_existing_file(&mut paths, home.join(".claude.json"));
+        }
+        (_, "config") => {
+            push_existing_file(&mut paths, project.join(".claude").join("settings.local.json"));
+            push_existing_file(&mut paths, project.join(".claude").join("settings.json"));
+            push_existing_file(&mut paths, home.join(".claude").join("settings.json"));
+        }
+        (_, "plugin") => {
+            push_existing_file(&mut paths, project.join(".claude").join("settings.json"));
+            push_existing_file(&mut paths, home.join(".claude").join("settings.json"));
+        }
+        (_, "rules") => {
+            let mut visited = std::collections::HashSet::new();
+            collect_rule_file(&mut paths, project.join("CLAUDE.md"), &home, &mut visited, 0);
+            collect_rule_file(
+                &mut paths,
+                project.join(".claude").join("CLAUDE.md"),
+                &home,
+                &mut visited,
+                0,
+            );
+            collect_rule_file(
+                &mut paths,
+                home.join(".claude").join("CLAUDE.md"),
+                &home,
+                &mut visited,
+                0,
+            );
+        }
+        _ => {}
+    }
+
+    Ok(paths)
+}
+
 /// Path to the user-level Claude state file where Claude Code stores `mcpServers`
 /// (user-scope at top level, project-scope under `projects.<abs-path>.mcpServers`).
 fn claude_json_path() -> Result<std::path::PathBuf, String> {
@@ -1079,6 +1402,44 @@ mod tests {
     fn list_skill_dirs_missing_dir_returns_empty() {
         let missing = std::env::temp_dir().join(format!("ct_no_such_{}", std::process::id()));
         assert!(list_skill_dirs(&missing).is_empty());
+    }
+
+    #[test]
+    fn skill_file_matches_parent_dir_or_frontmatter_name() {
+        let tmp = std::env::temp_dir().join(format!("ct_skill_match_{}", std::process::id()));
+        let alpha = tmp.join("alpha");
+        let nested = tmp.join("plugin").join("skills").join("other");
+        std::fs::create_dir_all(&alpha).unwrap();
+        std::fs::create_dir_all(&nested).unwrap();
+        let alpha_skill = alpha.join("SKILL.md");
+        let nested_skill = nested.join("SKILL.md");
+        std::fs::write(&alpha_skill, "body").unwrap();
+        std::fs::write(&nested_skill, "---\nname: plugin-skill\n---\nbody").unwrap();
+
+        assert!(skill_file_matches(&alpha_skill, &["alpha".to_string()]));
+        assert!(skill_file_matches(&nested_skill, &["plugin-skill".to_string()]));
+        assert!(!skill_file_matches(&nested_skill, &["missing".to_string()]));
+
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn collect_rule_file_includes_at_imports() {
+        let tmp = std::env::temp_dir().join(format!("ct_rule_match_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let claude_md = tmp.join("CLAUDE.md");
+        let imported = tmp.join("RTK.md");
+        std::fs::write(&claude_md, "# Rules\n\n@RTK.md\n").unwrap();
+        std::fs::write(&imported, "# Import\n").unwrap();
+
+        let mut paths = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+        collect_rule_file(&mut paths, claude_md.clone(), &tmp, &mut visited, 0);
+
+        assert!(paths.iter().any(|p| p.ends_with("CLAUDE.md")), "got {:?}", paths);
+        assert!(paths.iter().any(|p| p.ends_with("RTK.md")), "got {:?}", paths);
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]

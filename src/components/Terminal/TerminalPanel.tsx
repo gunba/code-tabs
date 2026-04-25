@@ -408,6 +408,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           continueSession: session.config.continueSession,
         },
       });
+      let codexRolloutStarted = false;
       try {
         // Allocate a verified-free inspector port before spawning Claude.
         // Codex is a Rust binary and exposes structured data via rollout JSONL,
@@ -496,19 +497,22 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
             model: session.config.model,
           },
         });
+
+        // Codex creates its rollout JSONL during startup. Arm the watcher
+        // immediately before PTY spawn so its mtime attribution window cannot
+        // miss a fast-created file.
+        if (session.config.cli === "codex") {
+          try {
+            await invoke("start_codex_rollout", { sessionId: session.id });
+            codexRolloutStarted = true;
+          } catch (err) {
+            dlog("terminal", session.id, `start_codex_rollout failed: ${err}`, "WARN");
+          }
+        }
         const handle = await pty.spawn(program, args, cwd, cols, rows, env);
         registerPtyWriter(session.id, handle.write);
         registerPtyKill(session.id, () => handle.kill());
         registerPtyHandleId(session.id, handle.pid);
-
-        // Codex observability: tail the rollout JSONL Codex writes to
-        // ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl during the TUI
-        // session and forward normalized events to observability.jsonl.
-        if (session.config.cli === "codex") {
-          invoke("start_codex_rollout", { sessionId: session.id }).catch((err) => {
-            dlog("terminal", session.id, `start_codex_rollout failed: ${err}`, "WARN");
-          });
-        }
         dlog("terminal", session.id, `spawned pid=${handle.pid} port=${inspPort} tapPort=${tapPort} cols=${cols} rows=${rows}`, "LOG", {
           event: "session.spawned",
           data: {
@@ -529,6 +533,9 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           rows,
         });
       } catch (err) {
+        if (codexRolloutStarted) {
+          invoke("stop_codex_rollout", { sessionId: session.id }).catch(() => {});
+        }
         spawnSpan.fail(err);
         dlog("terminal", session.id, `spawn failed: ${err}`, "ERR");
         updateState(session.id, "error");

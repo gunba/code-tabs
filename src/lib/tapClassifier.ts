@@ -47,8 +47,12 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
   }
 }
 
+function isCodexShellTool(name: string): boolean {
+  return name === "shell" || name === "exec_command" || name === "shell_command" || name === "local_shell";
+}
+
 function normalizeCodexToolName(name: string): string {
-  if (name === "shell" || name === "exec_command") return "Bash";
+  if (isCodexShellTool(name)) return "Bash";
   return name;
 }
 
@@ -64,10 +68,10 @@ function codexCommandString(command: unknown): string {
 
 function parseCodexToolInput(name: string, raw: unknown): { toolName: string; input: Record<string, unknown> } {
   const parsed = parseJsonObject(raw);
-  if (name === "shell" || name === "exec_command") {
+  if (isCodexShellTool(name)) {
     const cmd = name === "exec_command"
       ? stringField(parsed, "cmd")
-      : codexCommandString(parsed?.command);
+      : codexCommandString(parsed?.command) || stringField(parsed, "cmd");
     return {
       toolName: "Bash",
       input: {
@@ -84,6 +88,43 @@ function parseCodexToolInput(name: string, raw: unknown): { toolName: string; in
         ...(parsed ?? {}),
         patch: typeof raw === "string" ? raw : JSON.stringify(raw ?? ""),
         description: "apply_patch",
+      },
+    };
+  }
+  if (name === "list_dir") {
+    const path = stringField(parsed, "dir_path") || stringField(parsed, "path");
+    return {
+      toolName: "Glob",
+      input: {
+        ...(parsed ?? {}),
+        path,
+        pattern: "*",
+        description: "Codex directory listing",
+      },
+    };
+  }
+  if (name === "read_file" || name === "open_file" || name === "view_image") {
+    const filePath = stringField(parsed, "file_path")
+      || stringField(parsed, "path")
+      || stringField(parsed, "absolute_path")
+      || stringField(parsed, "image_path");
+    return {
+      toolName: "Read",
+      input: {
+        ...(parsed ?? {}),
+        file_path: filePath,
+        description: name === "view_image" ? "Codex image read" : "Codex file read",
+      },
+    };
+  }
+  if ((name === "grep" || name === "grep_files" || name === "search_files") && stringField(parsed, "pattern")) {
+    return {
+      toolName: "Grep",
+      input: {
+        ...(parsed ?? {}),
+        path: stringField(parsed, "path") || stringField(parsed, "dir_path"),
+        pattern: stringField(parsed, "pattern"),
+        description: "Codex search",
       },
     };
   }
@@ -104,6 +145,49 @@ function codexTextFromContent(content: unknown): string {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+function parseCodexContextUserMessage(ts: number, text: string): TapEvent | null {
+  const trimmed = text.trim();
+  const skillBlock = trimmed.match(/<skill>\s*<name>([^<]+)<\/name>\s*<path>([^<]+)<\/path>/s);
+  if (skillBlock) {
+    return {
+      kind: "InstructionsLoadedEvent",
+      ts,
+      filePath: skillBlock[2].trim(),
+      memoryType: "skill",
+      loadReason: skillBlock[1].trim(),
+    };
+  }
+
+  const skillPreview = trimmed.match(/^\[skill:\$?([^\]]+)\]\(([^)]+)\)$/);
+  if (skillPreview) {
+    return {
+      kind: "InstructionsLoadedEvent",
+      ts,
+      filePath: skillPreview[2].trim(),
+      memoryType: "skill",
+      loadReason: skillPreview[1].trim(),
+    };
+  }
+
+  const agents = trimmed.match(/^# AGENTS\.md instructions for ([^\n]+)\n\n<INSTRUCTIONS>/);
+  if (agents) {
+    const dir = agents[1].trim().replace(/[\\/]+$/, "");
+    return {
+      kind: "InstructionsLoadedEvent",
+      ts,
+      filePath: `${dir}/AGENTS.md`,
+      memoryType: "project",
+      loadReason: "AGENTS.md",
+    };
+  }
+
+  if (trimmed.startsWith("<environment_context>")) {
+    return { kind: "ContextFilesHint", ts, contextKind: "config", label: "codex environment context" };
+  }
+
+  return null;
 }
 
 function codexToolOutputInfo(entry: TapEntry): {
@@ -211,6 +295,16 @@ function classifyParse(ts: number, parsed: any): TapEvent | null {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function classifyStringify(ts: number, parsed: any): TapEvent | null {
   if (typeof parsed !== "object" || parsed === null) return null;
+
+  if (typeof parsed.commandName === "string" && typeof parsed.success === "boolean") {
+    return {
+      kind: "SkillInvocation",
+      ts,
+      skill: parsed.commandName,
+      success: parsed.success,
+      allowedTools: Array.isArray(parsed.allowedTools) ? parsed.allowedTools : [],
+    };
+  }
 
   // UserInput: has display + timestamp + project/sessionId
   if (typeof parsed.display === "string" && parsed.timestamp) {
@@ -470,6 +564,13 @@ function classifyStringify(ts: number, parsed: any): TapEvent | null {
   }
 
   // ConversationMessage: has type in (user, assistant, result) + message or specific structure
+  if (parsed.type === "attachment" && parsed.attachment?.type === "mcp_instructions_delta") {
+    const names = Array.isArray(parsed.attachment.addedNames)
+      ? parsed.attachment.addedNames.filter((name: unknown) => typeof name === "string").join(", ")
+      : "";
+    return { kind: "ContextFilesHint", ts, contextKind: "mcp", label: names || "mcp instructions" };
+  }
+
   if (parsed.type === "user" || parsed.type === "assistant" || parsed.type === "result") {
     // [IN-17] SkillInvocation: early-return before UserInterruption/PermissionRejected checks
     if (parsed.type === "user" && parsed.toolUseResult?.commandName) {
@@ -979,10 +1080,24 @@ function classifyTapEntryInner(entry: TapEntry): TapEvent | null {
       };
     }
 
+    if (cat === "codex-thread-name-updated") {
+      const title = String(entry.threadName || "").trim();
+      if (!title) return null;
+      return {
+        kind: "CustomTitle",
+        ts,
+        title,
+        sessionId: String(entry.codexSessionId || ""),
+      };
+    }
+
     if (cat === "codex-message") {
       const role = String(entry.role || "");
       const text = codexTextFromContent(entry.content);
+      const phase = typeof entry.phase === "string" ? entry.phase : "";
       if (role === "user") {
+        const contextEvent = parseCodexContextUserMessage(ts, text);
+        if (contextEvent) return contextEvent;
         return { kind: "UserInput", ts, display: text, sessionId: "" };
       }
       if (role === "assistant") {
@@ -995,7 +1110,7 @@ function classifyTapEntryInner(entry: TapEntry): TapEvent | null {
           uuid: null,
           parentUuid: null,
           promptId: null,
-          stopReason: "end_turn",
+          stopReason: phase && phase !== "final_answer" ? null : "end_turn",
           toolNames: [],
           toolAction: null,
           textSnippet: text,

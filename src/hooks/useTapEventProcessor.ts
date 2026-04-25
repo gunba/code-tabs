@@ -6,7 +6,7 @@ import { tapEventBus } from "../lib/tapEventBus";
 import { reduceTapEvent } from "../lib/tapStateReducer";
 import { TapMetadataAccumulator } from "../lib/tapMetadataAccumulator";
 import { TapSubagentTracker } from "../lib/tapSubagentTracker";
-import { normalizePath, canonicalizePath, parseWorktreePath } from "../lib/paths";
+import { normalizePath, canonicalizePath, parseWorktreePath, dirToTabName } from "../lib/paths";
 import { getResumeId, resolveModelFamily } from "../lib/claude";
 import { buildSubagentTabs } from "../lib/contextProjection";
 import { useSettingsStore } from "../store/settings";
@@ -129,6 +129,126 @@ async function runGitScanAndValidate(sid: string): Promise<void> {
   }
 }
 
+function isAbsoluteLikePath(path: string): boolean {
+  return path.startsWith("/")
+    || path.startsWith("~")
+    || /^[A-Za-z]:[\\/]/.test(path);
+}
+
+function resolveActivityPath(rawPath: string, workDir: string): string {
+  if (!rawPath) return "";
+  if (isAbsoluteLikePath(rawPath) || !workDir) return canonicalizePath(rawPath);
+  return canonicalizePath(`${workDir.replace(/[\\/]+$/, "")}/${rawPath}`);
+}
+
+function recordContextPath(
+  sid: string,
+  rawPath: string,
+  memoryType: string,
+  loadReason: string,
+  toolName: string,
+  agentId: string | null
+): void {
+  if (!rawPath.trim()) return;
+  const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+  const workDir = session?.config.workingDir ?? "";
+  const ctxPath = resolveActivityPath(rawPath, workDir);
+  const isExternal = workDir ? !normalizePath(ctxPath).startsWith(workDir) : false;
+  const activityStore = useActivityStore.getState();
+  activityStore.addContextFile(sid, {
+    path: ctxPath,
+    memoryType,
+    loadReason,
+  });
+  activityStore.addFileActivity(sid, ctxPath, "read", {
+    agentId,
+    toolName,
+    isExternal,
+  });
+}
+
+async function resolveAndRecordSkillFile(
+  sid: string,
+  skillName: string,
+  agentId: string | null,
+  seen: Set<string>
+): Promise<void> {
+  const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+  if (!session) return;
+  const key = `${sid}:skill:${session.config.cli}:${skillName}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  try {
+    const path = await invoke<string | null>("resolve_skill_file", {
+      cli: session.config.cli,
+      skillName,
+      workingDir: session.config.workingDir,
+    });
+    if (path) {
+      recordContextPath(sid, path, "skill", skillName, "Skill", agentId);
+    }
+  } catch (err) {
+    dlog("tap", sid, `resolve_skill_file failed: ${err}`, "DEBUG");
+  }
+}
+
+async function resolveAndRecordContextFiles(
+  sid: string,
+  contextKind: "mcp" | "plugin" | "config" | "rules",
+  label: string,
+  toolName: string,
+  agentId: string | null,
+  seen: Set<string>
+): Promise<void> {
+  const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+  if (!session) return;
+  const keyLabel = contextKind === "mcp" || contextKind === "config" ? contextKind : label;
+  const key = `${sid}:context:${session.config.cli}:${contextKind}:${keyLabel}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  try {
+    const paths = await invoke<string[]>("resolve_activity_context_files", {
+      cli: session.config.cli,
+      contextKind,
+      workingDir: session.config.workingDir,
+    });
+    for (const path of paths) {
+      recordContextPath(sid, path, contextKind, label || contextKind, toolName, agentId);
+    }
+  } catch (err) {
+    dlog("tap", sid, `resolve_activity_context_files failed: ${err}`, "DEBUG");
+  }
+}
+
+function deriveCodexPromptTitle(display: string): string | null {
+  const cleaned = display
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[`*_#[\]()>]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned || cleaned.startsWith("/")) return null;
+  const words = cleaned.match(/[A-Za-z0-9][A-Za-z0-9._/-]*/g) ?? [];
+  if (words.length === 0) return null;
+  const title = words.slice(0, 7).join(" ");
+  return title.length > 54 ? `${title.slice(0, 51).trim()}...` : title;
+}
+
+function maybeAutoNameCodexSession(sid: string, display: string, seen: Set<string>): void {
+  if (seen.has(sid)) return;
+  const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
+  if (!session || session.config.cli !== "codex") return;
+  const defaultName = dirToTabName(session.config.launchWorkingDir || session.config.workingDir);
+  if (session.name && session.name !== defaultName) {
+    seen.add(sid);
+    return;
+  }
+  const title = deriveCodexPromptTitle(display);
+  if (!title || title === session.name) return;
+  useSessionStore.getState().renameSession(sid, title);
+  useSettingsStore.getState().setSessionName(getResumeId(session), title);
+  seen.add(sid);
+}
+
 // [SI-13] Event priority: runs reduceTapEvent which enforces sticky actionNeeded guard
 // [SI-20] Worktree cwd detection: ConversationMessage/SessionRegistration/WorktreeState -> updateConfig
 // [SI-23] Plan detection: ToolCallStart(ExitPlanMode) handled by reducer, processor dispatches
@@ -173,6 +293,8 @@ export function useTapEventProcessor(
     subTrackerRef.current = subTracker;
     stateRef.current = "starting";
     let activityTurnCounter = 0;
+    const contextFileHintsSeen = new Set<string>();
+    const codexAutoNamed = new Set<string>();
     setClaudeSessionId(null);
     setUserPrompt(null);
 
@@ -293,6 +415,7 @@ export function useTapEventProcessor(
           allowedTools: event.allowedTools,
           timestamp: event.ts,
         });
+        void resolveAndRecordSkillFile(sid, event.skill, null, contextFileHintsSeen);
       }
 
       // 5. Activity tracking — file change events for the Activity Panel
@@ -310,6 +433,10 @@ export function useTapEventProcessor(
         // so it only fires when all work is genuinely done (including subagents).
 
         if (event.kind === "ToolInput") {
+          if (event.toolName.startsWith("mcp__")) {
+            void resolveAndRecordContextFiles(sid, "mcp", event.toolName, "MCP", agentId, contextFileHintsSeen);
+          }
+
           // Suppress phantom Read events during subagent context re-serialization.
           // When a subagent is in flight but sidechainActive is false and the last
           // main-agent tool was Agent, ToolInput(Read) events are re-serialized
@@ -482,17 +609,36 @@ export function useTapEventProcessor(
         }
 
         if (event.kind === "InstructionsLoadedEvent") {
-          const ctxPath = canonicalizePath(event.filePath);
-          activityStore.addContextFile(sid, {
-            path: ctxPath,
-            memoryType: event.memoryType,
-            loadReason: event.loadReason,
-          });
-          // Also record as a read so context files appear in Response mode and the file tree
-          activityStore.addFileActivity(sid, ctxPath, "read", {
+          recordContextPath(
+            sid,
+            event.filePath,
+            event.memoryType,
+            event.loadReason,
+            event.memoryType === "skill" ? "Skill" : "context",
             agentId,
-            toolName: "context",
-          });
+          );
+        }
+
+        if (event.kind === "ContextFilesHint") {
+          void resolveAndRecordContextFiles(
+            sid,
+            event.contextKind,
+            event.label,
+            event.contextKind === "mcp" ? "MCP" : "context",
+            agentId,
+            contextFileHintsSeen,
+          );
+        }
+
+        if (event.kind === "ContextBudget" && event.claudeMdSize > 0) {
+          void resolveAndRecordContextFiles(
+            sid,
+            "rules",
+            "Claude rules",
+            "context",
+            agentId,
+            contextFileHintsSeen,
+          );
         }
       }
 
@@ -521,6 +667,9 @@ export function useTapEventProcessor(
       if (event.kind === "UserInput" || event.kind === "SlashCommand") {
         useActivityStore.getState().markUserMessage(sid);
         setUserPrompt(event.display.slice(0, 200));
+        if (event.kind === "UserInput") {
+          maybeAutoNameCodexSession(sid, event.display, codexAutoNamed);
+        }
       }
 
       if (event.kind === "SlashCommand") {

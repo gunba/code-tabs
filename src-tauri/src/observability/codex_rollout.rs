@@ -378,6 +378,10 @@ fn rollout_ts_millis(ts: &str) -> i64 {
         .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis())
 }
 
+fn parsed_str<'a>(payload: &'a Value, key: &str) -> Option<&'a str> {
+    payload.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty())
+}
+
 // [CX-01] emit_tap_entry publishes 'tap-entry-{sid}' events with codex-* cats; function_call/custom_tool_call dual-handled; dual emit (tool-call-start + tool-input) for tool calls
 fn emit_tap_entry(app: &tauri::AppHandle, session_id: &str, ts: &str, mut entry: Value) {
     let Some(obj) = entry.as_object_mut() else {
@@ -522,6 +526,99 @@ fn emit_event_msg(app: &tauri::AppHandle, session_id: &str, ts: &str, payload: &
                 }),
             );
         }
+        "session_configured" => {
+            if let Some(thread_name) = parsed_str(payload, "thread_name") {
+                emit_tap_entry(
+                    app,
+                    session_id,
+                    ts,
+                    serde_json::json!({
+                        "cat": "codex-thread-name-updated",
+                        "codexSessionId": payload.get("thread_id"),
+                        "threadName": thread_name,
+                    }),
+                );
+            }
+            record_backend_event(
+                app,
+                "DEBUG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.session_configured",
+                "Session configured",
+                serde_json::json!({ "ts": ts, "payload": payload }),
+            );
+        }
+        "thread_name_updated" => {
+            emit_tap_entry(
+                app,
+                session_id,
+                ts,
+                serde_json::json!({
+                    "cat": "codex-thread-name-updated",
+                    "codexSessionId": payload.get("thread_id"),
+                    "threadName": payload.get("thread_name"),
+                }),
+            );
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.thread_name_updated",
+                "Thread name updated",
+                serde_json::json!({ "ts": ts, "payload": payload }),
+            );
+        }
+        "user_message" => {
+            emit_tap_entry(
+                app,
+                session_id,
+                ts,
+                serde_json::json!({
+                    "cat": "codex-message",
+                    "role": "user",
+                    "content": [{
+                        "type": "input_text",
+                        "text": payload.get("message").and_then(|v| v.as_str()).unwrap_or(""),
+                    }],
+                }),
+            );
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.user_message",
+                "User message",
+                serde_json::json!({ "ts": ts, "payload": payload }),
+            );
+        }
+        "agent_message" => {
+            emit_tap_entry(
+                app,
+                session_id,
+                ts,
+                serde_json::json!({
+                    "cat": "codex-message",
+                    "role": "assistant",
+                    "phase": payload.get("phase"),
+                    "content": [{
+                        "type": "output_text",
+                        "text": payload.get("message").and_then(|v| v.as_str()).unwrap_or(""),
+                    }],
+                }),
+            );
+            record_backend_event(
+                app,
+                "DEBUG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.agent_message",
+                payload.get("phase").and_then(|v| v.as_str()).unwrap_or("assistant"),
+                serde_json::json!({ "ts": ts, "payload": payload }),
+            );
+        }
         "exec_command_end" => {
             record_backend_event(
                 app,
@@ -544,6 +641,66 @@ fn emit_event_msg(app: &tauri::AppHandle, session_id: &str, ts: &str, payload: &
                     "exitCode": payload.get("exit_code"),
                     "duration": payload.get("duration"),
                 }),
+            );
+        }
+        "mcp_tool_call_begin" => {
+            let invocation = payload.get("invocation").unwrap_or(&Value::Null);
+            let server = invocation.get("server").and_then(|v| v.as_str()).unwrap_or("");
+            let tool = invocation.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+            let name = format!("mcp__{server}__{tool}");
+            let call_id = payload.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
+            emit_tap_entry(
+                app,
+                session_id,
+                ts,
+                serde_json::json!({
+                    "cat": "codex-tool-call-start",
+                    "callId": call_id,
+                    "name": name,
+                }),
+            );
+            emit_tap_entry(
+                app,
+                session_id,
+                ts,
+                serde_json::json!({
+                    "cat": "codex-tool-input",
+                    "callId": call_id,
+                    "name": name,
+                    "arguments": invocation.get("arguments"),
+                }),
+            );
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.mcp_tool_call_begin",
+                &name,
+                serde_json::json!({ "ts": ts, "payload": payload }),
+            );
+        }
+        "mcp_tool_call_end" => {
+            let call_id = payload.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
+            emit_tap_entry(
+                app,
+                session_id,
+                ts,
+                serde_json::json!({
+                    "cat": "codex-tool-call-complete",
+                    "callId": call_id,
+                    "output": payload.get("result"),
+                    "duration": payload.get("duration"),
+                }),
+            );
+            record_backend_event(
+                app,
+                "LOG",
+                "codex.rollout",
+                Some(session_id),
+                "codex.mcp_tool_call_end",
+                "MCP tool finished",
+                serde_json::json!({ "ts": ts, "payload": payload }),
             );
         }
         _ => {

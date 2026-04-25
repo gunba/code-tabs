@@ -218,6 +218,8 @@ pub fn run() {
             commands::list_agents,
             commands::list_skills,
             commands::list_codex_skill_files,
+            commands::resolve_skill_file,
+            commands::resolve_activity_context_files,
             commands::register_active_pid,
             commands::unregister_active_pid,
             commands::kill_process_tree,
