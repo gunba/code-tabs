@@ -25,7 +25,6 @@
 //!     | "event_msg" | "compacted" | "turn_context", "payload": {...} }
 
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -604,12 +603,13 @@ fn emit_codex_prompt_capture(
     let model = payload.get("model").and_then(|v| v.as_str()).unwrap_or("");
     let developer = turn_context_developer_instructions(payload);
     let user = turn_context_user_instructions(payload);
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    model.hash(&mut hasher);
-    base.hash(&mut hasher);
-    developer.unwrap_or("").hash(&mut hasher);
-    user.unwrap_or("").hash(&mut hasher);
-    let capture_key = hasher.finish().to_string();
+    let capture_key = format!(
+        "{}\u{1f}{}\u{1f}{}\u{1f}{}",
+        model,
+        base,
+        developer.unwrap_or(""),
+        user.unwrap_or(""),
+    );
     if prompt_state.last_capture_key.as_deref() == Some(capture_key.as_str()) {
         return;
     }

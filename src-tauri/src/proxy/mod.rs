@@ -463,7 +463,7 @@ fn is_anthropic_endpoint(path: &str) -> bool {
 }
 
 fn is_openai_responses_endpoint(path: &str) -> bool {
-    path == "/v1/responses" || path.starts_with("/v1/responses?")
+    path_matches_endpoint(path, "/v1/responses")
 }
 
 fn resolve_upstream(path: &str) -> UpstreamKind {

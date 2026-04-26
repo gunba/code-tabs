@@ -8,12 +8,15 @@ let cachedByCli: Record<CliKind, ReadonlySet<string>> = {
 };
 
 useSettingsStore.subscribe((state, prev) => {
-  if (state.recordingConfigsByCli !== prev.recordingConfigsByCli || state.recordingConfig !== prev.recordingConfig) {
-    cachedByCli = {
-      claude: new Set(getRecordingConfigForCliFromState(state, "claude").noisyEventKinds),
-      codex: new Set(getRecordingConfigForCliFromState(state, "codex").noisyEventKinds),
-    };
-  }
+  const claudeKinds = getRecordingConfigForCliFromState(state, "claude").noisyEventKinds;
+  const codexKinds = getRecordingConfigForCliFromState(state, "codex").noisyEventKinds;
+  const prevClaudeKinds = getRecordingConfigForCliFromState(prev, "claude").noisyEventKinds;
+  const prevCodexKinds = getRecordingConfigForCliFromState(prev, "codex").noisyEventKinds;
+  if (claudeKinds === prevClaudeKinds && codexKinds === prevCodexKinds) return;
+  cachedByCli = {
+    claude: new Set(claudeKinds),
+    codex: new Set(codexKinds),
+  };
 });
 
 /** Returns the current set of noisy event kinds (synchronous, cached). */

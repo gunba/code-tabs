@@ -28,8 +28,8 @@ export const DEFAULT_NOISY_EVENT_KINDS: string[] = [
   "ApiTelemetry", "ProcessHealth", "EnvAccess", "TextDecoderChunk",
 ];
 
-// [CI-05] Recording defaults expand TAP categories, keep stdout/stderr off, and v6 backfills older persisted configs.
-// [CI-06] debugCapture field controls DEBUG-level capture; v8 migration backfills true for older states.
+// [CI-05] Recording defaults: TAP/traffic disabled, all high-volume tap categories off, parse/stringify and codex-* categories on. v6 backfilled added categories with stdout/stderr forced off; v21 force-quiets persisted configs into recordingConfigsByCli.
+// [CI-06] RecordingConfig.debugCapture field controls DEBUG-level capture (default false). v8 backfilled debugCapture=true for older states; v21 force-quiets it back to false alongside the other recording defaults.
 export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
   taps: {
     enabled: false,

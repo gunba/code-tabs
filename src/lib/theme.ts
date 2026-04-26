@@ -36,6 +36,7 @@ export interface Theme {
     cliClaudeBg: string;     // Claude tinted background
     cliCodex: string;        // Codex identity color
     cliCodexBg: string;      // Codex tinted background
+    cliCodexHover: string;   // Codex hover color (mirrors accentHover for the codex provider scope)
 
     // Semantic
     success: string;
@@ -84,6 +85,7 @@ export const CLAUDE_THEME: Theme = {
     cliClaudeBg: "#3d2a20",
     cliCodex: "#39c5cf",
     cliCodexBg: "#173a3d",
+    cliCodexHover: "#56d4dd",
 
     // Semantic (Cowork dark mode)
     success: "#5cb85c",         // Cowork success: hsl(97, 59.1%, 46.1%)
@@ -142,7 +144,7 @@ export function applyTheme(theme: Theme): void {
   root.style.setProperty("--provider-claude-accent-hover", c.accentHover);
   root.style.setProperty("--provider-codex-accent", c.cliCodex);
   root.style.setProperty("--provider-codex-accent-bg", c.cliCodexBg);
-  root.style.setProperty("--provider-codex-accent-hover", "#56d4dd");
+  root.style.setProperty("--provider-codex-accent-hover", c.cliCodexHover);
   root.style.setProperty("--provider-accent", c.cliClaude);
   root.style.setProperty("--provider-accent-bg", c.cliClaudeBg);
   root.style.setProperty("--provider-accent-hover", c.accentHover);

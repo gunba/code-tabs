@@ -36,7 +36,8 @@ function looksLikeFilePath(path: string): boolean {
   const trimmed = path.replace(/[\\/]+$/, "");
   const slash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
   const base = slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
-  return base.includes(".") && !base.startsWith(".");
+  if (!base || base === "." || base === "..") return false;
+  return base.includes(".");
 }
 
 function isFolderLike(path: string): boolean {
