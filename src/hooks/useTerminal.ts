@@ -679,6 +679,8 @@ export function useTerminal({
   const flushWriteQueue = useCallback(() => {
     const term = termRef.current;
     if (!term) return;
+    // Hidden tabs keep raw output queued; xterm parsing/rendering catches up on activation.
+    if (!visibleRef.current) return;
     if (writeInFlightRef.current) return;
     const queuedChunks = getTerminalWriteQueueDepth(writeQueueRef.current);
     const batch = takeTerminalWriteBatch(writeQueueRef.current);
@@ -754,6 +756,12 @@ export function useTerminal({
       flushWriteQueue();
     }
   }, []);
+
+  useEffect(() => {
+    if (visible) {
+      flushWriteQueue();
+    }
+  }, [flushWriteQueue, visible]);
 
   const write = useCallback((data: string) => {
     if (!termRef.current) return;
