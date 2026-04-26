@@ -91,18 +91,6 @@ function parseCodexToolInput(name: string, raw: unknown): { toolName: string; in
       },
     };
   }
-  if (name === "list_dir") {
-    const path = stringField(parsed, "dir_path") || stringField(parsed, "path");
-    return {
-      toolName: "Glob",
-      input: {
-        ...(parsed ?? {}),
-        path,
-        pattern: "*",
-        description: "Codex directory listing",
-      },
-    };
-  }
   if (name === "read_file" || name === "open_file" || name === "view_image") {
     const filePath = stringField(parsed, "file_path")
       || stringField(parsed, "path")
@@ -114,17 +102,6 @@ function parseCodexToolInput(name: string, raw: unknown): { toolName: string; in
         ...(parsed ?? {}),
         file_path: filePath,
         description: name === "view_image" ? "Codex image read" : "Codex file read",
-      },
-    };
-  }
-  if ((name === "grep" || name === "grep_files" || name === "search_files") && stringField(parsed, "pattern")) {
-    return {
-      toolName: "Grep",
-      input: {
-        ...(parsed ?? {}),
-        path: stringField(parsed, "path") || stringField(parsed, "dir_path"),
-        pattern: stringField(parsed, "pattern"),
-        description: "Codex search",
       },
     };
   }

@@ -522,7 +522,7 @@ describe("classifyTapEntry — Codex rollout events", () => {
     });
   });
 
-  it("classifies Codex list_dir calls as Glob activity input", () => {
+  it("keeps Codex list_dir calls under their native tool name", () => {
     const event = classifyTapEntry({
       ts: 6005,
       cat: "codex-tool-input",
@@ -532,8 +532,8 @@ describe("classifyTapEntry — Codex rollout events", () => {
     });
     expect(event).toMatchObject({
       kind: "ToolInput",
-      toolName: "Glob",
-      input: { path: "/repo/src", pattern: "*" },
+      toolName: "list_dir",
+      input: { dir_path: "/repo/src" },
     });
   });
 
