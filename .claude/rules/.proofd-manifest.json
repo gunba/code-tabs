@@ -1,6 +1,7 @@
 {
   "branch": "master",
   "files": [
+    "package-json-7030d0b2.md",
     "src-app-css-aa7165ae.md",
     "src-app-tsx-835da56f.md",
     "src-components-activitypanel-activitypanel-tsx-69a849fe.md",
@@ -15,12 +16,14 @@
     "src-components-configmanager-pluginspane-tsx-aa9ba9ed.md",
     "src-components-configmanager-promptstab-css-a854ad9e.md",
     "src-components-configmanager-promptstab-tsx-ea7b92a2.md",
+    "src-components-configmanager-recordingpane-tsx-f0f0c199.md",
     "src-components-configmanager-settingspane-tsx-38f26a94.md",
     "src-components-configmanager-settingstab-tsx-b798a099.md",
     "src-components-configmanager-skillseditor-tsx-322dfe55.md",
     "src-components-configmanager-threepaneeditor-tsx-81e402b7.md",
     "src-components-configmanager-unsavedtexteditors-tsx-9ed8195e.md",
     "src-components-contextviewer-contextviewer-tsx-757de311.md",
+    "src-components-debugpanel-debugpanel-css-f6706a87.md",
     "src-components-debugpanel-debugpanel-tsx-d96fd753.md",
     "src-components-dropdown-dropdown-tsx-235148c8.md",
     "src-components-header-header-tsx-593609f6.md",
@@ -29,6 +32,7 @@
     "src-components-modaloverlay-modaloverlay-tsx-a135232f.md",
     "src-components-notespanel-notespanel-tsx-1103397d.md",
     "src-components-resumepicker-resumepicker-tsx-437dde11.md",
+    "src-components-rightpanel-rightpanel-tsx-09ac93a1.md",
     "src-components-sessionlauncher-sessionlauncher-css-c1dcdf8b.md",
     "src-components-sessionlauncher-sessionlauncher-tsx-9437a0e8.md",
     "src-components-statusbar-statusbar-tsx-e70f7306.md",
@@ -65,12 +69,15 @@
     "src-lib-terminalpathlinks-ts-df9c4a3d.md",
     "src-lib-terminalregistry-ts-80c51fbb.md",
     "src-lib-terminalwritequeue-ts-a092a42d.md",
+    "src-lib-tests-claude-test-ts-a39b88e7.md",
     "src-lib-theme-ts-a181114c.md",
     "src-lib-tuiscrollsearch-ts-bbc05229.md",
+    "src-main-tsx-60f616ca.md",
     "src-store-activity-ts-13b01eb4.md",
     "src-store-sessions-ts-13276abb.md",
     "src-store-settings-ts-8fe4e3b5.md",
     "src-store-version-ts-294717d9.md",
+    "src-tauri-src-bin-discover-audit-rs-ad146f45.md",
     "src-tauri-src-cli-adapter-claude-rs-7729e8cd.md",
     "src-tauri-src-cli-adapter-codex-rs-72beb2c9.md",
     "src-tauri-src-cli-adapter-mod-rs-92947f37.md",
@@ -97,6 +104,7 @@
     "src-tauri-src-session-types-rs-920df7b3.md",
     "src-tauri-src-tap-server-rs-dc90a71d.md",
     "src-types-session-ts-b2c31cff.md",
-    "src-types-tapevents-ts-79312c4c.md"
+    "src-types-tapevents-ts-79312c4c.md",
+    "tools-codex-hook-py-6a38e529.md"
   ]
 }

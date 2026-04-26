@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSettingsStore } from "../../store/settings";
 import { useVersionStore } from "../../store/version";
+// [DR-04] Components live in src/components/<Name>/<Name>.tsx with co-located <Name>.css. Header is the canonical example: Header.tsx + Header.css side by side.
 import "./Header.css";
 
 const DRAG_THRESHOLD_PX_SQ = 9; // 3px movement before we start a window drag

@@ -1,3 +1,4 @@
+// [DR-03] Zustand store. Project convention: stores live in src/store/, hooks in src/hooks/.
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { trace, traceAsync } from "../lib/perfTrace";
@@ -192,7 +193,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
           }).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`, { module: "session", event: "session.init.orphans_killed", data: { count: n } }); })
            .catch((e) => dlog("session", null, `orphan cleanup failed: ${e}`, "ERR"))
         : Promise.resolve(),
-      // Slimmed proxy lifecycle: localhost prompt-rewrite passthrough.
+      // [PS-06] Slimmed proxy lifecycle: localhost prompt-rewrite passthrough.
       // No provider config, no model translation, no compression. Claude
       // uses ANTHROPIC_BASE_URL; Codex uses openai_base_url at launch.
       traceAsync("init: start_api_proxy", () => {
@@ -298,6 +299,7 @@ export const useSessionStore = create<SessionsState>((set) => ({
       return { sessions, activeTabId, subagents, skillInvocations, commandHistory, inspectorOffSessions, trafficRecording, processHealth };
     });
     useActivityStore.getState().clearSession(id);
+    // [DP-14] closeSession() drops the per-session debug-log buffer (and bumps the generation counter so DebugPanel re-fetches).
     removeDebugLogSession(id);
     // Persist immediately so the removal is captured even if the app closes
     useSessionStore.getState().persist();

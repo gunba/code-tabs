@@ -168,6 +168,7 @@ export function RecordingPane({ cli, onStatus }: RecordingPaneProps) {
           <span className="recording-hint">Write intercepted events to disk</span>
         </label>
 
+        {/* [CM-27] TAP categories grouped by subsystem (TAP_CATEGORY_GROUPS); each row shows label + hookSource. The raw cat.key is React key + checkbox lookup, not user-facing. */}
         <div className={`recording-categories${!recordingConfig.taps.enabled ? " recording-disabled" : ""}`}>
           {TAP_CATEGORY_GROUPS.map((group) => (
             <div key={group.label} className="recording-group">

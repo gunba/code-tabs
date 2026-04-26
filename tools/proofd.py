@@ -1325,9 +1325,14 @@ class ProofStore:
             return {str(item).lower() for item in configured}
         return set(DEFAULT_SOURCE_EXTENSIONS)
 
+    def configured_scan_excludes(self) -> list[str]:
+        metadata = self.repo_metadata()
+        return [normalize_path(item) for item in metadata.get("scan_excludes", []) if str(item).strip()]
+
     def iter_source_files(self) -> itertools.chain[pathlib.Path]:
         source_dirs = self.configured_source_dirs()
         extensions = self.configured_source_extensions()
+        excludes = self.configured_scan_excludes()
         yielded: set[str] = set()
         iterables: list[list[pathlib.Path]] = []
         for source_dir in source_dirs:
@@ -1342,6 +1347,8 @@ class ProofStore:
                     continue
                 rel_path = normalize_path(str(path.relative_to(self.repo_root)))
                 if any(should_skip_scan_dir(part) for part in scan_dir_parts(rel_path, source_dir)):
+                    continue
+                if excludes and file_matches(rel_path, excludes):
                     continue
                 if rel_path in yielded:
                     continue

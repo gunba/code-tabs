@@ -183,6 +183,7 @@ pub fn run() {
         .manage(pty::PtyState::default())
         .manage(ProxyState::new())
         .manage(observability::codex_rollout::CodexRolloutState::default())
+        // [DR-01] [AR-01] All Rust IPC commands registered through tauri::generate_handler! — sources spread across src-tauri/src/commands/*.rs (session/cli/config/git/process/data), plus output_filter.rs/proxy/mod.rs/tap_server.rs/path_resolve.rs. The bridge between React (WebView2) and Rust runs through this single handler list.
         .invoke_handler(tauri::generate_handler![
             commands::create_session,
             commands::close_session,

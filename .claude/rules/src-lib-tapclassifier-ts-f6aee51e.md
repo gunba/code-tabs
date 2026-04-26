@@ -11,6 +11,10 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 - [CT-01 L19] Codex tap classification helpers: asRecord, parseJsonObject, normalizeCodexToolName (Bash for shell/exec_command), parseCodexToolInput (apply_patch preserves raw patch; list_dir maps to Glob with dir_path/path/directory fallbacks; grep/search_files maps to Grep with path/dir_path/directory + pattern/query/regex fallbacks; read_file/open_file/view_image maps to Read with file_path/path/uri), codexToolOutputInfo. classifyTapEntryInner branches on cat: codex-task-started -> CodexTaskStarted; codex-task-complete -> CodexTaskComplete (lastAgentMessage + durationMs); codex-turn-aborted -> UserInterruption; codex-thread-name-updated -> session naming hook; codex-message/assistant -> ConversationMessage(end_turn). The classifyTapEntry wrapper copies entry.cat onto every classified event so reducer cat==='codex-tool-call-start' / 'codex-message' branches are reachable.
 
+## Inspector Hooks
+
+- [IN-20 L997] There is no active ping loop in inspectorHooks.ts and no ping_api Tauri command — the previous Rust-backed ping was removed. apiLatencyMs is sourced passively from ApiFetch round-trip durations and (when available) HttpPing tap entries (cat=ping from external producers). HttpPing wins over ApiFetch when both arrive.
+
 ## State Metadata
 
 - [SI-25 L923] Status line data capture: INSTALL_TAPS stringify hook matches the serialized status payload shape (session_id + cost.total_cost_usd + context_window.total_input_tokens) and pushes flattened fields to dedicated 'status-line' category. tapClassifier classifies as StatusLineUpdate event. tapMetadataAccumulator stores a grouped nullable statusLine snapshot on SessionMetadata (22 fields, including cumulative input/output tokens and total cost). tapStateReducer treats this as informational (no state change). App tab metadata uses current-turn statusLine context when present and falls back to contextDebug; StatusBar token displays prefer statusLine totals and otherwise fall back to session metadata totals.

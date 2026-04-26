@@ -132,7 +132,7 @@ export function CommandBar({ sessionId, sessionState, ctrlHeld }: CommandBarProp
           )}
         </div>
       )}
-      {/* [CB-09] Per-session command history strip: newest left, merged with skill invocations */}
+      {/* [CB-09] [CB-13] Per-session command history strip: newest left, merged with skill invocations */}
       {merged.length > 0 && (
         <div className="command-history">
           {merged.map((entry) => (

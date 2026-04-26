@@ -259,7 +259,7 @@ pub fn spawn(
     let master_fd = master.into_raw_fd();
     let writer = FdWriter(master_fd);
 
-    // [PT-15] Background reader thread: OS thread reads PTY fd (8 KiB) into sync_channel(64)
+    // [PT-15] [DF-02] Background reader thread: OS thread reads PTY fd (8 KiB) into sync_channel(64). Downstream pty_read drains the channel before responding (PT-27); xterm.js 6.0 handles DEC 2026 sync output on the frontend.
     let reader_fd = master_fd;
     let (output_tx, output_rx) = mpsc::sync_channel::<Vec<u8>>(64);
     std::thread::spawn(move || {

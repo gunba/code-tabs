@@ -176,7 +176,7 @@ function DiscardChangesDialog({
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <IconGear size={11} /> },
   { id: "envvars", label: "Env Vars", icon: <IconBraces size={11} /> },
-  { id: "claudemd", label: "Instructions", icon: <IconDocument size={11} /> },
+  { id: "claudemd", label: "Instructions", icon: <IconDocument size={11} /> }, // [CM-20]
   { id: "hooks", label: "Hooks", icon: <IconHook size={11} /> },
   { id: "plugins", label: "Plugins", icon: <IconPuzzle size={11} /> },
   { id: "mcp", label: "MCP", icon: <IconServer size={11} /> },

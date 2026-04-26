@@ -743,6 +743,7 @@ export const INSTALL_TAPS = `(function() {
     var origStringifyForBypass = origStringify; // use the true original, not the tap-wrapped version
     var fetchBypassCount = 0;
     var httpsTimeoutCount = 0;
+    // [SI-16] WebFetch domain blocklist bypass: api.anthropic.com/api/web/domain_info returns can_fetch:true, eliminating the 10s preflight on every WebFetch.
     https.request = function(options) {
       var h = (options && options.hostname) || '';
       var p = (options && options.path) || '';
@@ -808,6 +809,7 @@ export const INSTALL_TAPS = `(function() {
     };
   } catch(e) {}
 
+  // [SI-18] WebFetch timeout protection: globalThis.fetch wraps non-streaming Anthropic API calls (callSmallModel summarization) at 120s; https.request applies a 90s wall-clock timeout to external HTTPS requests (block above).
   // ── Timeout for non-streaming Anthropic API calls (WebFetch summarization path) ──
   try {
     if (!globalThis.__tapFetchTimeoutInstalled) {

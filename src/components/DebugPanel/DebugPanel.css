@@ -144,6 +144,7 @@
   color: var(--text-primary);
 }
 
+/* [DP-10] DebugPanel chips and rows use --font-mono at 10px so dense logs stay readable while keeping the panel compact. */
 .debug-filter-chip-mod {
   font-family: var(--font-mono);
 }

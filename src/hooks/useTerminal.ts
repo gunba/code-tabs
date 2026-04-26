@@ -26,6 +26,7 @@ import {
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', 'ClaudeEmoji', monospace";
 
+// [DF-05] xterm.js 6.0 with DEC 2026 synchronized output — coalesces ink BSU/ESU diff frames so rapid TUI writes don't flash partial buffers.
 const XTVERSION_REPLY = "\x1bP>|xterm.js(6.0.0)\x1b\\";
 // [TA-12] SHIFT_ENTER_SEQUENCE: kitty-protocol \x1b[13;2u; getTerminalKeySequenceOverride intercepts Shift+Enter before xterm default
 export const SHIFT_ENTER_SEQUENCE = "\x1b[13;2u";

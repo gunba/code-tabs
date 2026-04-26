@@ -1,3 +1,4 @@
+// [DR-05] Add tests for any new pure-logic functions in src/lib/ and store actions in src/store/. claude.test.ts covers dirToTabName/modelLabel/modelColor/computeHeatLevel/sessionColor and friends from src/lib/claude.ts.
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   dirToTabName,

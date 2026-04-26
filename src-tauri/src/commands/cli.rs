@@ -84,6 +84,7 @@ fn detect_claude_cli_details_sync() -> Result<(String, &'static str), String> {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
+        // [DR-07] All Rust commands that spawn subprocesses MUST add CREATE_NO_WINDOW (0x08000000) on Windows so console windows don't pop up.
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
     let output = cmd
@@ -239,6 +240,7 @@ fn run_claude_cli(args: &[&str], label: &str) -> Result<String, String> {
 /// Run `claude --version` — async to avoid blocking the WebView.
 #[tauri::command]
 pub async fn check_cli_version(app: AppHandle) -> Result<String, String> {
+    // [DR-06] All Rust commands that spawn subprocesses MUST use tokio::task::spawn_blocking() so they don't block the WebView event loop.
     let version =
         tokio::task::spawn_blocking(|| run_claude_cli(&["--version"], "claude --version"))
             .await

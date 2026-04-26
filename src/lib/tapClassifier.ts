@@ -994,7 +994,7 @@ function classifyTapEntryInner(entry: TapEntry): TapEvent | null {
       return classifyFetch(ts, entry);
     }
 
-    // [IN-18] Ping: dedicated HTTP ping to Anthropic origin
+    // [IN-18] [IN-20] Ping: dedicated HTTP ping to Anthropic origin. There is no active ping loop or ping_api Tauri command; this branch only fires when an external producer emits cat=ping. apiLatencyMs falls back to ApiFetch durations when no ping arrives.
     if (cat === "ping") {
       return {
         kind: "HttpPing", ts,

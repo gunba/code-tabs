@@ -342,7 +342,7 @@ export default function App() {
         setShowResumePicker(true);
       }
 
-      // Ctrl+Shift+F: open RightPanel search tab
+      // [KB-11] Ctrl+Shift+F: open RightPanel search tab (cross-session terminal search)
       if (e.ctrlKey && e.shiftKey && e.key === "F") {
         e.preventDefault();
         useSettingsStore.getState().setRightPanelTab("search");
@@ -442,6 +442,7 @@ export default function App() {
     <div className={`app app-provider-${activeProvider}${ctrlHeld ? " ctrl-held" : ""}`}>
       {IS_LINUX && !useNativeChrome && <Header />}
       {/* Tab bar */}
+      {/* [LO-01] Main window layout: tab bar (here), subagent bar, terminal area, CommandBar (slash commands + skill pills + history), StatusBar. */}
       <div className="tab-bar">
           <div className="tab-bar-scroll">
             {groups.flatMap((group, gi) => [

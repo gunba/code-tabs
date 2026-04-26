@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionStore } from "../../store/sessions";
 import { sessionColor } from "../../lib/claude";
 import { dirToTabName } from "../../lib/paths";
+// [DP-12] Strategic logging at key points: PTY spawn/kill/exit, TerminalPanel respawn, inspector connect/disconnect, tap pipeline, session lifecycle. All flow through dlog() and surface here via per-session ring buffers.
 import { dlog, getDebugLog, getDebugLogForSession, getDebugLogGeneration, clearDebugLog, type DebugLogEntry, type DebugLogSource } from "../../lib/debugLog";
 import "./DebugPanel.css";
 
@@ -59,6 +60,7 @@ function levelClass(level: string): string {
 // [DP-01] Debug log view with session/module filters
 export function DebugPanel() {
   const [logs, setLogs] = useState<DebugLogEntry[]>([]);
+  // [DP-06] Free-text filter applied over module/event/message/data so users can grep the live buffer.
   const [textFilter, setTextFilter] = useState("");
   const [sessionFilter, setSessionFilter] = useState<string | "all" | "global">("all");
   const [moduleFilter, setModuleFilter] = useState<Set<string>>(new Set());
@@ -176,6 +178,7 @@ export function DebugPanel() {
     [filtered],
   );
 
+  // [DP-08] Copy joins all currently-visible (filtered) entries as one tsv-like string and pushes via navigator.clipboard.writeText; Clear empties the underlying ring buffer via clearDebugLog().
   const handleCopy = useCallback(() => {
     const text = filtered
       .map((e) => {

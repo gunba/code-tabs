@@ -10,6 +10,7 @@ import "./RightPanel.css";
 
 type RightPanelTab = "search" | "response" | "session" | "notes" | "debug";
 
+// [RI-04] BASE_TABS ordered [search, response, session, notes, debug]. Activity tab was removed (8d454f3) — Response/Session render ActivityPanel with a mode prop. Debug tab filtered out unless debugBuild.
 const BASE_TABS = [
   { id: "search" as const, label: "Search", icon: <IconSearch size={13} /> },
   { id: "response" as const, label: "Response", icon: <IconResponse size={13} /> },
@@ -62,6 +63,7 @@ export function RightPanel() {
         {activeTab === "session" && <ActivityPanel mode="session" />}
         {activeTab === "notes" && <NotesPanel />}
         {activeTab === "search" && <SearchPanel />}
+        {/* [DP-02] DebugPanel surfaced as a RightPanel tab gated on debugBuild; no global keyboard shortcut. */}
         {activeTab === "debug" && debugBuild && <DebugPanel />}
       </div>
     </aside>

@@ -11,6 +11,10 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 - [PT-15 L262] Background reader thread per session: OS thread reads ConPTY pipe (8 KiB buffer) into bounded sync_channel(64). Decouples blocking pipe reads from IPC, enabling timeout-based reads in the pty_read command.
 
+## Data Flow
+
+- [DF-02 L262] Claude/Codex stdout -> PTY (ConPTY on Windows / openpty on Linux) -> background reader thread (8 KiB buffer) -> mpsc::sync_channel(64) -> pty_read drains queued chunks up to 256KB (PT-27) -> Tauri IPC response -> Uint8Array. There is no in-process OutputFilter or SyncBlockDetector; sync output coalescing is delegated to xterm.js 6.0 (DEC 2026 BSU/ESU).
+
 ## PTY Spawn
 
 - [PT-20 L80] UnixPty::kill() sends SIGKILL to the negative PGID (libc::kill(-pgid, SIGKILL)) to tear down the entire process group, including grandchildren (tools spawned by the CLI). ESRCH (no such process group) is treated as Ok since the goal — no live processes — is already met. This mirrors ConPTY's Windows-side tree teardown.

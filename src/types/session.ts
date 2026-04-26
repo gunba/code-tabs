@@ -1,3 +1,4 @@
+// [DR-02] TypeScript types in src/types/ mirror Rust types using camelCase via serde rename_all="camelCase". This file is the canonical front-end shape for SessionState/SessionConfig/SessionMetadata.
 export type SessionState =
   | "starting"
   | "idle"
