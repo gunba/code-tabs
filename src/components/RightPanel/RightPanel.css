@@ -19,7 +19,9 @@
 }
 
 .right-panel-tabs {
+  flex: 1 1 auto;
   display: flex;
+  width: 100%;
   min-width: 0;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
