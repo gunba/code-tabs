@@ -50,7 +50,7 @@
   flex: 0 1 200px;
   min-width: 90px;
   max-width: 200px;
-  height: 66px;
+  height: 54px;
   overflow: hidden;
   box-sizing: border-box;
   /* [CV-03] --tab-active-accent: Claude=var(--accent-claude), Codex=var(--accent-codex) */
@@ -105,38 +105,21 @@
   opacity: 0.85;
 }
 
-.tab-title-line {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-}
-
-.tab-title-line .tab-name {
-  min-width: 0;
-}
-
-.tab-cli-badge {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  height: 14px;
-  padding: 0 4px;
-  border-radius: 3px;
+.tab-cli-row {
   font-size: 9px;
   font-weight: 700;
-  line-height: 1;
-  border: 1px solid var(--border-subtle);
+  line-height: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.tab-cli-badge-claude {
+.tab-cli-row-claude {
   color: var(--cli-claude);
-  background: color-mix(in srgb, var(--cli-claude) 12%, transparent);
 }
 
-.tab-cli-badge-codex {
+.tab-cli-row-codex {
   color: var(--cli-codex);
-  background: color-mix(in srgb, var(--cli-codex) 12%, transparent);
 }
 
 /* ── Ctrl-held: unified blue top-bar + tint ──────────── */
@@ -205,27 +188,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 16px;
+  line-height: 15px;
 }
 
-/* [TA-03] .tab-activity: single-line tool activity display */
-.tab-activity {
+.tab-status-row {
   font-size: 10px;
-  line-height: 14px;
+  line-height: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
   letter-spacing: 0.02em;
-}
-
-.tab-meta {
-  font-size: 9px;
-  color: var(--text-muted);
-  opacity: 0.7;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   margin-top: auto;
 }
 
@@ -312,8 +285,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 66px;
-  height: 66px;
+  width: 54px;
+  height: 54px;
   border: none;
   border-left: 1px solid var(--border-subtle);
   background: var(--accent);
@@ -333,8 +306,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 66px;
-  height: 66px;
+  width: 54px;
+  height: 54px;
   border: none;
   border-left: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--accent-secondary) 12%, var(--bg-surface));
@@ -354,8 +327,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 66px;
-  height: 66px;
+  width: 54px;
+  height: 54px;
   border: none;
   border-left: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--accent-tertiary) 10%, var(--bg-surface));
@@ -519,7 +492,7 @@
   flex: 0 1 200px;
   min-width: 90px;
   max-width: 200px;
-  height: 56px;
+  height: 48px;
   overflow: hidden;
   box-sizing: border-box;
   transition: background 0.15s, box-shadow 0.15s;
@@ -599,15 +572,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 16px;
+  line-height: 15px;
 }
 
-
-/* Mirrors .tab-meta */
-.subagent-meta {
+.subagent-type {
+  color: var(--accent-secondary);
   font-size: 9px;
+  font-weight: 700;
+  line-height: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mirrors .tab-status-row, scaled down */
+.subagent-status-row {
+  font-size: 10px;
   color: var(--text-secondary);
-  opacity: 0.7;
+  line-height: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -414,30 +414,32 @@ export default function App() {
               const activity = getActivityText(session.metadata.currentToolName, session.metadata.currentEventKind);
               const activityColor = activity ? eventKindColor(session.metadata.currentEventKind ?? session.metadata.currentToolName!) : undefined;
 
-              // Meta row: model | effort | agents (each colored)
+              // Status row: event/state | model | effort | agents | worktree | context
               const m = effectiveModel(session);
               const wt = parseWorktreePath(session.config.workingDir);
-              const metaSpans: { text: string; color: string; title?: string }[] = [];
+              const statusSpans: { text: string; color: string; title?: string }[] = [];
               if (m) {
                 const label = modelLabel(m);
                 const resolved = label !== m; // modelLabel shortened it to a family name
                 const vMatch = m.match(/(\d+)[.-](\d+)/);
                 const ver = resolved && vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
-                metaSpans.push({ text: label + ver, color: modelColor(m) });
+                statusSpans.push({ text: label + ver, color: modelColor(m) });
               }
               const effort = session.config.effort ?? session.metadata.effortLevel;
-              if (effort) metaSpans.push({ text: effort.charAt(0).toUpperCase() + effort.slice(1), color: effortColor(effort) });
+              if (effort) statusSpans.push({ text: effort.charAt(0).toUpperCase() + effort.slice(1), color: effortColor(effort) });
               const subs = subagentMap.get(session.id) || [];
+              const effectiveState = getEffectiveState(session.state, subs);
+              const activityText = activity ?? effectiveState;
               const liveAgents = subs.filter((s) => isSubagentActive(s.state)).length;
-              if (liveAgents > 0) metaSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
-              if (wt) metaSpans.push({ text: worktreeAcronym(wt.worktreeName), color: "var(--accent-tertiary)", title: wt.worktreeName });
+              if (liveAgents > 0) statusSpans.push({ text: `${liveAgents} agent${liveAgents > 1 ? "s" : ""}`, color: "var(--text-secondary)" });
+              if (wt) statusSpans.push({ text: worktreeAcronym(wt.worktreeName), color: "var(--accent-tertiary)", title: wt.worktreeName });
               // [SI-25] When Status hook data exists, surface the current
-              // context footprint in the tab meta row. Fall back to contextDebug (SSE-derived).
+              // context footprint in the tab status row. Fall back to contextDebug (SSE-derived).
               const sl = session.metadata.statusLine;
               if (sl) {
                 const totalCtx = sl.cacheCreationInputTokens + sl.cacheReadInputTokens + sl.currentInputTokens;
                 if (totalCtx > 0) {
-                  metaSpans.push({
+                  statusSpans.push({
                     text: formatTokenCount(totalCtx),
                     color: "var(--text-muted)",
                     title: `Context: ${sl.currentInputTokens.toLocaleString()} input + ${sl.cacheReadInputTokens.toLocaleString()} cache read + ${sl.cacheCreationInputTokens.toLocaleString()} cache write`,
@@ -446,7 +448,7 @@ export default function App() {
               } else if (session.metadata.contextDebug) {
                 const dbg = session.metadata.contextDebug;
                 if (dbg.totalContextTokens > 0) {
-                  metaSpans.push({
+                  statusSpans.push({
                     text: formatTokenCount(dbg.totalContextTokens),
                     color: "var(--text-muted)",
                     title: `Context: ${dbg.inputTokens.toLocaleString()} input + ${dbg.cacheRead.toLocaleString()} cache read + ${dbg.cacheCreation.toLocaleString()} cache write`,
@@ -524,31 +526,28 @@ export default function App() {
                     setTabContextMenu({ x: e.clientX, y: e.clientY, sessionId: session.id });
                   }}
                   onMouseEnter={() => settledStateManager.clearSettled(session.id)}
-                  title={ctrlHeld ? `Ctrl+Click: Relaunch ${fullName}` : `${fullName} — ${getEffectiveState(session.state, subs)}\n${session.config.workingDir}${wt ? `\nWorktree: ${wt.worktreeName}` : ""}`}
+                  title={ctrlHeld ? `Ctrl+Click: Relaunch ${fullName}` : `${fullName} — ${effectiveState}\n${session.config.workingDir}${wt ? `\nWorktree: ${wt.worktreeName}` : ""}`}
                 >
-                  <span className={`tab-dot state-${getEffectiveState(session.state, subs)}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
+                  <span className={`tab-dot state-${effectiveState}${inspectorOffSessions.has(session.id) ? " inspector-off" : ""}`} />
                   <span className="tab-label">
-                    <span className="tab-title-line">
-                      <span className={`tab-cli-badge tab-cli-badge-${session.config.cli}`} title={session.config.cli === "codex" ? "Codex" : "Claude Code"}>
-                        {session.config.cli === "codex" ? "Codex" : "Claude"}
-                      </span>
-                      <span className="tab-name">{fullName}</span>
+                    <span className="tab-name">{fullName}</span>
+                    <span
+                      className={`tab-cli-row tab-cli-row-${session.config.cli}`}
+                      title={session.config.cli === "codex" ? "Codex" : "Claude Code"}
+                    >
+                      {session.config.cli === "codex" ? "Codex" : "Claude"}
                     </span>
-                    {activity && (
-                      <span className="tab-activity" style={{ color: activityColor }}>
-                        {activity}
+                    <span className="tab-status-row">
+                      <span style={{ color: activityColor ?? "var(--text-secondary)" }}>
+                        {activityText}
                       </span>
-                    )}
-                    {metaSpans.length > 0 && (
-                      <span className="tab-meta">
-                        {metaSpans.map((s, i) => (
-                          <span key={i}>
-                            {i > 0 && <span style={{ color: "var(--text-muted)", opacity: 0.5 }}> &middot; </span>}
-                            <span style={{ color: s.color }} title={s.title}>{s.text}</span>
-                          </span>
-                        ))}
-                      </span>
-                    )}
+                      {statusSpans.map((s, i) => (
+                        <span key={i}>
+                          <span style={{ color: "var(--text-muted)", opacity: 0.5 }}> &middot; </span>
+                          <span style={{ color: s.color }} title={s.title}>{s.text}</span>
+                        </span>
+                      ))}
+                    </span>
                   </span>
                   {group.sessions.length > 1 && (
                     <span className="tab-reorder-arrows">
@@ -629,20 +628,13 @@ export default function App() {
               // [TA-06] Subagent activity: same display as parent tabs
               const subActivity = getActivityText(sub.currentToolName, sub.currentEventKind);
               const subActivityColor = subActivity ? eventKindColor(sub.currentEventKind ?? sub.currentToolName!) : undefined;
-              const metaParts: string[] = [];
               const typeLabel = sub.subagentType || sub.agentType;
-              if (typeLabel) metaParts.push(typeLabel);
-              // [TA-09] Subagent model meta: falls back to parent session effectiveModel when sub.model absent
-              const subModel = sub.model || (activeSession ? effectiveModel(activeSession) : null);
-              if (subModel) {
-                const subLabel = modelLabel(subModel);
-                const subResolved = subLabel !== subModel;
-                const vMatch = subModel.match(/(\d+)[.-](\d+)/);
-                const ver = subResolved && vMatch ? ` ${vMatch[1]}.${vMatch[2]}` : "";
-                metaParts.push(subLabel + ver);
-              }
-              if (sub.totalToolUses != null) metaParts.push(`${sub.totalToolUses} tools`);
-              if (sub.durationMs != null) metaParts.push(`${Math.round(sub.durationMs / 1000)}s`);
+              const subStatusText = subActivity ?? (isCompleted ? "Completed" : sub.state);
+              const subStatusColor = subActivityColor ?? (isCompleted ? "var(--success)" : "var(--text-secondary)");
+              const subStatusSpans: string[] = [];
+              if (sub.totalToolUses != null) subStatusSpans.push(`${sub.totalToolUses} tools`);
+              if (sub.durationMs != null) subStatusSpans.push(`${Math.round(sub.durationMs / 1000)}s`);
+              if (sub.tokenCount > 0) subStatusSpans.push(formatTokenCount(sub.tokenCount));
               // [TA-08] Completed subagents stay visible in the bar with success styling/checkmark.
               // [TR-11] Subagent card with selected highlight when inspector is open
               return (
@@ -658,18 +650,19 @@ export default function App() {
                   }
                   <span className="subagent-label">
                     <span className="subagent-name">{sub.description}</span>
-                    {subActivity && (
-                      <span className="tab-activity" style={{ color: subActivityColor }}>
-                        {subActivity}
+                    <span className="subagent-type">{typeLabel ?? "Agent"}</span>
+                    <span className="subagent-status-row">
+                      <span style={{ color: subStatusColor }}>
+                        {subStatusText}
                       </span>
-                    )}
-                    {metaParts.length > 0 && (
-                      <span className="subagent-meta">{metaParts.join(" \u00b7 ")}</span>
-                    )}
+                      {subStatusSpans.map((part, i) => (
+                        <span key={i}>
+                          <span style={{ color: "var(--text-muted)", opacity: 0.5 }}> &middot; </span>
+                          <span>{part}</span>
+                        </span>
+                      ))}
+                    </span>
                   </span>
-                  {sub.tokenCount > 0 && (
-                    <span className="subagent-tokens">{formatTokenCount(sub.tokenCount)}</span>
-                  )}
                 </button>
               );
             }
