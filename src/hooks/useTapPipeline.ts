@@ -7,6 +7,7 @@ import { classifyTapEntry } from "../lib/tapClassifier";
 import { tapEventBus } from "../lib/tapEventBus";
 import { dlog } from "../lib/debugLog";
 import { useSettingsStore } from "../store/settings";
+import { useSessionStore } from "../store/sessions";
 import type { TapEntry } from "../types/tapEvents";
 import { annotateTapEntry, getTapCategoryLabel, type RecordedTapEntry } from "../lib/tapCatalog";
 import { useRuntimeStore } from "../store/runtime";
@@ -47,7 +48,10 @@ export function useTapPipeline({
   const wasConnectedRef = useRef(false);
 
   // Read recording config from settings store
-  const recordingConfig = useSettingsStore((s) => s.recordingConfig);
+  const sessionCli = useSessionStore((s) =>
+    sessionId ? s.sessions.find((session) => session.id === sessionId)?.config.cli ?? "claude" : "claude"
+  );
+  const recordingConfig = useSettingsStore((s) => s.recordingConfigsByCli[sessionCli] ?? s.recordingConfig);
   const observabilityEnabled = useRuntimeStore((s) => s.observabilityInfo.observabilityEnabled);
   const recordingEnabled = observabilityEnabled && recordingConfig.taps.enabled;
 
@@ -182,16 +186,6 @@ export function useTapPipeline({
           coreCategories: ["parse", "stringify"],
         },
       });
-
-      // Diagnostic: check TCP connection state after a short delay
-      const diagSid = sessionId;
-      setTimeout(() => {
-        const diagId = wsSend("Runtime.evaluate", {
-          expression: "JSON.stringify(globalThis.__tapDiag || 'no-diag')",
-          returnByValue: true,
-        });
-        dlog("tap", diagSid, `tap diag requested (msgId=${diagId})`, "DEBUG");
-      }, 2000);
     }
 
     // Toggle individual optional categories that changed.

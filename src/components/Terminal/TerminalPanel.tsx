@@ -32,6 +32,22 @@ function escapeChunkPreview(text: string): string {
     .slice(0, 240);
 }
 
+function hasCodexConfigOverride(args: string[], key: string): boolean {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "-c" || arg === "--config") {
+      const value = args[i + 1]?.trimStart();
+      if (value?.startsWith(`${key}=`)) return true;
+      i += 1;
+      continue;
+    }
+    if (arg.startsWith("-c") && arg.slice(2).trimStart().startsWith(`${key}=`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // ── Duration Timer (active time only) ────────────────────────────────────
 
 const ACTIVE_STATES = new Set<SessionState>(["thinking", "toolUse", "actionNeeded", "waitingPermission", "error"]);
@@ -103,9 +119,12 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
   });
 
   // Auto-start traffic logging when recording config enables it
-  const trafficEnabled = useSettingsStore((s) => s.recordingConfig.traffic.enabled);
+  const trafficEnabled = useSettingsStore((s) =>
+    (s.recordingConfigsByCli[session.config.cli] ?? s.recordingConfig).traffic.enabled
+  );
   const observabilityEnabled = useRuntimeStore((s) => s.observabilityInfo.observabilityEnabled);
   const startTrafficLog = useSessionStore((s) => s.startTrafficLog);
+  const stopTrafficLog = useSessionStore((s) => s.stopTrafficLog);
   const trafficStartedRef = useRef(false);
   useEffect(() => {
     if (!inspector.connected || session.state === "dead") {
@@ -411,6 +430,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         },
       });
       let codexRolloutStarted = false;
+      let codexTrafficStarted = false;
       try {
         // Allocate a verified-free inspector port before spawning Claude.
         // Codex is a Rust binary and exposes structured data via rollout JSONL,
@@ -444,7 +464,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           }
         }
 
-        // Build launch config (Claude only — Codex spawns natively in batch 4).
+        // Build launch config through the selected CLI adapter.
         const launchConfig: SessionConfig = { ...session.config };
         // Adapter dispatch: build the right SpawnSpec for whichever
         // CLI this session runs. ClaudeAdapter delegates to the
@@ -456,18 +476,28 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
           envOverrides: Array<[string, string | null]>;
           cwd: string;
         }>("build_cli_spawn", { config: launchConfig });
-        const args = spawnSpec.args;
+        const args = [...spawnSpec.args];
         const program = spawnSpec.program;
         const { cols, rows } = terminal.getDimensions();
         const cwd = normalizePath(session.config.workingDir);
+        const { proxyPort } = useSettingsStore.getState();
+        // Codex supports a built-in OpenAI base URL override. Point only
+        // the active session at our local proxy so prompt rules can rewrite
+        // OpenAI Responses `instructions` without replacing Codex's prompt.
+        if (
+          session.config.cli === "codex"
+          && proxyPort
+          && !hasCodexConfigOverride(args, "openai_base_url")
+        ) {
+          args.push("-c", `openai_base_url=${JSON.stringify(`http://127.0.0.1:${proxyPort}/s/${session.id}/v1`)}`);
+        }
         // Pass BUN_INSPECT env for inspector-based hook injection,
         // TAP_PORT for dedicated TCP event delivery. Claude CLI sessions only.
         const env: Record<string, string> = {};
         if (session.config.cli === "claude") {
           env.BUN_INSPECT = `ws://127.0.0.1:${inspPort}/0`;
           if (tapPort) env.TAP_PORT = String(tapPort);
-          // System-prompt rewrite proxy (PromptsTab). Claude only.
-          const { proxyPort } = useSettingsStore.getState();
+          // Claude's proxy hook is env-based; Codex's is the arg override above.
           if (proxyPort) {
             env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}/s/${session.id}`;
           }
@@ -504,6 +534,16 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
         // immediately before PTY spawn so its mtime attribution window cannot
         // miss a fast-created file.
         if (session.config.cli === "codex") {
+          if (observabilityEnabled && trafficEnabled && proxyPort && !trafficStartedRef.current) {
+            try {
+              const path = await invoke<string>("start_traffic_log", { sessionId: session.id });
+              startTrafficLog(session.id, path);
+              trafficStartedRef.current = true;
+              codexTrafficStarted = true;
+            } catch (err) {
+              dlog("traffic", session.id, `codex auto-start failed: ${err}`, "WARN");
+            }
+          }
           try {
             await invoke("start_codex_rollout", { sessionId: session.id });
             codexRolloutStarted = true;
@@ -537,6 +577,11 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       } catch (err) {
         if (codexRolloutStarted) {
           invoke("stop_codex_rollout", { sessionId: session.id }).catch(() => {});
+        }
+        if (codexTrafficStarted) {
+          invoke("stop_traffic_log", { sessionId: session.id }).catch(() => {});
+          stopTrafficLog(session.id);
+          trafficStartedRef.current = false;
         }
         spawnSpan.fail(err);
         dlog("terminal", session.id, `spawn failed: ${err}`, "ERR");

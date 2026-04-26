@@ -76,7 +76,9 @@ function SessionStatus({
 }) {
   const perm = permissionIcon(session.config.permissionMode);
   const inspectorOff = useSessionStore((s) => s.inspectorOffSessions.has(session.id));
-  const tapEnabled = useSettingsStore((s) => s.recordingConfig.taps.enabled);
+  const tapEnabled = useSettingsStore((s) =>
+    (s.recordingConfigsByCli[session.config.cli] ?? s.recordingConfig).taps.enabled
+  );
   const observabilityEnabled = useRuntimeStore((s) => s.observabilityInfo.observabilityEnabled);
   const health = useSessionStore((s) => s.processHealth.get(session.id));
   const apiIp = useSettingsStore((s) => s.apiIp);
@@ -342,25 +344,39 @@ export function StatusBar({ onOpenContextViewer }: StatusBarProps) {
   const updateCli = useVersionStore((s) => s.updateCli);
   const cliVersion = useSettingsStore((s) => s.cliVersions.claude);
   const cliUpdateAvailable = newerThan(latestCliVersion, cliVersion);
+  const hookDiscovery = useMemo(() => {
+    const alive = sessions.filter((s) => !s.isMetaAgent && s.state !== "dead" && s.config.workingDir);
+    const claudeDirs = [...new Set(
+      alive.filter((s) => s.config.cli === "claude").map((s) => s.config.workingDir)
+    )].sort();
+    const codexDirs = [...new Set(
+      alive.filter((s) => s.config.cli === "codex").map((s) => s.config.workingDir)
+    )].sort();
+    return {
+      claudeDirs,
+      codexDirs,
+      key: `claude:${claudeDirs.join("\u0000")}|codex:${codexDirs.join("\u0000")}`,
+    };
+  }, [sessions]);
 
   useEffect(() => {
-    const dirs = sessions
-      .filter((s) => !s.isMetaAgent && s.state !== "dead")
-      .map((s) => s.config.workingDir)
-      .filter(Boolean);
-    if (dirs.length === 0) {
+    const jobs: Array<Promise<Record<string, unknown>>> = [];
+    if (hookDiscovery.claudeDirs.length > 0) {
+      jobs.push(invoke<Record<string, unknown>>("discover_hooks", { workingDirs: hookDiscovery.claudeDirs }).catch(() => ({})));
+    }
+    if (hookDiscovery.codexDirs.length > 0) {
+      jobs.push(invoke<Record<string, unknown>>("discover_codex_hooks", { workingDirs: hookDiscovery.codexDirs }).catch(() => ({})));
+    }
+    if (jobs.length === 0) {
       setHookCount(0);
       return;
     }
-    Promise.all([
-      invoke<Record<string, unknown>>("discover_hooks", { workingDirs: dirs }).catch(() => ({})),
-      invoke<Record<string, unknown>>("discover_codex_hooks", { workingDirs: dirs }).catch(() => ({})),
-    ])
-      .then(([claudeHooks, codexHooks]) => {
-        setHookCount(countHookEntries(claudeHooks) + countHookEntries(codexHooks));
+    Promise.all(jobs)
+      .then((results) => {
+        setHookCount(results.reduce((sum, hooks) => sum + countHookEntries(hooks), 0));
       })
       .catch(() => setHookCount(0));
-  }, [sessions]);
+  }, [hookDiscovery.key]);
 
   const subagentMap = useSessionStore((s) => s.subagents);
   const aliveSessions = sessions.filter((s) => s.state !== "dead");

@@ -1,17 +1,22 @@
-import { useSettingsStore } from "../store/settings";
+import { getRecordingConfigForCliFromState, useSettingsStore } from "../store/settings";
+import type { CliKind } from "../types/session";
 
-/** Cached set of noisy event kinds, rebuilt when config changes. */
-let cached: ReadonlySet<string> = new Set(
-  useSettingsStore.getState().recordingConfig.noisyEventKinds,
-);
+/** Cached sets of noisy event kinds, rebuilt when config changes. */
+let cachedByCli: Record<CliKind, ReadonlySet<string>> = {
+  claude: new Set(getRecordingConfigForCliFromState(useSettingsStore.getState(), "claude").noisyEventKinds),
+  codex: new Set(getRecordingConfigForCliFromState(useSettingsStore.getState(), "codex").noisyEventKinds),
+};
 
 useSettingsStore.subscribe((state, prev) => {
-  if (state.recordingConfig.noisyEventKinds !== prev.recordingConfig.noisyEventKinds) {
-    cached = new Set(state.recordingConfig.noisyEventKinds);
+  if (state.recordingConfigsByCli !== prev.recordingConfigsByCli || state.recordingConfig !== prev.recordingConfig) {
+    cachedByCli = {
+      claude: new Set(getRecordingConfigForCliFromState(state, "claude").noisyEventKinds),
+      codex: new Set(getRecordingConfigForCliFromState(state, "codex").noisyEventKinds),
+    };
   }
 });
 
 /** Returns the current set of noisy event kinds (synchronous, cached). */
-export function getNoisyEventKinds(): ReadonlySet<string> {
-  return cached;
+export function getNoisyEventKinds(cli: CliKind = "claude"): ReadonlySet<string> {
+  return cachedByCli[cli] ?? cachedByCli.claude;
 }

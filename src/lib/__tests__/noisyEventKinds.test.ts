@@ -4,9 +4,17 @@ import { getNoisyEventKinds } from "../noisyEventKinds";
 
 describe("getNoisyEventKinds", () => {
   beforeEach(() => {
+    const base = useSettingsStore.getState().recordingConfigsByCli.claude;
     useSettingsStore.setState({
+      recordingConfigsByCli: {
+        ...useSettingsStore.getState().recordingConfigsByCli,
+        claude: {
+          ...base,
+          noisyEventKinds: DEFAULT_NOISY_EVENT_KINDS,
+        },
+      },
       recordingConfig: {
-        ...useSettingsStore.getState().recordingConfig,
+        ...base,
         noisyEventKinds: DEFAULT_NOISY_EVENT_KINDS,
       },
     });
@@ -28,10 +36,14 @@ describe("getNoisyEventKinds", () => {
   });
 
   it("updates when config changes", () => {
+    const base = useSettingsStore.getState().recordingConfigsByCli.claude;
     useSettingsStore.setState({
-      recordingConfig: {
-        ...useSettingsStore.getState().recordingConfig,
-        noisyEventKinds: ["TurnStart"],
+      recordingConfigsByCli: {
+        ...useSettingsStore.getState().recordingConfigsByCli,
+        claude: {
+          ...base,
+          noisyEventKinds: ["TurnStart"],
+        },
       },
     });
     const set = getNoisyEventKinds();
@@ -41,12 +53,31 @@ describe("getNoisyEventKinds", () => {
   });
 
   it("returns empty set when noisyEventKinds is empty", () => {
+    const base = useSettingsStore.getState().recordingConfigsByCli.claude;
     useSettingsStore.setState({
-      recordingConfig: {
-        ...useSettingsStore.getState().recordingConfig,
-        noisyEventKinds: [],
+      recordingConfigsByCli: {
+        ...useSettingsStore.getState().recordingConfigsByCli,
+        claude: {
+          ...base,
+          noisyEventKinds: [],
+        },
       },
     });
     expect(getNoisyEventKinds().size).toBe(0);
+  });
+
+  it("supports Codex-specific noisy event kinds", () => {
+    const base = useSettingsStore.getState().recordingConfigsByCli.codex;
+    useSettingsStore.setState({
+      recordingConfigsByCli: {
+        ...useSettingsStore.getState().recordingConfigsByCli,
+        codex: {
+          ...base,
+          noisyEventKinds: ["CodexTokenCount"],
+        },
+      },
+    });
+    expect(getNoisyEventKinds("codex").has("CodexTokenCount")).toBe(true);
+    expect(getNoisyEventKinds("claude").has("CodexTokenCount")).toBe(false);
   });
 });

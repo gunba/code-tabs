@@ -220,7 +220,7 @@ const SUB_TABS: { value: "prompts" | "observed" | "rules"; label: string }[] = [
 
 export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   const savedPrompts = useSettingsStore((s) => s.savedPrompts);
-  const observedPrompts = useSettingsStore((s) => s.observedPrompts);
+  const allObservedPrompts = useSettingsStore((s) => s.observedPrompts);
   const addSavedPrompt = useSettingsStore((s) => s.addSavedPrompt);
   const updateSavedPrompt = useSettingsStore((s) => s.updateSavedPrompt);
   const removeSavedPrompt = useSettingsStore((s) => s.removeSavedPrompt);
@@ -233,10 +233,8 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
 
   // Sub-tab navigation
   const [activeSubTab, setActiveSubTab] = useState<"prompts" | "observed" | "rules">("prompts");
-  const availableSubTabs = useMemo(
-    () => cli === "codex" ? SUB_TABS.filter((t) => t.value === "prompts") : SUB_TABS,
-    [cli],
-  );
+  const supportsPromptRules = true;
+  const availableSubTabs = useMemo(() => SUB_TABS, []);
 
   // My Prompts state
   const [selectedSavedPromptId, setSelectedSavedPromptId] = useState<string | null>(null);
@@ -262,16 +260,16 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   const [observedBaseline, setObservedBaseline] = useState("");
   const [pendingRules, setPendingRules] = useState<GeneratedChangeset | null>(null);
   const [observedSeedKey, setObservedSeedKey] = useState(0);
+  const observedPrompts = useMemo(
+    () => allObservedPrompts.filter((p) => (p.cli ?? "claude") === cli),
+    [allObservedPrompts, cli],
+  );
 
   // Collapse expanded rule on tab switch
   useEffect(() => { setExpandedRuleId(null); }, [activeSubTab]);
 
   useEffect(() => {
-    if (cli === "codex" && activeSubTab !== "prompts") setActiveSubTab("prompts");
-  }, [cli, activeSubTab]);
-
-  useEffect(() => {
-    if (cli !== "claude" || activeSubTab !== "rules") return;
+    if (activeSubTab !== "rules") return;
     let cancelled = false;
     const fetch = () => {
       invoke<Record<string, number>>("get_rule_match_counts")
@@ -281,7 +279,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
     fetch();
     const id = window.setInterval(fetch, 2000);
     return () => { cancelled = true; window.clearInterval(id); };
-  }, [cli, activeSubTab]);
+  }, [activeSubTab]);
 
   // Load saved prompt into editor. We only reseed (bump seedKey + remount the
   // inputs) when the underlying values genuinely differ from what's currently
@@ -332,18 +330,20 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   // Rules-applied text
   const rulesAppliedText = useMemo(() => {
     if (!observedRawText) return "";
+    if (!supportsPromptRules) return observedRawText;
     const enabledRules = systemPromptRules.filter((r) => r.enabled && r.pattern);
     if (enabledRules.length === 0) return observedRawText;
     return applyRulesToText(observedRawText, enabledRules);
-  }, [observedRawText, systemPromptRules]);
+  }, [observedRawText, supportsPromptRules, systemPromptRules]);
 
   // Compute rules-applied text for an arbitrary prompt (used in click handler to avoid stale state flash)
   const computeAppliedText = useCallback((rawText: string): string => {
     if (!rawText) return "";
+    if (!supportsPromptRules) return rawText;
     const enabledRules = systemPromptRules.filter((r) => r.enabled && r.pattern);
     if (enabledRules.length === 0) return rawText;
     return applyRulesToText(rawText, enabledRules);
-  }, [systemPromptRules]);
+  }, [supportsPromptRules, systemPromptRules]);
 
   // Reseed textarea when rules change out from under the user, but only if they haven't typed anything different from the last seeded baseline (and no preview is open).
   useEffect(() => {
@@ -404,6 +404,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   // ── Observed prompt handlers ───────────────────────────────────────
 
   const handleGenerateRules = useCallback(() => {
+    if (!supportsPromptRules) return;
     if (!observedEdited) return;
     const changeset = generateRulesAndConflicts(observedRawText, observedEditText, systemPromptRules);
     if (changeset.adds.length === 0 && changeset.deletes.length === 0) {
@@ -412,7 +413,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
       return;
     }
     setPendingRules(changeset);
-  }, [observedEdited, observedRawText, observedEditText, systemPromptRules, onStatus]);
+  }, [supportsPromptRules, observedEdited, observedRawText, observedEditText, systemPromptRules, onStatus]);
 
   const handleConfirmRules = useCallback(() => {
     if (!pendingRules) return;
@@ -524,7 +525,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
                   defaultValue={editText}
                   onInput={(e) => { setEditText(e.currentTarget.value); setDirty(true); }}
                   ref={textareaRef}
-                  placeholder={cli === "codex" ? "Enter Codex developer instructions..." : "Enter your system prompt..."}
+                  placeholder={cli === "codex" ? "Enter reusable Codex instructions..." : "Enter your system prompt..."}
                   spellCheck={false}
                 />
                 <div className="prompts-editor-footer">
@@ -581,9 +582,9 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
             ) : (
               <>
                 <div className="prompts-editor-header">
-                  <span className="prompts-editor-title">Observed System Prompt</span>
+                  <span className="prompts-editor-title">{cli === "codex" ? "Observed Codex Instructions" : "Observed System Prompt"}</span>
                   <div className="prompts-editor-actions">
-                    {observedEdited && !pendingRules && (
+                    {supportsPromptRules && observedEdited && !pendingRules && (
                       <button className="prompts-save-btn" onClick={handleGenerateRules}>
                         Generate Rules
                       </button>

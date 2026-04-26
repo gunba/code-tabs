@@ -67,6 +67,7 @@ export const TAP_CATEGORY_GROUPS: Array<{
   {
     label: "Codex Rollout",
     categories: [
+      { key: "system-prompt", label: "Prompt Capture", group: "codex", hookSource: "Claude system prompt hook / Codex rollout prompt context" },
       { key: "codex-session", label: "Codex Session", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl session_meta" },
       { key: "codex-turn-context", label: "Codex Turn Context", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl turn_context" },
       { key: "codex-token-count", label: "Codex Token Counts", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl token_count" },

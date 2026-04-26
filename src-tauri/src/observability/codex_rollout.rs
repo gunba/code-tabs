@@ -25,6 +25,7 @@
 //!     | "event_msg" | "compacted" | "turn_context", "payload": {...} }
 
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -348,6 +349,7 @@ async fn tail_rollout(
         .map_err(|e| format!("notify watch {watch_path:?}: {e}"))?;
 
     let app_arc = Arc::new(app.clone());
+    let mut prompt_state = CodexPromptCaptureState::default();
     loop {
         // Drain whatever is currently readable.
         loop {
@@ -355,7 +357,7 @@ async fn tail_rollout(
             match reader.read_line(&mut line).await {
                 Ok(0) => break, // EOF; wait for more
                 Ok(_) => {
-                    handle_rollout_line(&app_arc, session_id, line.trim_end());
+                    handle_rollout_line(&app_arc, session_id, line.trim_end(), &mut prompt_state);
                 }
                 Err(e) => {
                     return Err(format!("read rollout: {e}"));
@@ -374,7 +376,18 @@ async fn tail_rollout(
     }
 }
 
-fn handle_rollout_line(app: &tauri::AppHandle, session_id: &str, line: &str) {
+#[derive(Default)]
+struct CodexPromptCaptureState {
+    base_instructions: Option<String>,
+    last_capture_key: Option<String>,
+}
+
+fn handle_rollout_line(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    line: &str,
+    prompt_state: &mut CodexPromptCaptureState,
+) {
     if line.is_empty() {
         return;
     }
@@ -393,7 +406,7 @@ fn handle_rollout_line(app: &tauri::AppHandle, session_id: &str, line: &str) {
             return;
         }
     };
-    emit_normalized(app, session_id, &parsed);
+    emit_normalized(app, session_id, &parsed, prompt_state);
 }
 
 fn rollout_ts_millis(ts: &str) -> i64 {
@@ -421,7 +434,12 @@ fn emit_tap_entry(app: &tauri::AppHandle, session_id: &str, ts: &str, mut entry:
 
 /// Translate a `RolloutItem` into one (or more) `record_backend_event`
 /// calls. The taxonomy mirrors what tap classifier emits for Claude.
-fn emit_normalized(app: &tauri::AppHandle, session_id: &str, parsed: &RolloutLine) {
+fn emit_normalized(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    parsed: &RolloutLine,
+    prompt_state: &mut CodexPromptCaptureState,
+) {
     let ts = parsed.timestamp.clone().unwrap_or_default();
     match parsed.kind.as_str() {
         "session_meta" => {
@@ -436,6 +454,29 @@ fn emit_normalized(app: &tauri::AppHandle, session_id: &str, parsed: &RolloutLin
                 .get("cli_version")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
+            if let Some(text) = parsed
+                .payload
+                .get("base_instructions")
+                .and_then(|v| v.get("text"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                prompt_state.base_instructions = Some(text.to_string());
+                record_backend_event(
+                    app,
+                    "LOG",
+                    "codex.rollout",
+                    Some(session_id),
+                    "codex.system_prompt",
+                    "Codex system instructions captured",
+                    serde_json::json!({
+                        "ts": ts,
+                        "codexSessionId": id,
+                        "text": text,
+                        "length": text.len(),
+                    }),
+                );
+            }
             record_backend_event(
                 app,
                 "LOG",
@@ -463,6 +504,7 @@ fn emit_normalized(app: &tauri::AppHandle, session_id: &str, parsed: &RolloutLin
             );
         }
         "turn_context" => {
+            emit_codex_prompt_capture(app, session_id, &ts, &parsed.payload, prompt_state);
             record_backend_event(
                 app,
                 "DEBUG",
@@ -520,6 +562,98 @@ fn emit_normalized(app: &tauri::AppHandle, session_id: &str, parsed: &RolloutLin
             );
         }
     }
+}
+
+fn turn_context_developer_instructions(payload: &Value) -> Option<&str> {
+    payload
+        .get("collaboration_mode")
+        .and_then(|v| v.get("settings"))
+        .and_then(|v| v.get("developer_instructions"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+}
+
+fn turn_context_user_instructions(payload: &Value) -> Option<&str> {
+    payload
+        .get("user_instructions")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+}
+
+fn text_message(role: &str, text: &str) -> Value {
+    serde_json::json!({
+        "role": role,
+        "content": [{ "type": "text", "text": text }],
+    })
+}
+
+fn emit_codex_prompt_capture(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    ts: &str,
+    payload: &Value,
+    prompt_state: &mut CodexPromptCaptureState,
+) {
+    let Some(base) = prompt_state.base_instructions.as_deref() else {
+        return;
+    };
+    if base.is_empty() {
+        return;
+    }
+
+    let model = payload.get("model").and_then(|v| v.as_str()).unwrap_or("");
+    let developer = turn_context_developer_instructions(payload);
+    let user = turn_context_user_instructions(payload);
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    model.hash(&mut hasher);
+    base.hash(&mut hasher);
+    developer.unwrap_or("").hash(&mut hasher);
+    user.unwrap_or("").hash(&mut hasher);
+    let capture_key = hasher.finish().to_string();
+    if prompt_state.last_capture_key.as_deref() == Some(capture_key.as_str()) {
+        return;
+    }
+    prompt_state.last_capture_key = Some(capture_key);
+
+    let mut messages = Vec::new();
+    if let Some(text) = developer {
+        messages.push(text_message("developer", text));
+    }
+    if let Some(text) = user {
+        messages.push(text_message("user", text));
+    }
+    let message_count = messages.len();
+
+    record_backend_event(
+        app,
+        "LOG",
+        "codex.rollout",
+        Some(session_id),
+        "codex.prompt_capture",
+        "Codex prompt context captured",
+        serde_json::json!({
+            "ts": ts,
+            "model": model,
+            "systemInstructionsLength": base.len(),
+            "developerInstructionsLength": developer.map(str::len).unwrap_or(0),
+            "userInstructionsLength": user.map(str::len).unwrap_or(0),
+            "messages": &messages,
+        }),
+    );
+    emit_tap_entry(
+        app,
+        session_id,
+        ts,
+        serde_json::json!({
+            "cat": "system-prompt",
+            "source": "codex-rollout",
+            "text": base,
+            "model": model,
+            "msgCount": message_count,
+            "blocks": [{ "text": base }],
+            "messages": messages,
+        }),
+    );
 }
 
 fn emit_event_msg(app: &tauri::AppHandle, session_id: &str, ts: &str, payload: &Value) {

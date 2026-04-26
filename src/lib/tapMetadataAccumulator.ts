@@ -1,6 +1,6 @@
 import { getNoisyEventKinds } from "./noisyEventKinds";
 import type { TapEvent } from "../types/tapEvents";
-import type { SessionMetadata, SystemPromptBlock, CapturedMessage } from "../types/session";
+import type { CliKind, SessionMetadata, SystemPromptBlock, CapturedMessage } from "../types/session";
 
 // [SI-07] Tool actions, user prompts, assistant text captured inline via event processing
 // [IN-11] StatusBar enrichment: model, subscription, region, latency, rate limits, lines changed
@@ -10,6 +10,8 @@ import type { SessionMetadata, SystemPromptBlock, CapturedMessage } from "../typ
  * One instance per session. Fingerprint-based diffing — only returns changes.
  */
 export class TapMetadataAccumulator {
+  constructor(private readonly cli: CliKind = "claude") {}
+
   private costUsd = 0;
   private inputTokens = 0;
   private outputTokens = 0;
@@ -95,7 +97,7 @@ export class TapMetadataAccumulator {
     if (event.kind === "ConversationMessage") {
       this.sidechainActive = (event as { isSidechain: boolean }).isSidechain;
     }
-    if (!getNoisyEventKinds().has(event.kind) && !this.sidechainActive) {
+    if (!getNoisyEventKinds(this.cli).has(event.kind) && !this.sidechainActive) {
       this.currentEventKind = event.kind;
     }
     switch (event.kind) {

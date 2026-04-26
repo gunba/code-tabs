@@ -2,10 +2,10 @@
 //!
 //! Spawn-side: translate `SessionConfig` (Claude-shaped) into Codex CLI
 //! args. Codex's flag surface is intentionally narrower than Claude's
-//! (no `--allowedTools`, no `--system-prompt` flag). Prompt injection
-//! goes through Codex's `developer_instructions` config override; the
-//! adapter passes through what
-//! Codex understands and silently drops Claude-only fields.
+//! (no `--allowedTools`, no `--system-prompt` flag). Prompt overrides
+//! go through Codex config keys (`instructions` and
+//! `developer_instructions`); the adapter passes through what Codex
+//! understands and silently drops Claude-only fields.
 //!
 //! Discovery-side: defer to `commands::codex_cli` (runtime probes of the
 //! installed binary). No vendored source.
@@ -95,10 +95,14 @@ impl CliAdapter for CodexAdapter {
             }
         }
 
-        // Codex exposes launch-time model-visible instructions as a config
-        // override, not as Claude's `--system-prompt`/`--append-system-prompt`
-        // flags. `developer_instructions` is additive to Codex's built-in
-        // developer messages, which is the closest supported equivalent.
+        // Codex exposes launch-time model-visible instructions as config
+        // overrides. `instructions` replaces the OpenAI Responses API
+        // system/base instructions; `developer_instructions` adds a separate
+        // developer-role message.
+        if let Some(prompt) = codex_system_instructions(cfg) {
+            args.push("-c".into());
+            args.push(format!("instructions={}", quote_toml_value(prompt)));
+        }
         if let Some(prompt) = codex_developer_instructions(cfg) {
             args.push("-c".into());
             args.push(format!("developer_instructions={}", quote_toml_value(prompt)));
@@ -273,11 +277,17 @@ impl CliAdapter for CodexAdapter {
     }
 }
 
-// [CC-05] system_prompt / append_system_prompt -> developer_instructions via -c override; quote_toml_value uses serde_json::to_string for correct Unicode/newline escaping
-fn codex_developer_instructions(cfg: &SessionConfig) -> Option<&str> {
+// [CC-05] system_prompt -> instructions and append_system_prompt -> developer_instructions via -c overrides; quote_toml_value uses serde_json::to_string for correct Unicode/newline escaping
+fn codex_system_instructions(cfg: &SessionConfig) -> Option<&str> {
     cfg.system_prompt
         .as_deref()
-        .or(cfg.append_system_prompt.as_deref())
+        .map(str::trim)
+        .filter(|prompt| !prompt.is_empty())
+}
+
+fn codex_developer_instructions(cfg: &SessionConfig) -> Option<&str> {
+    cfg.append_system_prompt
+        .as_deref()
         .map(str::trim)
         .filter(|prompt| !prompt.is_empty())
 }
@@ -441,9 +451,26 @@ mod tests {
     }
 
     #[test]
-    fn prompt_maps_to_developer_instructions() {
+    fn prompt_replace_maps_to_system_instructions() {
         let mut c = cfg();
         c.system_prompt = Some("Be precise.\nUse short answers.".into());
+        assert_eq!(
+            codex_system_instructions(&c),
+            Some("Be precise.\nUse short answers.")
+        );
+        assert_eq!(
+            format!(
+                "instructions={}",
+                quote_toml_value(codex_system_instructions(&c).unwrap())
+            ),
+            "instructions=\"Be precise.\\nUse short answers.\""
+        );
+    }
+
+    #[test]
+    fn prompt_append_maps_to_developer_instructions() {
+        let mut c = cfg();
+        c.append_system_prompt = Some("Be precise.\nUse short answers.".into());
         assert_eq!(
             codex_developer_instructions(&c),
             Some("Be precise.\nUse short answers.")

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { dlog, getDebugLog, getDebugLogForSession, clearDebugLog, removeDebugLogSession, getDebugLogGeneration, setDebugCaptureEnabled, configureObservability } from "../debugLog";
+import { dlog, getDebugLog, getDebugLogForSession, clearDebugLog, removeDebugLogSession, getDebugLogGeneration, setDebugCaptureEnabled, setDebugCaptureResolver, configureObservability } from "../debugLog";
 import type { DebugLogEntry } from "../debugLog";
 
 const MAX_BUFFER_ENTRIES = 3000;
@@ -21,6 +21,7 @@ describe("debugLog", () => {
       devtoolsAvailable: true,
       globalLogPath: null,
     });
+    setDebugCaptureResolver(null);
     setDebugCaptureEnabled(true);
     vi.restoreAllMocks();
   });
@@ -206,6 +207,15 @@ describe("debugLog", () => {
     dlog("m", null, "visible", "DEBUG");
     expect(getDebugLog()).toHaveLength(1);
     expect(getDebugLog()[0].message).toBe("visible");
+  });
+
+  it("can scope DEBUG capture by session", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    setDebugCaptureResolver((sessionId) => sessionId === "codex-session");
+    dlog("m", "claude-session", "hidden", "DEBUG");
+    dlog("m", "codex-session", "visible", "DEBUG");
+    expect(getDebugLog()).toHaveLength(1);
+    expect(getDebugLog()[0].sessionId).toBe("codex-session");
   });
 
   it("does not capture non-error logs when observability is disabled", () => {

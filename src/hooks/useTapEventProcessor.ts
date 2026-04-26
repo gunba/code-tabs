@@ -287,7 +287,9 @@ export function useTapEventProcessor(
     if (!sessionId) return;
 
     // Create per-session instances
-    const metaAcc = new TapMetadataAccumulator();
+    const initialSession = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
+    const sessionCli = initialSession?.config.cli ?? "claude";
+    const metaAcc = new TapMetadataAccumulator(sessionCli);
     const subTracker = new TapSubagentTracker(sessionId);
     metaAccRef.current = metaAcc;
     subTrackerRef.current = subTracker;
@@ -324,7 +326,7 @@ export function useTapEventProcessor(
 
       useSessionStore.getState().addSeenEventKind(event.kind);
 
-      if (!getNoisyEventKinds().has(event.kind)) {
+      if (!getNoisyEventKinds(sessionCli).has(event.kind)) {
         const cat = event.cat || "?";
         const categoryLabel = getTapCategoryLabel(cat);
         dlog("tap", sid, `[${categoryLabel}] ${event.kind}${eventDetail(event)}`, "DEBUG", {
@@ -352,7 +354,7 @@ export function useTapEventProcessor(
         dlog("inspector", sid, `state ${prevState} → ${newState} (${event.kind})`);
         stateRef.current = newState;
         updateState(sid, newState);
-      } else if (!getNoisyEventKinds().has(event.kind)) {
+      } else if (!getNoisyEventKinds(sessionCli).has(event.kind)) {
         dlog("inspector", sid, `state ${prevState} unchanged by ${event.kind}`, "DEBUG");
       }
 
@@ -679,7 +681,9 @@ export function useTapEventProcessor(
 
       // SystemPromptCapture → collect all unique observed prompts
       if (event.kind === "SystemPromptCapture") {
-        useSettingsStore.getState().addObservedPrompt(event.text, event.model);
+        const sessionCli =
+          useSessionStore.getState().sessions.find((s) => s.id === sid)?.config.cli ?? "claude";
+        useSettingsStore.getState().addObservedPrompt(event.text, event.model, sessionCli);
 
         // Bridge resultText from capturedMessages to TAP-derived subagents.
         // capturedMessages pair Agent tool_use with tool_result blocks authoritatively,

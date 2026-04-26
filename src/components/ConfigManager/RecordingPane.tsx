@@ -6,18 +6,20 @@ import seedEventKinds from "../../types/eventKinds.json";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import { TAP_CATEGORY_GROUPS } from "../../lib/tapCatalog";
 import { useRuntimeStore } from "../../store/runtime";
+import type { CliKind } from "../../types/session";
 import "./RecordingPane.css";
 
 interface RecordingPaneProps {
+  cli: CliKind;
   onStatus: (msg: StatusMessage | null) => void;
 }
 
 const seedSet = new Set(seedEventKinds as string[]);
 
-export function RecordingPane({ onStatus }: RecordingPaneProps) {
-  const recordingConfig = useSettingsStore((s) => s.recordingConfig);
-  const setRecordingConfig = useSettingsStore((s) => s.setRecordingConfig);
-  const toggleNoisyEventKind = useSettingsStore((s) => s.toggleNoisyEventKind);
+export function RecordingPane({ cli, onStatus }: RecordingPaneProps) {
+  const recordingConfig = useSettingsStore((s) => s.recordingConfigsByCli[cli] ?? s.recordingConfig);
+  const setRecordingConfigForCli = useSettingsStore((s) => s.setRecordingConfigForCli);
+  const toggleNoisyEventKindForCli = useSettingsStore((s) => s.toggleNoisyEventKindForCli);
   const seenEventKinds = useSessionStore((s) => s.seenEventKinds);
   const globalLogPath = useRuntimeStore((s) => s.observabilityInfo.globalLogPath);
   const [cleaning, setCleaning] = useState(false);
@@ -76,13 +78,13 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
   }, [seenEventKinds, onStatus]);
 
   const toggleTapEnabled = useCallback(() => {
-    setRecordingConfig({
+    setRecordingConfigForCli(cli, {
       taps: { ...recordingConfig.taps, enabled: !recordingConfig.taps.enabled },
     });
-  }, [recordingConfig.taps, setRecordingConfig]);
+  }, [cli, recordingConfig.taps, setRecordingConfigForCli]);
 
   const toggleCategory = useCallback((key: string) => {
-    setRecordingConfig({
+    setRecordingConfigForCli(cli, {
       taps: {
         ...recordingConfig.taps,
         categories: {
@@ -91,17 +93,17 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
         },
       },
     });
-  }, [recordingConfig.taps, setRecordingConfig]);
+  }, [cli, recordingConfig.taps, setRecordingConfigForCli]);
 
   const toggleTraffic = useCallback(() => {
-    setRecordingConfig({
+    setRecordingConfigForCli(cli, {
       traffic: { enabled: !recordingConfig.traffic.enabled },
     });
-  }, [recordingConfig.traffic, setRecordingConfig]);
+  }, [cli, recordingConfig.traffic, setRecordingConfigForCli]);
 
   const setMaxAge = useCallback((hours: number) => {
-    setRecordingConfig({ maxAgeHours: Math.max(1, hours) });
-  }, [setRecordingConfig]);
+    setRecordingConfigForCli(cli, { maxAgeHours: Math.max(1, hours) });
+  }, [cli, setRecordingConfigForCli]);
 
   const handleCleanup = useCallback(async () => {
     setCleaning(true);
@@ -142,7 +144,7 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
       <div className="recording-section">
         <div className="recording-section-title">Debug Build Observability</div>
         <span className="recording-hint">
-          This panel is only available in debug builds. Frontend and backend events are written to structured JSONL with ISO timestamps.
+          This panel is only available in debug builds. These controls apply to {cli === "codex" ? "Codex" : "Claude"} sessions.
         </span>
         <div className="recording-data-row">
           <button className="recording-btn" onClick={openAppLog}>
@@ -206,7 +208,7 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
               <button
                 key={kind}
                 className={`event-filter-pill${isNoisy ? " active" : ""}${isDiscovered ? " discovered" : ""}`}
-                onClick={() => toggleNoisyEventKind(kind)}
+                onClick={() => toggleNoisyEventKindForCli(cli, kind)}
                 title={isDiscovered ? `${kind} (discovered at runtime)` : kind}
               >
                 {kind}
@@ -243,7 +245,7 @@ export function RecordingPane({ onStatus }: RecordingPaneProps) {
           <input
             type="checkbox"
             checked={recordingConfig.debugCapture}
-            onChange={() => setRecordingConfig({ debugCapture: !recordingConfig.debugCapture })}
+            onChange={() => setRecordingConfigForCli(cli, { debugCapture: !recordingConfig.debugCapture })}
           />
           <span className="recording-section-title">Verbose App Logs</span>
           <span className="recording-hint">Capture DEBUG-level frontend/backend observability entries</span>

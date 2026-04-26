@@ -217,7 +217,7 @@ export function ConfigManager() {
           <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="skills" scopes={["user", "project"]} />
         )}
         {debugBuild && tab === "recording" && (
-          <RecordingPane onStatus={setStatusMsg} />
+          <RecordingPane cli={configCli} onStatus={setStatusMsg} />
         )}
       </div>
 

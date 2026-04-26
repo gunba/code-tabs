@@ -138,6 +138,15 @@ export function SessionLauncher() {
   }, []);
 
   const [commandLine, setCommandLine] = useState(() => buildFullCommand(config, config.extraFlags || ""));
+  const promptKindLabel = config.cli === "codex" ? "Instructions" : "System Prompt";
+  const promptReplaceLabel = config.cli === "codex" ? "System" : "Replace";
+  const promptAppendLabel = config.cli === "codex" ? "Developer" : "Append";
+  const promptReplaceTitle = config.cli === "codex"
+    ? "Replace Codex system instructions"
+    : "Replace system prompt";
+  const promptAppendTitle = config.cli === "codex"
+    ? "Add Codex developer instructions"
+    : "Append to system prompt";
 
   // Regenerate command line when config dropdowns change (skip on mount and in utility mode)
   useEffect(() => {
@@ -584,25 +593,25 @@ export function SessionLauncher() {
             <div className="launcher-prompt-group">
               {savedPrompts.length > 0 ? (
                 <>
-                  <span className="launcher-pill-icon" title="System Prompt"><IconDocument size={13} /></span>
+                  <span className="launcher-pill-icon" title={promptKindLabel}><IconDocument size={13} /></span>
                   <div className="launcher-prompt-slot">
                     <Dropdown
                       className="launcher-select launcher-prompt-select"
                       value={selectedPromptId}
                       onChange={setSelectedPromptId}
                       disabled={isNonSessionCommand}
-                      title="System prompt"
-                      ariaLabel="System Prompt"
+                      title={promptKindLabel}
+                      ariaLabel={promptKindLabel}
                       options={[{ value: "", label: "Default Prompt" }, ...savedPrompts.map((p) => ({ value: p.id, label: p.name }))]}
                     />
                     {selectedPromptId && (
                       <button
                         className={`launcher-toggle-pill launcher-prompt-mode${promptMode === "append" ? " launcher-toggle-pill-on" : ""}`}
                         onClick={() => setPromptMode((m) => m === "replace" ? "append" : "replace")}
-                        title={promptMode === "replace" ? "Replace system prompt" : "Append to system prompt"}
+                        title={promptMode === "replace" ? promptReplaceTitle : promptAppendTitle}
                         type="button"
                       >
-                        {promptMode === "replace" ? "Replace" : "Append"}
+                        {promptMode === "replace" ? promptReplaceLabel : promptAppendLabel}
                       </button>
                     )}
                   </div>

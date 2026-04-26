@@ -7,7 +7,7 @@ import { normalizePath, parseWorktreePath } from "../lib/paths";
 import type { BinarySettingField, JsonSchema } from "../lib/settingsSchema";
 import type { EnvVarEntry } from "../lib/envVars";
 import type { ModelRegistryEntry } from "../lib/claude";
-import { dlog, setDebugCaptureEnabled } from "../lib/debugLog";
+import { dlog, setDebugCaptureEnabled, setDebugCaptureResolver } from "../lib/debugLog";
 import { traceAsync } from "../lib/perfTrace";
 import { useSessionStore } from "./sessions";
 
@@ -21,6 +21,8 @@ export interface RecordingConfig {
   maxAgeHours: number;
   noisyEventKinds: string[];
 }
+
+export type RecordingConfigsByCli = Record<CliKind, RecordingConfig>;
 
 export const DEFAULT_NOISY_EVENT_KINDS: string[] = [
   "ApiTelemetry", "ProcessHealth", "EnvAccess", "TextDecoderChunk",
@@ -48,6 +50,7 @@ export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
       "codex-message": true,
       "codex-thread-name-updated": true,
       "codex-compacted": true,
+      "system-prompt": true,
     },
   },
   traffic: { enabled: true },
@@ -55,6 +58,50 @@ export const DEFAULT_RECORDING_CONFIG: RecordingConfig = {
   maxAgeHours: 72,
   noisyEventKinds: DEFAULT_NOISY_EVENT_KINDS,
 };
+
+function cloneRecordingConfig(config: RecordingConfig = DEFAULT_RECORDING_CONFIG): RecordingConfig {
+  return {
+    taps: {
+      enabled: config.taps.enabled,
+      categories: { ...DEFAULT_RECORDING_CONFIG.taps.categories, ...config.taps.categories },
+    },
+    traffic: { enabled: config.traffic.enabled },
+    debugCapture: config.debugCapture,
+    maxAgeHours: config.maxAgeHours,
+    noisyEventKinds: [...config.noisyEventKinds],
+  };
+}
+
+function mergeRecordingConfig(base: RecordingConfig, patch: Partial<RecordingConfig>): RecordingConfig {
+  return {
+    ...base,
+    ...patch,
+    taps: patch.taps
+      ? {
+          ...base.taps,
+          ...patch.taps,
+          categories: {
+            ...base.taps.categories,
+            ...(patch.taps.categories ?? {}),
+          },
+        }
+      : base.taps,
+    traffic: patch.traffic ? { ...base.traffic, ...patch.traffic } : base.traffic,
+    noisyEventKinds: patch.noisyEventKinds ? [...patch.noisyEventKinds] : base.noisyEventKinds,
+  };
+}
+
+export const DEFAULT_RECORDING_CONFIGS_BY_CLI: RecordingConfigsByCli = {
+  claude: cloneRecordingConfig(),
+  codex: cloneRecordingConfig(),
+};
+
+export function getRecordingConfigForCliFromState(
+  state: Pick<SettingsState, "recordingConfig" | "recordingConfigsByCli">,
+  cli: CliKind,
+): RecordingConfig {
+  return state.recordingConfigsByCli?.[cli] ?? state.recordingConfig;
+}
 
 function syncRulesToProxy() {
   const rules = useSettingsStore.getState().systemPromptRules;
@@ -95,6 +142,7 @@ export interface SlashCommand {
 
 export interface ObservedPrompt {
   id: string;
+  cli: CliKind;
   text: string;
   model: string;
   firstSeenAt: number;
@@ -142,6 +190,7 @@ interface SettingsState {
   systemPromptRules: SystemPromptRule[];
   modelRegistry: Record<string, ModelRegistryEntry>;
   recordingConfig: RecordingConfig;
+  recordingConfigsByCli: RecordingConfigsByCli;
 
   // Actions
   addRecentDir: (dir: string) => void;
@@ -172,7 +221,7 @@ interface SettingsState {
   loadBinarySettingsSchema: () => Promise<void>;
   loadSettingsJsonSchema: () => Promise<void>;
   loadKnownEnvVars: (cliPath?: string | null) => Promise<void>;
-  addObservedPrompt: (text: string, model: string) => void;
+  addObservedPrompt: (text: string, model: string, cli?: CliKind) => void;
   addSavedPrompt: (name: string, text: string) => void;
   updateSavedPrompt: (id: string, updates: { name?: string; text?: string }) => void;
   removeSavedPrompt: (id: string) => void;
@@ -184,7 +233,9 @@ interface SettingsState {
   reorderSystemPromptRules: (id: string, direction: -1 | 1) => void;
   updateModelRegistry: (entry: ModelRegistryEntry) => void;
   setRecordingConfig: (config: Partial<RecordingConfig>) => void;
+  setRecordingConfigForCli: (cli: CliKind, config: Partial<RecordingConfig>) => void;
   toggleNoisyEventKind: (kind: string) => void;
+  toggleNoisyEventKindForCli: (cli: CliKind, kind: string) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -230,7 +281,11 @@ export const useSettingsStore = create<SettingsState>()(
       apiIp: null,
       systemPromptRules: [],
       modelRegistry: {},
-      recordingConfig: DEFAULT_RECORDING_CONFIG,
+      recordingConfig: cloneRecordingConfig(),
+      recordingConfigsByCli: {
+        claude: cloneRecordingConfig(),
+        codex: cloneRecordingConfig(),
+      },
 
       addRecentDir: (dir) =>
         set((s) => {
@@ -616,11 +671,11 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
 
-      addObservedPrompt: (text, model) => set((s) => {
-        if (s.observedPrompts.some((p) => p.text === text)) return s;
+      addObservedPrompt: (text, model, cli = "claude") => set((s) => {
+        if (s.observedPrompts.some((p) => p.text === text && (p.cli ?? "claude") === cli)) return s;
         const label = text.slice(0, 60).replace(/\n/g, " ").trim() + (text.length > 60 ? "..." : "");
         const entry: ObservedPrompt = {
-          id: crypto.randomUUID(), text, model, firstSeenAt: Date.now(), label,
+          id: crypto.randomUUID(), cli, text, model, firstSeenAt: Date.now(), label,
         };
         return { observedPrompts: [...s.observedPrompts, entry].slice(-50) };
       }),
@@ -696,21 +751,63 @@ export const useSettingsStore = create<SettingsState>()(
         return { modelRegistry: pruned };
       }),
 
-      setRecordingConfig: (config) => set((s) => ({
-        recordingConfig: { ...s.recordingConfig, ...config },
-      })),
+      setRecordingConfig: (config) => set((s) => {
+        const next = mergeRecordingConfig(s.recordingConfig, config);
+        return {
+          recordingConfig: next,
+          recordingConfigsByCli: {
+            ...s.recordingConfigsByCli,
+            claude: next,
+          },
+        };
+      }),
+
+      setRecordingConfigForCli: (cli, config) => set((s) => {
+        const current = getRecordingConfigForCliFromState(s, cli);
+        const next = mergeRecordingConfig(current, config);
+        return {
+          recordingConfig: cli === "claude" ? next : s.recordingConfig,
+          recordingConfigsByCli: {
+            ...s.recordingConfigsByCli,
+            [cli]: next,
+          },
+        };
+      }),
 
       toggleNoisyEventKind: (kind) => set((s) => {
         const current = s.recordingConfig.noisyEventKinds;
         const next = current.includes(kind)
           ? current.filter((k) => k !== kind)
           : [...current, kind].sort();
-        return { recordingConfig: { ...s.recordingConfig, noisyEventKinds: next } };
+        const recordingConfig = { ...s.recordingConfig, noisyEventKinds: next };
+        return {
+          recordingConfig,
+          recordingConfigsByCli: {
+            ...s.recordingConfigsByCli,
+            claude: recordingConfig,
+          },
+        };
+      }),
+
+      toggleNoisyEventKindForCli: (cli, kind) => set((s) => {
+        const currentConfig = getRecordingConfigForCliFromState(s, cli);
+        const current = currentConfig.noisyEventKinds;
+        const nextKinds = current.includes(kind)
+          ? current.filter((k) => k !== kind)
+          : [...current, kind].sort();
+        const nextConfig = { ...currentConfig, noisyEventKinds: nextKinds };
+        return {
+          recordingConfig: cli === "claude" ? nextConfig : s.recordingConfig,
+          recordingConfigsByCli: {
+            ...s.recordingConfigsByCli,
+            [cli]: nextConfig,
+          },
+        };
       }),
     }),
     {
       name: "claude-tabs-settings",
-      version: 18,
+      version: 19,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
@@ -833,6 +930,23 @@ export const useSettingsStore = create<SettingsState>()(
             }
           }
         }
+        if (version < 19) {
+          const legacy = cloneRecordingConfig(
+            (state.recordingConfig as RecordingConfig | undefined) ?? DEFAULT_RECORDING_CONFIG,
+          );
+          state.recordingConfig = legacy;
+          state.recordingConfigsByCli = {
+            claude: cloneRecordingConfig(legacy),
+            codex: cloneRecordingConfig(legacy),
+          };
+        } else {
+          const byCli = state.recordingConfigsByCli as Partial<RecordingConfigsByCli> | undefined;
+          state.recordingConfigsByCli = {
+            claude: cloneRecordingConfig(byCli?.claude ?? (state.recordingConfig as RecordingConfig | undefined) ?? DEFAULT_RECORDING_CONFIG),
+            codex: cloneRecordingConfig(byCli?.codex ?? (state.recordingConfig as RecordingConfig | undefined) ?? DEFAULT_RECORDING_CONFIG),
+          };
+          state.recordingConfig = (state.recordingConfigsByCli as RecordingConfigsByCli).claude;
+        }
         return state;
       },
       // Don't persist transient UI state
@@ -862,16 +976,30 @@ export const useSettingsStore = create<SettingsState>()(
         systemPromptRules: state.systemPromptRules,
         modelRegistry: state.modelRegistry,
         recordingConfig: state.recordingConfig,
+        recordingConfigsByCli: state.recordingConfigsByCli,
       }),
     }
   )
 );
 
 // Sync debug capture flag into the zero-import debugLog module
-let _prevDebugCapture = useSettingsStore.getState().recordingConfig.debugCapture;
+function resolveDebugCaptureForSession(sessionId: string | null): boolean {
+  const settings = useSettingsStore.getState();
+  if (!sessionId) {
+    return settings.recordingConfigsByCli.claude.debugCapture || settings.recordingConfigsByCli.codex.debugCapture;
+  }
+  const sessionState = useSessionStore.getState();
+  const session = sessionState.sessions?.find((s) => s.id === sessionId);
+  const cached = settings.sessionConfigs[sessionId]?.cli;
+  const cli = session?.config.cli ?? cached ?? "claude";
+  return getRecordingConfigForCliFromState(settings, cli).debugCapture;
+}
+
+let _prevDebugCapture = useSettingsStore.getState().recordingConfigsByCli.claude.debugCapture;
 setDebugCaptureEnabled(_prevDebugCapture);
+setDebugCaptureResolver(resolveDebugCaptureForSession);
 useSettingsStore.subscribe((state) => {
-  const next = state.recordingConfig.debugCapture;
+  const next = state.recordingConfigsByCli.claude.debugCapture;
   if (next !== _prevDebugCapture) {
     _prevDebugCapture = next;
     setDebugCaptureEnabled(next);

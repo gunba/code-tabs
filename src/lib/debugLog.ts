@@ -47,6 +47,7 @@ let generation = 0;
 let nextId = 1;
 let totalEntryCount = 0;
 let debugCaptureEnabled = true;
+let debugCaptureResolver: ((sessionId: string | null) => boolean) | null = null;
 let observabilityInfo: ObservabilityInfo = {
   debugBuild: false,
   observabilityEnabled: false,
@@ -115,7 +116,7 @@ function toSafeValue(
 
 function shouldCapture(level: LogLevel): boolean {
   if (!observabilityInfo.observabilityEnabled) return false;
-  if (level === "DEBUG" && !debugCaptureEnabled) return false;
+  if (level === "DEBUG" && !debugCaptureResolver && !debugCaptureEnabled) return false;
   return true;
 }
 
@@ -203,6 +204,9 @@ function trimTotalBuffers(): void {
 }
 
 function pushEntry(entry: DebugLogEntry, persist: boolean): void {
+  if (entry.level === "DEBUG" && debugCaptureResolver && !debugCaptureResolver(entry.sessionId)) {
+    return;
+  }
   if (!shouldCapture(entry.level)) {
     if (entry.level === "DEBUG") return;
     forwardToConsole(entry);
@@ -344,6 +348,10 @@ export function getDebugLogGeneration(): number {
 
 export function setDebugCaptureEnabled(enabled: boolean): void {
   debugCaptureEnabled = enabled;
+}
+
+export function setDebugCaptureResolver(resolver: ((sessionId: string | null) => boolean) | null): void {
+  debugCaptureResolver = resolver;
 }
 
 export interface DebugLogStats {

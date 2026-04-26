@@ -24,6 +24,7 @@ vi.mock("../../lib/theme", () => ({
 vi.mock("../../lib/debugLog", () => ({
   dlog: () => {},
   setDebugCaptureEnabled: () => {},
+  setDebugCaptureResolver: () => {},
 }));
 
 import { getTerminalKeySequenceOverride, SHIFT_ENTER_SEQUENCE, TERMINAL_FONT_FAMILY } from "../useTerminal";

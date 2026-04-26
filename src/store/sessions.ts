@@ -161,9 +161,9 @@ export const useSessionStore = create<SessionsState>((set) => ({
           }).then((n) => { if (n > 0) trace(`init: killed ${n} orphan(s)`, { module: "session", event: "session.init.orphans_killed", data: { count: n } }); })
            .catch((e) => dlog("session", null, `orphan cleanup failed: ${e}`, "ERR"))
         : Promise.resolve(),
-      // Slimmed proxy lifecycle: localhost system-prompt-rewrite passthrough.
-      // No provider config, no model translation, no compression. Codex
-      // sessions bypass the proxy entirely and call OpenAI directly.
+      // Slimmed proxy lifecycle: localhost prompt-rewrite passthrough.
+      // No provider config, no model translation, no compression. Claude
+      // uses ANTHROPIC_BASE_URL; Codex uses openai_base_url at launch.
       traceAsync("init: start_api_proxy", () => {
         return invoke<number>("start_api_proxy")
           .then((port) => {

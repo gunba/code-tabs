@@ -110,6 +110,7 @@ describe("addObservedPrompt", () => {
     expect(observed).toHaveLength(1);
     expect(observed[0].text).toBe("You are Claude, a helpful assistant.");
     expect(observed[0].model).toBe("claude-opus-4-6");
+    expect(observed[0].cli).toBe("claude");
     expect(observed[0].id).toBeTruthy();
     expect(observed[0].label).toBeTruthy();
     expect(observed[0].firstSeenAt).toBeGreaterThan(0);
@@ -129,6 +130,14 @@ describe("addObservedPrompt", () => {
     useSettingsStore.getState().addObservedPrompt("Same prompt", "opus");
     useSettingsStore.getState().addObservedPrompt("Same prompt", "sonnet");
     expect(useSettingsStore.getState().observedPrompts).toHaveLength(1);
+  });
+
+  it("keeps identical observed prompt text separate per CLI", () => {
+    useSettingsStore.getState().addObservedPrompt("Same prompt", "opus", "claude");
+    useSettingsStore.getState().addObservedPrompt("Same prompt", "gpt-5.2", "codex");
+    const observed = useSettingsStore.getState().observedPrompts;
+    expect(observed).toHaveLength(2);
+    expect(observed.map((p) => p.cli)).toEqual(["claude", "codex"]);
   });
 
   it("adds distinct texts as separate entries", () => {

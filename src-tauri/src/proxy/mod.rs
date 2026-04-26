@@ -1,17 +1,18 @@
-//! Slim system-prompt-rewrite proxy.
+//! Slim prompt-rewrite proxy.
 //!
-// [SP-01] Slimmed proxy: system-prompt rewrite + traffic logging only; forwards to https://api.anthropic.com; no provider routing or model translation; Codex bypasses entirely
+// [SP-01] Slim proxy: prompt rewrite + traffic logging only; Anthropic
+// and OpenAI are forwarded unchanged except for rule application on the
+// provider-native prompt field.
 //! What this module is: a localhost HTTP forwarder for Claude Code's
-//! `POST /v1/messages` traffic. It applies user-defined regex rules to
-//! the request's `system` field (PromptsTab) before forwarding to
-//! `https://api.anthropic.com`, and optionally tees request/response
-//! to a per-session `traffic.jsonl`. That's it.
+//! `POST /v1/messages` traffic and Codex's OpenAI Responses traffic. It
+//! applies user-defined regex rules to Claude's `system` field or
+//! OpenAI's `instructions` field (PromptsTab) before forwarding to the
+//! original provider, and optionally tees request/response to a
+//! per-session `traffic.jsonl`. That's it.
 //!
 //! What it isn't (and used to be): an Anthropic↔OpenAI translator, a
 //! provider router, an OAuth client, a compression engine. All of
-//! that lived in `proxy/codex/` and `proxy/compress/` and is gone —
-//! the Codex CLI is now spawned natively and bypasses this proxy
-//! entirely.
+//! that lived in `proxy/codex/` and `proxy/compress/` and is gone.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -425,7 +426,55 @@ pub fn stop_traffic_log(
 
 // ── Connection handling ─────────────────────────────────────────────
 
-const UPSTREAM_BASE_URL: &str = "https://api.anthropic.com";
+const ANTHROPIC_UPSTREAM_BASE_URL: &str = "https://api.anthropic.com";
+const OPENAI_UPSTREAM_BASE_URL: &str = "https://api.openai.com";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum UpstreamKind {
+    Anthropic,
+    OpenAi,
+}
+
+impl UpstreamKind {
+    fn base_url(self) -> &'static str {
+        match self {
+            UpstreamKind::Anthropic => ANTHROPIC_UPSTREAM_BASE_URL,
+            UpstreamKind::OpenAi => OPENAI_UPSTREAM_BASE_URL,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            UpstreamKind::Anthropic => "anthropic",
+            UpstreamKind::OpenAi => "openai",
+        }
+    }
+}
+
+fn path_matches_endpoint(path: &str, endpoint: &str) -> bool {
+    path == endpoint
+        || path
+            .strip_prefix(endpoint)
+            .map_or(false, |suffix| suffix.starts_with('?') || suffix.starts_with('/'))
+}
+
+fn is_anthropic_endpoint(path: &str) -> bool {
+    path_matches_endpoint(path, "/v1/messages") || path_matches_endpoint(path, "/v1/complete")
+}
+
+fn is_openai_responses_endpoint(path: &str) -> bool {
+    path == "/v1/responses" || path.starts_with("/v1/responses?")
+}
+
+fn resolve_upstream(path: &str) -> UpstreamKind {
+    if is_anthropic_endpoint(path) {
+        UpstreamKind::Anthropic
+    } else if path.starts_with("/v1/") {
+        UpstreamKind::OpenAi
+    } else {
+        UpstreamKind::Anthropic
+    }
+}
 
 async fn handle_connection(
     mut stream: tokio::net::TcpStream,
@@ -481,11 +530,21 @@ async fn handle_connection(
 
     let model = extract_model(&body);
 
-    // Apply system-prompt rewrite rules; record matches per rule id.
-    let (final_body, matched_ids) = if rules.is_empty() {
+    let upstream = resolve_upstream(&path);
+    let rewritable_prompt_endpoint = match upstream {
+        UpstreamKind::Anthropic => is_anthropic_endpoint(&path),
+        UpstreamKind::OpenAi => is_openai_responses_endpoint(&path),
+    };
+
+    // Apply prompt rewrite rules to the provider-native prompt field:
+    // Claude/Anthropic => `system`, Codex/OpenAI Responses => `instructions`.
+    let (final_body, matched_ids) = if rules.is_empty() || !rewritable_prompt_endpoint {
         (body.to_vec(), Vec::new())
     } else {
-        rewrite_system_prompt_in_body(&body, &rules)
+        match upstream {
+            UpstreamKind::Anthropic => rewrite_system_prompt_in_body(&body, &rules),
+            UpstreamKind::OpenAi => rewrite_openai_instructions_in_body(&body, &rules),
+        }
     };
     if !matched_ids.is_empty() {
         if let Ok(mut s) = proxy_state.lock() {
@@ -506,15 +565,18 @@ async fn handle_connection(
             "method": method,
             "rawPath": raw_path,
             "path": path,
+            "upstream": upstream.label(),
             "sessionScoped": session_id.is_some(),
             "requestModel": model,
-            "systemPromptRulesApplied": !rules.is_empty(),
+            "promptRulesEligible": rewritable_prompt_endpoint,
+            "promptRulesApplied": !matched_ids.is_empty(),
             "shouldLogTraffic": should_log,
         }),
     );
 
-    // Build upstream request (always Anthropic; provider concept gone).
-    let url = format!("{}{}", UPSTREAM_BASE_URL.trim_end_matches('/'), path);
+    // Build upstream request. This is routing only, not provider translation:
+    // headers and request bodies otherwise pass through unchanged.
+    let url = format!("{}{}", upstream.base_url().trim_end_matches('/'), path);
     let http_method =
         reqwest::Method::from_bytes(method.as_bytes()).unwrap_or(reqwest::Method::POST);
     let mut req = default_client.request(http_method, &url);
@@ -540,6 +602,7 @@ async fn handle_connection(
         "method": log_method,
         "path": log_path,
         "model": log_model,
+        "upstream": upstream.label(),
         "shouldLogTraffic": should_log,
     });
     record_backend_perf_start(
@@ -591,6 +654,7 @@ async fn handle_connection(
                     "durationMs": req_start.elapsed().as_millis() as u64,
                     "method": log_method,
                     "path": log_path,
+                    "upstream": upstream.label(),
                     "model": log_model,
                     "error": error_message,
                 }),
@@ -668,6 +732,7 @@ async fn handle_connection(
             "durationMs": req_start.elapsed().as_millis() as u64,
             "method": log_method,
             "path": log_path,
+            "upstream": upstream.label(),
             "model": log_model,
             "status": status_code,
         }),
@@ -778,6 +843,33 @@ fn rewrite_system_prompt_in_body(body: &[u8], rules: &[SystemPromptRule]) -> (Ve
     };
     let mut matched: Vec<String> = Vec::new();
     apply_rules_to_system_value(system, &enabled, &mut matched);
+    (
+        serde_json::to_vec(&json).unwrap_or_else(|_| body.to_vec()),
+        matched,
+    )
+}
+
+fn rewrite_openai_instructions_in_body(
+    body: &[u8],
+    rules: &[SystemPromptRule],
+) -> (Vec<u8>, Vec<String>) {
+    let enabled: Vec<&SystemPromptRule> = rules
+        .iter()
+        .filter(|r| r.enabled && !r.pattern.is_empty())
+        .collect();
+    if enabled.is_empty() {
+        return (body.to_vec(), Vec::new());
+    }
+    let mut json = match serde_json::from_slice::<serde_json::Value>(body) {
+        Ok(j) => j,
+        Err(_) => return (body.to_vec(), Vec::new()),
+    };
+    let instructions = match json.get_mut("instructions") {
+        Some(serde_json::Value::String(s)) => s,
+        _ => return (body.to_vec(), Vec::new()),
+    };
+    let mut matched: Vec<String> = Vec::new();
+    *instructions = apply_rules_to_text(instructions, &enabled, &mut matched);
     (
         serde_json::to_vec(&json).unwrap_or_else(|_| body.to_vec()),
         matched,
@@ -1015,6 +1107,36 @@ mod tests {
         assert_eq!(matched.len(), 2);
         assert!(matched.contains(&"r1".into()));
         assert!(matched.contains(&"r2".into()));
+    }
+
+    #[test]
+    fn test_rewrite_openai_instructions_prompt() {
+        let body = br#"{"model":"gpt-5.2","instructions":"hello world","input":[]}"#;
+        let rule = make_rule("r1", "hello", "goodbye", true);
+        let (out, matched) = rewrite_openai_instructions_in_body(body, &[rule]);
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(v["instructions"], "goodbye world");
+        assert_eq!(matched, vec!["r1".to_string()]);
+    }
+
+    #[test]
+    fn test_rewrite_openai_instructions_missing_is_noop() {
+        let body = br#"{"model":"gpt-5.2","input":[]}"#;
+        let rule = make_rule("r1", "hello", "goodbye", true);
+        let (out, matched) = rewrite_openai_instructions_in_body(body, &[rule]);
+        assert_eq!(out, body);
+        assert!(matched.is_empty());
+    }
+
+    #[test]
+    fn test_resolve_upstream_routes_provider_native_endpoints() {
+        assert_eq!(resolve_upstream("/v1/messages"), UpstreamKind::Anthropic);
+        assert_eq!(
+            resolve_upstream("/v1/messages/count_tokens"),
+            UpstreamKind::Anthropic
+        );
+        assert_eq!(resolve_upstream("/v1/responses"), UpstreamKind::OpenAi);
+        assert_eq!(resolve_upstream("/v1/models"), UpstreamKind::OpenAi);
     }
 
     #[test]
