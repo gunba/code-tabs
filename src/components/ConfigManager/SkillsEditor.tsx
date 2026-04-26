@@ -5,6 +5,7 @@ import { dlog } from "../../lib/debugLog";
 import { insertTextAtCursor } from "../../lib/domEdit";
 import type { AgentFile } from "../../lib/settingsSchema";
 import type { PaneComponentProps } from "./ThreePaneEditor";
+import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 
 type Kind = "command" | "skill";
 
@@ -208,6 +209,26 @@ export function SkillsEditor({ scope, projectDir, cli, onStatus }: PaneComponent
   }, [scope, workingDir, peerCli, cli, peerName, loadEntries, onStatus]);
 
   const dirty = isNew ? newName.trim() !== "" && content !== "" : content !== savedContent;
+
+  useUnsavedTextEditor(`${cli}:skill:${scope}:${projectDir}:${selected ?? "none"}`, () => {
+    if (loading || !selected) return null;
+    const after = textareaRef.current?.value ?? content;
+    if (isNew ? after === "" : after === savedContent) return null;
+    const scopeLabel = scope === "project" ? "Project" : "User";
+    const parsed = selected && !isNew ? parseKey(selected) : null;
+    const existingTitle = parsed
+      ? parsed.kind === "skill"
+        ? `Skill ${parsed.name}/SKILL.md`
+        : `Command /${parsed.name}.md`
+      : null;
+    return {
+      title: isNew
+        ? `New ${newKind}${newName.trim() ? ` "${newName.trim()}"` : ""} (${scopeLabel})`
+        : `${existingTitle ?? "Skill or command"} (${scopeLabel})`,
+      before: isNew ? "" : savedContent,
+      after,
+    };
+  });
 
   // Group entries: commands first, then skills.
   const grouped = useMemo(() => {

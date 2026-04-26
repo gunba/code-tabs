@@ -13,6 +13,7 @@ import {
   defaultForType,
 } from "../../lib/settingsSchema";
 import type { SettingField } from "../../lib/settingsSchema";
+import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 
 // [CM-13] JSON textarea with syntax highlighting overlay (pre behind transparent textarea)
 /** Tokenize JSON text and wrap tokens in colored spans. */
@@ -347,6 +348,18 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
   };
 
   const dirty = text !== saved;
+
+  useUnsavedTextEditor(`${cli}:settings:${scope}:${projectDir}`, () => {
+    if (loading) return null;
+    const after = textareaRef.current?.value ?? text;
+    if (after === saved) return null;
+    const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
+    return {
+      title: `${cli === "codex" ? "Codex config" : "Settings"} (${scopeLabel})`,
+      before: saved,
+      after,
+    };
+  });
 
   if (loading) return <div className="pane-hint">Loading...</div>;
 

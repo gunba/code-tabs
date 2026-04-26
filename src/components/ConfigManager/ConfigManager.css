@@ -8,6 +8,7 @@
   min-width: 900px;
   height: 78vh;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  position: relative;
 }
 
 
@@ -462,6 +463,218 @@
 
 .config-status-error {
   color: var(--error);
+}
+
+/* ── Unsaved editor discard dialog ───────────────────── */
+
+.config-discard-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg-primary) 62%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.config-discard-dialog {
+  width: min(920px, 100%);
+  max-height: min(620px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.config-discard-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.config-discard-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.config-discard-subtitle {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.config-discard-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr;
+  min-height: 0;
+  flex: 1;
+}
+
+.config-discard-change-list {
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  padding: 8px;
+}
+
+.config-discard-change {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.config-discard-change:hover {
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.config-discard-change.active {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.config-discard-change-title {
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.config-discard-change-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.config-discard-preview {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.config-discard-preview-title {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.config-discard-diff {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-primary);
+  padding: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.config-discard-diff-line {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 6px;
+  padding: 0 12px;
+  min-width: 0;
+}
+
+.config-discard-diff-marker {
+  color: var(--text-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.config-discard-diff-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.config-discard-diff-add {
+  background: color-mix(in srgb, var(--success) 13%, transparent);
+  color: var(--text-primary);
+}
+
+.config-discard-diff-add .config-discard-diff-marker {
+  color: var(--success);
+}
+
+.config-discard-diff-del {
+  background: color-mix(in srgb, var(--error) 13%, transparent);
+  color: var(--text-primary);
+}
+
+.config-discard-diff-del .config-discard-diff-marker {
+  color: var(--error);
+}
+
+.config-discard-diff-same {
+  color: var(--text-secondary);
+}
+
+.config-discard-diff-skip,
+.config-discard-diff-empty {
+  padding: 2px 14px 2px 42px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.config-discard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.config-discard-keep,
+.config-discard-confirm {
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.config-discard-keep {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.config-discard-keep:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.config-discard-confirm {
+  background: color-mix(in srgb, var(--error) 18%, transparent);
+  border: 1px solid var(--error);
+  color: var(--error);
+}
+
+.config-discard-confirm:hover {
+  background: var(--error);
+  color: var(--text-primary);
 }
 
 /* ── Markdown file editor (agents, skills) ────────────── */

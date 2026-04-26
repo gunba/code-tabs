@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import type { PaneComponentProps } from "./ThreePaneEditor";
 import { insertTextAtCursor } from "../../lib/domEdit";
+import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 import "./MarkdownPane.css";
 
 // [CM-14] Scope-to-fileType mapping.
@@ -114,6 +115,18 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
   }, [scope, workingDir, peerFileType, fileType, peerName, load, onStatus]);
 
   const dirty = current !== saved;
+
+  useUnsavedTextEditor(`${cli}:instructions:${scope}:${projectDir}`, () => {
+    if (loading) return null;
+    const after = textareaRef.current?.value ?? current;
+    if (after === saved) return null;
+    const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
+    return {
+      title: `${docName} (${scopeLabel})`,
+      before: saved,
+      after,
+    };
+  });
 
   if (loading) return <div className="pane-hint">Loading...</div>;
 

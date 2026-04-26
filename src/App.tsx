@@ -12,7 +12,7 @@ import { ResumePicker } from "./components/ResumePicker/ResumePicker";
 import { StatusBar } from "./components/StatusBar/StatusBar";
 import { CommandBar } from "./components/CommandBar/CommandBar";
 import { CommandPalette } from "./components/CommandPalette/CommandPalette";
-import { ConfigManager } from "./components/ConfigManager/ConfigManager";
+import { ConfigManager, CONFIG_MANAGER_CLOSE_REQUEST_EVENT } from "./components/ConfigManager/ConfigManager";
 import { RightPanel } from "./components/RightPanel/RightPanel";
 import { ModalOverlay } from "./components/ModalOverlay/ModalOverlay";
 import { ContextViewer } from "./components/ContextViewer/ContextViewer";
@@ -316,7 +316,11 @@ export default function App() {
       // [KB-07] Ctrl+,: config manager
       if (e.ctrlKey && e.key === ",") {
         e.preventDefault();
-        setShowConfigManager(showConfigManager ? false : "settings");
+        if (showConfigManager) {
+          window.dispatchEvent(new Event(CONFIG_MANAGER_CLOSE_REQUEST_EVENT));
+        } else {
+          setShowConfigManager("settings");
+        }
       }
 
       if (devtoolsAvailable && e.ctrlKey && e.shiftKey && e.key === "I") {
@@ -329,7 +333,7 @@ export default function App() {
         if (tabContextMenu) { setTabContextMenu(null); return; }
         if (showPalette) return;
         if (showContextViewer) { setShowContextViewer(false); return; }
-        if (showConfigManager) { setShowConfigManager(false); return; }
+        if (showConfigManager) { window.dispatchEvent(new Event(CONFIG_MANAGER_CLOSE_REQUEST_EVENT)); return; }
         if (showResumePicker) { setShowResumePicker(false); return; }
         if (showLauncher) { setShowLauncher(false); return; }
         if (inspectedSubagent) { e.preventDefault(); setInspectedSubagent(null); return; }

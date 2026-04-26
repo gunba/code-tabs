@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
@@ -19,9 +20,158 @@ import { parseWorktreePath } from "../../lib/paths";
 import type { StatusMessage } from "../../lib/settingsSchema";
 import { useRuntimeStore } from "../../store/runtime";
 import type { CliKind } from "../../types/session";
+import { diffLines } from "../../lib/promptDiff";
+import type { DiffLine } from "../../lib/promptDiff";
+import {
+  UnsavedTextEditorProvider,
+  useUnsavedTextEditorRegistry,
+  type UnsavedTextEditorChange,
+} from "./UnsavedTextEditors";
 import "./ConfigManager.css";
 
 type Tab = "settings" | "envvars" | "claudemd" | "hooks" | "plugins" | "mcp" | "agents" | "prompts" | "skills" | "recording";
+export const CONFIG_MANAGER_CLOSE_REQUEST_EVENT = "config-manager-close-request";
+
+type DiffPreviewLine = DiffLine | { type: "skip"; skipped: number; truncated?: boolean };
+
+const DIFF_CONTEXT_LINES = 2;
+const MAX_DIFF_PREVIEW_ROWS = 140;
+
+function buildDiffPreview(before: string, after: string): DiffPreviewLine[] {
+  const diff = diffLines(before, after);
+  const changedIndexes = diff
+    .map((line, index) => line.type === "same" ? -1 : index)
+    .filter((index) => index >= 0);
+  if (changedIndexes.length === 0) return [];
+
+  const keep = new Set<number>();
+  for (const index of changedIndexes) {
+    for (let i = Math.max(0, index - DIFF_CONTEXT_LINES); i <= Math.min(diff.length - 1, index + DIFF_CONTEXT_LINES); i++) {
+      keep.add(i);
+    }
+  }
+
+  const rows: DiffPreviewLine[] = [];
+  let skipped = 0;
+  for (let i = 0; i < diff.length; i++) {
+    if (!keep.has(i)) {
+      skipped += 1;
+      continue;
+    }
+    if (skipped > 0) {
+      rows.push({ type: "skip", skipped });
+      skipped = 0;
+    }
+    rows.push(diff[i]);
+  }
+  if (skipped > 0) rows.push({ type: "skip", skipped });
+
+  if (rows.length <= MAX_DIFF_PREVIEW_ROWS) return rows;
+  const limited = rows.slice(0, MAX_DIFF_PREVIEW_ROWS);
+  limited.push({ type: "skip", skipped: rows.length - MAX_DIFF_PREVIEW_ROWS, truncated: true });
+  return limited;
+}
+
+function DiscardChangesDialog({
+  changes,
+  onCancel,
+  onDiscard,
+}: {
+  changes: UnsavedTextEditorChange[];
+  onCancel: () => void;
+  onDiscard: () => void;
+}) {
+  const [activeId, setActiveId] = useState(changes[0]?.id ?? "");
+
+  useEffect(() => {
+    if (!changes.some((change) => change.id === activeId)) {
+      setActiveId(changes[0]?.id ?? "");
+    }
+  }, [activeId, changes]);
+
+  const activeChange = changes.find((change) => change.id === activeId) ?? changes[0];
+  const previewRows = useMemo(
+    () => activeChange ? buildDiffPreview(activeChange.before, activeChange.after) : [],
+    [activeChange],
+  );
+
+  return (
+    <div className="config-discard-layer" role="presentation" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="config-discard-dialog" role="dialog" aria-modal="true" aria-labelledby="config-discard-title">
+        <div className="config-discard-header">
+          <div>
+            <div id="config-discard-title" className="config-discard-title">Discard unsaved changes?</div>
+            <div className="config-discard-subtitle">
+              {changes.length === 1
+                ? "This editor has changes that have not been saved."
+                : `${changes.length} editors have changes that have not been saved.`}
+            </div>
+          </div>
+          <button className="config-close" onClick={onCancel} title="Keep editing">
+            <IconClose size={14} />
+          </button>
+        </div>
+
+        <div className="config-discard-body">
+          <div className="config-discard-change-list" aria-label="Unsaved editors">
+            {changes.map((change) => (
+              <button
+                key={change.id}
+                type="button"
+                className={`config-discard-change${change.id === activeChange?.id ? " active" : ""}`}
+                onClick={() => setActiveId(change.id)}
+              >
+                <span className="config-discard-change-title">{change.title}</span>
+                <span className="config-discard-change-meta">
+                  {change.after.length.toLocaleString()} chars
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="config-discard-preview" aria-label="Unsaved change diff">
+            <div className="config-discard-preview-title">
+              {activeChange?.title ?? "Unsaved changes"}
+            </div>
+            <div className="config-discard-diff">
+              {previewRows.length === 0 ? (
+                <div className="config-discard-diff-empty">Only whitespace or metadata changed.</div>
+              ) : (
+                previewRows.map((line, index) => {
+                  if (line.type === "skip") {
+                    return (
+                      <div key={`skip-${index}`} className="config-discard-diff-skip">
+                        {line.truncated
+                          ? `... ${line.skipped} more diff row${line.skipped === 1 ? "" : "s"} hidden`
+                          : `... ${line.skipped} unchanged line${line.skipped === 1 ? "" : "s"}`}
+                      </div>
+                    );
+                  }
+                  const marker = line.type === "add" ? "+" : line.type === "del" ? "-" : " ";
+                  return (
+                    <div key={`${line.type}-${index}`} className={`config-discard-diff-line config-discard-diff-${line.type}`}>
+                      <span className="config-discard-diff-marker">{marker}</span>
+                      <span className="config-discard-diff-text">{line.text || " "}</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="config-discard-actions">
+          <button type="button" className="config-discard-keep" onClick={onCancel} autoFocus>
+            Keep editing
+          </button>
+          <button type="button" className="config-discard-confirm" onClick={onDiscard}>
+            Discard changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "settings", label: "Settings", icon: <IconGear size={11} /> },
@@ -55,7 +205,11 @@ export function ConfigManager() {
   });
   const [projectDir, setProjectDir] = useState("");
   const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
+  const [pendingDiscardChanges, setPendingDiscardChanges] = useState<UnsavedTextEditorChange[] | null>(null);
   const prevRequestedTabRef = useRef<typeof showConfigManager>(showConfigManager);
+  const pendingDiscardActionRef = useRef<(() => void) | null>(null);
+  const allowWindowCloseRef = useRef(false);
+  const unsavedTextEditorRegistry = useUnsavedTextEditorRegistry();
   const availableCliKinds = useMemo(() => {
     const kinds: CliKind[] = [];
     if (claudePath) kinds.push("claude");
@@ -127,108 +281,181 @@ export function ConfigManager() {
     }
   }, [projectDir, activeTabId, sessions, projectDirs]);
 
-  const onClose = () => setShowConfigManager(false);
+  const closeConfig = useCallback(() => setShowConfigManager(false), [setShowConfigManager]);
+  const cancelDiscard = useCallback(() => {
+    pendingDiscardActionRef.current = null;
+    setPendingDiscardChanges(null);
+  }, []);
+  const runWithUnsavedEditorGuard = useCallback((afterDiscard: () => void = closeConfig) => {
+    const changes = unsavedTextEditorRegistry.getChanges();
+    if (changes.length > 0) {
+      pendingDiscardActionRef.current = afterDiscard;
+      setPendingDiscardChanges(changes);
+      return;
+    }
+    afterDiscard();
+  }, [closeConfig, unsavedTextEditorRegistry]);
+  const confirmDiscard = useCallback(() => {
+    const action = pendingDiscardActionRef.current ?? closeConfig;
+    pendingDiscardActionRef.current = null;
+    setPendingDiscardChanges(null);
+    action();
+  }, [closeConfig]);
+  const onClose = useCallback(() => runWithUnsavedEditorGuard(closeConfig), [runWithUnsavedEditorGuard, closeConfig]);
   const codexTwoScopes = configCli === "codex" ? ["user", "project"] as Array<"user" | "project"> : undefined;
+
+  useEffect(() => {
+    const handler = () => {
+      if (pendingDiscardChanges) {
+        cancelDiscard();
+        return;
+      }
+      runWithUnsavedEditorGuard(closeConfig);
+    };
+    window.addEventListener(CONFIG_MANAGER_CLOSE_REQUEST_EVENT, handler);
+    return () => window.removeEventListener(CONFIG_MANAGER_CLOSE_REQUEST_EVENT, handler);
+  }, [cancelDiscard, closeConfig, pendingDiscardChanges, runWithUnsavedEditorGuard]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    getCurrentWindow().onCloseRequested((event) => {
+      if (allowWindowCloseRef.current) return;
+      const changes = unsavedTextEditorRegistry.getChanges();
+      if (changes.length === 0) return;
+      event.preventDefault();
+      pendingDiscardActionRef.current = () => {
+        allowWindowCloseRef.current = true;
+        getCurrentWindow().close().catch(() => {
+          allowWindowCloseRef.current = false;
+        });
+      };
+      setPendingDiscardChanges(changes);
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else unlisten = dispose;
+    }).catch(() => {});
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [unsavedTextEditorRegistry]);
 
   return (
     <ModalOverlay onClose={onClose} className={`config-modal config-modal-cli-${configCli}`} closeOnBackdropClick={false}>
-      {/* [CM-04] [CM-09] keystroke isolation + Escape/X/Ctrl+, close */}
-      {/* Header with tabs */}
-      <div className="config-header">
-        <div className="config-title-group">
-          <span className="config-title">Config</span>
-          {availableCliKinds.length > 1 ? (
-            <div className="config-cli-switch" role="tablist" aria-label="Configuration target">
+      <UnsavedTextEditorProvider registry={unsavedTextEditorRegistry}>
+        {/* [CM-04] [CM-09] keystroke isolation + Escape/X/Ctrl+, close */}
+        {/* Header with tabs */}
+        <div className="config-header">
+          <div className="config-title-group">
+            <span className="config-title">Config</span>
+            {availableCliKinds.length > 1 ? (
+              <div className="config-cli-switch" role="tablist" aria-label="Configuration target">
+                <button
+                  className={`config-cli-switch-btn config-cli-switch-btn-claude${configCli === "claude" ? " active" : ""}`}
+                  onClick={() => {
+                    if (configCli !== "claude") runWithUnsavedEditorGuard(() => setConfigCli("claude"));
+                  }}
+                  type="button"
+                >
+                  Claude
+                </button>
+                <button
+                  className={`config-cli-switch-btn config-cli-switch-btn-codex${configCli === "codex" ? " active" : ""}`}
+                  onClick={() => {
+                    if (configCli !== "codex") runWithUnsavedEditorGuard(() => setConfigCli("codex"));
+                  }}
+                  type="button"
+                >
+                  Codex
+                </button>
+              </div>
+            ) : (
+              <span className={`config-cli-label config-cli-label-${configCli}`}>{configCli === "codex" ? "Codex" : "Claude"}</span>
+            )}
+          </div>
+          <div className="config-tabs">
+            {visibleTabs.map((t) => (
               <button
-                className={`config-cli-switch-btn config-cli-switch-btn-claude${configCli === "claude" ? " active" : ""}`}
-                onClick={() => setConfigCli("claude")}
-                type="button"
+                key={t.id}
+                className={`config-tab${tab === t.id ? " config-tab-active" : ""}`}
+                onClick={() => {
+                  if (tab !== t.id) runWithUnsavedEditorGuard(() => setTab(t.id));
+                }}
               >
-                Claude
+                <span className="config-tab-icon">{t.icon}</span>
+                {t.label}
               </button>
-              <button
-                className={`config-cli-switch-btn config-cli-switch-btn-codex${configCli === "codex" ? " active" : ""}`}
-                onClick={() => setConfigCli("codex")}
-                type="button"
-              >
-                Codex
-              </button>
-            </div>
-          ) : (
-            <span className={`config-cli-label config-cli-label-${configCli}`}>{configCli === "codex" ? "Codex" : "Claude"}</span>
-          )}
-        </div>
-        <div className="config-tabs">
-          {visibleTabs.map((t) => (
-            <button
-              key={t.id}
-              className={`config-tab${tab === t.id ? " config-tab-active" : ""}`}
-              onClick={() => setTab(t.id)}
-            >
-              <span className="config-tab-icon">{t.icon}</span>
-              {t.label}
+            ))}
+          </div>
+          <div className="config-header-right">
+            {/* Project dir selector — only when multiple dirs exist */}
+            {projectDirs.length > 1 && (
+              <Dropdown
+                className="config-select config-project-select"
+                value={projectDir}
+                onChange={(dir) => runWithUnsavedEditorGuard(() => setProjectDir(dir))}
+                ariaLabel="Project directory"
+                options={projectDirs.map((dir) => ({ value: dir, label: dir }))}
+              />
+            )}
+            <button className="config-close" onClick={onClose} title="Close (Esc)">
+              <IconClose size={14} />
             </button>
-          ))}
+          </div>
         </div>
-        <div className="config-header-right">
-          {/* Project dir selector — only when multiple dirs exist */}
-          {projectDirs.length > 1 && (
-            <Dropdown
-              className="config-select config-project-select"
-              value={projectDir}
-              onChange={setProjectDir}
-              ariaLabel="Project directory"
-              options={projectDirs.map((dir) => ({ value: dir, label: dir }))}
-            />
+
+        {/* Content */}
+        <div className="config-content">
+          {tab === "settings" && (
+            <SettingsTab projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} />
           )}
-          <button className="config-close" onClick={onClose} title="Close (Esc)">
-            <IconClose size={14} />
-          </button>
+          {configCli === "claude" && tab === "envvars" && (
+            <EnvVarsTab projectDir={projectDir} onStatus={setStatusMsg} />
+          )}
+          {tab === "claudemd" && (
+            <ThreePaneEditor component={MarkdownPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="claudemd" />
+          )}
+          {tab === "hooks" && (
+            <ThreePaneEditor component={HooksPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="hooks" scopes={codexTwoScopes} />
+          )}
+          {tab === "plugins" && (
+            <PluginsTab visible projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} />
+          )}
+          {tab === "mcp" && (
+            <ThreePaneEditor component={McpPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="mcp" scopes={["user", "project"]} />
+          )}
+          {configCli === "claude" && tab === "agents" && (
+            <ThreePaneEditor component={AgentEditor} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="agents" scopes={["user", "project"]} />
+          )}
+          {tab === "prompts" && (
+            <PromptsTab cli={configCli} onStatus={setStatusMsg} />
+          )}
+          {tab === "skills" && (
+            <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="skills" scopes={["user", "project"]} />
+          )}
+          {debugBuild && tab === "recording" && (
+            <RecordingPane cli={configCli} onStatus={setStatusMsg} />
+          )}
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="config-content">
-        {tab === "settings" && (
-          <SettingsTab projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} />
+        {/* Footer */}
+        {statusMsg && (
+          <div className="config-footer">
+            <span className={`config-status config-status-${statusMsg.type}`}>
+              {statusMsg.text}
+            </span>
+          </div>
         )}
-        {configCli === "claude" && tab === "envvars" && (
-          <EnvVarsTab projectDir={projectDir} onStatus={setStatusMsg} />
-        )}
-        {tab === "claudemd" && (
-          <ThreePaneEditor component={MarkdownPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="claudemd" />
-        )}
-        {tab === "hooks" && (
-          <ThreePaneEditor component={HooksPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="hooks" scopes={codexTwoScopes} />
-        )}
-        {tab === "plugins" && (
-          <PluginsTab visible projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} />
-        )}
-        {tab === "mcp" && (
-          <ThreePaneEditor component={McpPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="mcp" scopes={["user", "project"]} />
-        )}
-        {configCli === "claude" && tab === "agents" && (
-          <ThreePaneEditor component={AgentEditor} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="agents" scopes={["user", "project"]} />
-        )}
-        {tab === "prompts" && (
-          <PromptsTab cli={configCli} onStatus={setStatusMsg} />
-        )}
-        {tab === "skills" && (
-          <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="skills" scopes={["user", "project"]} />
-        )}
-        {debugBuild && tab === "recording" && (
-          <RecordingPane cli={configCli} onStatus={setStatusMsg} />
-        )}
-      </div>
 
-      {/* Footer */}
-      {statusMsg && (
-        <div className="config-footer">
-          <span className={`config-status config-status-${statusMsg.type}`}>
-            {statusMsg.text}
-          </span>
-        </div>
-      )}
+        {pendingDiscardChanges && (
+          <DiscardChangesDialog
+            changes={pendingDiscardChanges}
+            onCancel={cancelDiscard}
+            onDiscard={confirmDiscard}
+          />
+        )}
+      </UnsavedTextEditorProvider>
     </ModalOverlay>
   );
 }

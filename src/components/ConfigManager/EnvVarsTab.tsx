@@ -8,6 +8,7 @@ import { highlightJson } from "./SettingsPane";
 import { EnvVarsReference } from "./EnvVarsReference";
 import { replaceTextareaValue } from "../../lib/domEdit";
 import type { StatusMessage } from "../../lib/settingsSchema";
+import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 
 type Scope = PaneComponentProps["scope"];
 
@@ -212,6 +213,18 @@ function EnvPane({ scope, projectDir, onStatus, onEnvKeysChange, insertRef, onEd
   };
 
   const dirty = text !== saved;
+
+  useUnsavedTextEditor(`env:${scope}:${projectDir}`, () => {
+    if (loading) return null;
+    const after = textareaRef.current?.value ?? text;
+    if (after === saved) return null;
+    const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
+    return {
+      title: `Env vars (${scopeLabel})`,
+      before: saved,
+      after,
+    };
+  });
 
   if (loading) return <div className="pane-hint">Loading...</div>;
 

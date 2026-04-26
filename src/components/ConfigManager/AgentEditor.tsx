@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { insertTextAtCursor } from "../../lib/domEdit";
 import type { AgentFile } from "../../lib/settingsSchema";
 import type { PaneComponentProps } from "./ThreePaneEditor";
+import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 
 // [CM-07] Agent editor: pills + editor, auto-select first, duplicate name validation, Ctrl+S save/create
 export function AgentEditor({ scope, projectDir, onStatus }: PaneComponentProps) {
@@ -135,6 +136,20 @@ export function AgentEditor({ scope, projectDir, onStatus }: PaneComponentProps)
 
   const isNew = selectedAgent === "__new__";
   const dirty = isNew ? newAgentName.trim() !== "" && content !== "" : content !== savedContent;
+
+  useUnsavedTextEditor(`agent:${scope}:${projectDir}:${selectedAgent ?? "none"}`, () => {
+    if (loading || !selectedAgent) return null;
+    const after = textareaRef.current?.value ?? content;
+    if (isNew ? after === "" : after === savedContent) return null;
+    const scopeLabel = scope === "project" ? "Project" : "User";
+    return {
+      title: isNew
+        ? `New agent${newAgentName.trim() ? ` "${newAgentName.trim()}"` : ""} (${scopeLabel})`
+        : `Agent ${selectedAgent}.md (${scopeLabel})`,
+      before: isNew ? "" : savedContent,
+      after,
+    };
+  });
 
   if (loading) return <div className="config-md-hint">Loading...</div>;
 

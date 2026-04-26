@@ -7,6 +7,7 @@ import { applyRulesToText, generateRulesAndConflicts, classifyRule } from "../..
 import type { GeneratedChangeset } from "../../lib/promptDiff";
 import type { CliKind, SystemPromptRule } from "../../types/session";
 import type { StatusMessage } from "../../lib/settingsSchema";
+import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 import "./PromptsTab.css";
 
 interface PromptsTabProps {
@@ -260,6 +261,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   const [observedBaseline, setObservedBaseline] = useState("");
   const [pendingRules, setPendingRules] = useState<GeneratedChangeset | null>(null);
   const [observedSeedKey, setObservedSeedKey] = useState(0);
+  const observedTextareaRef = useRef<HTMLTextAreaElement>(null);
   const observedPrompts = useMemo(
     () => allObservedPrompts.filter((p) => (p.cli ?? "claude") === cli),
     [allObservedPrompts, cli],
@@ -357,6 +359,30 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   }, [rulesAppliedText, selectedObservedPromptId, pendingRules, observedEditText, observedBaseline]);
 
   const observedEdited = !!selectedObservedPromptId && observedEditText !== observedBaseline;
+
+  useUnsavedTextEditor(`prompt:saved:${selectedSavedPromptId ?? "none"}`, () => {
+    if (activeSubTab !== "prompts" || !selectedSavedPromptId) return null;
+    const prompt = savedPrompts.find((p) => p.id === selectedSavedPromptId);
+    if (!prompt) return null;
+    const after = textareaRef.current?.value ?? editText;
+    if (after === prompt.text) return null;
+    return {
+      title: `Prompt "${prompt.name || "Untitled"}"`,
+      before: prompt.text,
+      after,
+    };
+  });
+
+  useUnsavedTextEditor(`prompt:observed:${cli}:${selectedObservedPromptId ?? "none"}`, () => {
+    if (activeSubTab !== "observed" || !selectedObservedPromptId) return null;
+    const after = observedTextareaRef.current?.value ?? observedEditText;
+    if (after === observedBaseline) return null;
+    return {
+      title: `${cli === "codex" ? "Observed Codex instructions" : "Observed system prompt"}${selectedObservedPrompt?.label ? ` (${selectedObservedPrompt.label})` : ""}`,
+      before: observedBaseline,
+      after,
+    };
+  });
 
   // ── Saved prompt handlers ──────────────────────────────────────────
 
@@ -605,6 +631,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
                       // rule-driven reseed). Mid-edit the textarea owns its
                       // value and the native undo stack.
                       key={observedSeedKey}
+                      ref={observedTextareaRef}
                       className="prompts-textarea"
                       defaultValue={observedEditText}
                       onInput={(e) => setObservedEditText(e.currentTarget.value)}

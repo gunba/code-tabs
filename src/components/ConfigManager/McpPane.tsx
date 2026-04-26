@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Dropdown } from "../Dropdown/Dropdown";
 import type { PaneComponentProps } from "./ThreePaneEditor";
+import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 import "./McpPane.css";
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -146,6 +147,32 @@ function serverToForm(name: string, server: McpServerEntry): FormState {
     envText: kvToText(server.env),
     headerText: kvToText(server.headers ?? server.http_headers),
   };
+}
+
+function formChanged(a: FormState, b: FormState): boolean {
+  return a.name !== b.name ||
+    a.transport !== b.transport ||
+    a.command !== b.command ||
+    a.args !== b.args ||
+    a.url !== b.url ||
+    a.envText !== b.envText ||
+    a.headerText !== b.headerText;
+}
+
+function formToDiffText(form: FormState): string {
+  const lines = [
+    `name=${form.name}`,
+    `transport=${form.transport}`,
+  ];
+  if (form.transport === "stdio") {
+    lines.push(`command=${form.command}`);
+    if (form.args) lines.push(`args:\n${form.args}`);
+    if (form.envText) lines.push(`env:\n${form.envText}`);
+  } else {
+    lines.push(`url=${form.url}`);
+    if (form.headerText) lines.push(`headers:\n${form.headerText}`);
+  }
+  return lines.join("\n");
 }
 
 function isFormValid(form: FormState, servers: Record<string, McpServerEntry>, editing: FlatServer | null): boolean {
@@ -295,6 +322,18 @@ export function McpPane({ scope, projectDir, cli, onStatus }: PaneComponentProps
   }, [peerCli, peerName, scope, workingDir, servers, copyMode, cli, saveServers, onStatus]);
 
   const flatServers: FlatServer[] = Object.entries(servers).map(([name, server]) => ({ name, server }));
+
+  useUnsavedTextEditor(`${cli}:mcp:${scope}:${projectDir}:${editing?.name ?? "new"}`, () => {
+    if (!showForm) return null;
+    const beforeForm = editing ? serverToForm(editing.name, editing.server) : { ...EMPTY_FORM };
+    if (!formChanged(form, beforeForm)) return null;
+    const scopeLabel = scope === "project" ? "Project" : "User";
+    return {
+      title: editing ? `MCP server ${editing.name} (${scopeLabel})` : `New MCP server (${scopeLabel})`,
+      before: formToDiffText(beforeForm),
+      after: formToDiffText(form),
+    };
+  });
 
   return (
     <div className="mcp-pane">
