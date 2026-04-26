@@ -153,6 +153,10 @@ export function useCliWatcher(): void {
               commandCount: capabilities.commands.length,
             },
           });
+
+          // [PR-02] Discover Codex settings schema (vendored + future binary mine) and env var catalog. Both run in background; failures degrade UI gracefully.
+          useSettingsStore.getState().loadSettingsSchemaForCli("codex");
+          useSettingsStore.getState().loadKnownEnvVarsForCli("codex");
         } catch (err) {
           useSettingsStore.getState().setCliCapabilitiesForCli("codex", version, capabilities);
           dlog("discovery", null, `Codex capabilities failed: ${err}`, "WARN", {

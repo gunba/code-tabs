@@ -10,6 +10,7 @@ import {
   defaultForType,
 } from "../../lib/settingsSchema";
 import type { SettingField, StatusMessage } from "../../lib/settingsSchema";
+import { buildCodexSettingsSchema, defaultForCodexType } from "../../lib/codexSchema";
 
 type Scope = PaneComponentProps["scope"];
 
@@ -67,11 +68,13 @@ export function SettingsTab({ projectDir, cli, onStatus }: SettingsTabProps) {
     [],
   );
 
-  const { cliCapabilitiesByCli, binarySettingsSchema, settingsJsonSchema } = useSettingsStore();
+  const { cliCapabilitiesByCli, binarySettingsSchema, settingsJsonSchema, settingsSchemaByCli } = useSettingsStore();
   const cliCapabilities = cliCapabilitiesByCli[cli] ?? { models: [], permissionModes: [], flags: [], options: [], commands: [] };
   const schema = useMemo(
-    () => cli === "claude" ? buildSettingsSchema(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema) : [],
-    [cli, cliCapabilities.options, binarySettingsSchema, settingsJsonSchema],
+    () => cli === "claude"
+      ? buildSettingsSchema(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema)
+      : buildCodexSettingsSchema(settingsSchemaByCli.codex),
+    [cli, cliCapabilities.options, binarySettingsSchema, settingsJsonSchema, settingsSchemaByCli.codex],
   );
   const visibleScopes = cli === "codex" ? SCOPES.filter((s) => s.value !== "project-local") : SCOPES;
   useEffect(() => {
@@ -104,7 +107,7 @@ export function SettingsTab({ projectDir, cli, onStatus }: SettingsTabProps) {
         ))}
       </div>
 
-      {cli === "claude" && schema.length > 0 && (
+      {schema.length > 0 && (
         <>
           <div className="settings-search-bar">
             <input
@@ -116,6 +119,7 @@ export function SettingsTab({ projectDir, cli, onStatus }: SettingsTabProps) {
             />
           </div>
           <UnifiedSettingsReference
+            cli={cli}
             schema={schema}
             scopeKeys={scopeKeys}
             activeScope={activeScope}
@@ -131,6 +135,7 @@ export function SettingsTab({ projectDir, cli, onStatus }: SettingsTabProps) {
 }
 
 function UnifiedSettingsReference({
+  cli,
   schema,
   scopeKeys,
   activeScope,
@@ -139,6 +144,7 @@ function UnifiedSettingsReference({
   collapsed,
   onToggleCollapsed,
 }: {
+  cli: CliKind;
   schema: SettingField[];
   scopeKeys: Record<Scope, Set<string>>;
   activeScope: Scope;
@@ -180,13 +186,21 @@ function UnifiedSettingsReference({
           )}
           {sorted.map((field) => {
             const isSet = activeKeys.has(field.key);
+            const managedElsewhere = field.category === "managed-elsewhere";
             return (
               <button
                 key={field.key}
-                className={`sr-field ${isSet ? "sr-field-set" : ""}`}
+                className={`sr-field ${isSet ? "sr-field-set" : ""}${managedElsewhere ? " sr-field-managed" : ""}`}
                 onClick={() => {
-                  if (!isSet) onInsert(field.key, defaultForType(field));
+                  if (managedElsewhere) return;
+                  if (!isSet) {
+                    onInsert(
+                      field.key,
+                      cli === "claude" ? defaultForType(field) : defaultForCodexType(field),
+                    );
+                  }
                 }}
+                disabled={managedElsewhere}
                 title={field.description}
               >
                 <div className="sr-field-header">

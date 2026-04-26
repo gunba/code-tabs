@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { scopePath, SCOPES } from "./ThreePaneEditor";
 import type { PaneComponentProps } from "./ThreePaneEditor";
+import type { CliKind } from "../../types/session";
 import { formatScopePath } from "../../lib/paths";
 import { useSettingsStore } from "../../store/settings";
 import { highlightJson } from "./SettingsPane";
@@ -14,10 +15,11 @@ type Scope = PaneComponentProps["scope"];
 
 interface EnvVarsTabProps {
   projectDir: string;
+  cli: CliKind;
   onStatus: (msg: StatusMessage | null) => void;
 }
 
-export function EnvVarsTab({ projectDir, onStatus }: EnvVarsTabProps) {
+export function EnvVarsTab({ projectDir, cli, onStatus }: EnvVarsTabProps) {
   const [activeScope, setActiveScope] = useState<Scope>("user");
   const [scopeEnvKeys, setScopeEnvKeys] = useState<Record<Scope, Set<string>>>({
     user: new Set(),
@@ -53,7 +55,8 @@ export function EnvVarsTab({ projectDir, onStatus }: EnvVarsTabProps) {
     [],
   );
 
-  const { knownEnvVars } = useSettingsStore();
+  const { knownEnvVarsByCli } = useSettingsStore();
+  const envVars = knownEnvVarsByCli[cli] ?? [];
 
   return (
     <div className="settings-tab">
@@ -63,10 +66,15 @@ export function EnvVarsTab({ projectDir, onStatus }: EnvVarsTabProps) {
             <div className="three-pane-header">
               <span className="three-pane-icon" style={{ color: colorVar }}>{icon}</span>
               <span className="three-pane-label">{label}</span>
-              <span className="three-pane-path">{formatScopePath(scopePath(value, projectDir, "settings"))}</span>
+              <span className="three-pane-path">
+                {cli === "codex"
+                  ? `Code Tabs spawn env (${label.toLowerCase()})`
+                  : formatScopePath(scopePath(value, projectDir, "settings"))}
+              </span>
             </div>
             <div className="three-pane-body">
               <EnvPane
+                cli={cli}
                 scope={value}
                 projectDir={projectDir}
                 onStatus={onStatus}
@@ -89,7 +97,7 @@ export function EnvVarsTab({ projectDir, onStatus }: EnvVarsTabProps) {
         />
       </div>
       <EnvVarsReference
-        envVars={knownEnvVars}
+        envVars={envVars}
         scopeEnvKeys={scopeEnvKeys}
         activeScope={activeScope}
         onInsert={(name) => insertRefs[activeScope].current?.(name)}
@@ -102,6 +110,7 @@ export function EnvVarsTab({ projectDir, onStatus }: EnvVarsTabProps) {
 }
 
 interface EnvPaneProps {
+  cli: CliKind;
   scope: Scope;
   projectDir: string;
   onStatus: (msg: StatusMessage | null) => void;
@@ -110,7 +119,7 @@ interface EnvPaneProps {
   onEditorFocus?: () => void;
 }
 
-function EnvPane({ scope, projectDir, onStatus, onEnvKeysChange, insertRef, onEditorFocus }: EnvPaneProps) {
+function EnvPane({ cli, scope, projectDir, onStatus, onEnvKeysChange, insertRef, onEditorFocus }: EnvPaneProps) {
   const [text, setText] = useState("{}");
   const [saved, setSaved] = useState("{}");
   const [loading, setLoading] = useState(true);
@@ -121,16 +130,27 @@ function EnvPane({ scope, projectDir, onStatus, onEnvKeysChange, insertRef, onEd
   const load = useCallback(async () => {
     let formatted = "{}";
     try {
-      const result = await invoke<string>("read_config_file", {
-        scope,
-        workingDir: scope === "user" ? "" : projectDir,
-        fileType: "settings",
-      });
-      const settings = result ? (JSON.parse(result) as Record<string, unknown>) : {};
-      const env = (settings.env && typeof settings.env === "object" && !Array.isArray(settings.env))
-        ? settings.env as Record<string, unknown>
-        : {};
-      formatted = JSON.stringify(env, null, 2);
+      if (cli === "codex") {
+        // Codex spawn env lives in a sidecar JSON in Code Tabs appdata,
+        // NOT in any file Codex itself reads. Code Tabs injects these vars
+        // when spawning the codex process.
+        const env = await invoke<Record<string, string>>("read_codex_spawn_env", {
+          scope,
+          workingDir: scope === "user" ? "" : projectDir,
+        });
+        formatted = JSON.stringify(env ?? {}, null, 2);
+      } else {
+        const result = await invoke<string>("read_config_file", {
+          scope,
+          workingDir: scope === "user" ? "" : projectDir,
+          fileType: "settings",
+        });
+        const settings = result ? (JSON.parse(result) as Record<string, unknown>) : {};
+        const env = (settings.env && typeof settings.env === "object" && !Array.isArray(settings.env))
+          ? settings.env as Record<string, unknown>
+          : {};
+        formatted = JSON.stringify(env, null, 2);
+      }
     } catch {
       formatted = "{}";
     }
@@ -138,7 +158,7 @@ function EnvPane({ scope, projectDir, onStatus, onEnvKeysChange, insertRef, onEd
     setSaved(formatted);
     setSeedKey((k) => k + 1);
     setLoading(false);
-  }, [scope, projectDir]);
+  }, [cli, scope, projectDir]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -175,35 +195,45 @@ function EnvPane({ scope, projectDir, onStatus, onEnvKeysChange, insertRef, onEd
 
   const handleSave = useCallback(async () => {
     const value = textareaRef.current?.value ?? text;
-    let newEnv: Record<string, unknown>;
+    let newEnv: Record<string, string>;
     try {
-      newEnv = JSON.parse(value) as Record<string, unknown>;
+      const parsed = JSON.parse(value) as Record<string, unknown>;
+      // Coerce to string-only for both backends (settings.env is string-keyed too).
+      newEnv = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, String(v)]));
     } catch (err) {
       onStatus({ text: `Invalid JSON: ${err}`, type: "error" });
       return;
     }
     try {
-      const current = await invoke<string>("read_config_file", {
-        scope,
-        workingDir: scope === "user" ? "" : projectDir,
-        fileType: "settings",
-      });
-      const full = current ? (JSON.parse(current) as Record<string, unknown>) : {};
-      full.env = newEnv;
-      const content = JSON.stringify(full, null, 2);
-      await invoke("write_config_file", {
-        scope,
-        workingDir: scope === "user" ? "" : projectDir,
-        fileType: "settings",
-        content,
-      });
+      if (cli === "codex") {
+        await invoke("write_codex_spawn_env", {
+          scope,
+          workingDir: scope === "user" ? "" : projectDir,
+          env: newEnv,
+        });
+      } else {
+        const current = await invoke<string>("read_config_file", {
+          scope,
+          workingDir: scope === "user" ? "" : projectDir,
+          fileType: "settings",
+        });
+        const full = current ? (JSON.parse(current) as Record<string, unknown>) : {};
+        full.env = newEnv;
+        const content = JSON.stringify(full, null, 2);
+        await invoke("write_config_file", {
+          scope,
+          workingDir: scope === "user" ? "" : projectDir,
+          fileType: "settings",
+          content,
+        });
+      }
       setSaved(value);
       onStatus({ text: "Env vars saved", type: "success" });
       setTimeout(() => onStatus(null), 2000);
     } catch (err) {
       onStatus({ text: `Save failed: ${err}`, type: "error" });
     }
-  }, [text, scope, projectDir, onStatus]);
+  }, [cli, text, scope, projectDir, onStatus]);
 
   const syncScroll = () => {
     if (textareaRef.current && preRef.current) {

@@ -62,6 +62,10 @@ flate2 = "1"
 tar = "0.4"
 # TOML parser for .codex/config.toml ↔ .claude/settings.json round-trips.
 toml = "0.8"
+# Format-preserving TOML editor — keeps comments and key order across
+# click-to-insert edits in the Codex Settings pane (see commands::config
+# `insert_codex_toml_key` / `insert_codex_toml_array_entry`).
+toml_edit = "0.22"
 # SIMD-accelerated substring search. Used to scan the Codex native binary for
 # slash-command probe strings without paying O(n*m) on a ~200MB file.
 memchr = "2"

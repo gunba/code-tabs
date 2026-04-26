@@ -13,6 +13,14 @@ import {
   defaultForType,
 } from "../../lib/settingsSchema";
 import type { SettingField } from "../../lib/settingsSchema";
+import {
+  buildCodexSettingsSchema,
+  defaultForCodexType,
+  getCodexTypeMismatches,
+  getCodexUnknownKeys,
+} from "../../lib/codexSchema";
+import { parseToml, flattenTomlKeys } from "../../lib/tomlParse";
+import { highlightToml } from "../../lib/tomlHighlight";
 import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 
 // [CM-13] JSON textarea with syntax highlighting overlay (pre behind transparent textarea)
@@ -113,10 +121,12 @@ function SettingsReference({
   schema,
   currentKeys,
   onInsert,
+  defaultFor,
 }: {
   schema: SettingField[];
   currentKeys: Set<string>;
   onInsert: (key: string, value: unknown) => void;
+  defaultFor: (field: SettingField) => unknown;
 }) {
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState(() => {
@@ -181,7 +191,7 @@ function SettingsReference({
                     key={field.key}
                     className={`sr-field ${isSet ? "sr-field-set" : ""}`}
                     onClick={() => {
-                      if (!isSet) onInsert(field.key, defaultForType(field));
+                      if (!isSet) onInsert(field.key, defaultFor(field));
                     }}
                     title={isSet ? "Already set" : `Click to insert "${field.key}"`}
                   >
@@ -229,21 +239,35 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
 
-  const { cliCapabilitiesByCli, binarySettingsSchema, settingsJsonSchema } = useSettingsStore();
+  const { cliCapabilitiesByCli, binarySettingsSchema, settingsJsonSchema, settingsSchemaByCli } = useSettingsStore();
   const cliCapabilities = cliCapabilitiesByCli[cli] ?? { models: [], permissionModes: [], flags: [], options: [], commands: [] };
 
   const { schema, sourceInfo } = useMemo(() => ({
-    schema: cli === "claude" ? buildSettingsSchema(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema) : [],
+    schema: cli === "claude"
+      ? buildSettingsSchema(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema)
+      : buildCodexSettingsSchema(settingsSchemaByCli.codex),
     sourceInfo: getSchemaSourceInfo(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema),
-  }), [cli, cliCapabilities.options, binarySettingsSchema, settingsJsonSchema]);
+  }), [cli, cliCapabilities.options, binarySettingsSchema, settingsJsonSchema, settingsSchemaByCli.codex]);
 
-  // Parse current JSON for validation + "already set" tracking
+  // Parse current text for validation + "already set" tracking. Codex uses
+  // smol-toml + flattenTomlKeys (dotted paths matching the flattened schema);
+  // Claude uses native JSON.parse on the raw object.
   const { currentKeys, unknownKeys, typeMismatches, parseError } = useMemo(() => {
     if (cli === "codex") {
+      const result = parseToml(text);
+      if (!result.ok) {
+        return {
+          currentKeys: new Set<string>(),
+          unknownKeys: [] as string[],
+          typeMismatches: [] as { key: string; expected: string; actual: string }[],
+          parseError: result.error,
+        };
+      }
+      const keys = flattenTomlKeys(result.value);
       return {
-        currentKeys: new Set<string>(),
-        unknownKeys: [] as string[],
-        typeMismatches: [] as { key: string; expected: string; actual: string }[],
+        currentKeys: keys,
+        unknownKeys: getCodexUnknownKeys(keys, schema),
+        typeMismatches: getCodexTypeMismatches(result.value, schema),
         parseError: null as string | null,
       };
     }
@@ -296,6 +320,13 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
         onStatus({ text: `Invalid JSON: ${err}`, type: "error" });
         return;
       }
+    } else {
+      // Codex TOML — let smol-toml flag malformed input before the round-trip.
+      const result = parseToml(value);
+      if (!result.ok) {
+        onStatus({ text: `Invalid TOML: ${result.error}`, type: "error" });
+        return;
+      }
     }
     try {
       await invoke("write_config_file", {
@@ -312,13 +343,28 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
     }
   }, [cli, scope, projectDir, onStatus]);
 
-  // Insert reformats the entire JSON document. We replace the textarea value
-  // through the browser's edit history (execCommand) so the change is a single
-  // undoable step that doesn't reset the native undo stack — and we read the
-  // current value off the DOM (not React state) to avoid acting on stale data.
-  const handleInsert = useCallback((key: string, value: unknown) => {
+  // Insert reformats the entire JSON / TOML document. We replace the textarea
+  // value through the browser's edit history (execCommand) so the change is a
+  // single undoable step that doesn't reset the native undo stack — and we
+  // read the current value off the DOM (not React state) to avoid acting on
+  // stale data. Codex uses a backend command (toml_edit) for format-preserving
+  // insertion of dotted paths; Claude does the JSON edit in-memory.
+  const handleInsert = useCallback(async (key: string, value: unknown) => {
     const el = textareaRef.current;
     if (!el) return;
+    if (cli === "codex") {
+      try {
+        const next = await invoke<string>("insert_codex_toml_key", {
+          content: el.value,
+          keyPath: key.split("."),
+          value,
+        });
+        if (next !== el.value) replaceTextareaValue(el, next);
+      } catch (err) {
+        onStatus({ text: `Insert failed: ${err}`, type: "error" });
+      }
+      return;
+    }
     const newJson = (() => {
       try {
         return insertIntoJson(el.value, key, value);
@@ -327,16 +373,18 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
       }
     })();
     replaceTextareaValue(el, newJson);
-  }, []);
+  }, [cli, onStatus]);
 
   // Report current keys to parent
   useEffect(() => {
     onKeysChange?.(currentKeys);
   }, [currentKeys, onKeysChange]);
 
-  // Expose handleInsert via ref
+  // Expose handleInsert via ref. Wrap in a sync stub since the ref's
+  // expected signature is `(key, value) => void` (Claude is sync); the
+  // Codex async path resolves on its own.
   useEffect(() => {
-    if (insertRef) insertRef.current = handleInsert;
+    if (insertRef) insertRef.current = (key, value) => { void handleInsert(key, value); };
     return () => { if (insertRef) insertRef.current = null; };
   }, [handleInsert, insertRef]);
 
@@ -385,28 +433,32 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
 
   const hasValidation = !!parseError || !!unknownLabel || !!mismatchLabel;
 
+  const highlighted = cli === "codex" ? highlightToml(text) : highlightJson(text);
+  const placeholder = cli === "codex"
+    ? "No config.toml found - type TOML or click a setting from the reference panel below to add it"
+    : undefined;
+  const formatLabel = cli === "codex" ? "TOML" : "JSON";
+
   return (
     <div className="pane-editor" onFocus={onEditorFocus}>
-      <div className={cli === "codex" ? "sh-container sh-container-plain" : "sh-container"}>
-        {cli === "claude" && (
-          <pre
-            ref={preRef}
-            className="sh-pre"
-            aria-hidden="true"
-            dangerouslySetInnerHTML={{ __html: highlightJson(text) + "\n" }}
-          />
-        )}
+      <div className="sh-container">
+        <pre
+          ref={preRef}
+          className="sh-pre"
+          aria-hidden="true"
+          dangerouslySetInnerHTML={{ __html: highlighted + "\n" }}
+        />
         <textarea
           // Remount on each successful load (or scope change) so `defaultValue`
           // reseeds. The browser owns the textarea's value and undo stack
           // mid-edit; React mirrors via onInput for the overlay/validation.
           key={seedKey}
           ref={textareaRef}
-          className={cli === "codex" ? "pane-textarea" : "pane-textarea sh-textarea"}
+          className="pane-textarea sh-textarea"
           defaultValue={text}
           onInput={(e) => setText(e.currentTarget.value)}
           spellCheck={false}
-          placeholder={cli === "codex" ? "No config.toml found - type TOML to create" : undefined}
+          placeholder={placeholder}
           onScroll={syncScroll}
           onKeyDown={(e) => {
             if (e.ctrlKey && e.key === "s") { e.preventDefault(); handleSave(); }
@@ -414,25 +466,26 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
         />
       </div>
 
-      {cli === "claude" && !hideReference && schema.length > 0 && (
+      {!hideReference && schema.length > 0 && (
         <SettingsReference
           schema={schema}
           currentKeys={currentKeys}
           onInsert={handleInsert}
+          defaultFor={cli === "codex" ? defaultForCodexType : defaultForType}
         />
       )}
 
       <div className="pane-footer">
-        {cli === "claude" && hasValidation && (
+        {hasValidation && (
           <span className="sr-validation">
-            {parseError && <span className="sr-validation-error">Invalid JSON</span>}
+            {parseError && <span className="sr-validation-error">Invalid {formatLabel}</span>}
             {parseError && unknownLabel && " \u2022 "}
             {unknownLabel && <span className={hasErrors ? "sr-validation-error" : "sr-validation-warn"} title={unknownTooltip}>{unknownLabel}</span>}
             {(parseError || unknownLabel) && mismatchLabel && " \u2022 "}
             {mismatchLabel && <span className="sr-validation-error">{mismatchLabel}</span>}
           </span>
         )}
-        {cli === "claude" && !hasValidation && !parseError && currentKeys.size > 0 && (
+        {!hasValidation && !parseError && currentKeys.size > 0 && (
           <span className="sr-validation sr-validation-ok">Valid</span>
         )}
         <button className="pane-save-btn" onClick={handleSave} disabled={!dirty}>

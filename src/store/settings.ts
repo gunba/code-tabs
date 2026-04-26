@@ -185,6 +185,14 @@ interface SettingsState {
   previousCliVersion: string | null;
   cliCapabilitiesByCli: Record<CliKind, CliCapabilities>;
   cliCapabilities: CliCapabilities;
+  // [PE-02] Per-CLI schema/env-var caches. Codex schema is mined from the
+  // installed native binary; Claude schema is fetched from schemastore +
+  // supplemented by binary Zod scan. Legacy mirrors (binarySettingsSchema /
+  // settingsJsonSchema / knownEnvVars) keep one-version backwards
+  // compatibility for consumers still reading the unkeyed fields.
+  binarySettingsFieldsByCli: Record<CliKind, BinarySettingField[]>;
+  settingsSchemaByCli: Record<CliKind, JsonSchema | null>;
+  knownEnvVarsByCli: Record<CliKind, EnvVarEntry[]>;
   binarySettingsSchema: BinarySettingField[]; // [CM-10] Cached in localStorage to avoid re-scanning on startup
   settingsJsonSchema: JsonSchema | null;
   knownEnvVars: EnvVarEntry[];
@@ -240,6 +248,11 @@ interface SettingsState {
   loadBinarySettingsSchema: () => Promise<void>;
   loadSettingsJsonSchema: () => Promise<void>;
   loadKnownEnvVars: (cliPath?: string | null) => Promise<void>;
+  // [PE-02] Per-CLI loaders. Claude variants mirror into the legacy fields
+  // for one version; Codex variants only populate the `.codex` slot.
+  loadBinarySettingsFieldsForCli: (cli: CliKind, cliPath?: string | null) => Promise<void>;
+  loadSettingsSchemaForCli: (cli: CliKind, cliPath?: string | null) => Promise<void>;
+  loadKnownEnvVarsForCli: (cli: CliKind, cliPath?: string | null) => Promise<void>;
   addObservedPrompt: (text: string, model: string, cli?: CliKind) => void;
   addSavedPrompt: (name: string, text: string) => void;
   updateSavedPrompt: (id: string, updates: { name?: string; text?: string }) => void;
@@ -280,6 +293,9 @@ export const useSettingsStore = create<SettingsState>()(
         codex: EMPTY_CLI_CAPABILITIES,
       },
       cliCapabilities: EMPTY_CLI_CAPABILITIES,
+      binarySettingsFieldsByCli: { claude: [], codex: [] },
+      settingsSchemaByCli: { claude: null, codex: null },
+      knownEnvVarsByCli: { claude: [], codex: [] },
       binarySettingsSchema: [],
       settingsJsonSchema: null,
       knownEnvVars: [],
@@ -602,95 +618,146 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       loadBinarySettingsSchema: async () => {
+        await get().loadBinarySettingsFieldsForCli("claude");
+      },
+      loadSettingsJsonSchema: async () => {
+        await get().loadSettingsSchemaForCli("claude");
+      },
+      loadKnownEnvVars: async (cliPath) => {
+        await get().loadKnownEnvVarsForCli("claude", cliPath);
+      },
+      // [PE-02] Per-CLI binary scan for setting fields. Claude path is the
+      // legacy `discover_settings_schema` (Zod regex over the .js bundle).
+      // Codex emits its full schema as JSON Schema; that lives in the
+      // settingsSchemaByCli slot rather than here, so this loader is a
+      // no-op for Codex (kept for symmetry).
+      loadBinarySettingsFieldsForCli: async (cli, cliPath) => {
+        if (cli === "codex") {
+          // Codex has no Zod-style "fields" extraction — its schema is the
+          // canonical source loaded by loadSettingsSchemaForCli("codex").
+          return;
+        }
         try {
-          const claudePath = useSessionStore.getState().claudePath;
-          dlog("discovery", null, "binary settings-schema discovery started", "DEBUG", {
+          const path = cliPath ?? useSessionStore.getState().claudePath;
+          dlog("discovery", null, `binary settings-schema discovery started for ${cli}`, "DEBUG", {
             event: "discovery.settings_schema_started",
-            data: { claudePath },
+            data: { cli, cliPath: path ?? null },
           });
-          const fields = await traceAsync("discovery.discover_settings_schema", () => invoke<BinarySettingField[]>("discover_settings_schema", { cliPath: claudePath }), {
+          const fields = await traceAsync("discovery.discover_settings_schema", () => invoke<BinarySettingField[]>("discover_settings_schema", { cliPath: path ?? null }), {
             module: "discovery",
             event: "discovery.settings_schema_perf",
             warnAboveMs: 1000,
-            data: { claudePath },
+            data: { cli, cliPath: path ?? null },
           });
-          set({ binarySettingsSchema: fields });
-          dlog("discovery", null, "binary settings-schema discovery completed", "LOG", {
+          set((s) => ({
+            binarySettingsFieldsByCli: { ...s.binarySettingsFieldsByCli, [cli]: fields },
+            binarySettingsSchema: fields, // Mirror into legacy field for one version
+          }));
+          dlog("discovery", null, `binary settings-schema discovery completed for ${cli}`, "LOG", {
             event: "discovery.settings_schema_loaded",
             data: {
+              cli,
               count: fields.length,
               keys: fields.map((field) => field.key),
-              claudePath,
+              cliPath: path ?? null,
             },
           });
         } catch (err) {
-          // Binary scan failed — no problem, CLI help + static fields still work
-          dlog("discovery", null, `binary settings-schema discovery failed: ${err}`, "WARN", {
+          dlog("discovery", null, `binary settings-schema discovery failed for ${cli}: ${err}`, "WARN", {
             event: "discovery.settings_schema_failed",
-            data: { error: String(err) },
+            data: { cli, error: String(err) },
           });
         }
       },
-      loadSettingsJsonSchema: async () => {
+      // [PE-02] Per-CLI JSON Schema fetch. Claude pulls schemastore.org via
+      // the existing fetch_settings_schema Tauri command (reqwest, avoids
+      // CORS). Codex extracts the embedded Draft-07 schema from the
+      // installed native binary via discover_codex_settings_schema (Phase 2).
+      loadSettingsSchemaForCli: async (cli, cliPath) => {
         try {
-          dlog("discovery", null, "remote settings schema fetch started", "DEBUG", {
+          dlog("discovery", null, `settings JSON schema fetch started for ${cli}`, "DEBUG", {
             event: "discovery.settings_json_schema_started",
-            data: {},
+            data: { cli },
           });
-          const raw = await traceAsync("discovery.fetch_settings_schema", () => invoke<string>("fetch_settings_schema"), {
-            module: "discovery",
-            event: "discovery.settings_json_schema_perf",
-            warnAboveMs: 1000,
-            data: {},
-          });
-          const schema = JSON.parse(raw) as JsonSchema;
-          set({ settingsJsonSchema: schema });
-          const schemaTitle = "title" in (schema as Record<string, unknown>)
+          let schema: JsonSchema | null = null;
+          if (cli === "claude") {
+            const raw = await traceAsync("discovery.fetch_settings_schema", () => invoke<string>("fetch_settings_schema"), {
+              module: "discovery",
+              event: "discovery.settings_json_schema_perf",
+              warnAboveMs: 1000,
+              data: { cli },
+            });
+            schema = JSON.parse(raw) as JsonSchema;
+          } else {
+            const path = cliPath ?? useSessionStore.getState().codexPath;
+            schema = await traceAsync("discovery.discover_codex_settings_schema", () => invoke<JsonSchema>("discover_codex_settings_schema", { cliPath: path ?? null }), {
+              module: "discovery",
+              event: "discovery.settings_json_schema_perf",
+              warnAboveMs: 5000,
+              data: { cli, cliPath: path ?? null },
+            });
+          }
+          set((s) => ({
+            settingsSchemaByCli: { ...s.settingsSchemaByCli, [cli]: schema },
+            ...(cli === "claude" ? { settingsJsonSchema: schema } : {}),
+          }));
+          const schemaTitle = schema && "title" in (schema as Record<string, unknown>)
             ? ((schema as Record<string, unknown>).title as string | undefined) ?? null
             : null;
-          dlog("discovery", null, "remote settings schema fetch completed", "LOG", {
+          dlog("discovery", null, `settings JSON schema fetch completed for ${cli}`, "LOG", {
             event: "discovery.settings_json_schema_loaded",
             data: {
+              cli,
               title: schemaTitle,
-              hasProperties: !!schema.properties,
-              topLevelPropertyCount: schema.properties ? Object.keys(schema.properties).length : 0,
+              hasProperties: !!schema?.properties,
+              topLevelPropertyCount: schema?.properties ? Object.keys(schema.properties).length : 0,
             },
           });
         } catch (err) {
-          // Network fetch failed — Zustand persistence provides offline fallback
-          dlog("discovery", null, `remote settings schema fetch failed: ${err}`, "WARN", {
+          dlog("discovery", null, `settings JSON schema fetch failed for ${cli}: ${err}`, "WARN", {
             event: "discovery.settings_json_schema_failed",
-            data: { error: String(err) },
+            data: { cli, error: String(err) },
           });
         }
       },
-      loadKnownEnvVars: async (cliPath) => {
+      // [PE-02] Per-CLI env var catalog. Claude scans the .js bundle for
+      // process.env.* references; Codex scans the native binary for
+      // CODEX_* string literals plus a curated catalog of non-prefixed
+      // vars (OPENAI_API_KEY, SSL_CERT_FILE, …) via Phase 2's
+      // discover_codex_env_vars.
+      loadKnownEnvVarsForCli: async (cli, cliPath) => {
         try {
-          const path = cliPath ?? useSessionStore.getState().claudePath;
-          dlog("discovery", null, "environment-variable discovery started", "DEBUG", {
+          const path = cliPath ?? (cli === "codex"
+            ? useSessionStore.getState().codexPath
+            : useSessionStore.getState().claudePath);
+          dlog("discovery", null, `environment-variable discovery started for ${cli}`, "DEBUG", {
             event: "discovery.env_vars_started",
-            data: { cliPath: path ?? null },
+            data: { cli, cliPath: path ?? null },
           });
-          const vars = await traceAsync("discovery.discover_env_vars", () => invoke<EnvVarEntry[]>("discover_env_vars", { cliPath: path ?? null }), {
+          const command = cli === "codex" ? "discover_codex_env_vars" : "discover_env_vars";
+          const vars = await traceAsync(`discovery.${command}`, () => invoke<EnvVarEntry[]>(command, { cliPath: path ?? null }), {
             module: "discovery",
             event: "discovery.env_vars_perf",
             warnAboveMs: 1000,
-            data: { cliPath: path ?? null },
+            data: { cli, cliPath: path ?? null },
           });
-          set({ knownEnvVars: vars });
-          dlog("discovery", null, "environment-variable discovery completed", "LOG", {
+          set((s) => ({
+            knownEnvVarsByCli: { ...s.knownEnvVarsByCli, [cli]: vars },
+            ...(cli === "claude" ? { knownEnvVars: vars } : {}),
+          }));
+          dlog("discovery", null, `environment-variable discovery completed for ${cli}`, "LOG", {
             event: "discovery.env_vars_loaded",
             data: {
+              cli,
               count: vars.length,
               names: vars.map((variable) => variable.name),
               cliPath: path ?? null,
             },
           });
         } catch (err) {
-          // Binary scan failed — no problem, UI just shows empty env vars panel
-          dlog("discovery", null, `environment-variable discovery failed: ${err}`, "WARN", {
+          dlog("discovery", null, `environment-variable discovery failed for ${cli}: ${err}`, "WARN", {
             event: "discovery.env_vars_failed",
-            data: { error: String(err) },
+            data: { cli, error: String(err) },
           });
         }
       },
@@ -831,7 +898,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "code-tabs-settings",
-      version: 21,
+      version: 22,
       storage: createJSONStorage(() => localStorage),
       // [CI-04] Persisted settings migrations normalize providerConfig from v0 and extend later stored fields.
       migrate: (persisted: unknown, version: number) => {
@@ -988,6 +1055,25 @@ export const useSettingsStore = create<SettingsState>()(
           };
           state.recordingConfig = (state.recordingConfigsByCli as RecordingConfigsByCli).claude;
         }
+        // [PE-02] v22: split formerly Claude-only schema/env-var caches
+        // into per-CLI maps. Backfill the .claude slot from the legacy
+        // fields so the existing Claude UI is uninterrupted; .codex starts
+        // empty and is populated on first Codex session via
+        // loadSettingsSchemaForCli("codex") / loadKnownEnvVarsForCli("codex").
+        if (version < 22) {
+          const legacyBinaryFields = (state.binarySettingsSchema as BinarySettingField[] | undefined) ?? [];
+          const legacyJsonSchema = (state.settingsJsonSchema as JsonSchema | null | undefined) ?? null;
+          const legacyEnvVars = (state.knownEnvVars as EnvVarEntry[] | undefined) ?? [];
+          if (!state.binarySettingsFieldsByCli) {
+            state.binarySettingsFieldsByCli = { claude: legacyBinaryFields, codex: [] };
+          }
+          if (!state.settingsSchemaByCli) {
+            state.settingsSchemaByCli = { claude: legacyJsonSchema, codex: null };
+          }
+          if (!state.knownEnvVarsByCli) {
+            state.knownEnvVarsByCli = { claude: legacyEnvVars, codex: [] };
+          }
+        }
         return state;
       },
       // Don't persist transient UI state
@@ -1007,6 +1093,9 @@ export const useSettingsStore = create<SettingsState>()(
         previousCliVersion: state.previousCliVersion,
         cliCapabilitiesByCli: state.cliCapabilitiesByCli,
         cliCapabilities: state.cliCapabilities,
+        binarySettingsFieldsByCli: state.binarySettingsFieldsByCli,
+        settingsSchemaByCli: state.settingsSchemaByCli,
+        knownEnvVarsByCli: state.knownEnvVarsByCli,
         binarySettingsSchema: state.binarySettingsSchema,
         settingsJsonSchema: state.settingsJsonSchema,
         slashCommandsByCli: state.slashCommandsByCli,

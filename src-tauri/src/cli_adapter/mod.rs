@@ -131,11 +131,33 @@ pub fn adapter_for(kind: CliKind) -> Box<dyn CliAdapter> {
 /// Tauri command: build a `SpawnSpec` for the given session config.
 /// Dispatches to the right adapter based on `config.cli`.
 // [CC-02] build_cli_spawn: dispatch via config.cli -> adapter_for -> build_spawn; cli_launch_options returns per-CLI models/effort/permission/flag-pills
+// [CC-06] Codex-only: layer the per-scope spawn-env sidecar on top of the adapter's env_overrides. Sidecars live in Code Tabs appdata (NOT the project tree); precedence project-local > project > user. The user-facing Env Vars tab writes to these sidecars; Codex itself doesn't read them — Code Tabs injects them at process spawn.
 #[tauri::command]
-pub async fn build_cli_spawn(config: SessionConfig) -> Result<SpawnSpec, String> {
-    tauri::async_runtime::spawn_blocking(move || adapter_for(config.cli).build_spawn(&config))
-        .await
-        .map_err(|e| format!("join error: {e}"))?
+pub async fn build_cli_spawn(
+    app: tauri::AppHandle,
+    config: SessionConfig,
+) -> Result<SpawnSpec, String> {
+    let cli = config.cli;
+    let working_dir = config.working_dir.clone();
+    let mut spec = tauri::async_runtime::spawn_blocking(move || {
+        adapter_for(config.cli).build_spawn(&config)
+    })
+    .await
+    .map_err(|e| format!("join error: {e}"))??;
+
+    if cli == CliKind::Codex {
+        let merged = crate::commands::merged_codex_spawn_env(&app, &working_dir);
+        for (k, v) in merged {
+            // Only add if the adapter didn't already set this var. Adapters
+            // that need a fixed value win (none currently for Codex, but
+            // future-proofs the precedence order).
+            if !spec.env_overrides.iter().any(|(existing, _)| existing == &k) {
+                spec.env_overrides.push((k, Some(v)));
+            }
+        }
+    }
+
+    Ok(spec)
 }
 
 /// Tauri command: discover launch options (models, effort levels,

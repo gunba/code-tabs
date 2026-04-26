@@ -228,7 +228,10 @@ export function ConfigManager() {
     () => TABS.filter((t) => {
       if (!debugBuild && t.id === "recording") return false;
       if (configCli === "codex") {
-        return !["envvars", "agents"].includes(t.id);
+        // Codex now has an env-vars editor too (Code Tabs spawn-env sidecar,
+        // injected at process launch). `agents` remains hidden (different
+        // shape on Codex).
+        return !["agents"].includes(t.id);
       }
       return true;
     }),
@@ -410,8 +413,8 @@ export function ConfigManager() {
           {tab === "settings" && (
             <SettingsTab projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} />
           )}
-          {configCli === "claude" && tab === "envvars" && (
-            <EnvVarsTab projectDir={projectDir} onStatus={setStatusMsg} />
+          {tab === "envvars" && (
+            <EnvVarsTab projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} />
           )}
           {tab === "claudemd" && (
             <ThreePaneEditor component={MarkdownPane} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="claudemd" />

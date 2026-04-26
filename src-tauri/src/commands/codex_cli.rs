@@ -15,10 +15,11 @@
 //!   - `codex features list`                  → feature flag catalog
 //!   - `codex mcp list`                       → configured MCP servers
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::discovery::DiscoveredEnvVar;
 use crate::observability::record_backend_event;
 
 // ── Detection ────────────────────────────────────────────────────────
@@ -699,6 +700,65 @@ const CODEX_SLASH_COMMANDS: &[(&str, &str, &[&str])] = &[
     ),
 ];
 
+// [CO-04] discover_codex_settings_schema: returns ConfigToml schema with provenance ("binary" or "bundled"). Codex 0.125.0 doesn't ship the schema in the runtime binary, so the binary mine returns nothing and we serve the vendored copy at discovery/codex_schema.json. Future-proofed: when Codex starts embedding the schema, the binary path takes over automatically.
+/// Resolve the Codex ConfigToml JSON Schema. Always succeeds (falls back
+/// to the bundled vendored schema when the installed binary doesn't
+/// embed one). The result envelope reports which source actually fired
+/// so the Settings header can show "Schema: bundled" vs "from installed
+/// binary".
+#[tauri::command]
+pub async fn discover_codex_settings_schema(
+    cli_path: Option<String>,
+) -> Result<crate::discovery::codex::CodexSchemaResult, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<_, String> {
+        // The discovery function never errors — it always returns at least
+        // the bundled schema. We resolve the native binary best-effort and
+        // hand it over for the future-proof binary mine attempt; if
+        // resolution fails the discovery falls back transparently.
+        let native = resolve_native_for_discovery(cli_path.as_deref()).ok();
+        let stub = std::path::PathBuf::from("/__codex_native_unresolved__");
+        let path = native.as_deref().unwrap_or(&stub);
+        Ok(crate::discovery::codex::discover_codex_settings_schema_sync(path))
+    })
+    .await
+    .map_err(|e| format!("join error: {e}"))?
+}
+
+// [CO-05] discover_codex_env_vars: regex-mine CODEX_* identifiers from native binary, merge with curated catalog (~45 entries with descriptions/categories), filter test-only noise vars
+/// Mine `CODEX_*` env vars from the Codex native binary and merge with a
+/// curated catalog of non-prefixed vars Codex respects (`OPENAI_API_KEY`,
+/// `SSL_CERT_FILE`, …). Curated entries supply the human-facing
+/// descriptions; mined-only entries are flagged `documented=false`.
+#[tauri::command]
+pub async fn discover_codex_env_vars(
+    cli_path: Option<String>,
+) -> Result<Vec<DiscoveredEnvVar>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let native = resolve_native_for_discovery(cli_path.as_deref())?;
+        crate::discovery::codex::discover_codex_env_vars_sync(&native)
+    })
+    .await
+    .map_err(|e| format!("join error: {e}"))?
+}
+
+/// Resolve a Codex CLI path to its native binary. If `cli_path` is None,
+/// fall back to the auto-detected binary. Returns a meaningful error rather
+/// than `Option::None` so the discovery commands can surface the failure
+/// (env-var mining always needs a real binary; schema discovery falls back
+/// to the bundled copy when this errors).
+fn resolve_native_for_discovery(cli_path: Option<&str>) -> Result<PathBuf, String> {
+    let wrapper = match cli_path.filter(|p| !p.is_empty()) {
+        Some(p) => PathBuf::from(p),
+        None => PathBuf::from(detect_codex_cli_sync()?),
+    };
+    resolve_codex_native_binary_from_wrapper(&wrapper).ok_or_else(|| {
+        format!(
+            "Codex native binary not found from wrapper {} (expected vendor/<triple>/codex/codex)",
+            wrapper.display()
+        )
+    })
+}
+
 #[tauri::command]
 pub async fn discover_codex_slash_commands() -> Result<Vec<CodexSlashCommand>, String> {
     tauri::async_runtime::spawn_blocking(discover_codex_slash_commands_sync)
@@ -756,7 +816,14 @@ fn codex_slash_command_visible_on_platform(cmd: &str) -> bool {
 
 fn resolve_codex_native_binary_path() -> Option<PathBuf> {
     let bin = PathBuf::from(detect_codex_cli_sync().ok()?);
-    let canonical = std::fs::canonicalize(&bin).unwrap_or(bin);
+    resolve_codex_native_binary_from_wrapper(&bin)
+}
+
+/// Walk from a Codex wrapper path (the `codex` executable on PATH) to the
+/// vendored native ELF/Mach-O/PE binary. Used by discovery (which needs the
+/// stripped Rust binary, not the Node wrapper) and by slash-command probing.
+pub(crate) fn resolve_codex_native_binary_from_wrapper(wrapper: &Path) -> Option<PathBuf> {
+    let canonical = std::fs::canonicalize(wrapper).unwrap_or_else(|_| wrapper.to_path_buf());
     if canonical.extension().and_then(|e| e.to_str()) != Some("js") {
         return Some(canonical);
     }

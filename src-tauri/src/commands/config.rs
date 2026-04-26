@@ -2,7 +2,7 @@ use super::data::get_data_dir;
 use crate::observability::record_backend_event;
 use serde::Serialize;
 use serde_json::json;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 fn log_discovery(app: &AppHandle, event: &str, message: &str, data: serde_json::Value) {
     record_backend_event(app, "LOG", "discovery", None, event, message, data);
@@ -394,6 +394,278 @@ pub fn save_codex_hooks(
     }
 
     Ok(())
+}
+
+// [CD-02] Codex spawn-env sidecar (~/.config or %APPDATA%/code-tabs/codex-spawn-env/<scope>.json). Stores per-scope env vars Code Tabs injects when launching Codex; sidecar lives in Code Tabs appdata (NOT in project tree) so OPENAI_API_KEY etc. don't leak into git.
+//
+// File layout: { "project_root": "/abs/path", "env": { "KEY": "value" } }.
+// Scope precedence at spawn time: project-local > project > user (later wins).
+fn codex_spawn_env_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve appdata dir: {e}"))?;
+    let dir = base.join("codex-spawn-env");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create {}: {}", dir.display(), e))?;
+    Ok(dir)
+}
+
+fn project_hash(working_dir: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let canonical = std::fs::canonicalize(working_dir)
+        .ok()
+        .and_then(|p| p.to_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| working_dir.to_string());
+    let hash = Sha256::digest(canonical.as_bytes());
+    let hex = format!("{:x}", hash);
+    hex.chars().take(16).collect()
+}
+
+fn codex_spawn_env_file(
+    app: &AppHandle,
+    scope: &str,
+    working_dir: &str,
+) -> Result<std::path::PathBuf, String> {
+    let dir = codex_spawn_env_dir(app)?;
+    match scope {
+        "user" => Ok(dir.join("user.json")),
+        "project" => {
+            if working_dir.is_empty() {
+                return Err("working_dir required for project scope".into());
+            }
+            Ok(dir.join(format!("project-{}.json", project_hash(working_dir))))
+        }
+        "project-local" => {
+            if working_dir.is_empty() {
+                return Err("working_dir required for project-local scope".into());
+            }
+            Ok(dir.join(format!("project-local-{}.json", project_hash(working_dir))))
+        }
+        _ => Err(format!("Invalid scope: {scope}")),
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+pub struct CodexSpawnEnvFile {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_root: String,
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+}
+
+fn read_codex_spawn_env_file(path: &std::path::Path) -> CodexSpawnEnvFile {
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return CodexSpawnEnvFile::default();
+    };
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+#[tauri::command]
+pub fn read_codex_spawn_env(
+    app: AppHandle,
+    scope: String,
+    working_dir: String,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let path = codex_spawn_env_file(&app, &scope, &working_dir)?;
+    Ok(read_codex_spawn_env_file(&path).env)
+}
+
+#[tauri::command]
+pub fn write_codex_spawn_env(
+    app: AppHandle,
+    scope: String,
+    working_dir: String,
+    env: std::collections::BTreeMap<String, String>,
+) -> Result<(), String> {
+    let path = codex_spawn_env_file(&app, &scope, &working_dir)?;
+    let project_root = if scope == "user" {
+        String::new()
+    } else {
+        std::fs::canonicalize(&working_dir)
+            .ok()
+            .and_then(|p| p.to_str().map(|s| s.to_string()))
+            .unwrap_or(working_dir)
+    };
+    let payload = CodexSpawnEnvFile { project_root, env };
+    let serialized = serde_json::to_string_pretty(&payload)
+        .map_err(|e| format!("Failed to serialize spawn env: {e}"))?;
+    atomic_write(&path, serialized.as_bytes())
+        .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+}
+
+/// Read all spawn-env scopes for a project and merge them in precedence
+/// order (project-local > project > user; later wins). Used by the Codex
+/// CLI adapter at session launch.
+pub fn merged_codex_spawn_env(
+    app: &AppHandle,
+    working_dir: &str,
+) -> std::collections::BTreeMap<String, String> {
+    let mut merged: std::collections::BTreeMap<String, String> = Default::default();
+    for scope in ["user", "project", "project-local"] {
+        let needs_dir = matches!(scope, "project" | "project-local");
+        if needs_dir && working_dir.is_empty() {
+            continue;
+        }
+        let Ok(path) = codex_spawn_env_file(app, scope, working_dir) else {
+            continue;
+        };
+        let contents = read_codex_spawn_env_file(&path);
+        for (k, v) in contents.env {
+            merged.insert(k, v);
+        }
+    }
+    merged
+}
+
+// [CD-03] insert_codex_toml_key: format-preserving insert via toml_edit. Creates intermediate tables for dotted paths (`shell_environment_policy.inherit`); never overwrites an existing key (returns the original content unchanged); does not handle array-of-tables paths (use insert_codex_toml_array_entry for that).
+/// Insert a JSON-shaped value at the given dotted TOML path, preserving
+/// whitespace, comments, and key order in the surrounding file. Existing
+/// keys are NOT overwritten — the original content is returned unchanged so
+/// the user's existing value isn't clobbered. Use this for the click-to-
+/// insert path in the Codex Settings reference panel.
+///
+/// Limitations:
+///   * Inserting into an inline table (`tools = { ... }`) silently expands
+///     it to standard table form.
+///   * `[[arrays.of.tables]]` aren't supported here — use
+///     `insert_codex_toml_array_entry`.
+///   * New keys are appended at the end of an existing table; comments
+///     anchored to the table tail can become visually orphaned.
+#[tauri::command]
+pub fn insert_codex_toml_key(
+    content: String,
+    key_path: Vec<String>,
+    value: serde_json::Value,
+) -> Result<String, String> {
+    if key_path.is_empty() {
+        return Err("key_path must have at least one segment".into());
+    }
+    let mut doc = if content.trim().is_empty() {
+        toml_edit::DocumentMut::new()
+    } else {
+        content
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|e| format!("Existing TOML is invalid: {e}"))?
+    };
+
+    let toml_value = json_to_toml_edit_item(value)
+        .ok_or_else(|| "value is null; TOML has no null type".to_string())?;
+
+    // Walk to the parent table, creating intermediate tables as needed.
+    let (last, parents) = key_path.split_last().unwrap(); // checked above
+    let mut cursor: &mut toml_edit::Item = doc.as_item_mut();
+    for segment in parents {
+        let table = cursor
+            .as_table_mut()
+            .ok_or_else(|| format!("path traverses a non-table at `{segment}`"))?;
+        if !table.contains_key(segment) {
+            table.insert(segment, toml_edit::Item::Table(toml_edit::Table::new()));
+        }
+        cursor = &mut table[segment];
+    }
+
+    let parent_table = cursor
+        .as_table_mut()
+        .ok_or_else(|| format!("parent of `{last}` is not a table"))?;
+    if parent_table.contains_key(last) {
+        // Don't clobber existing values.
+        return Ok(content);
+    }
+    parent_table.insert(last, toml_value);
+    Ok(doc.to_string())
+}
+
+/// Append a JSON object to a TOML array-of-tables path (`[[a.b.c]]`).
+/// Wired for the future MCP-server / profile flows; not surfaced in the v1
+/// Settings UI (those entries already live in dedicated panes).
+#[tauri::command]
+pub fn insert_codex_toml_array_entry(
+    content: String,
+    table_path: Vec<String>,
+    entry: serde_json::Value,
+) -> Result<String, String> {
+    if table_path.is_empty() {
+        return Err("table_path must have at least one segment".into());
+    }
+    let mut doc = if content.trim().is_empty() {
+        toml_edit::DocumentMut::new()
+    } else {
+        content
+            .parse::<toml_edit::DocumentMut>()
+            .map_err(|e| format!("Existing TOML is invalid: {e}"))?
+    };
+
+    let entry_table = match json_to_toml_edit_item(entry) {
+        Some(toml_edit::Item::Value(toml_edit::Value::InlineTable(it))) => it.into_table(),
+        Some(toml_edit::Item::Table(t)) => t,
+        Some(_) => return Err("array-of-tables entry must be an object".into()),
+        None => return Err("entry is null".into()),
+    };
+
+    let (last, parents) = table_path.split_last().unwrap();
+    let mut cursor: &mut toml_edit::Item = doc.as_item_mut();
+    for segment in parents {
+        let table = cursor
+            .as_table_mut()
+            .ok_or_else(|| format!("path traverses a non-table at `{segment}`"))?;
+        if !table.contains_key(segment) {
+            table.insert(segment, toml_edit::Item::Table(toml_edit::Table::new()));
+        }
+        cursor = &mut table[segment];
+    }
+
+    let parent_table = cursor
+        .as_table_mut()
+        .ok_or_else(|| format!("parent of `{last}` is not a table"))?;
+    let array = if parent_table.contains_key(last) {
+        parent_table[last]
+            .as_array_of_tables_mut()
+            .ok_or_else(|| format!("`{last}` exists but is not an array of tables"))?
+    } else {
+        parent_table.insert(last, toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()));
+        parent_table[last].as_array_of_tables_mut().unwrap()
+    };
+    array.push(entry_table);
+    Ok(doc.to_string())
+}
+
+/// Convert a serde_json value to a `toml_edit::Item`. Returns `None` for
+/// JSON `null` (TOML has no null). Used by both insert helpers.
+fn json_to_toml_edit_item(value: serde_json::Value) -> Option<toml_edit::Item> {
+    use toml_edit::value as tev;
+    match value {
+        serde_json::Value::Null => None,
+        serde_json::Value::Bool(b) => Some(tev(b)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Some(tev(i))
+            } else if let Some(f) = n.as_f64() {
+                Some(tev(f))
+            } else {
+                Some(tev(n.to_string()))
+            }
+        }
+        serde_json::Value::String(s) => Some(tev(s)),
+        serde_json::Value::Array(items) => {
+            let mut arr = toml_edit::Array::new();
+            for item in items {
+                let Some(toml_item) = json_to_toml_edit_item(item) else { continue; };
+                if let toml_edit::Item::Value(v) = toml_item {
+                    arr.push(v);
+                }
+            }
+            Some(toml_edit::Item::Value(toml_edit::Value::Array(arr)))
+        }
+        serde_json::Value::Object(map) => {
+            let mut table = toml_edit::Table::new();
+            for (k, v) in map {
+                if let Some(item) = json_to_toml_edit_item(v) {
+                    table.insert(&k, item);
+                }
+            }
+            Some(toml_edit::Item::Table(table))
+        }
+    }
 }
 
 /// Resolve the path for a config file based on scope and file type.
