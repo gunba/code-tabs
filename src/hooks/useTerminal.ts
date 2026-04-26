@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
@@ -59,6 +58,7 @@ interface UseTerminalOptions {
   cwd?: string | null;
   scrollback?: number;
   enableWebgl?: boolean;
+  visible?: boolean;
 }
 
 function escapePreview(text: string): string {
@@ -135,6 +135,7 @@ export function useTerminal({
   cwd = null,
   scrollback = 100_000,
   enableWebgl = true,
+  visible = true,
 }: UseTerminalOptions = {}) {
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -148,16 +149,55 @@ export function useTerminal({
   onDataRef.current = onData;
   const cwdRef = useRef<string | null>(cwd);
   cwdRef.current = cwd;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const [ready, setReady] = useState(false);
   const [termGeneration, setTermGeneration] = useState(0);
   const writeQueueRef = useRef<TerminalWriteChunk[]>([]);
   const writeInFlightRef = useRef(false);
 
   const webglRef = useRef<WebglAddon | null>(null);
-  const searchAddonRef = useRef<SearchAddon | null>(null);
   const webLinksAddonRef = useRef<WebLinksAddon | null>(null);
   const unicode11AddonRef = useRef<Unicode11Addon | null>(null);
   const pathLinkDisposableRef = useRef<{ dispose(): void } | null>(null);
+
+  const enableWebglRenderer = useCallback((term: Terminal) => {
+    if (!enableWebgl || webglRef.current) return;
+    // [DF-06] WebGL renderer — if context is lost, fall back to canvas (no retry)
+    try {
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => {
+        dlog("terminal", sessionIdRef.current, "webgl context lost", "WARN", {
+          event: "terminal.webgl_context_lost",
+          data: {},
+        });
+        webgl.dispose();
+        webglRef.current = null;
+      });
+      term.loadAddon(webgl);
+      webglRef.current = webgl;
+      dlog("terminal", sessionIdRef.current, "webgl renderer enabled", "DEBUG", {
+        event: "terminal.webgl_enabled",
+        data: {},
+      });
+    } catch {
+      // WebGL not available — canvas fallback is automatic
+      dlog("terminal", sessionIdRef.current, "webgl renderer unavailable; using canvas fallback", "DEBUG", {
+        event: "terminal.webgl_unavailable",
+        data: {},
+      });
+    }
+  }, [enableWebgl]);
+
+  const disposeWebglRenderer = useCallback((event: string, message: string) => {
+    if (!webglRef.current) return;
+    webglRef.current.dispose();
+    webglRef.current = null;
+    dlog("terminal", sessionIdRef.current, message, "DEBUG", {
+      event,
+      data: {},
+    });
+  }, []);
 
   // [DF-10] FitAddon.fit() is called bare (no try/catch) so resize errors propagate to the caller.
   const fit = useCallback(() => {
@@ -202,31 +242,13 @@ export function useTerminal({
       },
     });
 
-    if (enableWebgl) {
-      // [DF-06] WebGL renderer — if context is lost, fall back to canvas (no retry)
-      try {
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => {
-          dlog("terminal", sessionIdRef.current, "webgl context lost", "WARN", {
-            event: "terminal.webgl_context_lost",
-            data: {},
-          });
-          webgl.dispose();
-          webglRef.current = null;
-        });
-        term.loadAddon(webgl);
-        webglRef.current = webgl;
-        dlog("terminal", sessionIdRef.current, "webgl renderer enabled", "DEBUG", {
-          event: "terminal.webgl_enabled",
-          data: {},
-        });
-      } catch {
-        // WebGL not available — canvas fallback is automatic
-        dlog("terminal", sessionIdRef.current, "webgl renderer unavailable; using canvas fallback", "DEBUG", {
-          event: "terminal.webgl_unavailable",
-          data: {},
-        });
-      }
+    if (enableWebgl && visibleRef.current) {
+      enableWebglRenderer(term);
+    } else if (enableWebgl) {
+      dlog("terminal", sessionIdRef.current, "webgl renderer deferred while hidden", "DEBUG", {
+        event: "terminal.webgl_deferred_hidden",
+        data: {},
+      });
     } else {
       dlog("terminal", sessionIdRef.current, "webgl renderer disabled", "DEBUG", {
         event: "terminal.webgl_disabled",
@@ -234,22 +256,7 @@ export function useTerminal({
       });
     }
 
-    // [DF-11] xterm addons loaded on open: search, web-links, unicode11 (each in try/catch); unicode11 sets activeVersion="11"
-    try {
-      const search = new SearchAddon();
-      term.loadAddon(search);
-      searchAddonRef.current = search;
-      dlog("terminal", sessionIdRef.current, "search addon enabled", "DEBUG", {
-        event: "terminal.search_addon_enabled",
-        data: {},
-      });
-    } catch {
-      dlog("terminal", sessionIdRef.current, "search addon unavailable", "DEBUG", {
-        event: "terminal.search_addon_unavailable",
-        data: {},
-      });
-    }
-
+    // [DF-11] xterm addons loaded on open: web-links, path links, unicode11 (each in try/catch); unicode11 sets activeVersion="11"
     try {
       const webLinks = new WebLinksAddon((event, uri) => {
         const reveal = event.ctrlKey || event.metaKey;
@@ -328,7 +335,17 @@ export function useTerminal({
 
     fit();
     return true;
-  }, [enableWebgl, fit]);
+  }, [enableWebgl, enableWebglRenderer, fit]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || !attachedRef.current || !enableWebgl) return;
+    if (visible) {
+      enableWebglRenderer(term);
+    } else {
+      disposeWebglRenderer("terminal.webgl_disposed_hidden", "webgl renderer disposed while hidden");
+    }
+  }, [disposeWebglRenderer, enableWebgl, enableWebglRenderer, visible]);
 
   // Create terminal instance once fonts are ready
   useEffect(() => {
@@ -603,8 +620,6 @@ export function useTerminal({
       writeInFlightRef.current = false;
       webglRef.current?.dispose();
       webglRef.current = null;
-      searchAddonRef.current?.dispose();
-      searchAddonRef.current = null;
       webLinksAddonRef.current?.dispose();
       webLinksAddonRef.current = null;
       pathLinkDisposableRef.current?.dispose();

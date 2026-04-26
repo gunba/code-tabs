@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { memo, useEffect, useRef, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTerminal } from "../../hooks/useTerminal";
 import { usePty } from "../../hooks/usePty";
@@ -93,7 +93,7 @@ function useDurationTimer(sessionId: string, state: SessionState, respawnCounter
 
 // ── Terminal Panel ──────────────────────────────────────────────────────
 
-export function TerminalPanel({ session, visible }: TerminalPanelProps) {
+export const TerminalPanel = memo(function TerminalPanel({ session, visible }: TerminalPanelProps) {
   const claudePath = useSessionStore((s) => s.claudePath);
   const codexPath = useSessionStore((s) => s.codexPath);
   const initialized = useSessionStore((s) => s.initialized);
@@ -400,6 +400,7 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
     cwd: session.config.workingDir ?? null,
     scrollback: session.config.cli === "codex" ? CODEX_SCROLLBACK_LINES : CLAUDE_SCROLLBACK_LINES,
     enableWebgl: session.config.cli !== "codex",
+    visible,
   });
   terminalRef.current = terminal;
 
@@ -748,4 +749,4 @@ export function TerminalPanel({ session, visible }: TerminalPanelProps) {
       )}
     </div>
   );
-}
+});
