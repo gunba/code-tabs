@@ -75,10 +75,11 @@ jobs:
           name: linux-artifacts
           path: |
             src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.deb.sig
             src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/rpm/*.rpm.sig
             src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz
-            src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz.sig
+            src-tauri/target/release/bundle/appimage/*.AppImage.sig
             src-tauri/target/release/code-tabs
 
       - name: Upload to release
@@ -89,10 +90,11 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           gh release view "$tag" 2>/dev/null || gh release create "$tag" --title "$tag" --generate-notes
           for f in src-tauri/target/release/bundle/deb/*.deb \
+                   src-tauri/target/release/bundle/deb/*.deb.sig \
                    src-tauri/target/release/bundle/rpm/*.rpm \
+                   src-tauri/target/release/bundle/rpm/*.rpm.sig \
                    src-tauri/target/release/bundle/appimage/*.AppImage \
-                   src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz \
-                   src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz.sig; do
+                   src-tauri/target/release/bundle/appimage/*.AppImage.sig; do
             [ -f "$f" ] && gh release upload "$tag" "$f" --clobber
           done
           gh release upload "$tag" src-tauri/target/release/code-tabs#code-tabs-linux-portable --clobber
@@ -105,19 +107,19 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           version="${tag#v}"
 
-          sig_file=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage.tar.gz.sig" | head -1)
+          sig_file=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage.sig" | head -1)
           if [ -z "$sig_file" ]; then
-            echo "::warning::No .AppImage.tar.gz.sig found, skipping latest.json"
+            echo "::warning::No .AppImage.sig found, skipping latest.json"
             exit 0
           fi
           sig=$(cat "$sig_file")
 
-          tar_file=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage.tar.gz" ! -name "*.sig" | head -1)
-          if [ -z "$tar_file" ]; then
-            echo "::error::No .AppImage.tar.gz found"
+          appimage_file=$(find src-tauri/target/release/bundle/appimage -name "*.AppImage" ! -name "*.sig" | head -1)
+          if [ -z "$appimage_file" ]; then
+            echo "::error::No .AppImage found"
             exit 1
           fi
-          tar_name=$(basename "$tar_file")
+          appimage_name=$(basename "$appimage_file")
 
           # Try to download existing latest.json (Windows may have uploaded first)
           existing="{}"
@@ -130,7 +132,7 @@ jobs:
             --arg v "$version" \
             --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg sig "$sig" \
-            --arg url "https://github.com/gunba/code-tabs/releases/download/$tag/$tar_name" \
+            --arg url "https://github.com/gunba/code-tabs/releases/download/$tag/$appimage_name" \
             '{
               version: $v,
               notes: ("Release v" + $v),

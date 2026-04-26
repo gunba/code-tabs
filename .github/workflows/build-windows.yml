@@ -66,8 +66,7 @@ jobs:
           name: windows-artifacts
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/nsis/*.nsis.zip
-            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            src-tauri/target/release/bundle/nsis/*.exe.sig
             src-tauri/target/release/code-tabs.exe
 
       - name: Upload to release
@@ -79,8 +78,7 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           gh release view "$tag" 2>/dev/null || gh release create "$tag" --title "$tag" --generate-notes
           for f in src-tauri/target/release/bundle/nsis/*.exe \
-                   src-tauri/target/release/bundle/nsis/*.nsis.zip \
-                   src-tauri/target/release/bundle/nsis/*.nsis.zip.sig; do
+                   src-tauri/target/release/bundle/nsis/*.exe.sig; do
             [ -f "$f" ] && gh release upload "$tag" "$f" --clobber
           done
           gh release upload "$tag" "src-tauri/target/release/code-tabs.exe#code-tabs-windows-portable.exe" --clobber
@@ -94,19 +92,19 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           version="${tag#v}"
 
-          sig_file=$(find src-tauri/target/release/bundle/nsis -name "*.nsis.zip.sig" | head -1)
+          sig_file=$(find src-tauri/target/release/bundle/nsis -name "*.exe.sig" | head -1)
           if [ -z "$sig_file" ]; then
-            echo "::warning::No .nsis.zip.sig found, skipping latest.json"
+            echo "::warning::No .exe.sig found, skipping latest.json"
             exit 0
           fi
           sig=$(cat "$sig_file")
 
-          zip_file=$(find src-tauri/target/release/bundle/nsis -name "*.nsis.zip" ! -name "*.sig" | head -1)
-          if [ -z "$zip_file" ]; then
-            echo "::error::No .nsis.zip found"
+          installer_file=$(find src-tauri/target/release/bundle/nsis -name "*.exe" ! -name "*.sig" | head -1)
+          if [ -z "$installer_file" ]; then
+            echo "::error::No setup .exe found"
             exit 1
           fi
-          zip_name=$(basename "$zip_file")
+          installer_name=$(basename "$installer_file")
 
           # Try to download existing latest.json (Linux may have uploaded first)
           existing="{}"
@@ -119,7 +117,7 @@ jobs:
             --arg v "$version" \
             --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg sig "$sig" \
-            --arg url "https://github.com/gunba/code-tabs/releases/download/$tag/$zip_name" \
+            --arg url "https://github.com/gunba/code-tabs/releases/download/$tag/$installer_name" \
             '{
               version: $v,
               notes: ("Release v" + $v),
