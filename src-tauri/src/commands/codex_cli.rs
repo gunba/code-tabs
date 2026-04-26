@@ -395,8 +395,8 @@ pub async fn discover_codex_mcp_servers() -> Result<Vec<CodexMcpServer>, String>
 ///
 /// Discovery roots (in priority order):
 /// - `~/.agents/skills/<name>/SKILL.md`           (Codex preferred)
-/// - `~/.codex/skills/<name>/SKILL.md`            (deprecated, kept for compat)
 /// - `<project>/.agents/skills/<name>/SKILL.md`
+/// - `~/.codex/skills/<name>/SKILL.md`            (deprecated, kept for compat)
 /// - `<project>/.codex/skills/<name>/SKILL.md`
 ///
 /// Returns `(commands, rejections)` matching the Claude shape so the
@@ -433,7 +433,6 @@ pub(crate) fn discover_codex_skills_sync(
 
     let global_roots = [
         home.join(".agents").join("skills"),
-        home.join(".codex").join("skills"),
     ];
     for root in &global_roots {
         if root.exists() {
@@ -444,9 +443,28 @@ pub(crate) fn discover_codex_skills_sync(
     for dir in extra_dirs {
         let project_roots = [
             std::path::Path::new(dir).join(".agents").join("skills"),
-            std::path::Path::new(dir).join(".codex").join("skills"),
         ];
         for root in &project_roots {
+            if root.exists() {
+                scan_dir(root, &mut commands, &mut rejections);
+            }
+        }
+    }
+
+    let compat_global_roots = [
+        home.join(".codex").join("skills"),
+    ];
+    for root in &compat_global_roots {
+        if root.exists() {
+            scan_dir(root, &mut commands, &mut rejections);
+        }
+    }
+
+    for dir in extra_dirs {
+        let compat_project_roots = [
+            std::path::Path::new(dir).join(".codex").join("skills"),
+        ];
+        for root in &compat_project_roots {
             if root.exists() {
                 scan_dir(root, &mut commands, &mut rejections);
             }
@@ -875,8 +893,8 @@ mod tests {
         )
         .unwrap();
 
-        // <proj>/.codex/skills/bar/SKILL.md
-        let project = proj.join(".codex").join("skills").join("bar");
+        // <proj>/.agents/skills/bar/SKILL.md
+        let project = proj.join(".agents").join("skills").join("bar");
         std::fs::create_dir_all(&project).unwrap();
         std::fs::write(
             project.join("SKILL.md"),

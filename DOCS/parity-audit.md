@@ -30,7 +30,7 @@ Audit run: 2026-04-25 (batches 1–10 landed).
 | Effort levels (`ANTHROPIC_EFFORTS`) | Per-model `supported_reasoning_levels` from `codex debug models` | ✅ |
 | Slash commands (binary scan) | `discover_codex_slash_commands` resolves the installed Codex wrapper/native binary and probes for slash-command strings; falls back to the catalog when the binary is unavailable or under-detected | ⚠️ binary-backed catalog — Codex still has no slash-list CLI endpoint |
 | Plugin commands (`~/.claude/plugins/`) | No analog — Codex has skills, not plugins | ⛔ no analog |
-| Skills (`SKILL.md` scan) | `discover_codex_skills` — same scanner, Codex roots (`~/.agents/skills/`, `<repo>/.codex/skills/`, `<repo>/.agents/skills/`, `~/.codex/skills/`) | ✅ |
+| Skills (`SKILL.md` scan) | `discover_codex_skills` — same scanner, Codex roots (`~/.agents/skills/`, `<repo>/.agents/skills/`, plus deprecated `.codex/skills` compatibility roots) | ✅ |
 | Settings schema (binary Zod scan) | No analog — Codex config schema not exposed via CLI | ⚠️ Codex settings are first-party in the UI as raw TOML (`~/.codex/config.toml` / `<project>/.codex/config.toml`), without schema guidance |
 | Env vars (binary scan + catalog) | `codex --help` parsing surfaces flag-tied env hints | ⚠️ partial |
 | CLI option pills (`claude --help`) | `discover_codex_cli_options` parses `codex --help` regex | ✅ |
@@ -95,7 +95,7 @@ Audit run: 2026-04-25 (batches 1–10 landed).
 2. **Codex settings schema/reference.** Add a typed helper/reference for common `config.toml` keys (`model`, `model_reasoning_effort`, `sandbox_mode`, approvals, `[instructions]`, `[developer_instructions]`, `[hooks]`) without pretending the Claude schema applies.
 3. **Cross-ecosystem copy actions.** Add explicit copy/sync affordances for settings, MCP, hooks, and skills now that both sides are first-party.
 4. **Hooks port.** Translator table from Claude `settings.json[hooks]` → Codex `config.toml[[hooks.*]]`. Locked event-name table sourced from `codex-rs/config/src/hook_config.rs:16-29` (PreToolUse, PermissionRequest, PostToolUse, SessionStart, UserPromptSubmit, Stop — same set).
-5. **Slash-command-to-skill converter.** Best-effort `.claude/commands/foo.md` → `.codex/skills/foo/SKILL.md` with frontmatter wrapping.
+5. **Slash-command-to-skill converter.** Best-effort `.claude/commands/foo.md` → `.agents/skills/foo/SKILL.md` with frontmatter wrapping.
 6. **Proofd context follow-up.** Codex has no Claude-style path-scoped rule auto-load; proofd support now relies on Codex skills, hooks, explicit context lookup, and MCP.
 
 ## Test status (after first-party Codex UI completion)

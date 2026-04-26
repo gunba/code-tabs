@@ -34,11 +34,8 @@ CLAUDE_SNIPPET_TEMPLATE = """# Workflow
 
 Use `/r`, `/j`, `/b`, `/c`, and `/rj` from this repo root.
 
-When review is delegated to Codex in `/r` or `/rj`, the same rule applies: if the review subprocess runs in the background, you must remain blocked on the task-notification before continuing. Do not present a final review result, do not begin janitor or finalization work that depends on the review, and do not treat the review as optional. It is normal for a Codex review wait to take up to 30 minutes.
-
-For long-running Bash commands such as Codex delegates or builds, launch them with `run_in_background: true`.
-The immediate launch response only means the task started; it is not completion, and the timeout is only an upper bound on how long the subprocess may run.
-Do NOT use TaskOutput to poll. Wait for task-notifications, then read the referenced `<output-file>` if you need the completed command output. If the background result is required to complete the current workflow step, remain blocked on that notification instead of concluding the step early.
+For long-running Bash commands such as builds or test suites, launch them with background execution when the runtime supports it.
+Do NOT poll background tasks. Wait for completion before acting on dependent results.
 
 # Documentation
 
@@ -56,7 +53,6 @@ Useful commands:
 - `{proofd_cmd} entry-files --tag <TAG>`
 - `{proofd_cmd} select-matching <paths...>`
 - `{proofd_cmd} context <paths...>`
-- `{codex_delegate_cmd} <workflow> ...`
 """
 
 
@@ -77,7 +73,6 @@ def installed_script_command(name: str) -> str:
 def build_claude_snippet() -> str:
     return CLAUDE_SNIPPET_TEMPLATE.format(
         proofd_cmd=installed_script_command("proofd"),
-        codex_delegate_cmd=installed_script_command("codex_delegate"),
     )
 
 

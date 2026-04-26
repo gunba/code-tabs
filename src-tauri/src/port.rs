@@ -109,17 +109,14 @@ fn skills_root_for(direction: PortDirection, project_dir: &Path) -> Result<(Path
         // Claude → Codex
         PortDirection::ClaudeToCodex => Ok((
             project_dir.join(".claude").join("skills"),
-            // Codex's preferred location is ~/.agents/skills, but we
-            // copy into the project's .codex/skills/ for project-local
-            // ports. User-level ports use ~/.agents/skills/.
-            project_dir.join(".codex").join("skills"),
+            project_dir.join(".agents").join("skills"),
         )),
         // Codex → Claude
         PortDirection::CodexToClaude => {
-            // Source: try project .codex/skills first, then .agents/skills, then ~/.agents/skills.
+            // Source: prefer project .agents/skills, then compatibility roots.
             let candidates = [
-                project_dir.join(".codex").join("skills"),
                 project_dir.join(".agents").join("skills"),
+                project_dir.join(".codex").join("skills"),
                 home.join(".agents").join("skills"),
                 home.join(".codex").join("skills"),
             ];
@@ -645,7 +642,7 @@ mod tests {
         };
         let report = port_skill_sync(&req).expect("port");
         assert!(!report.written.is_empty());
-        assert!(proj.join(".codex/skills/greet/SKILL.md").exists());
+        assert!(proj.join(".agents/skills/greet/SKILL.md").exists());
         // First-time port (no destination existed): no backup needed.
         assert!(report.backup_path.is_none());
         let _ = fs::remove_dir_all(&proj);
@@ -667,7 +664,7 @@ mod tests {
         let report = port_skill_sync(&req).expect("port dry");
         assert!(report.written.is_empty());
         assert!(report.backup_path.is_none());
-        assert!(!proj.join(".codex/skills/foo/SKILL.md").exists());
+        assert!(!proj.join(".agents/skills/foo/SKILL.md").exists());
         let _ = fs::remove_dir_all(&proj);
     }
 
@@ -677,7 +674,7 @@ mod tests {
         let src = proj.join(".claude/skills/dup");
         fs::create_dir_all(&src).unwrap();
         fs::write(src.join("SKILL.md"), "fresh").unwrap();
-        let dest = proj.join(".codex/skills/dup");
+        let dest = proj.join(".agents/skills/dup");
         fs::create_dir_all(&dest).unwrap();
         fs::write(dest.join("SKILL.md"), "existing").unwrap();
         let req = PortSkillRequest {
