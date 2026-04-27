@@ -121,44 +121,6 @@ export function useTerminal({
   const unicode11AddonRef = useRef<Unicode11Addon | null>(null);
   const pathLinkDisposableRef = useRef<{ dispose(): void } | null>(null);
 
-  const enableWebglRenderer = useCallback((term: Terminal) => {
-    if (!enableWebgl || webglRef.current) return;
-    // [DF-06] WebGL renderer — if context is lost, fall back to canvas (no retry)
-    try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => {
-        dlog("terminal", sessionIdRef.current, "webgl context lost", "WARN", {
-          event: "terminal.webgl_context_lost",
-          data: {},
-        });
-        webgl.dispose();
-        webglRef.current = null;
-      });
-      term.loadAddon(webgl);
-      webglRef.current = webgl;
-      dlog("terminal", sessionIdRef.current, "webgl renderer enabled", "DEBUG", {
-        event: "terminal.webgl_enabled",
-        data: {},
-      });
-    } catch {
-      // WebGL not available — canvas fallback is automatic
-      dlog("terminal", sessionIdRef.current, "webgl renderer unavailable; using canvas fallback", "DEBUG", {
-        event: "terminal.webgl_unavailable",
-        data: {},
-      });
-    }
-  }, [enableWebgl]);
-
-  const disposeWebglRenderer = useCallback((event: string, message: string) => {
-    if (!webglRef.current) return;
-    webglRef.current.dispose();
-    webglRef.current = null;
-    dlog("terminal", sessionIdRef.current, message, "DEBUG", {
-      event,
-      data: {},
-    });
-  }, []);
-
   // [DF-10] FitAddon.fit() is called bare (no try/catch) so resize errors propagate to the caller.
   const fit = useCallback(() => {
     return traceSync("terminal.fit_apply", () => {
@@ -202,13 +164,31 @@ export function useTerminal({
       },
     });
 
-    if (enableWebgl && visibleRef.current) {
-      enableWebglRenderer(term);
-    } else if (enableWebgl) {
-      dlog("terminal", sessionIdRef.current, "webgl renderer deferred while hidden", "DEBUG", {
-        event: "terminal.webgl_deferred_hidden",
-        data: {},
-      });
+    if (enableWebgl) {
+      // [DF-06] WebGL renderer — if context is lost, fall back to canvas (no retry)
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          dlog("terminal", sessionIdRef.current, "webgl context lost", "WARN", {
+            event: "terminal.webgl_context_lost",
+            data: {},
+          });
+          webgl.dispose();
+          webglRef.current = null;
+        });
+        term.loadAddon(webgl);
+        webglRef.current = webgl;
+        dlog("terminal", sessionIdRef.current, "webgl renderer enabled", "DEBUG", {
+          event: "terminal.webgl_enabled",
+          data: {},
+        });
+      } catch {
+        // WebGL not available — canvas fallback is automatic
+        dlog("terminal", sessionIdRef.current, "webgl renderer unavailable; using canvas fallback", "DEBUG", {
+          event: "terminal.webgl_unavailable",
+          data: {},
+        });
+      }
     } else {
       dlog("terminal", sessionIdRef.current, "webgl renderer disabled", "DEBUG", {
         event: "terminal.webgl_disabled",
@@ -295,17 +275,7 @@ export function useTerminal({
 
     fit();
     return true;
-  }, [enableWebgl, enableWebglRenderer, fit]);
-
-  useEffect(() => {
-    const term = termRef.current;
-    if (!term || !attachedRef.current || !enableWebgl) return;
-    if (visible) {
-      enableWebglRenderer(term);
-    } else {
-      disposeWebglRenderer("terminal.webgl_disposed_hidden", "webgl renderer disposed while hidden");
-    }
-  }, [disposeWebglRenderer, enableWebgl, enableWebglRenderer, visible]);
+  }, [enableWebgl, fit]);
 
   useEffect(() => {
     const term = termRef.current;
@@ -680,6 +650,8 @@ export function useTerminal({
   const flushWriteQueue = useCallback(() => {
     const term = termRef.current;
     if (!term) return;
+    // Hidden tabs keep raw output queued; xterm parsing/rendering catches up on activation.
+    if (!visibleRef.current) return;
     if (writeInFlightRef.current) return;
     const queuedChunks = getTerminalWriteQueueDepth(writeQueueRef.current);
     const batch = takeTerminalWriteBatch(writeQueueRef.current);
@@ -755,6 +727,12 @@ export function useTerminal({
       flushWriteQueue();
     }
   }, []);
+
+  useEffect(() => {
+    if (visible) {
+      flushWriteQueue();
+    }
+  }, [flushWriteQueue, visible]);
 
   const write = useCallback((data: string) => {
     if (!termRef.current) return;
