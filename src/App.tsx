@@ -803,6 +803,8 @@ export default function App() {
           <ContextViewer
             metadata={activeSession.metadata}
             subagents={subagentMap.get(activeSession.id) || []}
+            sessionId={activeSession.id}
+            cli={activeSession.config.cli}
             onClose={() => setShowContextViewer(false)}
           />
         </Suspense>

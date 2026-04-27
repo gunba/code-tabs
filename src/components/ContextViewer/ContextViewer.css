@@ -394,3 +394,41 @@
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-surface);
 }
+
+/* ── Reasoning chip (Codex) ──────────────────────────── */
+
+.context-reasoning-block .context-tool-badge {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  color: var(--text-muted);
+}
+
+.context-reasoning-block .context-tool-name {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Compaction boundary (Codex) ─────────────────────── */
+
+.context-compaction-boundary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  flex-wrap: wrap;
+}
+
+.context-compaction-boundary .context-cache-boundary-line {
+  background: var(--accent);
+}
+
+.context-compaction-boundary .context-cache-boundary-label {
+  color: var(--accent);
+}
+
+.context-compaction-summary-body {
+  flex-basis: 100%;
+}
+
+.context-message-pre-compaction {
+  opacity: 0.55;
+}

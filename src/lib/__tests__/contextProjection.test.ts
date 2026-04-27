@@ -283,3 +283,50 @@ describe("buildSubagentTabs", () => {
     expect(buildSubagentTabs(messages)).toEqual([]);
   });
 });
+
+// ── compaction-boundary handling ────────────────────────
+
+describe("buildMainTabEntries — compaction", () => {
+  function compaction(text: string): CapturedMessage {
+    return { role: "system", content: [{ type: "compaction_summary", text }] };
+  }
+
+  it("emits a compaction-boundary entry instead of a normal message", () => {
+    const messages: CapturedMessage[] = [
+      msg("user", [textBlock("before")]),
+      compaction("Summary of prior turns."),
+      msg("assistant", [textBlock("after")]),
+    ];
+    const entries = buildMainTabEntries([], messages, -1);
+    const kinds = entries.map((e) => e.kind);
+    expect(kinds).toEqual(["message", "compaction-boundary", "message"]);
+    const boundary = entries[1] as { kind: "compaction-boundary"; summary: string };
+    expect(boundary.summary).toBe("Summary of prior turns.");
+  });
+
+  it("flags messages before the latest compaction as preCompaction", () => {
+    const messages: CapturedMessage[] = [
+      msg("user", [textBlock("first")]),
+      compaction("c1"),
+      msg("assistant", [textBlock("middle")]),
+      compaction("c2"),
+      msg("user", [textBlock("after")]),
+    ];
+    const entries = buildMainTabEntries([], messages, -1);
+    const before = entries.find((e) => e.kind === "message" && (e.message.content[0] as { text?: string }).text === "first");
+    const middle = entries.find((e) => e.kind === "message" && (e.message.content[0] as { text?: string }).text === "middle");
+    const after = entries.find((e) => e.kind === "message" && (e.message.content[0] as { text?: string }).text === "after");
+    expect(before).toMatchObject({ kind: "message", preCompaction: true });
+    expect(middle).toMatchObject({ kind: "message", preCompaction: true });
+    expect(after).toMatchObject({ kind: "message", preCompaction: false });
+  });
+
+  it("does not filter Agent blocks from non-compaction system messages", () => {
+    const messages: CapturedMessage[] = [
+      msg("system", [textBlock("system note")]),
+    ];
+    const entries = buildMainTabEntries([], messages, -1);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe("message");
+  });
+});

@@ -1,17 +1,50 @@
 // [TA-04] ContextViewer: conversation context viewer — unified list with per-subagent tabs
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
 import { formatTokenCount } from "../../lib/claude";
 import { buildMainTabEntries, buildSubagentTabs } from "../../lib/contextProjection";
-import type { UnifiedEntry, SubagentTab } from "../../lib/contextProjection";
-import type { SessionMetadata, SystemPromptBlock, CapturedContentBlock, Subagent, SubagentMessage } from "../../types/session";
+import type { SubagentTab } from "../../lib/contextProjection";
+import { tapEventBus } from "../../lib/tapEventBus";
+import type { SessionMetadata, SystemPromptBlock, CapturedContentBlock, CapturedMessage, CliKind, Subagent, SubagentMessage } from "../../types/session";
 import { IconClose } from "../Icons/Icons";
 import "./ContextViewer.css";
 
 interface ContextViewerProps {
   metadata: SessionMetadata;
   subagents?: Subagent[];
+  sessionId: string;
+  cli: CliKind;
   onClose: () => void;
+}
+
+/**
+ * Live Codex sessions read their conversation directly from the rollout
+ * file on demand. Refreshes whenever a turn boundary fires (CodexTaskComplete
+ * or UserInterruption from a turn_aborted event).
+ */
+function useCodexMessages(sessionId: string, cli: CliKind): CapturedMessage[] | null {
+  const [messages, setMessages] = useState<CapturedMessage[] | null>(null);
+
+  const refresh = useCallback(() => {
+    if (cli !== "codex") return;
+    invoke<CapturedMessage[]>("read_codex_session_messages", { sessionId })
+      .then((next) => setMessages(next))
+      .catch(() => setMessages([]));
+  }, [sessionId, cli]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (cli !== "codex") return;
+    return tapEventBus.subscribe(sessionId, (event) => {
+      if (event.kind === "CodexTaskComplete" || event.kind === "UserInterruption") {
+        refresh();
+      }
+    });
+  }, [sessionId, cli, refresh]);
+
+  return messages;
 }
 
 // ── Content block renderer ──────────────────────────────
@@ -48,6 +81,25 @@ export function ContentBlockView({ block }: { block: CapturedContentBlock }) {
         <span className="context-tool-name">{block.mediaType}</span>
       </div>
     );
+  }
+  if (block.type === "reasoning") {
+    return (
+      <div className="context-tool-block context-reasoning-block">
+        <span className="context-tool-badge">reasoning</span>
+        <span
+          className="context-tool-name"
+          title="The model thought here (encrypted, no plaintext)"
+        >
+          thinking…
+        </span>
+        {block.summary && block.summary.length > 0 && (
+          <pre className="context-tool-preview">{block.summary.join("\n")}</pre>
+        )}
+      </div>
+    );
+  }
+  if (block.type === "compaction_summary") {
+    return <pre className="context-block-text">{block.text ?? ""}</pre>;
   }
   return (
     <div className="context-tool-block">
@@ -86,18 +138,19 @@ function SystemBlockEntry({ block, index, expanded, onToggle }: {
 
 // ── Message entry ───────────────────────────────────────
 
-export function MessageEntry({ message, index, expanded, onToggle }: {
+export function MessageEntry({ message, index, expanded, onToggle, preCompaction }: {
   message: { role: string; content: CapturedContentBlock[] };
   index: number;
   expanded: boolean;
   onToggle: () => void;
+  preCompaction?: boolean;
 }) {
   const textPreview = message.content.find((b) => b.type === "text")?.text?.slice(0, 120);
   const blockTypes = message.content.map((b) => b.type);
   const hasTools = blockTypes.some((t) => t === "tool_use" || t === "tool_result");
 
   return (
-    <div className="context-entry">
+    <div className={`context-entry${preCompaction ? " context-message-pre-compaction" : ""}`}>
       <button className="context-entry-header" onClick={onToggle}>
         <span className="context-entry-index">{index + 1}</span>
         <span className={`context-entry-role context-role-${message.role}`}>{message.role}</span>
@@ -238,10 +291,11 @@ function SubagentTabContent({ tab, messages, expandedSet, onToggle }: {
 
 // ── Main component ──────────────────────────────────────
 
-export function ContextViewer({ metadata, subagents, onClose }: ContextViewerProps) {
+export function ContextViewer({ metadata, subagents, sessionId, cli, onClose }: ContextViewerProps) {
   const blocks = metadata.capturedSystemBlocks;
   const text = metadata.capturedSystemPrompt;
-  const messages = metadata.capturedMessages;
+  const codexMessages = useCodexMessages(sessionId, cli);
+  const messages = cli === "codex" ? codexMessages : metadata.capturedMessages;
   const dbg = metadata.contextDebug;
 
   const [activeTab, setActiveTab] = useState("main");
@@ -333,9 +387,13 @@ export function ContextViewer({ metadata, subagents, onClose }: ContextViewerPro
   // Keys for current tab (for Expand All)
   const currentKeys = useMemo(() => {
     if (validTab === "main") {
-      return mainEntries
-        .filter(e => e.kind !== "cache-boundary")
-        .map(e => e.kind === "system" ? `main:sys-${e.index}` : `main:msg-${(e as Extract<UnifiedEntry, { kind: "message" }>).index}`);
+      const keys: string[] = [];
+      mainEntries.forEach((e, i) => {
+        if (e.kind === "system") keys.push(`main:sys-${e.index}`);
+        else if (e.kind === "message") keys.push(`main:msg-${e.index}`);
+        else if (e.kind === "compaction-boundary") keys.push(`main:compact-${i}`);
+      });
+      return keys;
     }
     const tab = subagentTabs.find(t => t.id === validTab);
     if (!tab) return [];
@@ -462,6 +520,23 @@ export function ContextViewer({ metadata, subagents, onClose }: ContextViewerPro
                     </div>
                   );
                 }
+                if (entry.kind === "compaction-boundary") {
+                  const key = `main:compact-${i}`;
+                  const isOpen = expandedSet.has(key);
+                  return (
+                    <div key={key} className="context-compaction-boundary">
+                      <span className="context-cache-boundary-line" />
+                      <span className="context-cache-boundary-label">Conversation compacted</span>
+                      <span className="context-cache-boundary-line" />
+                      <button className="context-viewer-toggle" onClick={() => toggleEntry(key)}>
+                        {isOpen ? "Hide" : "Show"} summary
+                      </button>
+                      {isOpen && (
+                        <pre className="context-block-text context-compaction-summary-body">{entry.summary}</pre>
+                      )}
+                    </div>
+                  );
+                }
                 if (entry.kind === "system") {
                   const key = `main:sys-${entry.index}`;
                   return (
@@ -483,6 +558,7 @@ export function ContextViewer({ metadata, subagents, onClose }: ContextViewerPro
                     index={entry.index}
                     expanded={expandedSet.has(key)}
                     onToggle={() => toggleEntry(key)}
+                    preCompaction={entry.preCompaction}
                   />
                 );
               })}

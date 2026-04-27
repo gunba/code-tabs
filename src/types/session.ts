@@ -292,14 +292,15 @@ export interface SystemPromptBlock {
 }
 
 export interface CapturedContentBlock {
-  type: string;
+  type: string;            // text | tool_use | tool_result | image | reasoning | compaction_summary
   id?: string;             // tool_use id (for pairing with tool_result)
-  text?: string;
+  text?: string;           // text, tool_result, compaction_summary
   name?: string;           // tool_use
   input?: unknown;         // tool_use (full input object)
   toolUseId?: string;      // tool_result
   isError?: boolean;       // tool_result
   mediaType?: string;      // image
+  summary?: string[];      // reasoning: optional summary array (often empty)
 }
 
 export interface CapturedMessage {

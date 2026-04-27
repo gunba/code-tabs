@@ -14,7 +14,9 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 ## Rust Session Commands
 
 - [RC-04 L392] list_past_sessions_sync detects plan-mode forks by capturing `sourceToolAssistantUUID` during the head pass and resolving it during chain detection.
-- [RC-22 L1454] reveal_in_file_manager Tauri command in src-tauri/src/commands/data.rs:L880 wraps the internal reveal_path() helper (data.rs:L31) to open the given path in the system file manager. Cross-platform: Windows uses 'explorer /select,<path>', macOS uses 'open -R <path>', Linux uses 'xdg-open <dir>'. Exposed to frontend as invoke('reveal_in_file_manager', { path }) — called by the WebLinksAddon custom handler and terminalPathLinks activate handler on Ctrl/Cmd+click.
+- [RC-22 L1663] reveal_in_file_manager Tauri command in src-tauri/src/commands/data.rs:L880 wraps the internal reveal_path() helper (data.rs:L31) to open the given path in the system file manager. Cross-platform: Windows uses 'explorer /select,<path>', macOS uses 'open -R <path>', Linux uses 'xdg-open <dir>'. Exposed to frontend as invoke('reveal_in_file_manager', { path }) — called by the WebLinksAddon custom handler and terminalPathLinks activate handler on Ctrl/Cmd+click.
+- [RC-25 L1810] read_codex_session_messages Tauri command + Codex rollout parser: read_codex_session_messages(session_id) resolves the per-session rollout path via codex_rollout_path_for_session (codex-rollout-path.txt sidecar with observability.jsonl fallback), then dispatches into read_conversation_sync. The Codex branch of read_conversation_sync handles rollout JSONL directly and emits CapturedMessage-shaped JSON: response_item/message -> {role, content:[{text}]} via codex_text_from_content; response_item/function_call|custom_tool_call -> assistant message with single tool_use block (id from call_id, name, input from codex_tool_input which JSON-parses the arguments string and falls back to Value::String for raw payloads like apply_patch); response_item/function_call_output|custom_tool_call_output -> user message with single tool_result block (toolUseId from call_id, text truncated via truncate_block_text); response_item/reasoning -> assistant message with reasoning block (no plaintext, optional summary array); compacted -> system message with single compaction_summary block. session_meta/turn_context/event_msg are explicitly skipped. Unknown response_item types are dropped via codex_response_item_to_message returning None. MAX_BLOCK_TEXT=2000 enforced via floor_char_boundary. MAX_CONVERSATION_MESSAGES bumped 500->2000 to accommodate Codex rollouts where each function_call is one message. Frontend Context modal calls read_codex_session_messages on mount and on every CodexTaskComplete/UserInterruption tap event.
+  - src-tauri/src/commands/data.rs:L1815 (read_codex_session_messages Tauri command), data.rs:L1829 (read_conversation_sync entry), data.rs:L1684 (truncate_block_text helper), data.rs:L1696 (codex_tool_input — JSON parse + fallback to raw string + 2000-char truncate), data.rs:L1722 (codex_response_item_to_message — payload-type dispatch), data.rs:L1786 (codex_compaction_marker)
 
 ## Rust System Command Modules
 
@@ -22,8 +24,8 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## Session Launcher
 
-- [SL-19 L1460] Directory validation: before launching, SessionLauncher invokes dir_exists (Rust command) to confirm the working directory exists; shows 'Directory does not exist' error inline and blocks launch if not found
-- [SL-20 L1460] Recent dir pruning: pruneRecentDirs() called on app init; invokes dir_exists for each recentDir in parallel, removes any that no longer exist on disk
+- [SL-19 L1669] Directory validation: before launching, SessionLauncher invokes dir_exists (Rust command) to confirm the working directory exists; shows 'Directory does not exist' error inline and blocks launch if not found
+- [SL-20 L1669] Recent dir pruning: pruneRecentDirs() called on app init; invokes dir_exists for each recentDir in parallel, removes any that no longer exist on disk
 
 ## Session Resume
 

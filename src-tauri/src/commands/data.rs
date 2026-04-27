@@ -1254,8 +1254,9 @@ fn search_jsonl_files_sync(
 #[cfg(test)]
 mod tests {
     use super::{
-        codex_id_from_rollout_filename, codex_user_event_text, extract_codex_message_text,
-        extract_user_text, push_search_matches, read_conversation_sync, summarize_codex_rollout,
+        codex_compaction_marker, codex_id_from_rollout_filename, codex_response_item_to_message,
+        codex_tool_input, codex_user_event_text, extract_codex_message_text, extract_user_text,
+        push_search_matches, read_conversation_sync, summarize_codex_rollout,
     };
     use serde_json::json;
     use std::io::Write;
@@ -1435,6 +1436,214 @@ mod tests {
         assert_eq!(messages[1]["role"], "assistant");
         assert_eq!(messages[1]["content"][0]["text"], "Codex answer");
     }
+
+    #[test]
+    fn read_conversation_sync_reads_codex_function_calls() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rollout-fc.jsonl");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call",
+                    "name": "exec_command",
+                    "arguments": "{\"cmd\":\"pwd\"}",
+                    "call_id": "call_123"
+                }
+            })
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "response_item",
+                "payload": {
+                    "type": "function_call_output",
+                    "call_id": "call_123",
+                    "output": "/home/jordan"
+                }
+            })
+        )
+        .unwrap();
+
+        let messages = read_conversation_sync(path.to_str().unwrap()).unwrap();
+        assert_eq!(messages.len(), 2);
+
+        // function_call -> assistant message with tool_use block
+        assert_eq!(messages[0]["role"], "assistant");
+        let tool_use = &messages[0]["content"][0];
+        assert_eq!(tool_use["type"], "tool_use");
+        assert_eq!(tool_use["name"], "exec_command");
+        assert_eq!(tool_use["id"], "call_123");
+        assert_eq!(tool_use["input"]["cmd"], "pwd");
+
+        // function_call_output -> user message with tool_result block
+        assert_eq!(messages[1]["role"], "user");
+        let tool_result = &messages[1]["content"][0];
+        assert_eq!(tool_result["type"], "tool_result");
+        assert_eq!(tool_result["toolUseId"], "call_123");
+        assert_eq!(tool_result["text"], "/home/jordan");
+    }
+
+    #[test]
+    fn read_conversation_sync_reads_codex_custom_tool_calls() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rollout-ct.jsonl");
+        let mut file = std::fs::File::create(&path).unwrap();
+        // apply_patch sends a raw, non-JSON patch as the arguments string.
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call",
+                    "name": "apply_patch",
+                    "arguments": "*** Begin Patch\n*** End Patch",
+                    "call_id": "call_xyz"
+                }
+            })
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "response_item",
+                "payload": {
+                    "type": "custom_tool_call_output",
+                    "call_id": "call_xyz",
+                    "output": "Patch applied"
+                }
+            })
+        )
+        .unwrap();
+
+        let messages = read_conversation_sync(path.to_str().unwrap()).unwrap();
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0]["content"][0]["type"], "tool_use");
+        assert_eq!(messages[0]["content"][0]["name"], "apply_patch");
+        // Raw (non-JSON) patch is preserved as a string input
+        assert_eq!(messages[0]["content"][0]["input"], "*** Begin Patch\n*** End Patch");
+        assert_eq!(messages[1]["content"][0]["type"], "tool_result");
+        assert_eq!(messages[1]["content"][0]["text"], "Patch applied");
+    }
+
+    #[test]
+    fn read_conversation_sync_reads_codex_reasoning_as_chip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rollout-r.jsonl");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "response_item",
+                "payload": {
+                    "type": "reasoning",
+                    "summary": [],
+                    "encrypted_content": "gAAAAA..."
+                }
+            })
+        )
+        .unwrap();
+
+        let messages = read_conversation_sync(path.to_str().unwrap()).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["content"][0]["type"], "reasoning");
+        // Empty summary is omitted
+        assert!(messages[0]["content"][0].get("summary").is_none());
+        // No plaintext is exposed
+        assert!(messages[0]["content"][0].get("text").is_none());
+        assert!(messages[0]["content"][0].get("encrypted_content").is_none());
+    }
+
+    #[test]
+    fn read_conversation_sync_reads_codex_compaction_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rollout-c.jsonl");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{ "type": "input_text", "text": "before compact" }]
+                }
+            })
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "timestamp": "2026-04-26T12:00:00Z",
+                "type": "compacted",
+                "payload": {
+                    "message": "Summary of prior turns."
+                }
+            })
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{ "type": "output_text", "text": "after compact" }]
+                }
+            })
+        )
+        .unwrap();
+
+        let messages = read_conversation_sync(path.to_str().unwrap()).unwrap();
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0]["content"][0]["text"], "before compact");
+        assert_eq!(messages[1]["role"], "system");
+        assert_eq!(messages[1]["content"][0]["type"], "compaction_summary");
+        assert_eq!(messages[1]["content"][0]["text"], "Summary of prior turns.");
+        assert_eq!(messages[2]["content"][0]["text"], "after compact");
+    }
+
+    #[test]
+    fn codex_tool_input_truncates_large_arguments() {
+        let big = "A".repeat(5000);
+        let arg = serde_json::Value::String(big);
+        let result = codex_tool_input(&arg);
+        let s = result.as_str().expect("truncated to string");
+        assert!(s.ends_with("..."));
+        assert!(s.len() <= 2000 + 3);
+        assert!(s.starts_with("\"AAA"));
+    }
+
+    #[test]
+    fn codex_response_item_to_message_skips_unknown_types() {
+        let payload = json!({ "type": "local_shell_call", "name": "shell", "call_id": "c1" });
+        assert!(codex_response_item_to_message(&payload).is_none());
+
+        let no_type = json!({});
+        assert!(codex_response_item_to_message(&no_type).is_none());
+    }
+
+    #[test]
+    fn codex_compaction_marker_skips_empty_summary() {
+        assert!(codex_compaction_marker(&json!({})).is_none());
+        assert!(codex_compaction_marker(&json!({ "message": "   " })).is_none());
+        let m = codex_compaction_marker(&json!({ "message": "Compacted." }));
+        assert!(m.is_some());
+        assert_eq!(m.unwrap()["content"][0]["text"], "Compacted.");
+    }
 }
 
 #[tauri::command]
@@ -1464,7 +1673,131 @@ pub fn dir_exists(path: String) -> bool {
 }
 
 const MAX_CONVERSATION_FILE_SIZE: u64 = 20 * 1024 * 1024;
-const MAX_CONVERSATION_MESSAGES: usize = 500;
+const MAX_CONVERSATION_MESSAGES: usize = 2000;
+const MAX_BLOCK_TEXT: usize = 2000;
+
+/// Truncate a string at a UTF-8 char boundary, appending "..." when shortened.
+fn truncate_block_text(s: &str) -> String {
+    if s.len() > MAX_BLOCK_TEXT {
+        let end = s.floor_char_boundary(MAX_BLOCK_TEXT);
+        format!("{}...", &s[..end])
+    } else {
+        s.to_string()
+    }
+}
+
+/// Codex tool arguments are JSON-encoded strings on the wire. Parse if possible;
+/// fall back to a raw string (e.g. `apply_patch` carries a non-JSON patch).
+/// Always returns a value whose stringified form is <= MAX_BLOCK_TEXT chars.
+fn codex_tool_input(arguments: &serde_json::Value) -> serde_json::Value {
+    let parsed = if let Some(s) = arguments.as_str() {
+        serde_json::from_str::<serde_json::Value>(s).unwrap_or(serde_json::Value::String(s.to_string()))
+    } else if arguments.is_null() {
+        return serde_json::Value::Null;
+    } else {
+        arguments.clone()
+    };
+    let serialized = serde_json::to_string(&parsed).unwrap_or_default();
+    if serialized.len() > MAX_BLOCK_TEXT {
+        let end = serialized.floor_char_boundary(MAX_BLOCK_TEXT);
+        serde_json::Value::String(format!("{}...", &serialized[..end]))
+    } else {
+        parsed
+    }
+}
+
+/// Map a Codex `response_item` payload to a CapturedMessage-shaped JSON value.
+/// Returns `None` for unknown / non-turn payloads.
+fn codex_response_item_to_message(payload: &serde_json::Value) -> Option<serde_json::Value> {
+    let payload_type = payload["type"].as_str()?;
+    match payload_type {
+        "message" => {
+            let role = match payload["role"].as_str()? {
+                "user" => "user",
+                "assistant" => "assistant",
+                _ => return None,
+            };
+            let text = codex_text_from_content(&payload["content"])?;
+            Some(serde_json::json!({
+                "role": role,
+                "content": [{ "type": "text", "text": text }],
+            }))
+        }
+        "function_call" | "custom_tool_call" => {
+            let name = payload["name"].as_str().unwrap_or("unknown");
+            let call_id = payload["call_id"].as_str().unwrap_or("");
+            let raw_args = payload
+                .get("arguments")
+                .or_else(|| payload.get("input"))
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            let mut block = serde_json::json!({
+                "type": "tool_use",
+                "name": name,
+                "input": codex_tool_input(&raw_args),
+            });
+            if !call_id.is_empty() {
+                block["id"] = serde_json::Value::String(call_id.to_string());
+            }
+            Some(serde_json::json!({
+                "role": "assistant",
+                "content": [block],
+            }))
+        }
+        "function_call_output" | "custom_tool_call_output" => {
+            let call_id = payload["call_id"].as_str().unwrap_or("");
+            let output = payload["output"]
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| {
+                    payload["output"]
+                        .get("content")
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string)
+                })
+                .unwrap_or_default();
+            let mut block = serde_json::json!({ "type": "tool_result" });
+            if !call_id.is_empty() {
+                block["toolUseId"] = serde_json::Value::String(call_id.to_string());
+            }
+            if !output.is_empty() {
+                block["text"] = serde_json::Value::String(truncate_block_text(&output));
+            }
+            Some(serde_json::json!({
+                "role": "user",
+                "content": [block],
+            }))
+        }
+        "reasoning" => {
+            let summary: Vec<&str> = payload["summary"]
+                .as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                .unwrap_or_default();
+            let mut block = serde_json::json!({ "type": "reasoning" });
+            if !summary.is_empty() {
+                block["summary"] = serde_json::json!(summary);
+            }
+            Some(serde_json::json!({
+                "role": "assistant",
+                "content": [block],
+            }))
+        }
+        _ => None,
+    }
+}
+
+/// Map a Codex `compacted` rollout line to a CapturedMessage sentinel that the
+/// frontend projection turns into a divider entry.
+fn codex_compaction_marker(payload: &serde_json::Value) -> Option<serde_json::Value> {
+    let summary = payload["message"].as_str()?.trim();
+    if summary.is_empty() {
+        return None;
+    }
+    Some(serde_json::json!({
+        "role": "system",
+        "content": [{ "type": "compaction_summary", "text": summary }],
+    }))
+}
 
 /// Read a conversation JSONL file and return structured messages as CapturedMessage[].
 #[tauri::command]
@@ -1472,6 +1805,25 @@ pub async fn read_conversation(file_path: String) -> Result<Vec<serde_json::Valu
     tokio::task::spawn_blocking(move || read_conversation_sync(&file_path))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// [RC-25] Read the live Codex rollout for a code-tabs session and return its
+/// turns as CapturedMessage[]. Used by the Context modal during a running
+/// session where the rollout file path is not visible to the frontend.
+#[tauri::command]
+pub async fn read_codex_session_messages(
+    session_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || {
+        let path = codex_rollout_path_for_session(&session_id)
+            .ok_or_else(|| format!("No rollout file attributed to session {session_id}"))?;
+        let s = path
+            .to_str()
+            .ok_or_else(|| "Rollout path is not valid UTF-8".to_string())?;
+        read_conversation_sync(s)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, String> {
@@ -1506,27 +1858,32 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
             Err(_) => continue,
         };
 
-        if parsed["type"].as_str() == Some("response_item") {
-            let payload = &parsed["payload"];
-            if payload["type"].as_str() != Some("message") {
+        // Codex rollout payloads. Each rollout line has a top-level `type` of
+        // `response_item` (turn content), `compacted` (live compaction marker),
+        // or one of `session_meta` / `turn_context` / `event_msg` (skipped — not
+        // turn content). Anything that doesn't match falls through to the
+        // Claude JSONL handler below.
+        match parsed["type"].as_str() {
+            Some("response_item") => {
+                if let Some(msg) = codex_response_item_to_message(&parsed["payload"]) {
+                    messages.push(msg);
+                    if messages.len() >= MAX_CONVERSATION_MESSAGES {
+                        break;
+                    }
+                }
                 continue;
             }
-            let role = match payload["role"].as_str() {
-                Some("user") => "user",
-                Some("assistant") => "assistant",
-                _ => continue,
-            };
-            let Some(text) = codex_text_from_content(&payload["content"]) else {
+            Some("compacted") => {
+                if let Some(msg) = codex_compaction_marker(&parsed["payload"]) {
+                    messages.push(msg);
+                    if messages.len() >= MAX_CONVERSATION_MESSAGES {
+                        break;
+                    }
+                }
                 continue;
-            };
-            messages.push(serde_json::json!({
-                "role": role,
-                "content": [{ "type": "text", "text": text }],
-            }));
-            if messages.len() >= MAX_CONVERSATION_MESSAGES {
-                break;
             }
-            continue;
+            Some("session_meta") | Some("turn_context") | Some("event_msg") => continue,
+            _ => {}
         }
 
         let msg_type = match parsed["type"].as_str() {
@@ -1564,17 +1921,7 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
                                 }
                                 // Truncate large tool inputs
                                 if let Some(input) = block.get("input") {
-                                    let input_str =
-                                        serde_json::to_string(input).unwrap_or_default();
-                                    if input_str.len() > 2000 {
-                                        let end = input_str.floor_char_boundary(2000);
-                                        obj["input"] = serde_json::Value::String(format!(
-                                            "{}...",
-                                            &input_str[..end]
-                                        ));
-                                    } else {
-                                        obj["input"] = input.clone();
-                                    }
+                                    obj["input"] = codex_tool_input(input);
                                 }
                                 obj
                             }
@@ -1588,13 +1935,7 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
                                 }
                                 // Extract text from tool result content
                                 if let Some(text) = block["content"].as_str() {
-                                    let truncated = if text.len() > 2000 {
-                                        let end = text.floor_char_boundary(2000);
-                                        format!("{}...", &text[..end])
-                                    } else {
-                                        text.to_string()
-                                    };
-                                    obj["text"] = serde_json::Value::String(truncated);
+                                    obj["text"] = serde_json::Value::String(truncate_block_text(text));
                                 } else if let Some(arr) = block["content"].as_array() {
                                     let parts: Vec<&str> = arr
                                         .iter()
@@ -1602,14 +1943,7 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
                                         .filter_map(|b| b["text"].as_str())
                                         .collect();
                                     if !parts.is_empty() {
-                                        let joined = parts.join("\n");
-                                        let truncated = if joined.len() > 2000 {
-                                            let end = joined.floor_char_boundary(2000);
-                                            format!("{}...", &joined[..end])
-                                        } else {
-                                            joined
-                                        };
-                                        obj["text"] = serde_json::Value::String(truncated);
+                                        obj["text"] = serde_json::Value::String(truncate_block_text(&parts.join("\n")));
                                     }
                                 }
                                 obj

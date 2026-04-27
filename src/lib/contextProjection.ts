@@ -5,7 +5,8 @@ import type { SystemPromptBlock, CapturedMessage, CapturedContentBlock } from ".
 export type UnifiedEntry =
   | { kind: "system"; index: number; block: SystemPromptBlock; isCacheBoundary: boolean }
   | { kind: "cache-boundary" }
-  | { kind: "message"; index: number; message: CapturedMessage };
+  | { kind: "compaction-boundary"; summary: string }
+  | { kind: "message"; index: number; message: CapturedMessage; preCompaction: boolean };
 
 export interface SubagentTab {
   id: string;               // tool_use id or positional fallback "agent-N"
@@ -106,21 +107,52 @@ export function buildMainTabEntries(
   // Collect Agent tool ids for filtering (handles both old and new data)
   const agentIds = collectAgentToolIds(messages);
 
+  // Find the index of the latest compaction sentinel — messages before it
+  // are no longer in the model's context window and should render greyed.
+  let lastCompactionIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (isCompactionMessage(messages[i])) {
+      lastCompactionIdx = i;
+      break;
+    }
+  }
+
   // Messages with Agent blocks stripped
   let msgIndex = 0;
-  for (const msg of messages) {
-    const filtered = filterAgentBlocks(msg, agentIds);
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+
+    // Compaction sentinel → divider entry, not a normal message
+    if (isCompactionMessage(msg)) {
+      const summary = msg.content[0]?.text ?? "";
+      entries.push({ kind: "compaction-boundary", summary });
+      msgIndex++;
+      continue;
+    }
+
+    // Codex system messages other than compaction sentinels skip Agent filtering
+    const filtered = msg.role === "system" ? msg.content : filterAgentBlocks(msg, agentIds);
     if (filtered) {
       entries.push({
         kind: "message",
         index: msgIndex,
         message: filtered === msg.content ? msg : { role: msg.role, content: filtered },
+        preCompaction: i < lastCompactionIdx,
       });
     }
     msgIndex++;
   }
 
   return entries;
+}
+
+/** A message produced by the Codex parser to mark a compaction boundary. */
+function isCompactionMessage(msg: CapturedMessage): boolean {
+  return (
+    msg.role === "system" &&
+    msg.content.length === 1 &&
+    msg.content[0].type === "compaction_summary"
+  );
 }
 
 // ── Subagent tabs ───────────────────────────────────────

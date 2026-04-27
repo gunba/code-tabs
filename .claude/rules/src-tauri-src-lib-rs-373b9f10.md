@@ -15,7 +15,7 @@ Startup env vars and runtime tweaks needed for webkit2gtk/Wayland/KDE to work re
 
 ## Rust System Command Modules
 
-- [RC-11 L345] register_active_pid / unregister_active_pid -- Frontend registers OS PIDs of PTY children; RunEvent::Exit handler in lib.rs iterates ActivePids and calls kill_process_tree_sync for each.
+- [RC-11 L346] register_active_pid / unregister_active_pid -- Frontend registers OS PIDs of PTY children; RunEvent::Exit handler in lib.rs iterates ActivePids and calls kill_process_tree_sync for each.
 
 ## Window
 
