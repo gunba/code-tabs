@@ -1,7 +1,7 @@
 {
   "name": "code-tabs",
   "private": true,
-  "version": "0.64.2",
+  "version": "0.64.3",
   "type": "module",
   "x-proofd-anchors": "[BV-02] build:quick / build:debug scripts; [BV-03] pre-commit gate -> npx tsc --noEmit + npm test (vitest run) + cargo check --manifest-path src-tauri/Cargo.toml",
   "scripts": {
