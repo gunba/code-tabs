@@ -90,6 +90,23 @@ function parseApplyPatchFiles(patch: string, workDir: string): Array<{ path: str
   return files;
 }
 
+async function runPathExistenceValidation(sid: string): Promise<void> {
+  const activity = useActivityStore.getState().sessions[sid];
+  if (!activity) return;
+  const paths = new Set<string>();
+  for (const f of Object.values(activity.allFiles)) paths.add(f.path);
+  for (const turn of activity.turns) {
+    for (const f of turn.files) paths.add(f.path);
+  }
+  if (paths.size === 0) return;
+  try {
+    const results = await invoke<PathStatus[]>("paths_exist", { paths: [...paths] });
+    useActivityStore.getState().confirmEntries(sid, results);
+  } catch (err) {
+    dlog("tap", sid, `paths_exist failed: ${err}`, "DEBUG");
+  }
+}
+
 async function runGitScanAndValidate(sid: string): Promise<void> {
   const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
   const workDir = session?.config.workingDir ?? "";
@@ -113,20 +130,7 @@ async function runGitScanAndValidate(sid: string): Promise<void> {
     }
   }
 
-  const activity = useActivityStore.getState().sessions[sid];
-  if (!activity) return;
-  const paths = new Set<string>();
-  for (const f of Object.values(activity.allFiles)) paths.add(f.path);
-  if (activity.turns.length > 0) {
-    for (const f of activity.turns[activity.turns.length - 1].files) paths.add(f.path);
-  }
-  if (paths.size === 0) return;
-  try {
-    const results = await invoke<PathStatus[]>("paths_exist", { paths: [...paths] });
-    activityStore.confirmEntries(sid, results);
-  } catch (err) {
-    dlog("tap", sid, `paths_exist failed: ${err}`, "DEBUG");
-  }
+  await runPathExistenceValidation(sid);
 }
 
 function isAbsoluteLikePath(path: string): boolean {
@@ -875,9 +879,35 @@ export function useTapEventProcessor(
       () => {},
     );
 
+    // Throttled paths_exist on every activity store change so heuristic
+    // false positives (Bash parser, apply_patch, errored Read inputs) are
+    // dropped within ~1.5s instead of waiting for settled-idle hysteresis.
+    let pendingValidate: ReturnType<typeof setTimeout> | null = null;
+    let lastValidate = 0;
+    const VALIDATE_THROTTLE_MS = 1500;
+    const scheduleValidation = () => {
+      if (pendingValidate) return;
+      const elapsed = Date.now() - lastValidate;
+      pendingValidate = setTimeout(() => {
+        pendingValidate = null;
+        lastValidate = Date.now();
+        void runPathExistenceValidation(sessionId);
+      }, Math.max(VALIDATE_THROTTLE_MS - elapsed, 200));
+    };
+    let prevActivity = useActivityStore.getState().sessions[sessionId];
+    const unsubActivity = useActivityStore.subscribe((state) => {
+      const next = state.sessions[sessionId];
+      if (next !== prevActivity) {
+        prevActivity = next;
+        scheduleValidation();
+      }
+    });
+
     return () => {
       unsub();
       unsubSettled();
+      unsubActivity();
+      if (pendingValidate) clearTimeout(pendingValidate);
       metaAcc.reset();
       subTracker.reset();
       metaAccRef.current = null;
