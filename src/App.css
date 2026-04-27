@@ -198,11 +198,11 @@
 }
 
 .ctrl-held .tab-add {
-  background: var(--accent-secondary);
+  background: var(--rarity-legendary);
 }
 
 .ctrl-held .tab-add:hover {
-  background: color-mix(in srgb, var(--accent-secondary) 80%, white);
+  background: color-mix(in srgb, var(--rarity-legendary) 85%, white);
 }
 
 .tab-dot {
@@ -342,6 +342,7 @@
 
 
 .tab-add {
+  --tab-action-color: var(--rarity-legendary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -349,7 +350,7 @@
   height: var(--tab-bar-height);
   border: none;
   border-left: 1px solid var(--border-subtle);
-  background: var(--accent);
+  background: var(--tab-action-color);
   color: var(--text-on-accent);
   font-size: 22px;
   font-weight: 300;
@@ -359,10 +360,11 @@
 }
 
 .tab-add:hover {
-  background: var(--accent-hover);
+  background: color-mix(in srgb, var(--tab-action-color) 85%, white);
 }
 
 .tab-resume {
+  --tab-action-color: var(--rarity-rare);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -370,8 +372,8 @@
   height: var(--tab-bar-height);
   border: none;
   border-left: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--accent-secondary) 12%, var(--bg-surface));
-  color: var(--accent-secondary);
+  background: color-mix(in srgb, var(--tab-action-color) 12%, var(--bg-surface));
+  color: var(--tab-action-color);
   font-size: 16px;
   cursor: pointer;
   flex-shrink: 0;
@@ -379,11 +381,12 @@
 }
 
 .tab-resume:hover {
-  background: color-mix(in srgb, var(--accent-secondary) 20%, var(--bg-surface));
-  color: var(--accent-secondary);
+  background: color-mix(in srgb, var(--tab-action-color) 20%, var(--bg-surface));
+  color: var(--tab-action-color);
 }
 
 .tab-config {
+  --tab-action-color: var(--rarity-epic);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -391,8 +394,8 @@
   height: var(--tab-bar-height);
   border: none;
   border-left: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--accent-tertiary) 10%, var(--bg-surface));
-  color: var(--accent-tertiary);
+  background: color-mix(in srgb, var(--tab-action-color) 10%, var(--bg-surface));
+  color: var(--tab-action-color);
   font-size: 16px;
   cursor: pointer;
   flex-shrink: 0;
@@ -400,8 +403,8 @@
 }
 
 .tab-config:hover {
-  background: color-mix(in srgb, var(--accent-tertiary) 18%, var(--bg-surface));
-  color: var(--accent-tertiary);
+  background: color-mix(in srgb, var(--tab-action-color) 18%, var(--bg-surface));
+  color: var(--tab-action-color);
 }
 
 /* ── Tab groups ──────────────────────────────────────────────── */
