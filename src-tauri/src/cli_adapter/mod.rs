@@ -132,10 +132,13 @@ pub fn adapter_for(kind: CliKind) -> Box<dyn CliAdapter> {
 /// Dispatches to the right adapter based on `config.cli`.
 // [CC-02] build_cli_spawn: dispatch via config.cli -> adapter_for -> build_spawn; cli_launch_options returns per-CLI models/effort/permission/flag-pills
 // [CC-06] Codex-only: layer the per-scope spawn-env sidecar on top of the adapter's env_overrides. Sidecars live in Code Tabs appdata (NOT the project tree); precedence project-local > project > user. The user-facing Env Vars tab writes to these sidecars; Codex itself doesn't read them — Code Tabs injects them at process spawn.
+// [CC-07] Codex-only: inject `-c openai_base_url=http://127.0.0.1:<proxyPort>/s/<sessionId>/<basePath>` so the proxy can intercept the Responses API for prompt-rewrite rules + traffic logging. basePath depends on Codex auth mode (read from $CODEX_HOME/auth.json): chatgpt → `backend-api/codex`, apikey/unknown → `v1`. Skipped if the user already pinned `openai_base_url` via -c/--config or the proxy isn't running.
 #[tauri::command]
 pub async fn build_cli_spawn(
     app: tauri::AppHandle,
+    proxy_state: tauri::State<'_, crate::proxy::ProxyState>,
     config: SessionConfig,
+    session_id: String,
 ) -> Result<SpawnSpec, String> {
     let cli = config.cli;
     let working_dir = config.working_dir.clone();
@@ -155,9 +158,53 @@ pub async fn build_cli_spawn(
                 spec.env_overrides.push((k, Some(v)));
             }
         }
+
+        let proxy_port = proxy_state
+            .0
+            .lock()
+            .ok()
+            .and_then(|s| s.port);
+        if let Some(port) = proxy_port {
+            if !session_id.is_empty() && !has_codex_config_override(&spec.args, "openai_base_url") {
+                let base_path = match crate::commands::codex_cli::read_codex_auth_mode_sync()
+                    .as_deref()
+                {
+                    Some("chatgpt") => "backend-api/codex",
+                    _ => "v1",
+                };
+                let url = format!("http://127.0.0.1:{port}/s/{session_id}/{base_path}");
+                let quoted = serde_json::to_string(&url).unwrap_or_else(|_| format!("\"{url}\""));
+                spec.args.push("-c".into());
+                spec.args.push(format!("openai_base_url={quoted}"));
+            }
+        }
     }
 
     Ok(spec)
+}
+
+/// Returns true if the Codex argv already pins `<key>=...` via `-c`/`--config`.
+/// Mirrors the previous frontend-side `hasCodexConfigOverride` helper so a user
+/// who set the override via Env Vars / extra-flags isn't silently overridden.
+fn has_codex_config_override(args: &[String], key: &str) -> bool {
+    let prefix = format!("{key}=");
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        if arg == "-c" || arg == "--config" {
+            if let Some(value) = iter.next() {
+                if value.trim_start().starts_with(&prefix) {
+                    return true;
+                }
+            }
+            continue;
+        }
+        if let Some(rest) = arg.strip_prefix("-c") {
+            if rest.trim_start().starts_with(&prefix) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Tauri command: discover launch options (models, effort levels,
@@ -167,4 +214,55 @@ pub async fn cli_launch_options(cli: CliKind) -> Result<LaunchOptions, String> {
     tauri::async_runtime::spawn_blocking(move || adapter_for(cli).launch_options())
         .await
         .map_err(|e| format!("join error: {e}"))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::has_codex_config_override;
+
+    fn args(s: &[&str]) -> Vec<String> {
+        s.iter().map(|x| x.to_string()).collect()
+    }
+
+    #[test]
+    fn detects_separated_dash_c_override() {
+        assert!(has_codex_config_override(
+            &args(&["-c", "openai_base_url=http://x"]),
+            "openai_base_url"
+        ));
+    }
+
+    #[test]
+    fn detects_separated_long_config_override() {
+        assert!(has_codex_config_override(
+            &args(&["--config", "openai_base_url=\"http://x\""]),
+            "openai_base_url"
+        ));
+    }
+
+    #[test]
+    fn detects_combined_dash_c_override() {
+        assert!(has_codex_config_override(
+            &args(&["-copenai_base_url=http://x"]),
+            "openai_base_url"
+        ));
+    }
+
+    #[test]
+    fn does_not_detect_unrelated_keys() {
+        assert!(!has_codex_config_override(
+            &args(&["-c", "model_reasoning_effort=high"]),
+            "openai_base_url"
+        ));
+        assert!(!has_codex_config_override(&args(&[]), "openai_base_url"));
+    }
+
+    #[test]
+    fn does_not_detect_key_as_substring() {
+        // `chatgpt_base_url=...` must not satisfy a check for `openai_base_url`.
+        assert!(!has_codex_config_override(
+            &args(&["-c", "chatgpt_base_url=http://x"]),
+            "openai_base_url"
+        ));
+    }
 }

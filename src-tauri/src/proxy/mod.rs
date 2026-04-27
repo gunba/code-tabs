@@ -428,12 +428,14 @@ pub fn stop_traffic_log(
 
 const ANTHROPIC_UPSTREAM_BASE_URL: &str = "https://api.anthropic.com";
 const OPENAI_UPSTREAM_BASE_URL: &str = "https://api.openai.com";
+const CHATGPT_UPSTREAM_BASE_URL: &str = "https://chatgpt.com";
 
-// [SP-02] Per-request upstream resolver: anthropic vs openai routing + path matchers + OpenAI instructions field rewrite (Codex/OpenAI Responses analog of Claude system field).
+// [SP-02] Per-request upstream resolver: anthropic / openai / chatgpt routing + path matchers + Responses API instructions rewrite (Codex/OpenAI Responses analog of Claude system field). ChatGpt covers the chatgpt.com/backend-api/codex endpoints used by Codex sessions authenticated via ChatGPT subscription; OpenAi covers api.openai.com/v1 used by API-key-authenticated sessions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum UpstreamKind {
     Anthropic,
     OpenAi,
+    ChatGpt,
 }
 
 impl UpstreamKind {
@@ -441,6 +443,7 @@ impl UpstreamKind {
         match self {
             UpstreamKind::Anthropic => ANTHROPIC_UPSTREAM_BASE_URL,
             UpstreamKind::OpenAi => OPENAI_UPSTREAM_BASE_URL,
+            UpstreamKind::ChatGpt => CHATGPT_UPSTREAM_BASE_URL,
         }
     }
 
@@ -448,6 +451,7 @@ impl UpstreamKind {
         match self {
             UpstreamKind::Anthropic => "anthropic",
             UpstreamKind::OpenAi => "openai",
+            UpstreamKind::ChatGpt => "chatgpt",
         }
     }
 }
@@ -467,9 +471,18 @@ fn is_openai_responses_endpoint(path: &str) -> bool {
     path_matches_endpoint(path, "/v1/responses")
 }
 
+// Match exactly the Codex Responses endpoint on chatgpt.com — NOT a broad
+// `/backend-api/codex/` prefix. Codex hits adjacent endpoints there
+// (account/usage/etc.) that should pass through unrewritten.
+fn is_chatgpt_responses_endpoint(path: &str) -> bool {
+    path_matches_endpoint(path, "/backend-api/codex/responses")
+}
+
 fn resolve_upstream(path: &str) -> UpstreamKind {
     if is_anthropic_endpoint(path) {
         UpstreamKind::Anthropic
+    } else if path.starts_with("/backend-api/codex/") || path == "/backend-api/codex" {
+        UpstreamKind::ChatGpt
     } else if path.starts_with("/v1/") {
         UpstreamKind::OpenAi
     } else {
@@ -535,16 +548,20 @@ async fn handle_connection(
     let rewritable_prompt_endpoint = match upstream {
         UpstreamKind::Anthropic => is_anthropic_endpoint(&path),
         UpstreamKind::OpenAi => is_openai_responses_endpoint(&path),
+        UpstreamKind::ChatGpt => is_chatgpt_responses_endpoint(&path),
     };
 
     // Apply prompt rewrite rules to the provider-native prompt field:
-    // Claude/Anthropic => `system`, Codex/OpenAI Responses => `instructions`.
+    // Claude/Anthropic => `system`, OpenAI / ChatGPT Responses => `instructions`
+    // (same wire shape on both endpoints).
     let (final_body, matched_ids) = if rules.is_empty() || !rewritable_prompt_endpoint {
         (body.to_vec(), Vec::new())
     } else {
         match upstream {
             UpstreamKind::Anthropic => rewrite_system_prompt_in_body(&body, &rules),
-            UpstreamKind::OpenAi => rewrite_openai_instructions_in_body(&body, &rules),
+            UpstreamKind::OpenAi | UpstreamKind::ChatGpt => {
+                rewrite_openai_instructions_in_body(&body, &rules)
+            }
         }
     };
     if !matched_ids.is_empty() {
@@ -1145,6 +1162,55 @@ mod tests {
         );
         assert_eq!(resolve_upstream("/v1/responses"), UpstreamKind::OpenAi);
         assert_eq!(resolve_upstream("/v1/models"), UpstreamKind::OpenAi);
+        assert_eq!(
+            resolve_upstream("/backend-api/codex/responses"),
+            UpstreamKind::ChatGpt
+        );
+        assert_eq!(
+            resolve_upstream("/backend-api/codex/account"),
+            UpstreamKind::ChatGpt
+        );
+    }
+
+    #[test]
+    fn test_is_chatgpt_responses_endpoint_is_exact_match() {
+        assert!(is_chatgpt_responses_endpoint("/backend-api/codex/responses"));
+        assert!(is_chatgpt_responses_endpoint(
+            "/backend-api/codex/responses?stream=true"
+        ));
+        assert!(is_chatgpt_responses_endpoint(
+            "/backend-api/codex/responses/123"
+        ));
+        // Non-responses paths under the same prefix must NOT match — they
+        // should pass through to chatgpt.com without prompt-rewrite.
+        assert!(!is_chatgpt_responses_endpoint(
+            "/backend-api/codex/account"
+        ));
+        assert!(!is_chatgpt_responses_endpoint("/backend-api/codex"));
+        assert!(!is_chatgpt_responses_endpoint("/v1/responses"));
+    }
+
+    #[test]
+    fn test_chatgpt_upstream_rewrites_instructions() {
+        // Routing test: confirm a request targeted at the ChatGPT-codex
+        // Responses endpoint runs through the same instructions-rewrite
+        // path as the api.openai.com Responses endpoint.
+        let path = "/backend-api/codex/responses";
+        let upstream = resolve_upstream(path);
+        assert_eq!(upstream, UpstreamKind::ChatGpt);
+        let rewritable = match upstream {
+            UpstreamKind::Anthropic => is_anthropic_endpoint(path),
+            UpstreamKind::OpenAi => is_openai_responses_endpoint(path),
+            UpstreamKind::ChatGpt => is_chatgpt_responses_endpoint(path),
+        };
+        assert!(rewritable);
+
+        let body = br#"{"model":"gpt-5.2","instructions":"hello world","input":[]}"#;
+        let rule = make_rule("r1", "hello", "goodbye", true);
+        let (out, matched) = rewrite_openai_instructions_in_body(body, &[rule]);
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(v["instructions"], "goodbye world");
+        assert_eq!(matched, vec!["r1".to_string()]);
     }
 
     #[test]

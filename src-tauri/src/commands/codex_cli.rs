@@ -107,6 +107,21 @@ fn run_codex(args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
 }
 
+// ── Auth mode ────────────────────────────────────────────────────────
+
+/// Read `auth_mode` from `$CODEX_HOME/auth.json` (fallback `~/.codex/auth.json`).
+/// Returns `Some("chatgpt" | "apikey" | ...)` if the file is present and parses;
+/// `None` otherwise. Used by `cli_adapter::build_cli_spawn` to decide which
+/// upstream the proxy-injected `openai_base_url` should encode in its path.
+pub(crate) fn read_codex_auth_mode_sync() -> Option<String> {
+    let path = crate::commands::data::codex_home_dir()?.join("auth.json");
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    json.get("auth_mode")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+}
+
 // ── Version ──────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -1041,6 +1056,51 @@ mod tests {
             names.contains("/bar"),
             "expected project skill bar, got {names:?}"
         );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // CODEX_HOME is process-global, so all auth.json read cases live in a
+    // single test to avoid racing against parallel test threads.
+    #[test]
+    fn read_codex_auth_mode_handles_chatgpt_apikey_missing_and_malformed() {
+        let tmp = std::env::temp_dir().join(format!("ct-auth-mode-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let prev = std::env::var_os("CODEX_HOME");
+        std::env::set_var("CODEX_HOME", &tmp);
+
+        // Missing auth.json
+        assert!(read_codex_auth_mode_sync().is_none());
+
+        // chatgpt mode (the shape we observed in the user's auth.json)
+        std::fs::write(
+            tmp.join("auth.json"),
+            r#"{"auth_mode":"chatgpt","OPENAI_API_KEY":null,"tokens":{}}"#,
+        )
+        .unwrap();
+        assert_eq!(read_codex_auth_mode_sync().as_deref(), Some("chatgpt"));
+
+        // apikey mode
+        std::fs::write(
+            tmp.join("auth.json"),
+            r#"{"auth_mode":"apikey","OPENAI_API_KEY":"sk-test"}"#,
+        )
+        .unwrap();
+        assert_eq!(read_codex_auth_mode_sync().as_deref(), Some("apikey"));
+
+        // Malformed JSON
+        std::fs::write(tmp.join("auth.json"), "{not json").unwrap();
+        assert!(read_codex_auth_mode_sync().is_none());
+
+        // Valid JSON without auth_mode key
+        std::fs::write(tmp.join("auth.json"), r#"{"OPENAI_API_KEY":null}"#).unwrap();
+        assert!(read_codex_auth_mode_sync().is_none());
+
+        match prev {
+            Some(p) => std::env::set_var("CODEX_HOME", p),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

@@ -1,6 +1,6 @@
 use crate::path_utils;
 
-fn codex_home_dir() -> Option<std::path::PathBuf> {
+pub(crate) fn codex_home_dir() -> Option<std::path::PathBuf> {
     if let Ok(p) = std::env::var("CODEX_HOME") {
         if !p.is_empty() {
             return Some(std::path::PathBuf::from(p));

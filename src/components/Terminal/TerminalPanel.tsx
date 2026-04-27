@@ -47,22 +47,6 @@ function escapeChunkPreview(text: string): string {
     .slice(0, 240);
 }
 
-function hasCodexConfigOverride(args: string[], key: string): boolean {
-  for (let i = 0; i < args.length; i += 1) {
-    const arg = args[i];
-    if (arg === "-c" || arg === "--config") {
-      const value = args[i + 1]?.trimStart();
-      if (value?.startsWith(`${key}=`)) return true;
-      i += 1;
-      continue;
-    }
-    if (arg.startsWith("-c") && arg.slice(2).trimStart().startsWith(`${key}=`)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // ── Duration Timer (active time only) ────────────────────────────────────
 
 const ACTIVE_STATES = new Set<SessionState>(["thinking", "toolUse", "actionNeeded", "waitingPermission", "error"]);
@@ -499,34 +483,28 @@ export const TerminalPanel = memo(function TerminalPanel({ session, visible }: T
         // CLI this session runs. ClaudeAdapter delegates to the
         // existing build_claude_args; CodexAdapter translates into
         // codex flags / subcommands.
+        // Codex's `-c openai_base_url=...` proxy override is injected by
+        // build_cli_spawn (backend), which also picks the right base path
+        // (backend-api/codex vs v1) from ~/.codex/auth.json.
         const spawnSpec = await invoke<{
           program: string;
           args: string[];
           envOverrides: Array<[string, string | null]>;
           cwd: string;
-        }>("build_cli_spawn", { config: launchConfig });
+        }>("build_cli_spawn", { config: launchConfig, sessionId: session.id });
         const args = [...spawnSpec.args];
         const program = spawnSpec.program;
         const { cols, rows } = terminal.getDimensions();
         const cwd = normalizePath(session.config.workingDir);
         const { proxyPort } = useSettingsStore.getState();
-        // Codex supports a built-in OpenAI base URL override. Point only
-        // the active session at our local proxy so prompt rules can rewrite
-        // OpenAI Responses `instructions` without replacing Codex's prompt.
-        if (
-          session.config.cli === "codex"
-          && proxyPort
-          && !hasCodexConfigOverride(args, "openai_base_url")
-        ) {
-          args.push("-c", `openai_base_url=${JSON.stringify(`http://127.0.0.1:${proxyPort}/s/${session.id}/v1`)}`);
-        }
         // Pass BUN_INSPECT env for inspector-based hook injection,
         // TAP_PORT for dedicated TCP event delivery. Claude CLI sessions only.
         const env: Record<string, string> = {};
         if (session.config.cli === "claude") {
           env.BUN_INSPECT = `ws://127.0.0.1:${inspPort}/0`;
           if (tapPort) env.TAP_PORT = String(tapPort);
-          // Claude's proxy hook is env-based; Codex's is the arg override above.
+          // Claude's proxy hook is env-based; Codex's is the arg override
+          // injected by build_cli_spawn.
           if (proxyPort) {
             env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${proxyPort}/s/${session.id}`;
           }
