@@ -5,7 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { dlog } from "../../lib/debugLog";
-import { getResumeId, modelLabel, stripWorktreeFlags, effortColor } from "../../lib/claude";
+import { getResumeId, modelLabel, modelColor, stripWorktreeFlags, effortColor } from "../../lib/claude";
+import { cliLongLabel, cliShortLabel, resumeSessionCli } from "../../lib/cliDisplay";
 import { dirToTabName, abbreviatePath, normalizeForFilter, parentDir } from "../../lib/paths";
 import { useCtrlKey } from "../../hooks/useCtrlKey";
 import {
@@ -515,19 +516,21 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
             const ps = chain.resumeSession;
             const dead = findDead(chain);
             const isSelected = idx === selectedIndex;
-            const modelBadge = shortModelBadge(chain.model);
             const isContentOnly = idx >= contentDividerIndex && contentDividerIndex >= 0;
             const snippet = snippetMap.get(ps.id);
 
             // Resolve config for badge display
             const cached = sessionConfigs[ps.id];
             const config = dead?.config ?? cached;
+            const provider = resumeSessionCli(ps, config);
+            const providerLabel = cliShortLabel(provider);
+            const providerTitle = cliLongLabel(provider);
+            const modelBadge = shortModelBadge(chain.model);
 
             // Build badges (all share base class + color modifier)
             const badges: { label: string; mod: string; style?: React.CSSProperties }[] = [];
             if (!chain.dirExists) badges.push({ label: "Unavailable", mod: "resume-picker-badge-danger" });
-            if (ps.cli === "codex") badges.push({ label: "Codex", mod: "resume-picker-badge-agent" });
-            if (modelBadge) badges.push({ label: modelBadge, mod: "resume-picker-badge-model" });
+            if (modelBadge) badges.push({ label: modelBadge, mod: "resume-picker-badge-model", style: { "--badge-color": modelColor(chain.model) } as React.CSSProperties });
             if (config?.dangerouslySkipPermissions) badges.push({ label: "Skip Perms", mod: "resume-picker-badge-danger" });
             if (config?.permissionMode && config.permissionMode !== "default") {
               badges.push({ label: PERM_LABELS[config.permissionMode] || config.permissionMode, mod: "resume-picker-badge-perm" });
@@ -540,6 +543,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
             const cardClass = [
               "resume-picker-card",
               isSelected && "resume-picker-card-selected",
+              `resume-picker-card-provider-${provider}`,
               chain.chainLength > 1 && "resume-picker-card-chain",
               isContentOnly && "resume-picker-card-content-match",
               !chain.dirExists && "resume-picker-card-orphan",
@@ -568,21 +572,26 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
                 }}
                 onMouseEnter={() => setSelectedIndex(idx)}
                 title={!chain.dirExists
-                  ? `Directory no longer exists\n${ps.directory}\nClick to view conversation`
+                  ? `${providerTitle}\nDirectory no longer exists\n${ps.directory}\nClick to view conversation`
                   : ctrlHeld
-                    ? `Ctrl+Click: Configure & relaunch\n${ps.directory}`
-                    : `${ps.directory}\nSession: ${ps.id}\nCtrl+Click to configure · Right-click for more`}
+                    ? `${providerTitle}\nCtrl+Click: Configure & relaunch\n${ps.directory}`
+                    : `${providerTitle}\n${ps.directory}\nSession: ${ps.id}\nCtrl+Click to configure · Right-click for more`}
               >
                 <div className="resume-picker-card-top">
-                  <span className="resume-picker-card-name">
-                    {chain.displayName ? (
-                      <>
-                        <span className="resume-picker-card-custom-name">{chain.displayName}</span>
-                        <span className="resume-picker-card-dir-label">{dirToTabName(ps.directory)}</span>
-                      </>
-                    ) : (
-                      dirToTabName(ps.directory)
-                    )}
+                  <span className="resume-picker-card-heading">
+                    <span className={`resume-picker-provider-mark resume-picker-provider-mark-${provider}`} title={`Provider: ${providerTitle}`}>
+                      {providerLabel}
+                    </span>
+                    <span className="resume-picker-card-name">
+                      {chain.displayName ? (
+                        <>
+                          <span className="resume-picker-card-custom-name">{chain.displayName}</span>
+                          <span className="resume-picker-card-dir-label">{dirToTabName(ps.directory)}</span>
+                        </>
+                      ) : (
+                        dirToTabName(ps.directory)
+                      )}
+                    </span>
                   </span>
                   <span className="resume-picker-card-date">
                     {formatRelativeDate(chain.latestDate)}

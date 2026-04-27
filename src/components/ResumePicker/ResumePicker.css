@@ -114,23 +114,51 @@
 /* ── Session Card ──────────────────────────────────────────────── */
 
 .resume-picker-card {
+  --resume-provider-color: var(--cli-claude);
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: var(--bg-primary);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--resume-provider-color) 9%, var(--bg-primary)) 0%,
+      var(--bg-primary) 46%
+    );
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 8px 10px 8px 14px;
   cursor: pointer;
   transition: all 0.12s;
   overflow: hidden;
   flex-shrink: 0;
 }
 
+.resume-picker-card-provider-claude {
+  --resume-provider-color: var(--cli-claude);
+}
+
+.resume-picker-card-provider-codex {
+  --resume-provider-color: var(--cli-codex);
+}
+
+.resume-picker-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--resume-provider-color);
+}
+
 .resume-picker-card:hover,
 .resume-picker-card-selected {
-  border-color: var(--accent);
-  background: var(--bg-surface-hover);
+  border-color: color-mix(in srgb, var(--resume-provider-color) 70%, var(--border));
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--resume-provider-color) 15%, var(--bg-primary)) 0%,
+      color-mix(in srgb, var(--resume-provider-color) 5%, var(--bg-surface-hover)) 56%
+    );
 }
 
 .ctrl-held .resume-picker-card {
@@ -212,7 +240,7 @@
 }
 
 .resume-picker-chain-member-latest {
-  border-left: 2px solid var(--accent);
+  border-left: 2px solid var(--resume-provider-color, var(--accent));
 }
 
 .resume-picker-chain-member-orphan {
@@ -242,12 +270,47 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+
+.resume-picker-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+
+.resume-picker-provider-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 16px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--resume-provider-color) 48%, transparent);
+  border-radius: 4px;
+  color: var(--resume-provider-color);
+  background: color-mix(in srgb, var(--resume-provider-color) 14%, var(--bg-primary));
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.resume-picker-provider-mark::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .resume-picker-card-name {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

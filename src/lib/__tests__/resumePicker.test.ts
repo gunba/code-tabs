@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { normalizeForFilter } from "../paths";
+import { cliLongLabel, cliShortLabel, resumeSessionCli } from "../cliDisplay";
 import type { PastSession, ContentSearchMatch } from "../../types/session";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -144,6 +145,27 @@ describe("ResumePicker filter: resumable visibility", () => {
 
   it("still suppresses summarize placeholder sessions", () => {
     expect(shouldShowSessionCard(mkPastSession({ firstMessage: 'Summarize: [{"role":"user"}]' }))).toBe(false);
+  });
+});
+
+describe("ResumePicker provider display", () => {
+  it("defaults legacy past sessions to Claude", () => {
+    expect(resumeSessionCli(mkPastSession())).toBe("claude");
+  });
+
+  it("uses the provider stored on the past session", () => {
+    expect(resumeSessionCli(mkPastSession({ cli: "codex" }), { cli: "claude" })).toBe("codex");
+  });
+
+  it("falls back to cached config provider when the past session has no provider", () => {
+    expect(resumeSessionCli(mkPastSession(), { cli: "codex" })).toBe("codex");
+  });
+
+  it("uses clear short and long provider labels", () => {
+    expect(cliShortLabel("claude")).toBe("Claude");
+    expect(cliLongLabel("claude")).toBe("Claude Code");
+    expect(cliShortLabel("codex")).toBe("Codex");
+    expect(cliLongLabel("codex")).toBe("Codex CLI");
   });
 });
 
