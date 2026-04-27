@@ -22,10 +22,12 @@ use super::{
 
 pub struct CodexAdapter;
 
-// Mirrors the `model_reasoning_effort` enum in Codex's ConfigToml schema
-// (see src-tauri/src/discovery/codex_schema.json:1916). Used to gate
-// values passed via `-c model_reasoning_effort=...` so a stale Claude-
-// side effort never crashes Codex at config load.
+// [CC-08] CODEX_EFFORT_VALUES enum gate: mirrors the model_reasoning_effort
+// enum in Codex's ConfigToml schema (src-tauri/src/discovery/codex_schema.json).
+// build_spawn skips the -c model_reasoning_effort=... override when SessionConfig.effort
+// is not in this list, so a stale Claude-side value (e.g. "max") never reaches
+// Codex's config.toml parser at launch. The same set is mirrored in
+// SessionLauncher.tsx for the displayed CLI command preview.
 const CODEX_EFFORT_VALUES: &[&str] = &["none", "minimal", "low", "medium", "high", "xhigh"];
 
 impl CliAdapter for CodexAdapter {

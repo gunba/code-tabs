@@ -132,7 +132,7 @@ pub fn adapter_for(kind: CliKind) -> Box<dyn CliAdapter> {
 /// Dispatches to the right adapter based on `config.cli`.
 // [CC-02] build_cli_spawn: dispatch via config.cli -> adapter_for -> build_spawn; cli_launch_options returns per-CLI models/effort/permission/flag-pills
 // [CC-06] Codex-only: layer the per-scope spawn-env sidecar on top of the adapter's env_overrides. Sidecars live in Code Tabs appdata (NOT the project tree); precedence project-local > project > user. The user-facing Env Vars tab writes to these sidecars; Codex itself doesn't read them — Code Tabs injects them at process spawn.
-// [CC-07] Codex-only: inject a session-scoped Code Tabs model provider pointing at `http://127.0.0.1:<proxyPort>/s/<sessionId>/<basePath>` so the proxy can intercept the Responses API for prompt-rewrite rules + traffic logging without advertising WebSocket support. basePath depends on Codex auth mode (read from $CODEX_HOME/auth.json): ChatGPT/agent identity → `backend-api/codex`, API key → `v1`. Skipped if auth mode is unknown, the user already pinned `openai_base_url` or `model_provider` via -c/--config, or the proxy isn't running.
+// [CC-09] Codex-only: inject a session-scoped Code Tabs model provider pointing at `http://127.0.0.1:<proxyPort>/s/<sessionId>/<basePath>` so the proxy can intercept the Responses API for prompt-rewrite rules + traffic logging without advertising WebSocket support. basePath depends on Codex auth mode (read from $CODEX_HOME/auth.json): ChatGPT/agent identity → `backend-api/codex`, API key → `v1`. Skipped if auth mode is unknown, the user already pinned `openai_base_url` or `model_provider` via -c/--config, or the proxy isn't running.
 #[tauri::command]
 pub async fn build_cli_spawn(
     app: tauri::AppHandle,

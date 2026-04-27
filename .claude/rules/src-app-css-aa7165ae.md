@@ -13,8 +13,8 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## Session Resume
 
-- [SR-04 L561] Subagent cards (in App.tsx subagent bar) use --bg-surface base; idle/dead cards fade (opacity 0.45), interrupted cards color the name red (var(--error)), completed cards show full opacity with a checkmark. Selected cards get accent-secondary tint and bottom bar when their inspector is open.
+- [SR-04 L563] Subagent cards (in App.tsx subagent bar) use --bg-surface base; idle/dead cards fade (opacity 0.45), interrupted cards color the name red (var(--error)), completed cards show full opacity with a checkmark. Selected cards get accent-secondary tint and bottom bar when their inspector is open.
 
 ## Terminal UI
 
-- [TR-11 L636] Subagent card shows selected highlight (accent-secondary box-shadow + tinted background) when its inspector is open.
+- [TR-11 L638] Subagent card shows selected highlight (accent-secondary box-shadow + tinted background) when its inspector is open.

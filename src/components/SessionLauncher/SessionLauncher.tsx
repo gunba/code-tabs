@@ -39,9 +39,11 @@ const DEDICATED_FLAGS = new Set([
   "--dangerously-bypass-approvals-and-sandbox", "--add-dir",
 ]);
 
-// Mirror of the Codex `model_reasoning_effort` enum. Used to drop stale
+// [CC-08] CODEX_EFFORT_VALUES enum gate (frontend mirror). Drops stale
 // Claude-side values (e.g. "max") from the displayed Codex command so it
-// matches what the backend will actually send.
+// matches the -c model_reasoning_effort=... override that build_spawn
+// will actually emit. Source of truth is the Rust const in
+// src-tauri/src/cli_adapter/codex.rs.
 const CODEX_EFFORT_VALUES = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
 
 // [SL-14] Non-session flags rendered in separate Utility Commands section
