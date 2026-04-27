@@ -109,17 +109,30 @@ fn run_codex(args: &[&str]) -> Result<String, String> {
 
 // ── Auth mode ────────────────────────────────────────────────────────
 
-/// Read `auth_mode` from `$CODEX_HOME/auth.json` (fallback `~/.codex/auth.json`).
-/// Returns `Some("chatgpt" | "apikey" | ...)` if the file is present and parses;
-/// `None` otherwise. Used by `cli_adapter::build_cli_spawn` to decide which
-/// upstream the proxy-injected `openai_base_url` should encode in its path.
+/// Resolve Codex's effective auth mode from `$CODEX_HOME/auth.json`
+/// (fallback `~/.codex/auth.json`).
+///
+/// This mirrors Codex's own `AuthDotJson::resolved_mode`: an explicit
+/// `auth_mode` wins; otherwise a stored non-empty `OPENAI_API_KEY` means API
+/// key auth; otherwise the file represents ChatGPT auth. Missing or malformed
+/// files return `None`.
 pub(crate) fn read_codex_auth_mode_sync() -> Option<String> {
     let path = crate::commands::data::codex_home_dir()?.join("auth.json");
     let raw = std::fs::read_to_string(&path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
-    json.get("auth_mode")
+    if let Some(mode) = json.get("auth_mode").and_then(|v| v.as_str()) {
+        return Some(mode.to_string());
+    }
+    if json
+        .get("OPENAI_API_KEY")
         .and_then(|v| v.as_str())
-        .map(str::to_string)
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false)
+    {
+        Some("apikey".into())
+    } else {
+        Some("chatgpt".into())
+    }
 }
 
 // ── Version ──────────────────────────────────────────────────────────
@@ -1093,9 +1106,16 @@ mod tests {
         std::fs::write(tmp.join("auth.json"), "{not json").unwrap();
         assert!(read_codex_auth_mode_sync().is_none());
 
-        // Valid JSON without auth_mode key
+        // Valid JSON without auth_mode key resolves the way Codex does:
+        // OPENAI_API_KEY present => apikey, otherwise ChatGPT.
         std::fs::write(tmp.join("auth.json"), r#"{"OPENAI_API_KEY":null}"#).unwrap();
-        assert!(read_codex_auth_mode_sync().is_none());
+        assert_eq!(read_codex_auth_mode_sync().as_deref(), Some("chatgpt"));
+        std::fs::write(
+            tmp.join("auth.json"),
+            r#"{"OPENAI_API_KEY":"sk-test-without-auth-mode"}"#,
+        )
+        .unwrap();
+        assert_eq!(read_codex_auth_mode_sync().as_deref(), Some("apikey"));
 
         match prev {
             Some(p) => std::env::set_var("CODEX_HOME", p),
