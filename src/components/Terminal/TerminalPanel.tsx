@@ -160,10 +160,17 @@ export const TerminalPanel = memo(function TerminalPanel({ session, visible }: T
 
   const [loading, setLoading] = useState(!!session.config.resumeSession);
 
-  // [SR-01] Hide loading spinner when inspector connects
+  // [SR-01] Hide loading spinner once the session signals readiness.
+  // Claude: inspector connect (~1s after spawn).
+  // Codex: no inspector — first state transition off "starting" (set after pty.spawn).
   useEffect(() => {
-    if (loading && inspector.connected) setLoading(false);
-  }, [loading, inspector.connected]);
+    if (!loading) return;
+    if (session.config.cli === "codex") {
+      if (session.state !== "starting") setLoading(false);
+    } else if (inspector.connected) {
+      setLoading(false);
+    }
+  }, [loading, inspector.connected, session.config.cli, session.state]);
 
   // Sync Claude's internal session ID into config for persistence (plan-mode forks, compaction)
   const prevClaudeSessionIdRef = useRef<string | null>(null);

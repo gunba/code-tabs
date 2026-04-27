@@ -145,9 +145,11 @@
 
 .tab-meta-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
+  width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   line-height: 13px;
   overflow: hidden;
 }
