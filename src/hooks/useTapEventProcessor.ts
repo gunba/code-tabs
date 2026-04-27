@@ -316,6 +316,9 @@ export function useTapEventProcessor(
     let codexAutoNameTitle: string | null = null;
     const contextFileHintsSeen = new Set<string>();
     const codexAutoNamed = new Set<string>();
+    // Tracks Codex sessions that have already had an LLM-upgrade attempt
+    // kicked off, so we never spawn a second `codex exec` for the same tab.
+    const codexLLMUpgraded = new Set<string>();
     setClaudeSessionId(null);
     setUserPrompt(null);
 
@@ -709,8 +712,37 @@ export function useTapEventProcessor(
           setUserPrompt(event.display.slice(0, 200));
         }
         if (event.kind === "UserInput" && !duplicateOpenPrompt) {
-          const title = maybeAutoNameCodexSession(sid, event.display, codexAutoNamed);
-          if (title) codexAutoNameTitle = title;
+          // [SL-23] Codex LLM auto-rename upgrade: heuristic name applied
+          // synchronously by maybeAutoNameCodexSession, then fire-and-forget
+          // `codex exec` upgrade replaces it iff name still equals heuristic
+          // (respects manual mid-flight renames). codexLLMUpgraded gate
+          // prevents duplicate exec spawns. Backend: see CO-06.
+          const heuristicTitle = maybeAutoNameCodexSession(sid, event.display, codexAutoNamed);
+          if (heuristicTitle) {
+            codexAutoNameTitle = heuristicTitle;
+            // Provider-symmetric upgrade path: ask Codex's own model (via
+            // `codex exec`) for a better title. Fire-and-forget; the
+            // heuristic name is already showing, so nothing blocks the UI.
+            const settings = useSettingsStore.getState();
+            if (settings.codexAutoRenameLLMEnabled && !codexLLMUpgraded.has(sid)) {
+              codexLLMUpgraded.add(sid);
+              invoke<string>("generate_codex_session_title", {
+                prompt: event.display,
+                model: settings.codexAutoRenameLLMModel,
+              })
+                .then((llmTitle) => {
+                  if (!llmTitle || llmTitle === heuristicTitle) return;
+                  // Respect manual user renames mid-flight: only upgrade if
+                  // the tab name is still the heuristic we set.
+                  const current = useSessionStore.getState().sessions.find((s) => s.id === sid);
+                  if (!current || current.name !== heuristicTitle) return;
+                  useSessionStore.getState().renameSession(sid, llmTitle);
+                  useSettingsStore.getState().setSessionName(getResumeId(current), llmTitle);
+                  codexAutoNameTitle = llmTitle;
+                })
+                .catch((err) => dlog("tap", sid, `codex auto-rename LLM failed: ${err}`, "DEBUG"));
+            }
+          }
         }
       }
 

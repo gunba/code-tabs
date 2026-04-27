@@ -200,6 +200,10 @@ interface SettingsState {
   launcherGeneration: number;
   themeName: string;
   notificationsEnabled: boolean;
+  /** When true, Codex tabs auto-rename on first user message via a small OpenAI model. */
+  codexAutoRenameLLMEnabled: boolean;
+  /** Model passed to `codex exec --model` for auto-rename. Free text — Codex accepts any model string. */
+  codexAutoRenameLLMModel: string;
   cliVersions: Record<CliKind, string | null>;
   lastOpenedCliVersions: Record<CliKind, string | null>;
   previousCliVersions: Record<CliKind, string | null>;
@@ -252,6 +256,8 @@ interface SettingsState {
   setShowLauncher: (show: boolean) => void;
   setThemeName: (name: string) => void;
   setNotificationsEnabled: (enabled: boolean) => void;
+  setCodexAutoRenameLLMEnabled: (enabled: boolean) => void;
+  setCodexAutoRenameLLMModel: (model: string) => void;
   setLastOpenedCliVersion: (cli: CliKind, version: string | null) => void;
   setCliCapabilitiesForCli: (cli: CliKind, version: string | null, capabilities: CliCapabilities) => void;
   setCliCapabilities: (version: string, capabilities: CliCapabilities) => void;
@@ -305,6 +311,8 @@ export const useSettingsStore = create<SettingsState>()(
       launcherGeneration: 0,
       themeName: "Claude",
       notificationsEnabled: true,
+      codexAutoRenameLLMEnabled: true,
+      codexAutoRenameLLMModel: "gpt-5-mini",
       cliVersions: { claude: null, codex: null },
       lastOpenedCliVersions: { claude: null, codex: null },
       previousCliVersions: { claude: null, codex: null },
@@ -461,6 +469,8 @@ export const useSettingsStore = create<SettingsState>()(
       setThemeName: (name) => set({ themeName: name }),
 
       setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
+      setCodexAutoRenameLLMEnabled: (enabled) => set({ codexAutoRenameLLMEnabled: enabled }),
+      setCodexAutoRenameLLMModel: (model) => set({ codexAutoRenameLLMModel: model }),
       setLastOpenedCliVersion: (cli, version) =>
         set((s) => ({
           lastOpenedCliVersions: { ...s.lastOpenedCliVersions, [cli]: version },
@@ -1129,6 +1139,8 @@ export const useSettingsStore = create<SettingsState>()(
         workspaceNotes: state.workspaceNotes,
         themeName: state.themeName,
         notificationsEnabled: state.notificationsEnabled,
+        codexAutoRenameLLMEnabled: state.codexAutoRenameLLMEnabled,
+        codexAutoRenameLLMModel: state.codexAutoRenameLLMModel,
         cliVersions: state.cliVersions,
         lastOpenedCliVersions: state.lastOpenedCliVersions,
         previousCliVersions: state.previousCliVersions,

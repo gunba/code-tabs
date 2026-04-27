@@ -83,6 +83,7 @@ export function SettingsTab({ projectDir, cli, onStatus }: SettingsTabProps) {
 
   return (
     <div className="settings-tab">
+      {cli === "codex" && <CodexAppPrefs />}
       <div className="three-pane-grid" style={{ gridTemplateColumns: `repeat(${visibleScopes.length}, 1fr)` }}>
         {visibleScopes.map(({ value, label, colorVar, icon }) => (
           <div key={value} className="three-pane-column" style={{ "--scope-color": colorVar } as React.CSSProperties}>
@@ -223,6 +224,47 @@ function UnifiedSettingsReference({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Code Tabs preferences specific to Codex sessions. Lives above the
+ * config-file editors because these toggles change app behavior, not
+ * Codex's own config.toml.
+ */
+function CodexAppPrefs() {
+  const enabled = useSettingsStore((s) => s.codexAutoRenameLLMEnabled);
+  const model = useSettingsStore((s) => s.codexAutoRenameLLMModel);
+  const setEnabled = useSettingsStore((s) => s.setCodexAutoRenameLLMEnabled);
+  const setModel = useSettingsStore((s) => s.setCodexAutoRenameLLMModel);
+  return (
+    <div className="codex-app-prefs">
+      <div className="codex-app-prefs-title">Code Tabs preferences</div>
+      <label className="codex-app-prefs-row">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
+        <span className="codex-app-prefs-label">Auto-rename tabs via small model</span>
+        <span className="codex-app-prefs-hint">
+          On the first user message, generate a short tab title via <code>codex exec</code>.
+          Reuses your existing Codex auth.
+        </span>
+      </label>
+      <label className={`codex-app-prefs-row${enabled ? "" : " codex-app-prefs-row-disabled"}`}>
+        <span className="codex-app-prefs-label">Model</span>
+        <input
+          type="text"
+          className="codex-app-prefs-input"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          disabled={!enabled}
+          placeholder="gpt-5-mini"
+          spellCheck={false}
+        />
+      </label>
     </div>
   );
 }

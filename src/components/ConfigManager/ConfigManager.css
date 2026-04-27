@@ -1173,6 +1173,82 @@
   font-style: italic;
 }
 
+/* Code Tabs preferences (above the per-scope editors on the Settings tab,
+   visible only for Codex). Lives here because these toggles configure
+   Code Tabs behavior, not Codex's own config.toml. */
+.codex-app-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.codex-app-prefs-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.codex-app-prefs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+
+.codex-app-prefs-row-disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.codex-app-prefs-label {
+  font-weight: 500;
+}
+
+.codex-app-prefs-hint {
+  flex: 1 1 100%;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 22px;
+}
+
+.codex-app-prefs-hint code {
+  font-family: var(--font-mono);
+  background: var(--bg-secondary);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.codex-app-prefs-input {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  outline: none;
+  min-width: 180px;
+  transition: border-color 0.15s;
+}
+
+.codex-app-prefs-input:focus {
+  border-color: var(--accent);
+}
+
+.codex-app-prefs-input:disabled {
+  cursor: not-allowed;
+}
+
 .sr-panel-wide {
   max-height: 40%;
   border-top: none;

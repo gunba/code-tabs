@@ -290,6 +290,7 @@ pub fn run() {
             commands::insert_codex_toml_array_entry,
             commands::read_codex_spawn_env,
             commands::write_codex_spawn_env,
+            commands::generate_codex_session_title,
             cli_adapter::build_cli_spawn,
             cli_adapter::cli_launch_options,
             observability::codex_rollout::start_codex_rollout,

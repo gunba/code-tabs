@@ -905,6 +905,158 @@ fn current_codex_native_target() -> Option<(&'static str, &'static str, &'static
     None
 }
 
+// ── Session title generation (`codex exec` one-shot) ─────────────────
+//
+// [CO-06] generate_codex_session_title: 'codex exec --model X --ephemeral --output-last-message FILE --color never -c sandbox_mode=read-only -c approval_policy=never' one-shot reusing user's Codex auth; 60s timeout, 64-char output cap, RAII tempfile guard. Provider-symmetric with Claude Code's Haiku CustomTitle — see SL-23 for frontend trigger.
+//
+// Spawns `codex exec` against a small model to generate a 3-5 word tab
+// title from the user's first message. Reuses Codex's own auth (file /
+// keyring / env) so the user never re-enters credentials. Provider-
+// symmetric with Claude Code's Haiku-driven CustomTitle flow: each tab
+// gets renamed by its own provider's small model.
+
+const TITLE_PROMPT_TEMPLATE: &str = "Generate a 3-5 word title in sentence case for a coding session that begins with the user message below. Reply with ONLY the title — no quotes, no trailing punctuation, no preamble.\n\nUser message:\n<<<\n{prompt}\n>>>";
+
+const TITLE_TIMEOUT_SECS: u64 = 60;
+const TITLE_MAX_CHARS: usize = 64;
+const TITLE_PROMPT_MAX_CHARS: usize = 4_000;
+
+#[tauri::command]
+pub async fn generate_codex_session_title(
+    prompt: String,
+    model: String,
+) -> Result<String, String> {
+    let prompt = prompt.trim();
+    let model = model.trim();
+    if prompt.is_empty() {
+        return Err("empty prompt".into());
+    }
+    if model.is_empty() {
+        return Err("empty model".into());
+    }
+
+    let bin = detect_codex_cli_sync()?;
+
+    // Plain PathBuf + RAII guard instead of `tempfile` (which is a dev-only
+    // dependency in this crate). The guard removes the file on drop so we
+    // don't leak even on error paths.
+    let tmpfile_path = std::env::temp_dir().join(format!(
+        "code-tabs-codex-title-{}.txt",
+        uuid::Uuid::new_v4()
+    ));
+    struct TmpFileGuard(PathBuf);
+    impl Drop for TmpFileGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+    let _guard = TmpFileGuard(tmpfile_path.clone());
+
+    // Truncate very long prompts so we don't blow the model's input budget
+    // on a title call that only needs the first few hundred chars of context.
+    let trimmed_prompt: String = if prompt.chars().count() > TITLE_PROMPT_MAX_CHARS {
+        prompt
+            .chars()
+            .take(TITLE_PROMPT_MAX_CHARS)
+            .collect::<String>()
+    } else {
+        prompt.to_string()
+    };
+    let user_prompt = TITLE_PROMPT_TEMPLATE.replace("{prompt}", &trimmed_prompt);
+
+    // Run from the system temp dir so any stray tool call sees nothing
+    // interesting; sandbox_mode=read-only is the actual seatbelt.
+    let workdir = std::env::temp_dir();
+
+    let exec = tokio::process::Command::new(&bin)
+        .arg("exec")
+        .arg("--model")
+        .arg(model)
+        .arg("--ephemeral")
+        .arg("--output-last-message")
+        .arg(&tmpfile_path)
+        .arg("--color")
+        .arg("never")
+        .arg("-c")
+        .arg("sandbox_mode=read-only")
+        // `never` is what Codex recommends for non-interactive runs
+        // (`OnFailure` is documented as deprecated in protocol.rs); combined
+        // with `sandbox_mode=read-only` any tool write attempt fails inside
+        // the sandbox without prompting.
+        .arg("-c")
+        .arg("approval_policy=never")
+        .arg(&user_prompt)
+        .current_dir(&workdir)
+        .output();
+
+    let output = tokio::time::timeout(std::time::Duration::from_secs(TITLE_TIMEOUT_SECS), exec)
+        .await
+        .map_err(|_| "timeout".to_string())?
+        .map_err(|e| format!("spawn: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "codex exec exit {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    let raw = std::fs::read_to_string(&tmpfile_path)
+        .map_err(|e| format!("read tempfile: {e}"))?;
+    cleanup_title(&raw).ok_or_else(|| "empty title".to_string())
+}
+
+/// Clean up the LLM's title output: take the first non-empty line, strip
+/// surrounding quotes / trailing punctuation, cap to TITLE_MAX_CHARS.
+/// Returns None if nothing usable remains.
+fn cleanup_title(raw: &str) -> Option<String> {
+    let line = raw
+        .lines()
+        .map(|l| l.trim())
+        .find(|l| !l.is_empty())?
+        .to_string();
+
+    let mut s = line.trim().to_string();
+
+    // Strip surrounding matching quotes (single, double, or backtick).
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() >= 2 {
+        let first = chars[0];
+        let last = chars[chars.len() - 1];
+        if (first == '"' && last == '"')
+            || (first == '\'' && last == '\'')
+            || (first == '`' && last == '`')
+        {
+            s = chars[1..chars.len() - 1].iter().collect::<String>();
+            s = s.trim().to_string();
+        }
+    }
+
+    // Strip trailing sentence punctuation that the model may have added
+    // despite instructions.
+    s = s
+        .trim_end_matches(['.', '!', '?', ',', ';', ':'])
+        .trim()
+        .to_string();
+
+    // Cap length by char count (not byte count — handles multibyte).
+    if s.chars().count() > TITLE_MAX_CHARS {
+        s = s
+            .chars()
+            .take(TITLE_MAX_CHARS)
+            .collect::<String>()
+            .trim_end()
+            .to_string();
+    }
+
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1070,6 +1222,67 @@ mod tests {
             "expected project skill bar, got {names:?}"
         );
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn cleanup_title_trims_and_returns_simple_input() {
+        assert_eq!(
+            cleanup_title("Refactor function purity").as_deref(),
+            Some("Refactor function purity"),
+        );
+        assert_eq!(
+            cleanup_title("  Trim whitespace please  ").as_deref(),
+            Some("Trim whitespace please"),
+        );
+    }
+
+    #[test]
+    fn cleanup_title_strips_surrounding_quotes() {
+        assert_eq!(
+            cleanup_title("\"Quoted title here\"").as_deref(),
+            Some("Quoted title here"),
+        );
+        assert_eq!(
+            cleanup_title("'Single quoted'").as_deref(),
+            Some("Single quoted"),
+        );
+        assert_eq!(
+            cleanup_title("`Backtick title`").as_deref(),
+            Some("Backtick title"),
+        );
+    }
+
+    #[test]
+    fn cleanup_title_strips_trailing_punctuation() {
+        assert_eq!(
+            cleanup_title("Refactor the loop.").as_deref(),
+            Some("Refactor the loop"),
+        );
+        assert_eq!(
+            cleanup_title("Stop the bleeding!?").as_deref(),
+            Some("Stop the bleeding"),
+        );
+    }
+
+    #[test]
+    fn cleanup_title_takes_first_nonempty_line() {
+        let raw = "\n\nDebug auth flow\nSome rambling explanation that follows on the next line.\n";
+        assert_eq!(cleanup_title(raw).as_deref(), Some("Debug auth flow"));
+    }
+
+    #[test]
+    fn cleanup_title_caps_to_max_chars() {
+        let long = "a".repeat(TITLE_MAX_CHARS + 32);
+        let cleaned = cleanup_title(&long).expect("non-empty");
+        assert_eq!(cleaned.chars().count(), TITLE_MAX_CHARS);
+    }
+
+    #[test]
+    fn cleanup_title_rejects_empty() {
+        assert!(cleanup_title("").is_none());
+        assert!(cleanup_title("   \n\t  \n").is_none());
+        assert!(cleanup_title("''").is_none());
+        assert!(cleanup_title("\".\"").is_none());
     }
 
     // CODEX_HOME is process-global, so all auth.json read cases live in a
