@@ -3,6 +3,7 @@ import {
   registerBufferReader,
   unregisterBufferReader,
   getSessionTranscript,
+  getSessionViewport,
   registerTerminal,
   focusTerminal,
   unregisterTerminal,
@@ -31,7 +32,7 @@ function mockTerminal(altScreen = false) {
 }
 
 /** Terminal mock with scrollable buffer lines for scrollBufferToText tests. */
-function mockTerminalWithBuffer(lines: string[], rows = 24) {
+function mockTerminalWithBuffer(lines: string[], rows = 24, viewportY = 0) {
   const scrollToLine = vi.fn();
   return {
     term: {
@@ -41,6 +42,7 @@ function mockTerminalWithBuffer(lines: string[], rows = 24) {
         active: {
           type: "normal" as const,
           length: lines.length,
+          viewportY,
           getLine: (i: number) =>
             i >= 0 && i < lines.length
               ? { translateToString: () => lines[i] }
@@ -98,6 +100,23 @@ describe("terminalRegistry", () => {
 
     it("unregistering a non-existent session does not throw", () => {
       expect(() => unregisterBufferReader("nonexistent")).not.toThrow();
+    });
+  });
+
+  describe("viewport reader", () => {
+    it("returns null for unregistered session", () => {
+      expect(getSessionViewport("nonexistent")).toBeNull();
+    });
+
+    it("reads only visible viewport rows", () => {
+      const { term } = mockTerminalWithBuffer([
+        "line 0",
+        "line 1",
+        "line 2",
+        "line 3",
+      ], 2, 1);
+      registerTerminal(SID, term);
+      expect(getSessionViewport(SID)).toBe("line 1\nline 2");
     });
   });
 

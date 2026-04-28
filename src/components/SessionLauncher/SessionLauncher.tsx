@@ -511,7 +511,7 @@ export function SessionLauncher() {
 
   if (availableCliKinds.length === 0) {
     return (
-      <div className="launcher-overlay" onClick={dismissLauncher}>
+      <div className="launcher-overlay" data-modal-overlay onClick={dismissLauncher}>
         <div className="launcher" onClick={(e) => e.stopPropagation()}>
           <div className="launcher-error-content">
             <h2>No CLI installed</h2>
@@ -541,7 +541,7 @@ export function SessionLauncher() {
   // ── Main launcher ──
 
   return (
-    <div className="launcher-overlay" onClick={dismissLauncher}>
+    <div className="launcher-overlay" data-modal-overlay onClick={dismissLauncher}>
       <div className={`launcher provider-scope-${config.cli}`} onClick={(e) => e.stopPropagation()}>
 
         {/* Header */}

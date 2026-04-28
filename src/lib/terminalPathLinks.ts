@@ -15,15 +15,65 @@ interface ResolvedPath {
 // Optional :line[:col] suffix. Lookbehind rejects mid-token matches (URL
 // tails, filename fragments inside other identifiers).
 const PATH_RE =
-  /(?<![\w\/\\:.])(?:(?:[A-Za-z]:|~|\.{1,2})?[\/\\](?:[\w.\-]+[\/\\])*[\w.\-]+|[\w.\-]+(?:[\/\\][\w.\-]+)+|[\w\-]+\.[\w\-]{1,10})(?::\d+(?::\d+)?)?/g;
+  /(?<![\w\/\\:.])(?:(?:[A-Za-z]:|~|\.{1,2})?[\/\\](?:[\w.\-]+[\/\\])*[\w.\-]+|[\w.\-]+(?:[\/\\][\w.\-]+)+|[\w\-]+\.[\w\-]{1,10})(?::\d+(?::\d+)?)?(?![\w.\/\\:-])/g;
 
-// Trailing characters commonly stripped from path tokens found in prose.
+// Wrapper characters commonly stripped from path tokens found in prose.
+const LEADING_PUNCT_RE = /^[("'`<{\[]+/;
 const TRAILING_PUNCT_RE = /[).,;:"'>\]]+$/;
 
-function trimTrailingPunct(raw: string): string {
+function stripLineSuffix(candidate: string): string {
+  return candidate.replace(/:\d+(?::\d+)?$/, "");
+}
+
+function trimPathPunct(raw: string): string {
   // Preserve `:line[:col]` suffix: only trim non-digit trailing punct.
-  if (/:\d+(?::\d+)?$/.test(raw)) return raw;
-  return raw.replace(TRAILING_PUNCT_RE, "");
+  const trimmedLeading = raw.replace(LEADING_PUNCT_RE, "");
+  if (/:\d+(?::\d+)?$/.test(trimmedLeading)) return trimmedLeading;
+  return trimmedLeading.replace(TRAILING_PUNCT_RE, "");
+}
+
+function isPlausiblePathCandidate(candidate: string): boolean {
+  const withoutLineSuffix = stripLineSuffix(candidate);
+  if (withoutLineSuffix.includes("://")) return false;
+  const segments = withoutLineSuffix.split(/[\/\\]/);
+  if (segments.length > 1 && segments.every((segment) => /^\d+$/.test(segment))) {
+    return false;
+  }
+  if (!/[\/\\]/.test(withoutLineSuffix)) {
+    const parts = withoutLineSuffix.split(".");
+    if (parts.length !== 2) return false;
+    const [stem, ext] = parts;
+    if (!stem || !ext) return false;
+    if (/^\d+$/.test(stem)) return false;
+    if (stem.length === 1 && ext.length === 1) return false;
+  }
+  return true;
+}
+
+export interface PathLinkCandidate {
+  startCol: number; // 1-based
+  endCol: number; // 1-based inclusive
+  raw: string; // cleaned candidate string sent to backend
+}
+
+export function findPathLinkCandidates(text: string): PathLinkCandidate[] {
+  const candidates: PathLinkCandidate[] = [];
+  PATH_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = PATH_RE.exec(text)) !== null) {
+    if (m[0].length === 0) {
+      PATH_RE.lastIndex++;
+      continue;
+    }
+    const cleaned = trimPathPunct(m[0]);
+    if (!cleaned || m[0].includes("://") || !isPlausiblePathCandidate(cleaned)) continue;
+    candidates.push({
+      startCol: m.index + 1,
+      endCol: m.index + cleaned.length,
+      raw: cleaned,
+    });
+  }
+  return candidates;
 }
 
 interface CreateOptions {
@@ -31,41 +81,16 @@ interface CreateOptions {
   getCwd: () => string | null;
 }
 
-// Small LRU; cleared externally when cwd changes.
-const RESOLUTION_CACHE_CAP = 500;
-
 // [TP-01] xterm.js ILinkProvider: emits path tokens to the `resolve_paths`
 // Tauri command (literal + TTL-cached subtree lookup) and produces a
 // clickable link for any candidate the backend resolves to an existing
 // file. Click=shell_open, Ctrl/Cmd=reveal_in_file_manager.
 export function createPathLinkProvider({ term, getCwd }: CreateOptions): {
   provider: ILinkProvider;
-  clearCache: () => void;
 } {
-  // candidate string (post-trim) -> resolved absolute path (null = no match)
-  const resolutionCache = new Map<string, string | null>();
-  let cachedCwd: string | null = null;
-
-  const cacheSet = (candidate: string, abs: string | null) => {
-    resolutionCache.delete(candidate);
-    resolutionCache.set(candidate, abs);
-    if (resolutionCache.size > RESOLUTION_CACHE_CAP) {
-      const oldest = resolutionCache.keys().next().value;
-      if (oldest !== undefined) resolutionCache.delete(oldest);
-    }
-  };
-
-  const clearCache = () => {
-    resolutionCache.clear();
-  };
-
   const provider: ILinkProvider = {
     provideLinks(bufferLineNumber, callback) {
       const cwd = getCwd();
-      if (cachedCwd !== cwd) {
-        cachedCwd = cwd;
-        resolutionCache.clear();
-      }
 
       const buf = term.buffer.active;
       const line = buf.getLine(bufferLineNumber - 1);
@@ -79,28 +104,7 @@ export function createPathLinkProvider({ term, getCwd }: CreateOptions): {
         return;
       }
 
-      type Candidate = {
-        startCol: number; // 1-based
-        endCol: number; // 1-based inclusive
-        raw: string; // cleaned candidate string (sent to backend, cache key)
-      };
-      const candidates: Candidate[] = [];
-
-      PATH_RE.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = PATH_RE.exec(text)) !== null) {
-        if (m[0].length === 0) {
-          PATH_RE.lastIndex++;
-          continue;
-        }
-        const cleaned = trimTrailingPunct(m[0]);
-        if (!cleaned || cleaned.includes("://")) continue;
-        candidates.push({
-          startCol: m.index + 1,
-          endCol: m.index + cleaned.length,
-          raw: cleaned,
-        });
-      }
+      const candidates = findPathLinkCandidates(text);
 
       if (candidates.length === 0) {
         callback(undefined);
@@ -108,35 +112,34 @@ export function createPathLinkProvider({ term, getCwd }: CreateOptions): {
       }
 
       void (async () => {
-        const unresolved: string[] = [];
-        const seen = new Set<string>();
+        const uniqueCandidates: string[] = [];
+        const seenCandidates = new Set<string>();
         for (const c of candidates) {
-          if (!resolutionCache.has(c.raw) && !seen.has(c.raw)) {
-            unresolved.push(c.raw);
-            seen.add(c.raw);
+          if (!seenCandidates.has(c.raw)) {
+            uniqueCandidates.push(c.raw);
+            seenCandidates.add(c.raw);
           }
         }
 
-        if (unresolved.length > 0) {
-          try {
-            const resolved = await invoke<ResolvedPath[]>("resolve_paths", {
-              cwd,
-              candidates: unresolved,
-            });
-            for (const r of resolved) cacheSet(r.candidate, r.absPath);
-          } catch (err) {
-            // Fail closed: cache nulls so we don't spin on a broken backend.
-            for (const p of unresolved) cacheSet(p, null);
-            dlog("terminal", null, `resolve_paths failed: ${err}`, "WARN", {
-              event: "terminal.resolve_paths_failed",
-              data: { error: String(err) },
-            });
-          }
+        let resolved: ResolvedPath[];
+        try {
+          resolved = await invoke<ResolvedPath[]>("resolve_paths", {
+            cwd,
+            candidates: uniqueCandidates,
+          });
+        } catch (err) {
+          dlog("terminal", null, `resolve_paths failed: ${err}`, "WARN", {
+            event: "terminal.resolve_paths_failed",
+            data: { error: String(err) },
+          });
+          callback(undefined);
+          return;
         }
 
+        const resolvedByCandidate = new Map(resolved.map((r) => [r.candidate, r]));
         const links: ILink[] = [];
         for (const c of candidates) {
-          const abs = resolutionCache.get(c.raw) ?? null;
+          const abs = resolvedByCandidate.get(c.raw)?.absPath ?? null;
           if (!abs) continue;
           links.push({
             range: {
@@ -163,5 +166,5 @@ export function createPathLinkProvider({ term, getCwd }: CreateOptions): {
     },
   };
 
-  return { provider, clearCache };
+  return { provider };
 }

@@ -16,6 +16,12 @@ import { getResumeId } from "../lib/claude";
 import { IS_WINDOWS, IS_LINUX } from "../lib/paths";
 import { createPathLinkProvider } from "../lib/terminalPathLinks";
 import {
+  classifyTerminalKey,
+  getTerminalKeySequenceOverride,
+  isTerminalModalOpen,
+  SHIFT_ENTER_SEQUENCE,
+} from "../lib/terminalKeyShortcuts";
+import {
   createTerminalWriteQueue,
   enqueueTerminalWrite,
   getTerminalWriteQueueDepth,
@@ -25,29 +31,11 @@ import {
 } from "../lib/terminalWriteQueue";
 
 export const TERMINAL_FONT_FAMILY = "'Pragmasevka', 'Roboto Mono', 'ClaudeEmoji', monospace";
+export { getTerminalKeySequenceOverride, SHIFT_ENTER_SEQUENCE };
 
 // [DF-05] xterm.js 6.0 with DEC 2026 synchronized output — coalesces ink BSU/ESU diff frames so rapid TUI writes don't flash partial buffers.
 const XTVERSION_REPLY = "\x1bP>|xterm.js(6.0.0)\x1b\\";
-// [TA-12] SHIFT_ENTER_SEQUENCE: kitty-protocol \x1b[13;2u; getTerminalKeySequenceOverride intercepts Shift+Enter before xterm default
-export const SHIFT_ENTER_SEQUENCE = "\x1b[13;2u";
 const terminalOutputDecoder = new TextDecoder();
-
-type TerminalKeyEventLike = Pick<KeyboardEvent, "type" | "key" | "code" | "shiftKey" | "ctrlKey" | "altKey" | "metaKey">;
-
-export function getTerminalKeySequenceOverride(ev: TerminalKeyEventLike): string | null {
-  const isEnter = ev.key === "Enter" || ev.code === "Enter" || ev.code === "NumpadEnter";
-  if (
-    ev.type === "keydown" &&
-    isEnter &&
-    ev.shiftKey &&
-    !ev.ctrlKey &&
-    !ev.altKey &&
-    !ev.metaKey
-  ) {
-    return SHIFT_ENTER_SEQUENCE;
-  }
-  return null;
-}
 
 interface UseTerminalOptions {
   sessionId?: string | null;
@@ -409,129 +397,69 @@ export function useTerminal({
       // xterm.js convention: return false = "I handled this, suppress default"
       // return true = "let xterm.js handle normally"
       term.attachCustomKeyEventHandler((ev) => {
-        // Block all input when a modal overlay is open
-        if (document.querySelector('.launcher-overlay, .resume-picker-overlay, .modal-overlay, .palette-overlay, .inspector-overlay')) {
-          return false; // Suppress — modal is open
-        }
-        const keySequenceOverride = getTerminalKeySequenceOverride(ev);
-        if (keySequenceOverride !== null) {
+        const decision = classifyTerminalKey(ev, {
+          isLinux: IS_LINUX,
+          modalOpen: isTerminalModalOpen(),
+          hasSelection: term!.hasSelection(),
+        });
+
+        if (decision.kind === "passthrough") return true;
+        if (decision.kind === "swallow") return false;
+
+        if (decision.kind === "send") {
           dlog("terminal", sessionIdRef.current, "terminal key sequence override", "DEBUG", {
             event: "terminal.key_sequence_override",
             data: {
               key: ev.key,
               code: ev.code,
-              sequence: keySequenceOverride,
-              preview: escapePreview(keySequenceOverride),
+              sequence: decision.data,
+              preview: escapePreview(decision.data),
             },
           });
-          onDataRef.current?.(keySequenceOverride);
+          onDataRef.current?.(decision.data);
           return false;
         }
-        // Ctrl+Shift+C — Linux primary copy shortcut; copies selection if present.
-        // Always swallow to prevent xterm sending \x03 twice on Linux.
-        if (ev.ctrlKey && ev.shiftKey && (ev.key === "c" || ev.key === "C") && ev.type === "keydown") {
-          if (term!.hasSelection()) {
-            const selection = term!.getSelection();
-            dlog("terminal", sessionIdRef.current, "terminal selection copied (ctrl+shift+c)", "DEBUG", {
-              event: "terminal.copy_selection",
-              data: { length: selection.length, text: selection },
-            });
-            navigator.clipboard.writeText(selection);
-            term!.clearSelection();
-          }
-          return false;
-        }
-        if (ev.ctrlKey && !ev.shiftKey && ev.key === "c" && ev.type === "keydown") {
-          if (term!.hasSelection()) {
-            const selection = term!.getSelection();
-            dlog("terminal", sessionIdRef.current, "terminal selection copied", "DEBUG", {
-              event: "terminal.copy_selection",
-              data: {
-                length: selection.length,
-                text: selection,
-              },
-            });
-            navigator.clipboard.writeText(selection);
-            term!.clearSelection();
-            return false; // We handled it — don't send to PTY
-          }
-        }
-        // Ctrl+Shift+V — cross-platform text paste. Reads via Tauri clipboard plugin
-        // (navigator.clipboard.readText silently fails on webkit2gtk/Wayland). Text is
-        // delivered to the PTY via xterm's bracketed paste, which Claude Code's TUI reads.
-        if (ev.ctrlKey && ev.shiftKey && (ev.key === "v" || ev.key === "V") && ev.type === "keydown") {
-          clipboardReadText().then((text) => {
-            dlog("terminal", sessionIdRef.current, "terminal paste requested (ctrl+shift+v)", "DEBUG", {
-              event: "terminal.paste",
-              data: { length: text?.length ?? 0, text },
-            });
-            if (text) term!.paste(text);
-          }).catch((err) => {
-            dlog("terminal", sessionIdRef.current, `clipboard paste failed: ${err}`, "WARN", {
-              event: "terminal.paste_failed",
-              data: { error: String(err) },
-            });
-          });
-          return false;
-        }
-        // Handle Ctrl+V paste — read clipboard and insert into terminal
-        if (ev.ctrlKey && !ev.shiftKey && ev.key === "v" && ev.type === "keydown") {
-          // Linux: let xterm send ^V to PTY so Claude Code's chat:imagePaste keybind runs
-          // its native wl-paste image read (text paste on Linux goes through Ctrl+Shift+V).
-          if (IS_LINUX) return true;
-          clipboardReadText().then((text) => {
-            dlog("terminal", sessionIdRef.current, "terminal paste requested", "DEBUG", {
-              event: "terminal.paste",
-              data: {
-                length: text?.length ?? 0,
-                text,
-              },
-            });
-            if (text) term!.paste(text);
-          }).catch((err) => {
-            dlog("terminal", sessionIdRef.current, `clipboard paste failed: ${err}`, "WARN", {
-              event: "terminal.paste_failed",
-              data: { error: String(err) },
-            });
-          });
-          return false; // We handled it
-        }
-        // [TR-03] Ctrl+Home: scroll to top
-        if (ev.ctrlKey && ev.key === "Home" && ev.type === "keydown") {
-          term!.scrollToTop();
-          return false; // We handled it
-        }
-        // [TR-03] Ctrl+End: scroll to bottom
-        if (ev.ctrlKey && ev.key === "End" && ev.type === "keydown") {
-          term!.scrollToBottom();
-          return false; // We handled it
-        }
-        // [KB-10] Alt+1-9 blocked from PTY — handled by App.tsx global tab-switch handler
-        if (ev.altKey && ev.key >= "0" && ev.key <= "9" && ev.type === "keydown") {
-          return false; // We handled it (App.tsx will process)
-        }
-        // App-level shortcuts: return false to prevent xterm.js from processing
-        // (its key encoder calls stopPropagation, killing event bubbling to App.tsx).
-        if (ev.type === "keydown") {
-          if (ev.ctrlKey && !ev.shiftKey && !ev.altKey &&
-              (ev.key === "t" || ev.key === "w" || ev.key === "k" || ev.key === ",")) {
+
+        switch (decision.action) {
+          case "copySelection":
+            if (term!.hasSelection()) {
+              const selection = term!.getSelection();
+              dlog("terminal", sessionIdRef.current, "terminal selection copied", "DEBUG", {
+                event: "terminal.copy_selection",
+                data: { length: selection.length, text: selection },
+              });
+              navigator.clipboard.writeText(selection);
+              term!.clearSelection();
+            }
             return false;
-          }
-          if (ev.ctrlKey && ev.shiftKey && ev.key === "T" && !ev.altKey) {
+
+          case "pasteClipboard":
+            clipboardReadText().then((text) => {
+              dlog("terminal", sessionIdRef.current, "terminal paste requested", "DEBUG", {
+                event: "terminal.paste",
+                data: {
+                  length: text?.length ?? 0,
+                  text,
+                },
+              });
+              if (text) term!.paste(text);
+            }).catch((err) => {
+              dlog("terminal", sessionIdRef.current, `clipboard paste failed: ${err}`, "WARN", {
+                event: "terminal.paste_failed",
+                data: { error: String(err) },
+              });
+            });
             return false;
-          }
-          if (ev.ctrlKey && ev.key === "Tab") {
+
+          case "scrollTop":
+            term!.scrollToTop();
             return false;
-          }
-          if (ev.ctrlKey && ev.shiftKey && !ev.altKey &&
-              (ev.key === "D" || ev.key === "F" || ev.key === "G" || ev.key === "I" || ev.key === "R")) {
+
+          case "scrollBottom":
+            term!.scrollToBottom();
             return false;
-          }
-          if (ev.key === "Escape") {
-            return false;
-          }
         }
-        return true; // Let xterm.js handle normally
+        return false;
       });
 
       termRef.current = term;
@@ -718,13 +646,13 @@ export function useTerminal({
           });
         }
         writeInFlightRef.current = false;
-        flushWriteQueue();
+        queueMicrotask(flushWriteQueue);
       });
     } catch (err) {
       span.fail(err);
       writeInFlightRef.current = false;
       dlog("terminal", sid, `term.write error: ${err}`, "ERR");
-      flushWriteQueue();
+      queueMicrotask(flushWriteQueue);
     }
   }, []);
 

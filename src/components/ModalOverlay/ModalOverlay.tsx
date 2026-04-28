@@ -18,6 +18,7 @@ export function ModalOverlay({ children, onClose, className, closeOnBackdropClic
       ref={overlayRef}
       tabIndex={-1}
       className="modal-overlay"
+      data-modal-overlay
       onClick={closeOnBackdropClick ? onClose : undefined}
       onKeyDown={(e) => {
         // Let Escape and Ctrl+, propagate to global handler

@@ -485,7 +485,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
   }, [onClose, displayList, selectedIndex, handleResume, handleConfigure, handleRevealFile, contextMenu, viewingConversation]);
 
   return (
-    <div className="resume-picker-overlay" onClick={onClose}>
+    <div className="resume-picker-overlay" data-modal-overlay onClick={onClose}>
       <div className="resume-picker" onClick={(e) => e.stopPropagation()}>
         <div className="resume-picker-title">Resume Session</div>
 

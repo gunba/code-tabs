@@ -18,6 +18,19 @@ export function getSessionTranscript(sessionId: string): string | null {
   return reader ? reader() : null;
 }
 
+export function getSessionViewport(sessionId: string): string | null {
+  const term = terminals.get(sessionId);
+  if (!term) return null;
+  const buf = term.buffer.active;
+  const lines: string[] = [];
+  const start = buf.viewportY;
+  const end = Math.min(buf.length, start + term.rows);
+  for (let i = start; i < end; i++) {
+    lines.push(buf.getLine(i)?.translateToString(true) ?? "");
+  }
+  return lines.join("\n");
+}
+
 export function registerTerminal(sessionId: string, term: Terminal): void {
   terminals.set(sessionId, term);
 }

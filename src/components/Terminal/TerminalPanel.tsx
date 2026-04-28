@@ -670,7 +670,7 @@ export const TerminalPanel = memo(function TerminalPanel({ session, visible }: T
     if (!visible) return;
 
     let cancelled = false;
-    const overlaySelector = ".launcher-overlay, .resume-picker-overlay, .modal-overlay, .palette-overlay, .diff-panel";
+    const overlaySelector = "[data-modal-overlay], .launcher-overlay, .resume-picker-overlay, .modal-overlay, .palette-overlay, .diff-panel";
     const interactiveSelector = "button, input, textarea, select, [role=button], [role=tab], a[href], [contenteditable=true]";
 
     const handleFocusOut = () => {

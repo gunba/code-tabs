@@ -217,7 +217,7 @@ export function SubagentInspector({ subagent, onClose }: SubagentInspectorProps)
   if (subagent.messages.length > 0) metaParts.push(`${subagent.messages.length} msgs`);
 
   return (
-    <div className="inspector-overlay">
+    <div className="inspector-overlay" data-modal-overlay>
       <div className="inspector-header">
         <span className="inspector-header-status">
           {subagent.completed

@@ -1,4 +1,4 @@
-import { getSessionTranscript, waitForRender, isAltScreen, scrollBufferToText } from "./terminalRegistry";
+import { getSessionViewport, waitForRender, isAltScreen, scrollBufferToText } from "./terminalRegistry";
 import { writeToPty } from "./ptyRegistry";
 import { dlog } from "./debugLog";
 
@@ -20,7 +20,7 @@ function normalizeTargets(targetText: string | string[]): string[] {
 }
 
 function viewportIncludesTarget(sessionId: string, normalizedTargets: string[]): boolean {
-  const currentText = getSessionTranscript(sessionId);
+  const currentText = getSessionViewport(sessionId);
   if (!currentText) return false;
   const normalized = normalizeText(currentText);
   return normalizedTargets.some((target) => normalized.includes(target));
@@ -32,7 +32,7 @@ async function scrollToTuiEdge(
   normalizedTargets: string[],
   signal: AbortSignal,
 ): Promise<boolean> {
-  let prevViewport = getSessionTranscript(sessionId) ?? "";
+  let prevViewport = getSessionViewport(sessionId) ?? "";
   const MAX_SCROLLS = 500;
 
   for (let i = 0; i < MAX_SCROLLS; i++) {
@@ -43,7 +43,7 @@ async function scrollToTuiEdge(
 
     if (viewportIncludesTarget(sessionId, normalizedTargets)) return true;
 
-    const viewport = getSessionTranscript(sessionId) ?? "";
+    const viewport = getSessionViewport(sessionId) ?? "";
     if (viewport === prevViewport) return false;
     prevViewport = viewport;
   }
@@ -98,7 +98,7 @@ export async function scrollTuiToText(
 
     if (signal.aborted) return false;
 
-    const viewport = getSessionTranscript(sessionId) ?? "";
+    const viewport = getSessionViewport(sessionId) ?? "";
     const normalized = normalizeText(viewport);
 
     // Check if target text is now visible

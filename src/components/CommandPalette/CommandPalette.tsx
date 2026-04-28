@@ -117,7 +117,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   );
 
   return (
-    <div className="palette-overlay" onClick={onClose}>
+    <div className="palette-overlay" data-modal-overlay onClick={onClose}>
       <div className="palette" onClick={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
