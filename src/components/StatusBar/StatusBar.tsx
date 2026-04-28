@@ -82,7 +82,6 @@ function SessionStatus({
   );
   const observabilityEnabled = useRuntimeStore((s) => s.observabilityInfo.observabilityEnabled);
   const health = useSessionStore((s) => s.processHealth.get(session.id));
-  const apiIp = useSettingsStore((s) => s.apiIp);
   const model = effectiveModel(session);
   const wt = parseWorktreePath(session.config.workingDir);
   const effort = session.metadata.effortLevel ?? session.config.effort;
@@ -112,7 +111,6 @@ function SessionStatus({
         <span className="status-item status-model" title={
           (m.apiRegion || m.pingRttMs > 0)
             ? `Cloudflare POP: ${m.apiRegion || "—"}` +
-              (apiIp ? ` · IP: ${apiIp}` : "") +
               (m.pingRttMs > 0 ? ` · RTT: ${Math.round(m.pingRttMs)}ms` : "") +
               (m.tokPerSec > 0 ? ` · ${Math.round(m.tokPerSec)} tok/s` : "")
             : "Model"
@@ -127,11 +125,6 @@ function SessionStatus({
         {perm && (
           <span className="status-item status-perm" title={perm.tip}>
             {perm.icon}
-          </span>
-        )}
-        {apiIp && (
-          <span className="status-item" style={{ opacity: 0.5 }}>
-            {apiIp}
           </span>
         )}
         {(m.pingRttMs > 0 || m.tokPerSec > 0) && (

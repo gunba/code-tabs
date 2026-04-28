@@ -216,7 +216,6 @@ interface SettingsState {
   observedPrompts: ObservedPrompt[];
   savedPrompts: Array<{ id: string; name: string; text: string }>;
   proxyPort: number | null;
-  apiIp: string | null;
   systemPromptRules: SystemPromptRule[];
   modelRegistry: Record<string, ModelRegistryEntry>;
   recordingConfig: RecordingConfig;
@@ -257,7 +256,6 @@ interface SettingsState {
   updateSavedPrompt: (id: string, updates: { name?: string; text?: string }) => void;
   removeSavedPrompt: (id: string) => void;
   setProxyPort: (port: number | null) => void;
-  setApiIp: (ip: string) => void;
   addSystemPromptRule: () => void;
   updateSystemPromptRule: (id: string, updates: Partial<Omit<SystemPromptRule, "id">>) => void;
   removeSystemPromptRule: (id: string) => void;
@@ -309,7 +307,6 @@ export const useSettingsStore = create<SettingsState>()(
       observedPrompts: [],
       savedPrompts: [],
       proxyPort: null,
-      apiIp: null,
       systemPromptRules: [],
       modelRegistry: {},
       recordingConfig: defaultRecordingConfig(),
@@ -730,7 +727,6 @@ export const useSettingsStore = create<SettingsState>()(
       })),
 
       setProxyPort: (port) => set({ proxyPort: port }),
-      setApiIp: (ip) => set({ apiIp: ip }),
 
       addSystemPromptRule: () => set((s) => ({
         systemPromptRules: [...s.systemPromptRules, {

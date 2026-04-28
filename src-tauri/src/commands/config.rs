@@ -47,7 +47,8 @@ pub fn read_ui_config(app: AppHandle) -> Result<String, String> {
 pub fn write_ui_config(config_json: String) -> Result<(), String> {
     let data_dir = get_data_dir()?;
     let path = data_dir.join("ui-config.json");
-    std::fs::write(&path, config_json).map_err(|e| format!("Failed to write ui-config.json: {}", e))
+    atomic_write(&path, config_json.as_bytes())
+        .map_err(|e| format!("Failed to write ui-config.json: {}", e))
 }
 
 /// Discover hooks from Claude Code settings files.
@@ -117,16 +118,9 @@ pub fn discover_hooks(
 /// working_dir: project directory (needed for project scopes)
 #[tauri::command]
 pub fn save_hooks(scope: String, working_dir: String, hooks_json: String) -> Result<(), String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
-
     let settings_path = match scope.as_str() {
-        "user" => home.join(".claude").join("settings.json"),
-        "project" => std::path::Path::new(&working_dir)
-            .join(".claude")
-            .join("settings.json"),
-        "project-local" => std::path::Path::new(&working_dir)
-            .join(".claude")
-            .join("settings.local.json"),
+        "project-local" => claude_root("project", &working_dir)?.join("settings.local.json"),
+        "user" | "project" => claude_root(&scope, &working_dir)?.join("settings.json"),
         _ => return Err("Invalid scope".into()),
     };
 
@@ -135,10 +129,6 @@ pub fn save_hooks(scope: String, working_dir: String, hooks_json: String) -> Res
         let content = std::fs::read_to_string(&settings_path).map_err(|e| e.to_string())?;
         serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
     } else {
-        // Create .claude directory if needed
-        if let Some(parent) = settings_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
         serde_json::json!({})
     };
 
@@ -148,7 +138,7 @@ pub fn save_hooks(scope: String, working_dir: String, hooks_json: String) -> Res
 
     // Write back
     let output = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    std::fs::write(&settings_path, output).map_err(|e| e.to_string())?;
+    atomic_write(&settings_path, output.as_bytes()).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -170,21 +160,43 @@ fn validate_md_file_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-// [CD-01] codex_config_path / codex_hooks_json_path / read_codex_config_value / write_codex_config_value (atomic TOML); file_type variants codex-config, agentsmd-*, codex-skill[-delete]:
-fn codex_config_path(scope: &str, working_dir: &str) -> Result<std::path::PathBuf, String> {
+fn claude_root(scope: &str, working_dir: &str) -> Result<std::path::PathBuf, String> {
     let home = dirs::home_dir().ok_or("No home dir")?;
     match scope {
-        "user" => Ok(home.join(".codex").join("config.toml")),
+        "user" => Ok(home.join(".claude")),
+        "project" => Ok(std::path::Path::new(working_dir).join(".claude")),
+        _ => Err("Invalid scope".into()),
+    }
+}
+
+fn codex_root(scope: &str, working_dir: &str) -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    match scope {
+        "user" => Ok(home.join(".codex")),
         "project" => {
             if working_dir.is_empty() {
                 return Err("working_dir required for project scope".into());
             }
-            Ok(std::path::Path::new(working_dir)
-                .join(".codex")
-                .join("config.toml"))
+            Ok(std::path::Path::new(working_dir).join(".codex"))
         }
         _ => Err("Invalid scope".into()),
     }
+}
+
+fn codex_skill_root(scope: &str, working_dir: &str) -> Result<std::path::PathBuf, String> {
+    let home = dirs::home_dir().ok_or("No home dir")?;
+    match scope {
+        "user" => Ok(home.join(".agents").join("skills")),
+        "project" => Ok(std::path::Path::new(working_dir)
+            .join(".agents")
+            .join("skills")),
+        _ => Err("Invalid scope".into()),
+    }
+}
+
+// [CD-01] codex_config_path / codex_hooks_json_path / read_codex_config_value / write_codex_config_value (atomic TOML); file_type variants codex-config, agentsmd-*, codex-skill[-delete]:
+fn codex_config_path(scope: &str, working_dir: &str) -> Result<std::path::PathBuf, String> {
+    Ok(codex_root(scope, working_dir)?.join("config.toml"))
 }
 
 fn codex_hooks_json_path(scope: &str, working_dir: &str) -> Result<std::path::PathBuf, String> {
@@ -210,11 +222,22 @@ fn read_codex_config_value(path: &std::path::Path) -> Result<toml::Value, String
 fn write_codex_config_value(path: &std::path::Path, value: &toml::Value) -> Result<(), String> {
     let output =
         toml::to_string_pretty(value).map_err(|e| format!("Failed to serialize TOML: {e}"))?;
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create dir: {}", e))?;
-    }
     atomic_write(path, output.as_bytes())
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
+}
+
+fn with_codex_config(
+    scope: &str,
+    working_dir: &str,
+    f: impl FnOnce(&mut toml::value::Table) -> Result<(), String>,
+) -> Result<(), String> {
+    let path = codex_config_path(scope, working_dir)?;
+    let mut config = read_codex_config_value(&path)?;
+    let table = config
+        .as_table_mut()
+        .ok_or("Codex config root is not a table")?;
+    f(table)?;
+    write_codex_config_value(&path, &config)
 }
 
 fn json_to_toml_value(v: serde_json::Value) -> Option<toml::Value> {
@@ -247,8 +270,59 @@ fn json_to_toml_value(v: serde_json::Value) -> Option<toml::Value> {
     }
 }
 
+fn toml_value_to_edit_item(value: toml::Value) -> toml_edit::Item {
+    use toml_edit::value as tev;
+    match value {
+        toml::Value::String(s) => tev(s),
+        toml::Value::Integer(i) => tev(i),
+        toml::Value::Float(f) => tev(f),
+        toml::Value::Boolean(b) => tev(b),
+        toml::Value::Datetime(d) => tev(d.to_string()),
+        toml::Value::Array(items) => {
+            let mut array = toml_edit::Array::new();
+            for item in items {
+                if let toml_edit::Item::Value(value) = toml_value_to_edit_item(item) {
+                    array.push(value);
+                }
+            }
+            toml_edit::Item::Value(toml_edit::Value::Array(array))
+        }
+        toml::Value::Table(table) => {
+            let mut edit_table = toml_edit::Table::new();
+            for (key, value) in table {
+                edit_table.insert(&key, toml_value_to_edit_item(value));
+            }
+            toml_edit::Item::Table(edit_table)
+        }
+    }
+}
+
 fn toml_value_to_json(v: toml::Value) -> serde_json::Value {
     serde_json::to_value(v).unwrap_or_else(|_| serde_json::json!({}))
+}
+
+fn canonical_json_value(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(canonical_json_value).collect())
+        }
+        serde_json::Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            let mut out = serde_json::Map::new();
+            for key in keys {
+                if let Some(value) = map.get(key) {
+                    out.insert(key.clone(), canonical_json_value(value));
+                }
+            }
+            serde_json::Value::Object(out)
+        }
+        other => other.clone(),
+    }
+}
+
+fn canonical_json_key(value: &serde_json::Value) -> String {
+    serde_json::to_string(&canonical_json_value(value)).unwrap_or_default()
 }
 
 fn merge_hook_values(base: &mut serde_json::Value, incoming: serde_json::Value) {
@@ -262,8 +336,10 @@ fn merge_hook_values(base: &mut serde_json::Value, incoming: serde_json::Value) 
     for (event_name, event_hooks) in incoming_obj {
         match (base_obj.get_mut(event_name), event_hooks) {
             (Some(serde_json::Value::Array(existing)), serde_json::Value::Array(new_hooks)) => {
+                let mut seen: std::collections::HashSet<String> =
+                    existing.iter().map(canonical_json_key).collect();
                 for hook in new_hooks {
-                    if !existing.iter().any(|e| e == hook) {
+                    if seen.insert(canonical_json_key(hook)) {
                         existing.push(hook.clone());
                     }
                 }
@@ -299,7 +375,7 @@ fn read_codex_hooks_for_scope(scope: &str, working_dir: &str) -> Result<serde_js
     Ok(hooks)
 }
 
-// [CH-01] discover_codex_hooks merges config.toml [hooks] + hooks.json (array-extend); save_codex_hooks writes ONLY to config.toml [hooks] and force-sets features.codex_hooks=true. KNOWN BUG: save->reload doubles hooks.json entries.
+// [CH-01] discover_codex_hooks merges config.toml [hooks] + hooks.json (array-extend with canonical dedupe); save_codex_hooks writes ONLY to config.toml [hooks] and force-sets features.codex_hooks=true.
 #[tauri::command]
 pub fn discover_codex_hooks(
     app: AppHandle,
@@ -357,43 +433,30 @@ pub fn save_codex_hooks(
     working_dir: String,
     hooks_json: String,
 ) -> Result<(), String> {
-    let path = codex_config_path(&scope, &working_dir)?;
-    let mut config = read_codex_config_value(&path)?;
-    let table = config
-        .as_table_mut()
-        .ok_or("Codex config root is not a table")?;
-
     let hooks: serde_json::Value = serde_json::from_str(&hooks_json).map_err(|e| e.to_string())?;
-    if let Some(hooks_toml) = json_to_toml_value(hooks) {
-        table.insert("hooks".to_string(), hooks_toml);
-    } else {
-        table.remove("hooks");
-    }
+    with_codex_config(&scope, &working_dir, |table| {
+        if let Some(hooks_toml) = json_to_toml_value(hooks) {
+            table.insert("hooks".to_string(), hooks_toml);
+        } else {
+            table.remove("hooks");
+        }
 
-    let needs_feature_flag = !table
-        .get("features")
-        .and_then(|f| f.as_table())
-        .and_then(|f| f.get("codex_hooks"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if needs_feature_flag {
-        let features = table
-            .entry("features".to_string())
-            .or_insert_with(|| toml::Value::Table(toml::value::Table::new()))
-            .as_table_mut()
-            .ok_or("features is not a table")?;
-        features.insert("codex_hooks".to_string(), toml::Value::Boolean(true));
-    }
-
-    write_codex_config_value(&path, &config)?;
-
-    let hooks_json_path = codex_hooks_json_path(&scope, &working_dir)?;
-    if hooks_json_path.exists() {
-        atomic_write(&hooks_json_path, b"{}")
-            .map_err(|e| format!("Failed to clear {}: {}", hooks_json_path.display(), e))?;
-    }
-
-    Ok(())
+        let needs_feature_flag = !table
+            .get("features")
+            .and_then(|f| f.as_table())
+            .and_then(|f| f.get("codex_hooks"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if needs_feature_flag {
+            let features = table
+                .entry("features".to_string())
+                .or_insert_with(|| toml::Value::Table(toml::value::Table::new()))
+                .as_table_mut()
+                .ok_or("features is not a table")?;
+            features.insert("codex_hooks".to_string(), toml::Value::Boolean(true));
+        }
+        Ok(())
+    })
 }
 
 // [CD-02] Codex spawn-env sidecar (~/.config or %APPDATA%/code-tabs/codex-spawn-env/<scope>.json). Stores per-scope env vars Code Tabs injects when launching Codex; sidecar lives in Code Tabs appdata (NOT in project tree) so OPENAI_API_KEY etc. don't leak into git.
@@ -406,7 +469,8 @@ fn codex_spawn_env_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
         .app_data_dir()
         .map_err(|e| format!("Failed to resolve appdata dir: {e}"))?;
     let dir = base.join("codex-spawn-env");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create {}: {}", dir.display(), e))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create {}: {}", dir.display(), e))?;
     Ok(dir)
 }
 
@@ -427,22 +491,16 @@ fn codex_spawn_env_file(
     working_dir: &str,
 ) -> Result<std::path::PathBuf, String> {
     let dir = codex_spawn_env_dir(app)?;
-    match scope {
-        "user" => Ok(dir.join("user.json")),
-        "project" => {
-            if working_dir.is_empty() {
-                return Err("working_dir required for project scope".into());
-            }
-            Ok(dir.join(format!("project-{}.json", project_hash(working_dir))))
-        }
-        "project-local" => {
-            if working_dir.is_empty() {
-                return Err("working_dir required for project-local scope".into());
-            }
-            Ok(dir.join(format!("project-local-{}.json", project_hash(working_dir))))
-        }
-        _ => Err(format!("Invalid scope: {scope}")),
+    let suffix = match scope {
+        "user" => return Ok(dir.join("user.json")),
+        "project" => "project",
+        "project-local" => "project-local",
+        _ => return Err(format!("Invalid scope: {scope}")),
+    };
+    if working_dir.is_empty() {
+        return Err(format!("working_dir required for {suffix} scope"));
     }
+    Ok(dir.join(format!("{}-{}.json", suffix, project_hash(working_dir))))
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -622,7 +680,10 @@ pub fn insert_codex_toml_array_entry(
             .as_array_of_tables_mut()
             .ok_or_else(|| format!("`{last}` exists but is not an array of tables"))?
     } else {
-        parent_table.insert(last, toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()));
+        parent_table.insert(
+            last,
+            toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()),
+        );
         parent_table[last].as_array_of_tables_mut().unwrap()
     };
     array.push(entry_table);
@@ -632,38 +693,150 @@ pub fn insert_codex_toml_array_entry(
 /// Convert a serde_json value to a `toml_edit::Item`. Returns `None` for
 /// JSON `null` (TOML has no null). Used by both insert helpers.
 fn json_to_toml_edit_item(value: serde_json::Value) -> Option<toml_edit::Item> {
-    use toml_edit::value as tev;
-    match value {
-        serde_json::Value::Null => None,
-        serde_json::Value::Bool(b) => Some(tev(b)),
-        serde_json::Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Some(tev(i))
-            } else if let Some(f) = n.as_f64() {
-                Some(tev(f))
-            } else {
-                Some(tev(n.to_string()))
-            }
+    json_to_toml_value(value).map(toml_value_to_edit_item)
+}
+
+enum WorkspaceMdFile {
+    User,
+    Root,
+    Local,
+}
+
+enum ClaudeSkillKind {
+    Command,
+    Skill,
+}
+
+enum ConfigKind {
+    CodexConfig,
+    Settings,
+    ClaudeMd(WorkspaceMdFile),
+    AgentsMd(WorkspaceMdFile),
+    Agent { name: String },
+    ClaudeSkill { kind: ClaudeSkillKind, name: String },
+    CodexSkill { name: String },
+}
+
+impl ConfigKind {
+    fn parse(file_type: &str) -> Result<Self, String> {
+        match file_type {
+            "codex-config" => Ok(Self::CodexConfig),
+            "settings" => Ok(Self::Settings),
+            "claudemd-user" => Ok(Self::ClaudeMd(WorkspaceMdFile::User)),
+            "claudemd-root" => Ok(Self::ClaudeMd(WorkspaceMdFile::Root)),
+            "claudemd-local" => Ok(Self::ClaudeMd(WorkspaceMdFile::Local)),
+            "agentsmd-user" => Ok(Self::AgentsMd(WorkspaceMdFile::User)),
+            "agentsmd-root" => Ok(Self::AgentsMd(WorkspaceMdFile::Root)),
+            "agentsmd-local" => Ok(Self::AgentsMd(WorkspaceMdFile::Local)),
+            _ => Self::parse_dynamic(file_type),
         }
-        serde_json::Value::String(s) => Some(tev(s)),
-        serde_json::Value::Array(items) => {
-            let mut arr = toml_edit::Array::new();
-            for item in items {
-                let Some(toml_item) = json_to_toml_edit_item(item) else { continue; };
-                if let toml_edit::Item::Value(v) = toml_item {
-                    arr.push(v);
+    }
+
+    fn parse_dynamic(file_type: &str) -> Result<Self, String> {
+        if let Some(name) = file_type
+            .strip_prefix("agent:")
+            .or_else(|| file_type.strip_prefix("agent-delete:"))
+        {
+            validate_md_file_name(name)?;
+            return Ok(Self::Agent {
+                name: name.to_string(),
+            });
+        }
+
+        if let Some(rest) = file_type
+            .strip_prefix("skill:")
+            .or_else(|| file_type.strip_prefix("skill-delete:"))
+        {
+            let (kind, name) = rest.split_once(':').ok_or_else(|| {
+                format!(
+                    "Invalid file_type '{}': expected '<prefix>:<kind>:<name>'",
+                    file_type
+                )
+            })?;
+            validate_md_file_name(name)?;
+            let kind = match kind {
+                "command" => ClaudeSkillKind::Command,
+                "skill" => ClaudeSkillKind::Skill,
+                other => {
+                    return Err(format!(
+                        "Invalid kind '{}': expected 'command' or 'skill'",
+                        other
+                    ));
+                }
+            };
+            return Ok(Self::ClaudeSkill {
+                kind,
+                name: name.to_string(),
+            });
+        }
+
+        if let Some(name) = file_type
+            .strip_prefix("codex-skill:")
+            .or_else(|| file_type.strip_prefix("codex-skill-delete:"))
+        {
+            validate_md_file_name(name)?;
+            return Ok(Self::CodexSkill {
+                name: name.to_string(),
+            });
+        }
+
+        Err(format!("Unknown file_type: {}", file_type))
+    }
+
+    fn resolve(&self, scope: &str, working_dir: &str) -> Result<std::path::PathBuf, String> {
+        match self {
+            Self::CodexConfig => codex_config_path(scope, working_dir),
+            Self::Settings => match scope {
+                "user" | "project" => Ok(claude_root(scope, working_dir)?.join("settings.json")),
+                "project-local" => {
+                    Ok(claude_root("project", working_dir)?.join("settings.local.json"))
+                }
+                _ => Err("Invalid scope".into()),
+            },
+            Self::ClaudeMd(kind) => {
+                let home = dirs::home_dir().ok_or("No home dir")?;
+                match kind {
+                    WorkspaceMdFile::User => Ok(home.join(".claude").join("CLAUDE.md")),
+                    WorkspaceMdFile::Root => {
+                        Ok(std::path::Path::new(working_dir).join("CLAUDE.md"))
+                    }
+                    WorkspaceMdFile::Local => {
+                        Ok(std::path::Path::new(working_dir).join("CLAUDE.local.md"))
+                    }
                 }
             }
-            Some(toml_edit::Item::Value(toml_edit::Value::Array(arr)))
-        }
-        serde_json::Value::Object(map) => {
-            let mut table = toml_edit::Table::new();
-            for (k, v) in map {
-                if let Some(item) = json_to_toml_edit_item(v) {
-                    table.insert(&k, item);
+            Self::AgentsMd(kind) => {
+                let home = dirs::home_dir().ok_or("No home dir")?;
+                match kind {
+                    WorkspaceMdFile::User => Ok(home.join(".codex").join("AGENTS.md")),
+                    WorkspaceMdFile::Root => {
+                        Ok(std::path::Path::new(working_dir).join("AGENTS.md"))
+                    }
+                    WorkspaceMdFile::Local => {
+                        Ok(std::path::Path::new(working_dir).join("AGENTS.local.md"))
+                    }
                 }
             }
-            Some(toml_edit::Item::Table(table))
+            Self::Agent { name } => match scope {
+                "user" | "project" => Ok(claude_root(scope, working_dir)?
+                    .join("agents")
+                    .join(format!("{}.md", name))),
+                _ => Err("Invalid scope".into()),
+            },
+            Self::ClaudeSkill { kind, name } => {
+                let claude_dir = claude_root(scope, working_dir)?;
+                match kind {
+                    ClaudeSkillKind::Command => {
+                        Ok(claude_dir.join("commands").join(format!("{}.md", name)))
+                    }
+                    ClaudeSkillKind::Skill => {
+                        Ok(claude_dir.join("skills").join(name).join("SKILL.md"))
+                    }
+                }
+            }
+            Self::CodexSkill { name } => Ok(codex_skill_root(scope, working_dir)?
+                .join(name)
+                .join("SKILL.md")),
         }
     }
 }
@@ -674,87 +847,7 @@ fn resolve_config_path(
     working_dir: &str,
     file_type: &str,
 ) -> Result<std::path::PathBuf, String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
-
-    match file_type {
-        "codex-config" => codex_config_path(scope, working_dir),
-        "settings" => match scope {
-            "user" => Ok(home.join(".claude").join("settings.json")),
-            "project" => Ok(std::path::Path::new(working_dir)
-                .join(".claude")
-                .join("settings.json")),
-            "project-local" => Ok(std::path::Path::new(working_dir)
-                .join(".claude")
-                .join("settings.local.json")),
-            _ => Err("Invalid scope".into()),
-        },
-        "claudemd-user" => Ok(home.join(".claude").join("CLAUDE.md")),
-        "claudemd-root" => Ok(std::path::Path::new(working_dir).join("CLAUDE.md")),
-        "claudemd-local" => Ok(std::path::Path::new(working_dir).join("CLAUDE.local.md")),
-        "agentsmd-user" => Ok(home.join(".codex").join("AGENTS.md")),
-        "agentsmd-root" => Ok(std::path::Path::new(working_dir).join("AGENTS.md")),
-        "agentsmd-local" => Ok(std::path::Path::new(working_dir).join("AGENTS.local.md")),
-        _ if file_type.starts_with("agent:") || file_type.starts_with("agent-delete:") => {
-            let name = file_type.split_once(':').map(|(_, n)| n).unwrap_or("");
-            validate_md_file_name(name)?;
-            match scope {
-                "user" => Ok(home
-                    .join(".claude")
-                    .join("agents")
-                    .join(format!("{}.md", name))),
-                "project" => Ok(std::path::Path::new(working_dir)
-                    .join(".claude")
-                    .join("agents")
-                    .join(format!("{}.md", name))),
-                _ => Err("Invalid scope".into()),
-            }
-        }
-        _ if file_type.starts_with("skill:") || file_type.starts_with("skill-delete:") => {
-            // Format: "skill:<kind>:<name>" or "skill-delete:<kind>:<name>"
-            // <kind> is "command" or "skill".
-            let rest = file_type.split_once(':').map(|(_, r)| r).unwrap_or("");
-            let (kind, name) = rest.split_once(':').ok_or_else(|| {
-                format!(
-                    "Invalid file_type '{}': expected '<prefix>:<kind>:<name>'",
-                    file_type
-                )
-            })?;
-            validate_md_file_name(name)?;
-            let claude_dir = match scope {
-                "user" => home.join(".claude"),
-                "project" => std::path::Path::new(working_dir).join(".claude"),
-                _ => return Err("Invalid scope".into()),
-            };
-            match kind {
-                "command" => Ok(claude_dir.join("commands").join(format!("{}.md", name))),
-                "skill" => Ok(claude_dir.join("skills").join(name).join("SKILL.md")),
-                other => Err(format!(
-                    "Invalid kind '{}': expected 'command' or 'skill'",
-                    other
-                )),
-            }
-        }
-        _ if file_type.starts_with("codex-skill:")
-            || file_type.starts_with("codex-skill-delete:") =>
-        {
-            let name = file_type.split_once(':').map(|(_, n)| n).unwrap_or("");
-            validate_md_file_name(name)?;
-            match scope {
-                "user" => Ok(home
-                    .join(".agents")
-                    .join("skills")
-                    .join(name)
-                    .join("SKILL.md")),
-                "project" => Ok(std::path::Path::new(working_dir)
-                    .join(".agents")
-                    .join("skills")
-                    .join(name)
-                    .join("SKILL.md")),
-                _ => Err("Invalid scope".into()),
-            }
-        }
-        _ => Err(format!("Unknown file_type: {}", file_type)),
-    }
+    ConfigKind::parse(file_type)?.resolve(scope, working_dir)
 }
 
 // [RC-12] Config files read/write: settings JSON, CLAUDE.md (3 scopes), agent/skill files
@@ -821,14 +914,7 @@ pub fn write_config_file(
         toml::from_str::<toml::Value>(&content).map_err(|e| format!("Invalid TOML: {}", e))?;
     }
 
-    // Create parent directories
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create dir: {}", e))?;
-        }
-    }
-
-    std::fs::write(&path, &content)
+    atomic_write(&path, content.as_bytes())
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }
 
@@ -908,23 +994,15 @@ fn cli_skill_source_roots(
     scope: &str,
     working_dir: &str,
 ) -> Result<Vec<std::path::PathBuf>, String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
     let roots = match (cli, scope) {
-        ("claude", "user") => vec![home.join(".claude").join("skills")],
-        ("claude", "project") => vec![std::path::Path::new(working_dir)
-            .join(".claude")
-            .join("skills")],
+        ("claude", "user" | "project") => vec![claude_root(scope, working_dir)?.join("skills")],
         ("codex", "user") => vec![
-            home.join(".agents").join("skills"),
-            home.join(".codex").join("skills"),
+            codex_skill_root(scope, working_dir)?,
+            codex_root(scope, working_dir)?.join("skills"),
         ],
         ("codex", "project") => vec![
-            std::path::Path::new(working_dir)
-                .join(".agents")
-                .join("skills"),
-            std::path::Path::new(working_dir)
-                .join(".codex")
-                .join("skills"),
+            codex_skill_root(scope, working_dir)?,
+            codex_root(scope, working_dir)?.join("skills"),
         ],
         _ => return Err("Invalid CLI or scope".into()),
     };
@@ -936,16 +1014,9 @@ fn cli_skill_dest_root(
     scope: &str,
     working_dir: &str,
 ) -> Result<std::path::PathBuf, String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
     match (cli, scope) {
-        ("claude", "user") => Ok(home.join(".claude").join("skills")),
-        ("claude", "project") => Ok(std::path::Path::new(working_dir)
-            .join(".claude")
-            .join("skills")),
-        ("codex", "user") => Ok(home.join(".agents").join("skills")),
-        ("codex", "project") => Ok(std::path::Path::new(working_dir)
-            .join(".agents")
-            .join("skills")),
+        ("claude", "user" | "project") => Ok(claude_root(scope, working_dir)?.join("skills")),
+        ("codex", "user" | "project") => codex_skill_root(scope, working_dir),
         _ => Err("Invalid CLI or scope".into()),
     }
 }
@@ -1099,24 +1170,17 @@ pub fn read_codex_plugins(working_dir: String) -> Result<Vec<CodexPluginConfigEn
 fn mutate_codex_plugin_config(
     scope: &str,
     working_dir: &str,
-    id: &str,
     f: impl FnOnce(&mut toml::value::Table),
 ) -> Result<(), String> {
-    if id.trim().is_empty() {
-        return Err("Plugin id cannot be empty".into());
-    }
-    let path = codex_config_path(scope, working_dir)?;
-    let mut config = read_codex_config_value(&path)?;
-    let root = config
-        .as_table_mut()
-        .ok_or("Codex config root is not a table")?;
-    let plugins = root
-        .entry("plugins".to_string())
-        .or_insert_with(|| toml::Value::Table(toml::value::Table::new()))
-        .as_table_mut()
-        .ok_or("plugins is not a table")?;
-    f(plugins);
-    write_codex_config_value(&path, &config)
+    with_codex_config(scope, working_dir, |root| {
+        let plugins = root
+            .entry("plugins".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::value::Table::new()))
+            .as_table_mut()
+            .ok_or("plugins is not a table")?;
+        f(plugins);
+        Ok(())
+    })
 }
 
 #[tauri::command]
@@ -1126,8 +1190,11 @@ pub fn set_codex_plugin_enabled(
     working_dir: String,
     enabled: bool,
 ) -> Result<(), String> {
+    if id.trim().is_empty() {
+        return Err("Plugin id cannot be empty".into());
+    }
     let plugin_id = id.clone();
-    mutate_codex_plugin_config(&scope, &working_dir, &id, |plugins| {
+    mutate_codex_plugin_config(&scope, &working_dir, |plugins| {
         let entry = plugins
             .entry(plugin_id)
             .or_insert_with(|| toml::Value::Table(toml::value::Table::new()));
@@ -1147,7 +1214,10 @@ pub fn remove_codex_plugin_config(
     scope: String,
     working_dir: String,
 ) -> Result<(), String> {
-    mutate_codex_plugin_config(&scope, &working_dir, &id, |plugins| {
+    if id.trim().is_empty() {
+        return Err("Plugin id cannot be empty".into());
+    }
+    mutate_codex_plugin_config(&scope, &working_dir, |plugins| {
         plugins.remove(&id);
     })
 }
@@ -1185,7 +1255,7 @@ pub fn save_event_kinds(project_root: String, kinds: Vec<String>) -> Result<(), 
     let json =
         serde_json::to_string_pretty(&all).map_err(|e| format!("Failed to serialize: {}", e))?;
 
-    std::fs::write(&path, json + "\n")
+    atomic_write(&path, format!("{json}\n").as_bytes())
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }
 
@@ -1229,14 +1299,7 @@ pub fn list_agents(
     scope: String,
     working_dir: String,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
-    let dir = match scope.as_str() {
-        "user" => home.join(".claude").join("agents"),
-        "project" => std::path::Path::new(&working_dir)
-            .join(".claude")
-            .join("agents"),
-        _ => return Err("Invalid scope".into()),
-    };
+    let dir = claude_root(&scope, &working_dir)?.join("agents");
     let files = list_md_in_dir(&dir);
     log_discovery(
         &app,
@@ -1300,12 +1363,7 @@ pub fn list_skills(
     scope: String,
     working_dir: String,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
-    let claude_dir = match scope.as_str() {
-        "user" => home.join(".claude"),
-        "project" => std::path::Path::new(&working_dir).join(".claude"),
-        _ => return Err("Invalid scope".into()),
-    };
+    let claude_dir = claude_root(&scope, &working_dir)?;
     let commands_dir = claude_dir.join("commands");
     let skills_dir = claude_dir.join("skills");
 
@@ -1348,14 +1406,7 @@ pub fn list_codex_skill_files(
     scope: String,
     working_dir: String,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let home = dirs::home_dir().ok_or("No home dir")?;
-    let skills_dir = match scope.as_str() {
-        "user" => home.join(".agents").join("skills"),
-        "project" => std::path::Path::new(&working_dir)
-            .join(".agents")
-            .join("skills"),
-        _ => return Err("Invalid scope".into()),
-    };
+    let skills_dir = codex_skill_root(&scope, &working_dir)?;
 
     let mut entries: Vec<serde_json::Value> = Vec::new();
     for mut entry in list_skill_dirs(&skills_dir) {
@@ -1842,11 +1893,6 @@ pub fn write_mcp_servers(
     }
 
     let output = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-    }
     atomic_write(&path, output.as_bytes())
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
 }
@@ -1863,22 +1909,17 @@ pub fn write_codex_mcp_servers(
         return Err("servers_json must be a JSON object".into());
     }
 
-    let path = codex_config_path(&scope, &working_dir)?;
-    let mut config = read_codex_config_value(&path)?;
-    let table = config
-        .as_table_mut()
-        .ok_or("Codex config root is not a table")?;
-
-    let is_empty = parsed.as_object().map(|m| m.is_empty()).unwrap_or(true);
-    if is_empty {
-        table.remove("mcp_servers");
-    } else if let Some(servers_toml) = json_to_toml_value(parsed) {
-        table.insert("mcp_servers".to_string(), servers_toml);
-    } else {
-        table.remove("mcp_servers");
-    }
-
-    write_codex_config_value(&path, &config)
+    with_codex_config(&scope, &working_dir, |table| {
+        let is_empty = parsed.as_object().map(|m| m.is_empty()).unwrap_or(true);
+        if is_empty {
+            table.remove("mcp_servers");
+        } else if let Some(servers_toml) = json_to_toml_value(parsed) {
+            table.insert("mcp_servers".to_string(), servers_toml);
+        } else {
+            table.remove("mcp_servers");
+        }
+        Ok(())
+    })
 }
 
 // [RT-02] Atomic write: same-directory temp file + rename. Prevents partial
@@ -1888,6 +1929,7 @@ pub fn write_codex_mcp_servers(
 // sits next to the target rather than in std::env::temp_dir.
 fn atomic_write(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> {
     let parent = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    std::fs::create_dir_all(parent)?;
     let file_name = path
         .file_name()
         .and_then(|s| s.to_str())
@@ -1913,41 +1955,16 @@ fn atomic_write(path: &std::path::Path, contents: &[u8]) -> std::io::Result<()> 
     Ok(())
 }
 
-// [RC-20] Hardcoded DNS resolution of api.anthropic.com, 5s timeout, no user input
-/// Resolve api.anthropic.com to its IP address (Cloudflare edge).
-/// Hardcoded hostname — no user-supplied input. 5s timeout.
-#[tauri::command]
-pub async fn resolve_api_host(app: AppHandle) -> Result<String, String> {
-    let resolved = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        tokio::task::spawn_blocking(|| {
-            use std::net::ToSocketAddrs;
-            "api.anthropic.com:443"
-                .to_socket_addrs()
-                .map_err(|e| e.to_string())?
-                .next()
-                .map(|a| a.ip().to_string())
-                .ok_or_else(|| "No addresses found".to_string())
-        }),
-    )
-    .await
-    .map_err(|_| "DNS lookup timed out".to_string())?
-    .map_err(|e| e.to_string())??;
-    log_discovery(
-        &app,
-        "discovery.api_host_resolved",
-        "Resolved api.anthropic.com",
-        json!({
-            "host": "api.anthropic.com",
-            "ip": resolved,
-        }),
-    );
-    Ok(resolved)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tempdir() -> tempfile::TempDir {
+        tempfile::Builder::new()
+            .prefix("ct_config_")
+            .tempdir()
+            .unwrap()
+    }
 
     #[test]
     fn resolve_skill_command_user_scope() {
@@ -2014,8 +2031,8 @@ mod tests {
 
     #[test]
     fn list_skill_dirs_finds_subdirs_with_skill_md() {
-        let tmp = std::env::temp_dir().join(format!("ct_test_{}", std::process::id()));
-        let skills_root = tmp.join("skills");
+        let tmp = tempdir();
+        let skills_root = tmp.path().join("skills");
         std::fs::create_dir_all(skills_root.join("alpha")).unwrap();
         std::fs::create_dir_all(skills_root.join("beta")).unwrap();
         std::fs::create_dir_all(skills_root.join("no-skill-md")).unwrap();
@@ -2030,21 +2047,20 @@ mod tests {
             let p = v["path"].as_str().unwrap();
             assert!(p.ends_with("SKILL.md"), "path should be SKILL.md: {}", p);
         }
-
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
     fn list_skill_dirs_missing_dir_returns_empty() {
-        let missing = std::env::temp_dir().join(format!("ct_no_such_{}", std::process::id()));
+        let tmp = tempdir();
+        let missing = tmp.path().join("missing");
         assert!(list_skill_dirs(&missing).is_empty());
     }
 
     #[test]
     fn skill_file_matches_parent_dir_or_frontmatter_name() {
-        let tmp = std::env::temp_dir().join(format!("ct_skill_match_{}", std::process::id()));
-        let alpha = tmp.join("alpha");
-        let nested = tmp.join("plugin").join("skills").join("other");
+        let tmp = tempdir();
+        let alpha = tmp.path().join("alpha");
+        let nested = tmp.path().join("plugin").join("skills").join("other");
         std::fs::create_dir_all(&alpha).unwrap();
         std::fs::create_dir_all(&nested).unwrap();
         let alpha_skill = alpha.join("SKILL.md");
@@ -2058,22 +2074,20 @@ mod tests {
             &["plugin-skill".to_string()]
         ));
         assert!(!skill_file_matches(&nested_skill, &["missing".to_string()]));
-
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
     fn collect_rule_file_includes_at_imports() {
-        let tmp = std::env::temp_dir().join(format!("ct_rule_match_{}", std::process::id()));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let claude_md = tmp.join("CLAUDE.md");
-        let imported = tmp.join("RTK.md");
+        let tmp = tempdir();
+        let root = tmp.path();
+        let claude_md = root.join("CLAUDE.md");
+        let imported = root.join("RTK.md");
         std::fs::write(&claude_md, "# Rules\n\n@RTK.md\n").unwrap();
         std::fs::write(&imported, "# Import\n").unwrap();
 
         let mut paths = Vec::new();
         let mut visited = std::collections::HashSet::new();
-        collect_rule_file(&mut paths, claude_md.clone(), &tmp, &mut visited, 0);
+        collect_rule_file(&mut paths, claude_md.clone(), root, &mut visited, 0);
 
         assert!(
             paths.iter().any(|p| p.ends_with("CLAUDE.md")),
@@ -2085,8 +2099,6 @@ mod tests {
             "got {:?}",
             paths
         );
-
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
@@ -2135,21 +2147,58 @@ mod tests {
     }
 
     #[test]
+    fn merge_hook_values_dedupes_canonical_json_objects() {
+        let mut base = serde_json::json!({
+            "PreToolUse": [
+                {
+                    "matcher": "Bash",
+                    "command": "echo hi",
+                    "payload": { "b": 2, "a": 1 }
+                }
+            ]
+        });
+        let incoming = serde_json::json!({
+            "PreToolUse": [
+                {
+                    "payload": { "a": 1, "b": 2 },
+                    "command": "echo hi",
+                    "matcher": "Bash"
+                },
+                {
+                    "matcher": "Read",
+                    "command": "cat file"
+                }
+            ]
+        });
+
+        merge_hook_values(&mut base, incoming);
+
+        let hooks = base["PreToolUse"].as_array().unwrap();
+        assert_eq!(hooks.len(), 2, "got {hooks:?}");
+        assert_eq!(
+            hooks[1],
+            serde_json::json!({ "matcher": "Read", "command": "cat file" })
+        );
+    }
+
+    #[test]
+    fn atomic_write_creates_parent_directory() {
+        let tmp = tempdir();
+        let target = tmp.path().join("nested").join("file.json");
+
+        atomic_write(&target, b"created").unwrap();
+
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "created");
+    }
+
+    #[test]
     fn atomic_write_leaves_no_temp_file_on_success() {
-        let tmp = std::env::temp_dir().join(format!(
-            "ct_atomic_{}_{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let target = tmp.join(".claude.json");
+        let tmp = tempdir();
+        let target = tmp.path().join(".claude.json");
         std::fs::write(&target, br#"{"old":true}"#).unwrap();
         atomic_write(&target, br#"{"new":true}"#).unwrap();
         assert_eq!(std::fs::read(&target).unwrap(), br#"{"new":true}"#);
-        let leftovers: Vec<_> = std::fs::read_dir(&tmp)
+        let leftovers: Vec<_> = std::fs::read_dir(tmp.path())
             .unwrap()
             .filter_map(|e| e.ok())
             .filter(|e| {
@@ -2163,24 +2212,14 @@ mod tests {
             "atomic_write left {} temp file(s) behind",
             leftovers.len()
         );
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]
     fn atomic_write_overwrites_existing_file() {
-        let tmp = std::env::temp_dir().join(format!(
-            "ct_atomic_overwrite_{}_{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let target = tmp.join("file.json");
+        let tmp = tempdir();
+        let target = tmp.path().join("file.json");
         std::fs::write(&target, b"first").unwrap();
         atomic_write(&target, b"second").unwrap();
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "second");
-        std::fs::remove_dir_all(&tmp).ok();
     }
 }

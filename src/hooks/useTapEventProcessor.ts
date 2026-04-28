@@ -279,7 +279,6 @@ export function useTapEventProcessor(
   const subTrackerRef = useRef<TapSubagentTracker | null>(null);
   const healthCountRef = useRef(0);
   const lastHighMemWarnRef = useRef(0);
-  const apiIpResolvedRef = useRef(false);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
@@ -858,13 +857,6 @@ export function useTapEventProcessor(
         }
       }
 
-      // Resolve API IP on first fetch (skip if already resolved by any session)
-      if (event.kind === "ApiFetch" && !apiIpResolvedRef.current && !useSettingsStore.getState().apiIp) {
-        apiIpResolvedRef.current = true;
-        invoke("resolve_api_host")
-          .then((ip) => useSettingsStore.getState().setApiIp(ip as string))
-          .catch((err: unknown) => dlog("session", sid, `API IP resolve failed: ${err}`, "WARN"));
-      }
       }, {
         module: "tap",
         sessionId: sid,
