@@ -42,15 +42,23 @@ pub(crate) fn detect_codex_cli_sync() -> Result<String, String> {
     #[cfg(windows)]
     let which_cmd = "where";
 
-    if let Ok(out) = std::process::Command::new(which_cmd).arg("codex").output() {
+    let mut cmd = std::process::Command::new(which_cmd);
+    cmd.arg("codex");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // [DR-07] CREATE_NO_WINDOW so spawned `where` doesn't pop a console.
+        cmd.creation_flags(0x08000000);
+    }
+    if let Ok(out) = cmd.output() {
         if out.status.success() {
-            let path = String::from_utf8_lossy(&out.stdout)
-                .lines()
-                .next()
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if !path.is_empty() && std::path::Path::new(&path).exists() {
+            // [CD-W1] On Windows, `where codex` emits the extensionless npm
+            // bash wrapper before `codex.cmd`. CreateProcess refuses the
+            // wrapper ("not a valid Win32 application"), so prefer .cmd /
+            // .exe / .bat. Helper falls back to first existing line on Unix.
+            if let Some(path) = crate::path_utils::pick_runnable_from_which_output(
+                &String::from_utf8_lossy(&out.stdout),
+            ) {
                 return Ok(path);
             }
         }
@@ -58,6 +66,15 @@ pub(crate) fn detect_codex_cli_sync() -> Result<String, String> {
 
     // 3. Fallback candidates
     let home = dirs::home_dir().ok_or("no home dir")?;
+    #[cfg(target_os = "windows")]
+    let candidates: Vec<PathBuf> = vec![
+        home.join("AppData/Local/Programs/npm-global/codex.cmd"),
+        home.join("AppData/Roaming/npm/codex.cmd"),
+        home.join(".npm-global/bin/codex.cmd"),
+        home.join(".codex/bin/codex.exe"),
+        home.join(".cargo/bin/codex.exe"),
+    ];
+    #[cfg(not(target_os = "windows"))]
     let candidates: Vec<PathBuf> = vec![
         home.join(".codex/bin/codex"),
         home.join(".local/bin/codex"),

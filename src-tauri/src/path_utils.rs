@@ -100,3 +100,80 @@ fn decode_project_dir_heuristic(encoded: &str) -> String {
 
     current.to_string_lossy().to_string()
 }
+
+/// Pick the first runnable line from `where` / `which` stdout.
+///
+/// On Windows, npm-global emits multiple wrappers per CLI in PATHEXT order:
+/// the first `where claude` line is usually the extensionless bash wrapper,
+/// followed by `claude.cmd`. CreateProcess (what `std::process::Command::new`
+/// calls) refuses the extensionless one with "not a valid Win32 application"
+/// and only `.cmd` / `.exe` / `.bat` are runnable. Pick those first; fall
+/// back to whatever exists otherwise so Unix and edge cases still work.
+pub fn pick_runnable_from_which_output(stdout: &str) -> Option<String> {
+    let lines: Vec<&str> = stdout
+        .lines()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    #[cfg(target_os = "windows")]
+    {
+        for line in &lines {
+            let lower = line.to_lowercase();
+            if (lower.ends_with(".cmd") || lower.ends_with(".exe") || lower.ends_with(".bat"))
+                && std::path::Path::new(line).exists()
+            {
+                return Some((*line).to_string());
+            }
+        }
+    }
+
+    for line in &lines {
+        if std::path::Path::new(line).exists() {
+            return Some((*line).to_string());
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pick_runnable_returns_none_on_empty_stdout() {
+        assert!(pick_runnable_from_which_output("").is_none());
+        assert!(pick_runnable_from_which_output("   \n  \n").is_none());
+    }
+
+    #[test]
+    fn pick_runnable_skips_nonexistent_entries() {
+        // No path on disk matches these — helper returns None rather than a
+        // bogus path. Detectors then fall through to env / fallback candidates.
+        let stdout = "C:\\does-not-exist\\codex\nC:\\also-not\\codex.cmd\n";
+        assert!(pick_runnable_from_which_output(stdout).is_none());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn pick_runnable_prefers_cmd_over_extensionless_on_windows() {
+        // Real fixture: write a short script to a temp dir under each
+        // extension, pass `where`-style output that lists the extensionless
+        // wrapper first. We expect the .cmd line to win.
+        let dir = std::env::temp_dir().join("code-tabs-test-pick-runnable");
+        let _ = std::fs::create_dir_all(&dir);
+        let bare = dir.join("toolx");
+        let cmd = dir.join("toolx.cmd");
+        std::fs::write(&bare, "#!/bin/sh\necho hi\n").unwrap();
+        std::fs::write(&cmd, "@echo off\r\necho hi\r\n").unwrap();
+        let stdout = format!("{}\n{}\n", bare.display(), cmd.display());
+        let picked = pick_runnable_from_which_output(&stdout).unwrap();
+        assert_eq!(
+            picked.to_lowercase(),
+            cmd.to_string_lossy().to_lowercase(),
+            "expected the .cmd variant to be preferred over extensionless wrapper"
+        );
+        let _ = std::fs::remove_file(bare);
+        let _ = std::fs::remove_file(cmd);
+    }
+}
