@@ -1,5 +1,5 @@
 use crate::path_utils;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
@@ -16,6 +16,12 @@ struct ContentSearchCancelState {
 
 static CONTENT_SEARCH_CANCEL: LazyLock<Mutex<ContentSearchCancelState>> =
     LazyLock::new(|| Mutex::new(ContentSearchCancelState::default()));
+static CODEX_ROLLOUT_UUID_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(
+        r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$",
+    )
+    .unwrap()
+});
 
 fn content_search_cancel_guard() -> std::sync::MutexGuard<'static, ContentSearchCancelState> {
     CONTENT_SEARCH_CANCEL
@@ -116,13 +122,10 @@ fn collect_codex_rollout_files() -> Vec<std::path::PathBuf> {
 
 fn codex_id_from_rollout_filename(path: &std::path::Path) -> Option<String> {
     let stem = path.file_stem()?.to_str()?;
-    if stem.len() >= 36 {
-        let candidate = &stem[stem.len() - 36..];
-        if candidate.chars().filter(|c| *c == '-').count() == 4 {
-            return Some(candidate.to_string());
-        }
-    }
-    None
+    CODEX_ROLLOUT_UUID_RE
+        .captures(stem)
+        .and_then(|captures| captures.get(1))
+        .map(|m| m.as_str().to_string())
 }
 
 #[derive(Default)]
@@ -136,12 +139,31 @@ struct CodexRolloutSummary {
 }
 
 fn truncate_preview(text: &str, limit: usize) -> String {
-    text.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(limit)
-        .collect()
+    let mut out = String::new();
+    let mut chars = 0usize;
+    let mut pending_space = false;
+
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            pending_space = !out.is_empty();
+            continue;
+        }
+        if pending_space {
+            if chars >= limit {
+                break;
+            }
+            out.push(' ');
+            chars += 1;
+            pending_space = false;
+        }
+        if chars >= limit {
+            break;
+        }
+        out.push(ch);
+        chars += 1;
+    }
+
+    out
 }
 
 fn codex_user_event_text(parsed: &serde_json::Value) -> Option<String> {
@@ -293,6 +315,19 @@ pub(crate) fn reveal_path(path: &std::path::Path) -> Result<(), String> {
     }
 }
 
+fn session_dir_started_at(path: &std::path::Path) -> Option<std::time::SystemTime> {
+    let content = std::fs::read_to_string(path.join("manifest.json")).ok()?;
+    let val = serde_json::from_str::<serde_json::Value>(&content).ok()?;
+    let started = val["startedAt"].as_str()?;
+    chrono::DateTime::parse_from_rfc3339(started)
+        .ok()
+        .map(Into::into)
+}
+
+fn session_dir_age_time(path: &std::path::Path) -> Option<std::time::SystemTime> {
+    session_dir_started_at(path).or_else(|| path.metadata().and_then(|m| m.modified()).ok())
+}
+
 /// Return the absolute path to a session's data directory.
 #[tauri::command]
 pub fn get_session_data_path(session_id: String) -> Result<String, String> {
@@ -352,37 +387,9 @@ pub fn cleanup_session_data(max_age_hours: u64) -> Result<u32, String> {
             if !path.is_dir() {
                 continue;
             }
-            // Try manifest.json startedAt, fall back to dir mtime
-            let is_old = {
-                let manifest_path = path.join("manifest.json");
-                if manifest_path.exists() {
-                    if let Ok(content) = std::fs::read_to_string(&manifest_path) {
-                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(started) = val["startedAt"].as_str() {
-                                // Parse ISO timestamp and compare
-                                chrono::DateTime::parse_from_rfc3339(started)
-                                    .map(|dt| {
-                                        let sys: std::time::SystemTime = dt.into();
-                                        sys < cutoff
-                                    })
-                                    .unwrap_or(false)
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                } else {
-                    // No manifest — use directory mtime
-                    path.metadata()
-                        .and_then(|m| m.modified())
-                        .map(|t| t < cutoff)
-                        .unwrap_or(false)
-                }
-            };
+            let is_old = session_dir_age_time(&path)
+                .map(|started_or_modified| started_or_modified < cutoff)
+                .unwrap_or(false);
             if is_old {
                 let _ = std::fs::remove_dir_all(&path);
                 removed += 1;
@@ -464,249 +471,187 @@ pub async fn list_past_sessions() -> Result<Vec<serde_json::Value>, String> {
         .map_err(|e| e.to_string())?
 }
 
-// [RC-04] list_past_sessions_sync detects plan-mode forks by capturing sourceToolAssistantUUID during the head pass and resolving it during chain detection.
-fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
-    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
-    let projects_dir = home.join(".claude").join("projects");
+struct PastSessionRawEntry {
+    modified: std::time::SystemTime,
+    session_id: String,
+    source_tool_uuid: Option<String>,
+    json: serde_json::Value,
+}
 
-    if !projects_dir.exists() {
-        return Ok(Vec::new());
+fn format_modified_utc(modified: std::time::SystemTime) -> String {
+    chrono::DateTime::<chrono::Utc>::from(modified)
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string()
+}
+
+fn project_name_from_directory(directory: &str, fallback: &str) -> String {
+    directory
+        .replace('\\', "/")
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .last()
+        .unwrap_or(fallback)
+        .to_string()
+}
+
+fn scan_claude_session(
+    fpath: &std::path::Path,
+    metadata: &std::fs::Metadata,
+    project_name: &str,
+    decoded_dir: &str,
+    uuid_to_session: &mut HashMap<String, String>,
+) -> Option<PastSessionRawEntry> {
+    let modified = metadata.modified().unwrap_or(std::time::UNIX_EPOCH);
+    let size_bytes = metadata.len();
+    let session_id = fpath.file_stem()?.to_str()?.to_string();
+    if session_id.is_empty() {
+        return None;
     }
 
-    // Collect raw entries with their first-event sessionId for chain detection
-    struct RawEntry {
-        modified: std::time::SystemTime,
-        session_id: String,
-        source_tool_uuid: Option<String>,
-        json: serde_json::Value,
-    }
+    let mut first_msg = String::new();
+    let mut source_tool_uuid: Option<String> = None;
+    let file_handle = std::fs::File::open(fpath).ok()?;
+    use std::io::{BufRead, Read, Seek, SeekFrom};
+    let mut reader = std::io::BufReader::new(file_handle);
+    let mut line = String::new();
 
-    let mut raw_entries: Vec<RawEntry> = Vec::new();
-    // Global map: message UUID → session_id (for resolving chain parents)
-    let mut uuid_to_session: std::collections::HashMap<String, String> =
-        std::collections::HashMap::new();
-
-    // Walk project dirs
-    let entries = std::fs::read_dir(&projects_dir)
-        .map_err(|e| format!("Failed to read projects dir: {}", e))?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-
-        let encoded_name = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_string();
-
-        // Resolve the real directory path: reads cwd from JSONL files first,
-        // falls back to filesystem-probing heuristic for legacy/empty dirs.
-        let decoded_dir = path_utils::resolve_project_dir(&encoded_name, &path);
-
-        // Get the last segment as a short project name
-        let project_name = decoded_dir
-            .replace('\\', "/")
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .last()
-            .unwrap_or(&encoded_name)
-            .to_string();
-
-        // Look for .jsonl conversation files in each project dir
-        let files = match std::fs::read_dir(&path) {
-            Ok(f) => f,
-            Err(_) => continue,
+    for _ in 0..30 {
+        line.clear();
+        let bytes = match reader.read_line(&mut line) {
+            Ok(bytes) => bytes,
+            Err(_) => break,
         };
-
-        for file in files.flatten() {
-            let fpath = file.path();
-            if fpath.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-                continue;
+        if bytes == 0 {
+            break;
+        }
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line.trim_end()) {
+            if let Some(uuid) = parsed.get("uuid").and_then(|v| v.as_str()) {
+                uuid_to_session.insert(uuid.to_string(), session_id.clone());
             }
-
-            let metadata = match std::fs::metadata(&fpath) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-
-            let modified = metadata.modified().unwrap_or(std::time::UNIX_EPOCH);
-            let size_bytes = metadata.len();
-
-            // Extract session ID from filename (strip .jsonl)
-            let session_id = fpath
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_string();
-
-            if session_id.is_empty() {
-                continue;
-            }
-
-            let last_modified = chrono::DateTime::<chrono::Utc>::from(modified)
-                .format("%Y-%m-%dT%H:%M:%SZ")
-                .to_string();
-
-            // --- Head pass: BufReader, first 30 lines → firstMessage + sourceToolAssistantUUID ---
-            let mut first_msg = String::new();
-            let mut source_tool_uuid: Option<String> = None;
-            if let Ok(file_handle) = std::fs::File::open(&fpath) {
-                use std::io::BufRead;
-                let reader = std::io::BufReader::new(file_handle);
-                for line in reader.lines().take(30).flatten() {
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) {
-                        // Collect message UUIDs for chain resolution
-                        if let Some(uuid) = parsed.get("uuid").and_then(|v| v.as_str()) {
-                            uuid_to_session.insert(uuid.to_string(), session_id.clone());
-                        }
-                        // Capture sourceToolAssistantUUID (plan-mode fork link)
-                        if source_tool_uuid.is_none() {
-                            if let Some(stid) = parsed
-                                .get("sourceToolAssistantUUID")
-                                .and_then(|v| v.as_str())
-                            {
-                                if !stid.is_empty() {
-                                    source_tool_uuid = Some(stid.to_string());
-                                }
-                            }
-                        }
-                        // Extract first user message
-                        if first_msg.is_empty() && parsed["type"].as_str() == Some("user") {
-                            if let Some(text) = extract_user_text(&parsed) {
-                                first_msg = text;
-                            }
-                        }
-                    }
-                    if !first_msg.is_empty() && source_tool_uuid.is_some() {
-                        break;
+            if source_tool_uuid.is_none() {
+                if let Some(stid) = parsed
+                    .get("sourceToolAssistantUUID")
+                    .and_then(|v| v.as_str())
+                {
+                    if !stid.is_empty() {
+                        source_tool_uuid = Some(stid.to_string());
                     }
                 }
             }
-
-            // --- Tail pass: seek to last 256KB, reverse scan → lastMessage + model ---
-            let mut last_msg = String::new();
-            let mut model = String::new();
-            if let Ok(file_handle) = std::fs::File::open(&fpath) {
-                use std::io::{Read, Seek, SeekFrom};
-                let mut reader = std::io::BufReader::new(file_handle);
-                let tail_offset = size_bytes.saturating_sub(256 * 1024);
-                let _ = reader.seek(SeekFrom::Start(tail_offset));
-                let mut tail_bytes = Vec::new();
-                let _ = reader.read_to_end(&mut tail_bytes);
-                let tail_buf = String::from_utf8_lossy(&tail_bytes);
-                // Forward pass through tail: collect UUIDs for chain resolution
-                for line in tail_buf.lines() {
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
-                        if let Some(uuid) = parsed.get("uuid").and_then(|v| v.as_str()) {
-                            uuid_to_session.insert(uuid.to_string(), session_id.clone());
-                        }
-                    }
-                }
-                // Reverse scan lines for last user message and model
-                for line in tail_buf.lines().rev() {
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
-                        // Capture model from last assistant message
-                        if model.is_empty() && parsed["type"].as_str() == Some("assistant") {
-                            if let Some(m) = parsed["message"]["model"].as_str() {
-                                if !m.is_empty() {
-                                    model = m.to_string();
-                                }
-                            }
-                        }
-                        // Capture last user message
-                        if last_msg.is_empty() && parsed["type"].as_str() == Some("user") {
-                            if let Some(text) = extract_user_text(&parsed) {
-                                last_msg = text;
-                            }
-                        }
-                    }
-                    if !last_msg.is_empty() && !model.is_empty() {
-                        break;
-                    }
+            if first_msg.is_empty() && parsed["type"].as_str() == Some("user") {
+                if let Some(text) = extract_user_text(&parsed) {
+                    first_msg = text;
                 }
             }
-
-            raw_entries.push(RawEntry {
-                modified,
-                session_id: session_id.clone(),
-                source_tool_uuid,
-                json: serde_json::json!({
-                    "id": session_id,
-                    "cli": "claude",
-                    "path": project_name,
-                    "directory": decoded_dir,
-                    "lastModified": last_modified,
-                    "sizeBytes": size_bytes,
-                    "firstMessage": first_msg,
-                    "lastMessage": last_msg,
-                    "parentId": serde_json::Value::Null,
-                    "model": model,
-                    "filePath": fpath.to_string_lossy().to_string(),
-                    "dirExists": std::path::Path::new(&decoded_dir).is_dir(),
-                }),
-            });
+        }
+        if !first_msg.is_empty() && source_tool_uuid.is_some() {
+            break;
         }
     }
 
-    for fpath in collect_codex_rollout_files() {
-        let metadata = match std::fs::metadata(&fpath) {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-        let modified = metadata.modified().unwrap_or(std::time::UNIX_EPOCH);
-        let size_bytes = metadata.len();
-        let Some(summary) = summarize_codex_rollout(&fpath) else {
-            continue;
-        };
-        let directory = if summary.directory.is_empty() {
-            ".".to_string()
-        } else {
-            summary.directory
-        };
-        let project_name = directory
-            .replace('\\', "/")
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .last()
-            .unwrap_or("codex")
-            .to_string();
-        let last_modified = chrono::DateTime::<chrono::Utc>::from(modified)
-            .format("%Y-%m-%dT%H:%M:%SZ")
-            .to_string();
-        let last_message = if summary.last_user_message.is_empty() {
-            summary.last_assistant_message
-        } else {
-            summary.last_user_message
-        };
+    let tail_offset = size_bytes.saturating_sub(256 * 1024);
+    let _ = reader.seek(SeekFrom::Start(tail_offset));
+    let mut tail_bytes = Vec::new();
+    let _ = reader.read_to_end(&mut tail_bytes);
+    let tail_buf = String::from_utf8_lossy(&tail_bytes);
 
-        raw_entries.push(RawEntry {
-            modified,
-            session_id: summary.session_id.clone(),
-            source_tool_uuid: None,
-            json: serde_json::json!({
-                "id": summary.session_id,
-                "cli": "codex",
-                "path": project_name,
-                "directory": directory,
-                "lastModified": last_modified,
-                "sizeBytes": size_bytes,
-                "firstMessage": summary.first_message,
-                "lastMessage": last_message,
-                "parentId": serde_json::Value::Null,
-                "model": summary.model,
-                "filePath": fpath.to_string_lossy().to_string(),
-                "dirExists": std::path::Path::new(&directory).is_dir(),
-            }),
-        });
+    for line in tail_buf.lines() {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+            if let Some(uuid) = parsed.get("uuid").and_then(|v| v.as_str()) {
+                uuid_to_session.insert(uuid.to_string(), session_id.clone());
+            }
+        }
     }
 
-    // --- Chain detection: resolve sourceToolAssistantUUID → parent session via UUID map ---
-    let id_set: std::collections::HashSet<String> =
-        raw_entries.iter().map(|e| e.session_id.clone()).collect();
-    for entry in &mut raw_entries {
+    let mut last_msg = String::new();
+    let mut model = String::new();
+    for line in tail_buf.lines().rev() {
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
+            if model.is_empty() && parsed["type"].as_str() == Some("assistant") {
+                if let Some(m) = parsed["message"]["model"].as_str() {
+                    if !m.is_empty() {
+                        model = m.to_string();
+                    }
+                }
+            }
+            if last_msg.is_empty() && parsed["type"].as_str() == Some("user") {
+                if let Some(text) = extract_user_text(&parsed) {
+                    last_msg = text;
+                }
+            }
+        }
+        if !last_msg.is_empty() && !model.is_empty() {
+            break;
+        }
+    }
+
+    Some(PastSessionRawEntry {
+        modified,
+        session_id: session_id.clone(),
+        source_tool_uuid,
+        json: serde_json::json!({
+            "id": session_id,
+            "cli": "claude",
+            "path": project_name,
+            "directory": decoded_dir,
+            "lastModified": format_modified_utc(modified),
+            "sizeBytes": size_bytes,
+            "firstMessage": first_msg,
+            "lastMessage": last_msg,
+            "parentId": serde_json::Value::Null,
+            "model": model,
+            "filePath": fpath.to_string_lossy().to_string(),
+            "dirExists": std::path::Path::new(decoded_dir).is_dir(),
+        }),
+    })
+}
+
+fn codex_raw_entry(
+    fpath: &std::path::Path,
+    metadata: &std::fs::Metadata,
+    summary: CodexRolloutSummary,
+) -> PastSessionRawEntry {
+    let modified = metadata.modified().unwrap_or(std::time::UNIX_EPOCH);
+    let size_bytes = metadata.len();
+    let directory = if summary.directory.is_empty() {
+        ".".to_string()
+    } else {
+        summary.directory
+    };
+    let project_name = project_name_from_directory(&directory, "codex");
+    let last_message = if summary.last_user_message.is_empty() {
+        summary.last_assistant_message
+    } else {
+        summary.last_user_message
+    };
+
+    PastSessionRawEntry {
+        modified,
+        session_id: summary.session_id.clone(),
+        source_tool_uuid: None,
+        json: serde_json::json!({
+            "id": summary.session_id,
+            "cli": "codex",
+            "path": project_name,
+            "directory": directory,
+            "lastModified": format_modified_utc(modified),
+            "sizeBytes": size_bytes,
+            "firstMessage": summary.first_message,
+            "lastMessage": last_message,
+            "parentId": serde_json::Value::Null,
+            "model": summary.model,
+            "filePath": fpath.to_string_lossy().to_string(),
+            "dirExists": std::path::Path::new(&directory).is_dir(),
+        }),
+    }
+}
+
+fn resolve_session_chains(
+    raw_entries: &mut [PastSessionRawEntry],
+    uuid_to_session: &HashMap<String, String>,
+) {
+    let id_set: HashSet<String> = raw_entries.iter().map(|e| e.session_id.clone()).collect();
+    for entry in raw_entries {
         if let Some(ref stid) = entry.source_tool_uuid {
             if let Some(parent_sid) = uuid_to_session.get(stid) {
                 if parent_sid != &entry.session_id && id_set.contains(parent_sid) {
@@ -715,41 +660,124 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
             }
         }
     }
+}
 
-    // Sort by most recent first — return all (frontend filters by directory)
+// [RC-04] list_past_sessions_sync detects plan-mode forks by capturing sourceToolAssistantUUID during the head pass and resolving it during chain detection.
+fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let projects_dir = home.join(".claude").join("projects");
+
+    let mut raw_entries: Vec<PastSessionRawEntry> = Vec::new();
+    let mut uuid_to_session: HashMap<String, String> = HashMap::new();
+
+    if projects_dir.exists() {
+        let entries = std::fs::read_dir(&projects_dir)
+            .map_err(|e| format!("Failed to read projects dir: {}", e))?;
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            let encoded_name = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+            let decoded_dir = path_utils::resolve_project_dir(&encoded_name, &path);
+            let project_name = project_name_from_directory(&decoded_dir, &encoded_name);
+            let files = match std::fs::read_dir(&path) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+
+            for file in files.flatten() {
+                let fpath = file.path();
+                if fpath.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+                    continue;
+                }
+                let metadata = match std::fs::metadata(&fpath) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                if let Some(entry) = scan_claude_session(
+                    &fpath,
+                    &metadata,
+                    &project_name,
+                    &decoded_dir,
+                    &mut uuid_to_session,
+                ) {
+                    raw_entries.push(entry);
+                }
+            }
+        }
+    }
+
+    for fpath in collect_codex_rollout_files() {
+        let metadata = match std::fs::metadata(&fpath) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let Some(summary) = summarize_codex_rollout(&fpath) else {
+            continue;
+        };
+        raw_entries.push(codex_raw_entry(&fpath, &metadata, summary));
+    }
+
+    resolve_session_chains(&mut raw_entries, &uuid_to_session);
     raw_entries.sort_by(|a, b| b.modified.cmp(&a.modified));
     let entries: Vec<serde_json::Value> = raw_entries.into_iter().map(|e| e.json).collect();
     Ok(entries)
 }
 
-/// Extract user message text from a JSONL event, filtering out commands.
-fn extract_user_text(parsed: &serde_json::Value) -> Option<String> {
-    let truncate = |s: &str| -> Option<String> {
-        let normalized = s.split_whitespace().collect::<Vec<_>>().join(" ");
-        if normalized.is_empty()
-            || normalized.contains("command-name")
-            || normalized.contains("local-command")
-        {
-            return None;
-        }
-        Some(normalized.chars().take(150).collect())
-    };
-    let content = &parsed["message"]["content"];
+fn collect_content_text(
+    content: &serde_json::Value,
+    block_kinds: &[&str],
+    joiner: &str,
+) -> Option<String> {
     if let Some(text) = content.as_str() {
-        if let Some(t) = truncate(text) {
-            return Some(t);
+        if !text.is_empty() {
+            return Some(text.to_string());
         }
     }
-    if let Some(arr) = content.as_array() {
-        for block in arr {
-            if block["type"].as_str() == Some("text") {
-                if let Some(t) = block["text"].as_str().and_then(truncate) {
-                    return Some(t);
-                }
+
+    let arr = content.as_array()?;
+    let parts: Vec<&str> = arr
+        .iter()
+        .filter_map(|block| {
+            let block_type = block["type"].as_str().unwrap_or("");
+            if block_kinds.contains(&block_type) {
+                block["text"].as_str()
+            } else {
+                None
             }
-        }
+        })
+        .filter(|text| !text.is_empty())
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(joiner))
     }
-    None
+}
+
+fn is_slash_command_payload(text: &str) -> bool {
+    text.contains("<command-name>") || text.contains("<local-command-")
+}
+
+/// Extract user message text from a JSONL event, filtering out command metadata.
+fn extract_user_text(parsed: &serde_json::Value) -> Option<String> {
+    let text = collect_content_text(&parsed["message"]["content"], &["text"], "\n")?;
+    if is_slash_command_payload(&text) {
+        return None;
+    }
+    let preview = truncate_preview(&text, 150);
+    if preview.is_empty() {
+        None
+    } else {
+        Some(preview)
+    }
 }
 
 /// Extract full message text from a JSONL event (user or assistant), for content search.
@@ -759,26 +787,7 @@ fn extract_message_text(parsed: &serde_json::Value) -> Option<String> {
     if msg_type != "user" && msg_type != "assistant" {
         return None;
     }
-    let content = &parsed["message"]["content"];
-
-    // User messages can be a plain string
-    if let Some(text) = content.as_str() {
-        if !text.is_empty() {
-            return Some(text.to_string());
-        }
-    }
-    // Both user and assistant use text blocks in arrays
-    if let Some(arr) = content.as_array() {
-        let parts: Vec<&str> = arr
-            .iter()
-            .filter(|b| b["type"].as_str() == Some("text"))
-            .filter_map(|b| b["text"].as_str())
-            .collect();
-        if !parts.is_empty() {
-            return Some(parts.join(" "));
-        }
-    }
-    None
+    collect_content_text(&parsed["message"]["content"], &["text"], "\n")
 }
 
 fn utf16_len(text: &str) -> usize {
@@ -834,30 +843,7 @@ fn push_search_matches(
 }
 
 fn codex_text_from_content(content: &serde_json::Value) -> Option<String> {
-    if let Some(text) = content.as_str() {
-        if !text.is_empty() {
-            return Some(text.to_string());
-        }
-    }
-
-    let arr = content.as_array()?;
-    let parts: Vec<&str> = arr
-        .iter()
-        .filter_map(|block| {
-            let block_type = block["type"].as_str().unwrap_or("");
-            if block_type == "input_text" || block_type == "output_text" || block_type == "text" {
-                block["text"].as_str()
-            } else {
-                None
-            }
-        })
-        .filter(|text| !text.is_empty())
-        .collect();
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts.join("\n"))
-    }
+    collect_content_text(content, &["input_text", "output_text", "text"], "\n")
 }
 
 fn extract_codex_message_text(parsed: &serde_json::Value) -> Option<(String, String)> {
@@ -906,11 +892,7 @@ fn codex_rollout_path_for_session(app_session_id: &str) -> Option<std::path::Pat
     }
 
     let path = last_path?;
-    if path.exists() {
-        Some(path)
-    } else {
-        None
-    }
+    if path.exists() { Some(path) } else { None }
 }
 
 fn search_codex_rollout_file(
@@ -950,7 +932,7 @@ fn search_codex_rollout_file(
             Ok(v) => v,
             Err(_) => continue,
         };
-        let (role, text) = match extract_codex_message_text(&parsed) {
+        let (role, text) = match conversation_codec(SearchCli::Codex).extract_search_text(&parsed) {
             Some(t) => t,
             None => continue,
         };
@@ -960,7 +942,7 @@ fn search_codex_rollout_file(
             re,
             app_session_id,
             message_index,
-            &role,
+            role.as_str(),
             &text,
             limit,
         );
@@ -996,6 +978,19 @@ pub fn cancel_session_content_search(cancel_token: String) {
 const MAX_CONTENT_SEARCH_FILE_SIZE: u64 = 20 * 1024 * 1024;
 const MAX_CONTENT_SEARCH_RESULTS: usize = 50;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SearchCli {
+    Claude,
+    Codex,
+}
+
+struct SearchFileEntry {
+    path: std::path::PathBuf,
+    session_id: String,
+    modified: std::time::SystemTime,
+    cli: SearchCli,
+}
+
 fn search_session_content_sync(
     query: &str,
     cancelled: &AtomicBool,
@@ -1009,21 +1004,7 @@ fn search_session_content_sync(
 
     let query_lower = query.to_lowercase();
 
-    // Collect all .jsonl files with metadata, sorted by mtime descending
-    #[derive(Clone, Copy, PartialEq, Eq)]
-    enum SearchCli {
-        Claude,
-        Codex,
-    }
-
-    struct FileEntry {
-        path: std::path::PathBuf,
-        session_id: String,
-        modified: std::time::SystemTime,
-        cli: SearchCli,
-    }
-
-    let mut files: Vec<FileEntry> = Vec::new();
+    let mut files: Vec<SearchFileEntry> = Vec::new();
 
     if projects_dir.exists() {
         let project_dirs = std::fs::read_dir(&projects_dir)
@@ -1074,7 +1055,7 @@ fn search_session_content_sync(
                     continue;
                 }
 
-                files.push(FileEntry {
+                files.push(SearchFileEntry {
                     path: fpath,
                     session_id,
                     modified: metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
@@ -1102,7 +1083,7 @@ fn search_session_content_sync(
         if session_id.is_empty() {
             continue;
         }
-        files.push(FileEntry {
+        files.push(SearchFileEntry {
             path: fpath,
             session_id,
             modified: metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
@@ -1147,17 +1128,9 @@ fn search_session_content_sync(
                 Err(_) => continue,
             };
 
-            let text = match file_entry.cli {
-                SearchCli::Claude => match extract_message_text(&parsed) {
-                    Some(t) => t,
-                    None => continue,
-                },
-                SearchCli::Codex => match codex_user_event_text(&parsed)
-                    .or_else(|| extract_codex_message_text(&parsed).map(|(_, text)| text))
-                {
-                    Some(t) => t,
-                    None => continue,
-                },
+            let text = match conversation_codec(file_entry.cli).extract_search_text(&parsed) {
+                Some((_, text)) => text,
+                None => continue,
             };
 
             let text_lower = text.to_lowercase();
@@ -1337,26 +1310,24 @@ fn search_jsonl_files_sync(
                 Err(_) => continue,
             };
 
-            let role = match parsed["type"].as_str() {
-                Some("user") => "user",
-                Some("assistant") => "assistant",
-                _ => continue,
-            };
-
-            let text = match extract_message_text(&parsed) {
-                Some(t) => t,
-                None => {
-                    message_index += 1;
-                    continue;
-                }
-            };
+            let is_turn = matches!(parsed["type"].as_str(), Some("user" | "assistant"));
+            let (role, text) =
+                match conversation_codec(SearchCli::Claude).extract_search_text(&parsed) {
+                    Some(t) => t,
+                    None => {
+                        if is_turn {
+                            message_index += 1;
+                        }
+                        continue;
+                    }
+                };
 
             push_search_matches(
                 &mut results,
                 &re,
                 session_id,
                 message_index,
-                role,
+                role.as_str(),
                 &text,
                 limit,
             );
@@ -1372,8 +1343,9 @@ fn search_jsonl_files_sync(
 mod tests {
     use super::{
         codex_compaction_marker, codex_id_from_rollout_filename, codex_response_item_to_message,
-        codex_tool_input, codex_user_event_text, extract_codex_message_text, extract_user_text,
-        push_search_matches, read_conversation_sync, summarize_codex_rollout,
+        codex_tool_input, codex_user_event_text, extract_codex_message_text, extract_message_text,
+        extract_user_text, push_search_matches, read_conversation_sync, session_dir_age_time,
+        summarize_codex_rollout, truncate_preview,
     };
     use serde_json::json;
     use std::io::Write;
@@ -1395,11 +1367,70 @@ mod tests {
         let parsed = json!({
             "type": "user",
             "message": {
-                "content": "local-command command-name"
+                "content": "<command-name>/model</command-name><local-command-stdout>ok</local-command-stdout>"
             }
         });
 
         assert_eq!(extract_user_text(&parsed), None);
+    }
+
+    #[test]
+    fn extract_user_text_keeps_literal_command_words() {
+        let parsed = json!({
+            "type": "user",
+            "message": {
+                "content": "Please explain the words command-name and local-command."
+            }
+        });
+
+        assert_eq!(
+            extract_user_text(&parsed),
+            Some("Please explain the words command-name and local-command.".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_message_text_joins_blocks_with_newlines() {
+        let parsed = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    { "type": "text", "text": "first" },
+                    { "type": "text", "text": "second" }
+                ]
+            }
+        });
+
+        assert_eq!(
+            extract_message_text(&parsed),
+            Some("first\nsecond".to_string())
+        );
+    }
+
+    #[test]
+    fn truncate_preview_normalizes_without_full_join() {
+        assert_eq!(
+            truncate_preview("  alpha \n beta   gamma", 12),
+            "alpha beta g"
+        );
+        assert_eq!(truncate_preview("alpha beta", 0), "");
+    }
+
+    #[test]
+    fn invalid_manifest_age_falls_back_to_dir_mtime() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("manifest.json"), "{not json").unwrap();
+
+        assert!(session_dir_age_time(dir.path()).is_some());
+    }
+
+    #[test]
+    fn codex_rollout_filename_rejects_non_uuid_suffix() {
+        let path = std::path::Path::new(
+            "rollout-2026-04-26T10-52-05-019dc7b3-8995-7ec1-b5f8-b8962086a50z.jsonl",
+        );
+
+        assert_eq!(codex_id_from_rollout_filename(path), None);
     }
 
     #[test]
@@ -1555,6 +1586,66 @@ mod tests {
     }
 
     #[test]
+    fn read_conversation_sync_reads_claude_messages_and_tool_blocks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("claude.jsonl");
+        let mut file = std::fs::File::create(&path).unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "user",
+                "message": { "content": "Claude question" }
+            })
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        { "type": "text", "text": "Claude answer" },
+                        { "type": "tool_use", "id": "toolu_1", "name": "Bash", "input": { "command": "pwd" } }
+                    ]
+                }
+            })
+        )
+        .unwrap();
+        writeln!(
+            file,
+            "{}",
+            json!({
+                "type": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_1",
+                            "content": [{ "type": "text", "text": "/workspace" }]
+                        }
+                    ]
+                }
+            })
+        )
+        .unwrap();
+
+        let messages = read_conversation_sync(path.to_str().unwrap()).unwrap();
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0]["role"], "user");
+        assert_eq!(messages[0]["content"][0]["text"], "Claude question");
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(messages[1]["content"][0]["text"], "Claude answer");
+        assert_eq!(messages[1]["content"][1]["type"], "tool_use");
+        assert_eq!(messages[1]["content"][1]["id"], "toolu_1");
+        assert_eq!(messages[1]["content"][1]["input"]["command"], "pwd");
+        assert_eq!(messages[2]["content"][0]["type"], "tool_result");
+        assert_eq!(messages[2]["content"][0]["toolUseId"], "toolu_1");
+        assert_eq!(messages[2]["content"][0]["text"], "/workspace");
+    }
+
+    #[test]
     fn read_conversation_sync_reads_codex_function_calls() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("rollout-fc.jsonl");
@@ -1645,7 +1736,10 @@ mod tests {
         assert_eq!(messages[0]["content"][0]["type"], "tool_use");
         assert_eq!(messages[0]["content"][0]["name"], "apply_patch");
         // Raw (non-JSON) patch is preserved as a string input
-        assert_eq!(messages[0]["content"][0]["input"], "*** Begin Patch\n*** End Patch");
+        assert_eq!(
+            messages[0]["content"][0]["input"],
+            "*** Begin Patch\n*** End Patch"
+        );
         assert_eq!(messages[1]["content"][0]["type"], "tool_result");
         assert_eq!(messages[1]["content"][0]["text"], "Patch applied");
     }
@@ -1808,7 +1902,8 @@ fn truncate_block_text(s: &str) -> String {
 /// Always returns a value whose stringified form is <= MAX_BLOCK_TEXT chars.
 fn codex_tool_input(arguments: &serde_json::Value) -> serde_json::Value {
     let parsed = if let Some(s) = arguments.as_str() {
-        serde_json::from_str::<serde_json::Value>(s).unwrap_or(serde_json::Value::String(s.to_string()))
+        serde_json::from_str::<serde_json::Value>(s)
+            .unwrap_or(serde_json::Value::String(s.to_string()))
     } else if arguments.is_null() {
         return serde_json::Value::Null;
     } else {
@@ -1916,6 +2011,149 @@ fn codex_compaction_marker(payload: &serde_json::Value) -> Option<serde_json::Va
     }))
 }
 
+enum CodecLine {
+    Message(serde_json::Value),
+    Skip,
+    NotMine,
+}
+
+trait ConversationCodec {
+    fn parse_turn(&self, line: &serde_json::Value) -> CodecLine;
+    fn extract_search_text(&self, line: &serde_json::Value) -> Option<(String, String)>;
+}
+
+struct ClaudeCodec;
+struct CodexCodec;
+
+fn claude_line_to_message(parsed: &serde_json::Value) -> Option<serde_json::Value> {
+    let msg_type = match parsed["type"].as_str()? {
+        "user" => "user",
+        "assistant" => "assistant",
+        _ => return None,
+    };
+
+    let content = &parsed["message"]["content"];
+    let content_blocks = if let Some(text) = content.as_str() {
+        serde_json::json!([{ "type": "text", "text": text }])
+    } else if let Some(arr) = content.as_array() {
+        serde_json::Value::Array(
+            arr.iter()
+                .map(|block| {
+                    let block_type = block["type"].as_str().unwrap_or("text");
+                    match block_type {
+                        "text" => serde_json::json!({
+                            "type": "text",
+                            "text": block["text"].as_str().unwrap_or("")
+                        }),
+                        "tool_use" => {
+                            let mut obj = serde_json::json!({
+                                "type": "tool_use",
+                                "name": block["name"].as_str().unwrap_or("unknown"),
+                            });
+                            if let Some(id) = block["id"].as_str() {
+                                obj["id"] = serde_json::Value::String(id.to_string());
+                            }
+                            if let Some(input) = block.get("input") {
+                                obj["input"] = codex_tool_input(input);
+                            }
+                            obj
+                        }
+                        "tool_result" => {
+                            let mut obj = serde_json::json!({ "type": "tool_result" });
+                            if let Some(id) = block["tool_use_id"].as_str() {
+                                obj["toolUseId"] = serde_json::Value::String(id.to_string());
+                            }
+                            if let Some(err) = block["is_error"].as_bool() {
+                                obj["isError"] = serde_json::Value::Bool(err);
+                            }
+                            if let Some(text) = block["content"].as_str() {
+                                obj["text"] = serde_json::Value::String(truncate_block_text(text));
+                            } else if let Some(arr) = block["content"].as_array() {
+                                let parts: Vec<&str> = arr
+                                    .iter()
+                                    .filter(|b| b["type"].as_str() == Some("text"))
+                                    .filter_map(|b| b["text"].as_str())
+                                    .collect();
+                                if !parts.is_empty() {
+                                    obj["text"] = serde_json::Value::String(truncate_block_text(
+                                        &parts.join("\n"),
+                                    ));
+                                }
+                            }
+                            obj
+                        }
+                        _ => serde_json::json!({ "type": block_type }),
+                    }
+                })
+                .collect(),
+        )
+    } else {
+        return None;
+    };
+
+    Some(serde_json::json!({
+        "role": msg_type,
+        "content": content_blocks,
+    }))
+}
+
+impl ConversationCodec for ClaudeCodec {
+    fn parse_turn(&self, line: &serde_json::Value) -> CodecLine {
+        match claude_line_to_message(line) {
+            Some(message) => CodecLine::Message(message),
+            None => CodecLine::NotMine,
+        }
+    }
+
+    fn extract_search_text(&self, line: &serde_json::Value) -> Option<(String, String)> {
+        let role = match line["type"].as_str()? {
+            "user" => "user",
+            "assistant" => "assistant",
+            _ => return None,
+        };
+        extract_message_text(line).map(|text| (role.to_string(), text))
+    }
+}
+
+impl ConversationCodec for CodexCodec {
+    fn parse_turn(&self, line: &serde_json::Value) -> CodecLine {
+        match line["type"].as_str() {
+            Some("response_item") => codex_response_item_to_message(&line["payload"])
+                .map(CodecLine::Message)
+                .unwrap_or(CodecLine::Skip),
+            Some("compacted") => codex_compaction_marker(&line["payload"])
+                .map(CodecLine::Message)
+                .unwrap_or(CodecLine::Skip),
+            Some("session_meta") | Some("turn_context") | Some("event_msg") => CodecLine::Skip,
+            _ => CodecLine::NotMine,
+        }
+    }
+
+    fn extract_search_text(&self, line: &serde_json::Value) -> Option<(String, String)> {
+        if let Some(text) = codex_user_event_text(line) {
+            return Some(("user".to_string(), text));
+        }
+        extract_codex_message_text(line)
+    }
+}
+
+fn conversation_codec(cli: SearchCli) -> &'static dyn ConversationCodec {
+    static CLAUDE_CODEC: ClaudeCodec = ClaudeCodec;
+    static CODEX_CODEC: CodexCodec = CodexCodec;
+    match cli {
+        SearchCli::Claude => &CLAUDE_CODEC,
+        SearchCli::Codex => &CODEX_CODEC,
+    }
+}
+
+fn push_conversation_message(
+    messages: &mut Vec<serde_json::Value>,
+    message: serde_json::Value,
+) -> bool {
+    messages.push(message);
+    messages.len() >= MAX_CONVERSATION_MESSAGES
+}
+
 /// Read a conversation JSONL file and return structured messages as CapturedMessage[].
 #[tauri::command]
 pub async fn read_conversation(file_path: String) -> Result<Vec<serde_json::Value>, String> {
@@ -1964,6 +2202,8 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
     use std::io::BufRead;
     let reader = std::io::BufReader::new(file);
     let mut messages: Vec<serde_json::Value> = Vec::new();
+    let codex = CodexCodec;
+    let claude = ClaudeCodec;
 
     for line in reader.lines() {
         let line = match line {
@@ -1975,112 +2215,21 @@ fn read_conversation_sync(file_path: &str) -> Result<Vec<serde_json::Value>, Str
             Err(_) => continue,
         };
 
-        // Codex rollout payloads. Each rollout line has a top-level `type` of
-        // `response_item` (turn content), `compacted` (live compaction marker),
-        // or one of `session_meta` / `turn_context` / `event_msg` (skipped — not
-        // turn content). Anything that doesn't match falls through to the
-        // Claude JSONL handler below.
-        match parsed["type"].as_str() {
-            Some("response_item") => {
-                if let Some(msg) = codex_response_item_to_message(&parsed["payload"]) {
-                    messages.push(msg);
-                    if messages.len() >= MAX_CONVERSATION_MESSAGES {
-                        break;
-                    }
+        match codex.parse_turn(&parsed) {
+            CodecLine::Message(message) => {
+                if push_conversation_message(&mut messages, message) {
+                    break;
                 }
                 continue;
             }
-            Some("compacted") => {
-                if let Some(msg) = codex_compaction_marker(&parsed["payload"]) {
-                    messages.push(msg);
-                    if messages.len() >= MAX_CONVERSATION_MESSAGES {
-                        break;
-                    }
-                }
-                continue;
+            CodecLine::Skip => continue,
+            CodecLine::NotMine => {}
+        }
+
+        if let CodecLine::Message(message) = claude.parse_turn(&parsed) {
+            if push_conversation_message(&mut messages, message) {
+                break;
             }
-            Some("session_meta") | Some("turn_context") | Some("event_msg") => continue,
-            _ => {}
-        }
-
-        let msg_type = match parsed["type"].as_str() {
-            Some(t) => t,
-            None => continue,
-        };
-
-        if msg_type != "user" && msg_type != "assistant" {
-            continue;
-        }
-
-        // Preserve the content block array structure for CapturedMessage compatibility
-        let content = &parsed["message"]["content"];
-        let content_blocks = if let Some(text) = content.as_str() {
-            // User messages can be a plain string — wrap in a text block
-            serde_json::json!([{ "type": "text", "text": text }])
-        } else if let Some(arr) = content.as_array() {
-            // Already an array of content blocks — pass through
-            serde_json::Value::Array(
-                arr.iter()
-                    .map(|block| {
-                        let block_type = block["type"].as_str().unwrap_or("text");
-                        match block_type {
-                            "text" => serde_json::json!({
-                                "type": "text",
-                                "text": block["text"].as_str().unwrap_or("")
-                            }),
-                            "tool_use" => {
-                                let mut obj = serde_json::json!({
-                                    "type": "tool_use",
-                                    "name": block["name"].as_str().unwrap_or("unknown"),
-                                });
-                                if let Some(id) = block["id"].as_str() {
-                                    obj["id"] = serde_json::Value::String(id.to_string());
-                                }
-                                // Truncate large tool inputs
-                                if let Some(input) = block.get("input") {
-                                    obj["input"] = codex_tool_input(input);
-                                }
-                                obj
-                            }
-                            "tool_result" => {
-                                let mut obj = serde_json::json!({ "type": "tool_result" });
-                                if let Some(id) = block["tool_use_id"].as_str() {
-                                    obj["toolUseId"] = serde_json::Value::String(id.to_string());
-                                }
-                                if let Some(err) = block["is_error"].as_bool() {
-                                    obj["isError"] = serde_json::Value::Bool(err);
-                                }
-                                // Extract text from tool result content
-                                if let Some(text) = block["content"].as_str() {
-                                    obj["text"] = serde_json::Value::String(truncate_block_text(text));
-                                } else if let Some(arr) = block["content"].as_array() {
-                                    let parts: Vec<&str> = arr
-                                        .iter()
-                                        .filter(|b| b["type"].as_str() == Some("text"))
-                                        .filter_map(|b| b["text"].as_str())
-                                        .collect();
-                                    if !parts.is_empty() {
-                                        obj["text"] = serde_json::Value::String(truncate_block_text(&parts.join("\n")));
-                                    }
-                                }
-                                obj
-                            }
-                            _ => serde_json::json!({ "type": block_type }),
-                        }
-                    })
-                    .collect(),
-            )
-        } else {
-            continue;
-        };
-
-        messages.push(serde_json::json!({
-            "role": msg_type,
-            "content": content_blocks,
-        }));
-
-        if messages.len() >= MAX_CONVERSATION_MESSAGES {
-            break;
         }
     }
 
