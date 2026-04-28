@@ -23,8 +23,9 @@ import {
   getActivityText,
   TOOL_COLORS,
   EVENT_KIND_COLORS,
+  resolveResumeId,
 } from "../claude";
-import type { Session } from "../../types/session";
+import type { PastSession, Session } from "../../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../../types/session";
 
 describe("dirToTabName", () => {
@@ -372,6 +373,96 @@ describe("getResumeId", () => {
     // Empty string is falsy — should fall through to sessionId
     const s = makeSession({ resumeSession: "", sessionId: "fallback" });
     expect(getResumeId(s)).toBe("fallback");
+  });
+});
+
+describe("resolveResumeId", () => {
+  function past(p: { id: string; directory: string; lastModified: string; cli?: "claude" | "codex" }): PastSession {
+    return {
+      id: p.id,
+      directory: p.directory,
+      lastModified: p.lastModified,
+      cli: p.cli ?? "claude",
+      path: `/fake/${p.id}.jsonl`,
+      filePath: `/fake/${p.id}.jsonl`,
+      sizeBytes: 1024,
+      firstMessage: "first",
+      lastMessage: "last",
+      parentId: null,
+      model: "claude-opus-4-7",
+      dirExists: true,
+    };
+  }
+
+  function sessionFor(opts: {
+    workingDir: string;
+    sessionId?: string | null;
+    resumeSession?: string | null;
+    lastActive?: string;
+    createdAt?: string;
+  }): Session {
+    const base = makeSession({
+      sessionId: opts.sessionId ?? null,
+      resumeSession: opts.resumeSession ?? null,
+    });
+    return {
+      ...base,
+      config: { ...base.config, workingDir: opts.workingDir },
+      lastActive: opts.lastActive ?? base.lastActive,
+      createdAt: opts.createdAt ?? base.createdAt,
+    };
+  }
+
+  it("returns null when there are no past sessions in the cwd", () => {
+    const s = sessionFor({ workingDir: "C:/dev/code-tabs" });
+    const others = [past({ id: "abc", directory: "C:/dev/elsewhere", lastModified: "2026-04-28T10:00:00Z" })];
+    expect(resolveResumeId(s, others)).toBeNull();
+  });
+
+  it("uses the stored sessionId verbatim when it matches a JSONL in the cwd", () => {
+    const s = sessionFor({ workingDir: "C:/dev/code-tabs", sessionId: "wanted-id" });
+    const ps = [
+      past({ id: "wanted-id", directory: "C:/dev/code-tabs", lastModified: "2026-04-28T10:00:00Z" }),
+      past({ id: "other-id", directory: "C:/dev/code-tabs", lastModified: "2026-04-28T11:00:00Z" }),
+    ];
+    expect(resolveResumeId(s, ps)).toBe("wanted-id");
+  });
+
+  it("returns the only candidate when cwd has exactly one JSONL", () => {
+    // The dead tab carries an id that no JSONL matches (e.g. lost via TAP miss).
+    const s = sessionFor({ workingDir: "C:/dev/code-tabs", sessionId: "phantom-id" });
+    const ps = [past({ id: "real-id", directory: "C:/dev/code-tabs", lastModified: "2026-04-28T10:00:00Z" })];
+    expect(resolveResumeId(s, ps)).toBe("real-id");
+  });
+
+  it("tie-breaks by closest lastModified to the dead tab's lastActive", () => {
+    const s = sessionFor({
+      workingDir: "C:/dev/code-tabs",
+      sessionId: "phantom",
+      lastActive: "2026-04-28T12:00:00Z",
+    });
+    const ps = [
+      past({ id: "way-back", directory: "C:/dev/code-tabs", lastModified: "2026-04-20T10:00:00Z" }),
+      past({ id: "closest",  directory: "C:/dev/code-tabs", lastModified: "2026-04-28T11:55:00Z" }),
+      past({ id: "future",   directory: "C:/dev/code-tabs", lastModified: "2026-04-29T10:00:00Z" }),
+    ];
+    expect(resolveResumeId(s, ps)).toBe("closest");
+  });
+
+  it("normalizes path separators when matching cwd", () => {
+    // Same project, different slash flavours — must match.
+    const s = sessionFor({ workingDir: "C:\\dev\\code-tabs", sessionId: null });
+    const ps = [past({ id: "real", directory: "C:/dev/code-tabs", lastModified: "2026-04-28T10:00:00Z" })];
+    expect(resolveResumeId(s, ps)).toBe("real");
+  });
+
+  it("ignores Codex past sessions (different storage layer, not relevant to Claude --resume)", () => {
+    const s = sessionFor({ workingDir: "C:/dev/code-tabs", sessionId: null });
+    const ps = [
+      past({ id: "codex-roll", directory: "C:/dev/code-tabs", lastModified: "2026-04-28T11:00:00Z", cli: "codex" }),
+      past({ id: "claude-id",  directory: "C:/dev/code-tabs", lastModified: "2026-04-28T10:00:00Z" }),
+    ];
+    expect(resolveResumeId(s, ps)).toBe("claude-id");
   });
 });
 

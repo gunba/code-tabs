@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Session, SessionConfig, SessionState, Subagent } from "../types/session";
+import type { PastSession, Session, SessionConfig, SessionState, Subagent } from "../types/session";
 import { isSessionIdle, isSubagentActive } from "../types/session";
+import { normalizePath } from "./paths";
 
 // Re-export path utilities so existing imports from claude.ts keep working
 export { dirToTabName } from "./paths";
@@ -14,6 +15,68 @@ export async function buildClaudeArgs(
 /** [RS-02] Resume target: chains through revivals to find the original CLI session ID. */
 export function getResumeId(session: Session): string {
   return session.config.resumeSession || session.config.sessionId || session.id;
+}
+
+/**
+ * [RS-09] Auto-resolve a Claude resume id from on-disk JSONLs.
+ *
+ * Long-lived sessions sometimes report a sessionId via TAP that doesn't
+ * match the JSONL filename Claude actually wrote — or a session crashed
+ * before TAP captured anything, in which case `getResumeId` falls back
+ * to the Code Tabs app id which is never a valid CLI session id. Either
+ * way `claude --resume <bad-id>` fails silently.
+ *
+ * The picker side handles this by listing every JSONL on disk; we can
+ * borrow that index. Filter to the dead tab's cwd, prefer an exact id
+ * match, otherwise tie-break by the JSONL whose `lastModified` is
+ * closest to the dead tab's `lastActive`. Returns null when no JSONL
+ * exists in the cwd at all — caller should open the picker so the user
+ * can choose manually.
+ */
+export function resolveResumeId(
+  session: Session,
+  pastSessions: PastSession[]
+): string | null {
+  const cwd = normalizePath(session.config.workingDir).toLowerCase();
+  if (!cwd) return null;
+
+  // Same-cwd, Claude-only candidates. Codex sessions live elsewhere on
+  // disk and use a separate resume mechanism, so they shouldn't apply.
+  const candidates = pastSessions.filter(
+    (p) => normalizePath(p.directory).toLowerCase() === cwd && p.cli !== "codex"
+  );
+  if (candidates.length === 0) return null;
+
+  // Fast path: stored id is a real JSONL in this cwd.
+  const storedId = session.config.resumeSession || session.config.sessionId;
+  if (storedId) {
+    const exact = candidates.find((p) => p.id === storedId);
+    if (exact) return exact.id;
+  }
+
+  if (candidates.length === 1) return candidates[0].id;
+
+  // Multiple candidates — pick whichever JSONL was most recently active
+  // around the dead tab's lastActive. Falls back to the first entry
+  // (Rust returns them sorted by lastModified desc) when timestamps
+  // are missing.
+  const anchor = Date.parse(session.lastActive) || Date.parse(session.createdAt) || 0;
+  if (!anchor) return candidates[0].id;
+
+  let best = candidates[0];
+  let bestDelta = Math.abs(Date.parse(best.lastModified) - anchor);
+  if (!Number.isFinite(bestDelta)) bestDelta = Infinity;
+  for (let i = 1; i < candidates.length; i++) {
+    const c = candidates[i];
+    const t = Date.parse(c.lastModified);
+    if (!Number.isFinite(t)) continue;
+    const delta = Math.abs(t - anchor);
+    if (delta < bestDelta) {
+      best = c;
+      bestDelta = delta;
+    }
+  }
+  return best.id;
 }
 
 // [DS-03] canResumeSession: resumable only with actual conversation evidence

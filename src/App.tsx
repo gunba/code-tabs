@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { dirToTabName, effectiveModel, getResumeId, getLaunchWorkingDir, modelLabel, modelColor, effortColor, canResumeSession, stripWorktreeFlags, formatTokenCount, getActivityColor, getActivityText } from "./lib/claude";
+import { dirToTabName, effectiveModel, getResumeId, resolveResumeId, getLaunchWorkingDir, modelLabel, modelColor, effortColor, canResumeSession, stripWorktreeFlags, formatTokenCount, getActivityColor, getActivityText } from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 
 import { SessionLauncher } from "./components/SessionLauncher/SessionLauncher";
@@ -249,11 +249,21 @@ export default function App() {
   }, [persist]);
 
   const relaunchDeadSession = useCallback(async (session: Session) => {
+    // [RS-09] Auto-resolve: if the dead tab's stored sessionId lost touch
+    // with the actual JSONL on disk (e.g. TAP missed the rename, or the
+    // fallback id is the Code Tabs app UUID which is never a real CLI
+    // session id), pick the right JSONL by cwd + closest lastActive.
+    // Falls through to getResumeId() when pastSessions is empty / not
+    // yet loaded so we don't regress the common path.
+    const pastSessions = useSettingsStore.getState().pastSessions;
+    const resolvedId = resolveResumeId(session, pastSessions);
+    const resumeId = resolvedId ?? getResumeId(session);
+
     const resumeConfig = {
       ...session.config,
       workingDir: getLaunchWorkingDir(session),
       launchWorkingDir: getLaunchWorkingDir(session),
-      resumeSession: getResumeId(session),
+      resumeSession: resumeId,
       continueSession: false,
       extraFlags: stripWorktreeFlags(session.config.extraFlags),
     };
