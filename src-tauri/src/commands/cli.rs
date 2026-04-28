@@ -92,13 +92,13 @@ fn detect_claude_cli_details_sync() -> Result<(String, &'static str), String> {
         .map_err(|e| format!("Failed to search for claude: {}", e))?;
 
     if output.status.success() {
-        let path = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .next()
-            .unwrap_or("")
-            .trim()
-            .to_string();
-        if !path.is_empty() {
+        // [CD-W1] On Windows, `where claude` emits the extensionless npm bash
+        // wrapper before `claude.cmd`. CreateProcess refuses the wrapper
+        // ("not a valid Win32 application"); prefer .cmd / .exe / .bat. The
+        // helper falls back to the first existing line on Unix.
+        if let Some(path) = crate::path_utils::pick_runnable_from_which_output(
+            &String::from_utf8_lossy(&output.stdout),
+        ) {
             return Ok((path, "path_lookup"));
         }
     }
