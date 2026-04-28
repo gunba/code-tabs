@@ -4,6 +4,8 @@ import { isSubagentActive } from "../types/session";
 import { getNoisyEventKinds } from "./noisyEventKinds";
 import { dlog } from "./debugLog";
 
+const INTERNAL_ASIDE_QUESTION_AGENT_PREFIX = "aside_question";
+
 export interface SubagentAction {
   type: "add" | "update";
   subagentId?: string;
@@ -181,7 +183,7 @@ export class TapSubagentTracker {
         if (!this.knownIds.has(agentId)) {
           // [IN-03] Skip CLI-internal sidechains (aside_question replays parent context,
           // creating a phantom entry that duplicates a real agent)
-          if (agentId.startsWith("aside_question")) {
+          if (agentId.startsWith(INTERNAL_ASIDE_QUESTION_AGENT_PREFIX)) {
             dlog("inspector", this.parentSessionId, `skipping CLI-internal sidechain agentId=${agentId}`, "DEBUG");
             break;
           }

@@ -44,12 +44,17 @@ describe("tapEventBus", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("dispatchBatch sends all events to each handler", () => {
-    const handler = vi.fn();
-    tapEventBus.subscribe("test-session", handler);
+  it("dispatchBatch sends each event to all handlers before the next event", () => {
+    const calls: string[] = [];
+    const h1 = vi.fn((event: TapEvent) => calls.push(`h1:${event.ts}`));
+    const h2 = vi.fn((event: TapEvent) => calls.push(`h2:${event.ts}`));
+    tapEventBus.subscribe("test-session", h1);
+    tapEventBus.subscribe("test-session", h2);
     const events = [makeEvent("ThinkingStart", 1), makeEvent("ThinkingStart", 2)];
     tapEventBus.dispatchBatch("test-session", events);
-    expect(handler).toHaveBeenCalledTimes(2);
+    expect(h1).toHaveBeenCalledTimes(2);
+    expect(h2).toHaveBeenCalledTimes(2);
+    expect(calls).toEqual(["h1:1", "h2:1", "h1:2", "h2:2"]);
   });
 
   it("dispatchBatch is no-op for empty events", () => {

@@ -47,24 +47,8 @@ function eventDetail(event: TapEvent): string {
   }
 }
 
-// Module-scope cache: per-workingDir result of git_repo_check, so we don't re-shell
-// for every settled-idle on the same directory.
-const gitRepoCache = new Map<string, boolean>();
-
 interface GitChange { path: string; status: string }
 interface PathStatus { path: string; exists: boolean; isDir: boolean }
-
-async function isGitRepo(workDir: string): Promise<boolean> {
-  if (gitRepoCache.has(workDir)) return gitRepoCache.get(workDir)!;
-  try {
-    const isRepo = await invoke<boolean>("git_repo_check", { workingDir: workDir });
-    gitRepoCache.set(workDir, isRepo);
-    return isRepo;
-  } catch {
-    gitRepoCache.set(workDir, false);
-    return false;
-  }
-}
 
 function gitStatusToKind(status: string): FileChangeKind {
   if (status === "D") return "deleted";
@@ -112,7 +96,7 @@ async function runGitScanAndValidate(sid: string): Promise<void> {
   const workDir = session?.config.workingDir ?? "";
   const activityStore = useActivityStore.getState();
 
-  if (workDir && (await isGitRepo(workDir))) {
+  if (workDir) {
     try {
       const changes = await invoke<GitChange[]>("git_list_changes", { workingDir: workDir });
       const known = activityStore.sessions[sid]?.visitedPaths ?? new Set<string>();
@@ -919,12 +903,12 @@ export function useTapEventProcessor(
     const VALIDATE_THROTTLE_MS = 1500;
     const scheduleValidation = () => {
       if (pendingValidate) return;
-      const elapsed = Date.now() - lastValidate;
+      const delayMs = Math.max(lastValidate + VALIDATE_THROTTLE_MS - Date.now(), 0);
       pendingValidate = setTimeout(() => {
         pendingValidate = null;
         lastValidate = Date.now();
         void runPathExistenceValidation(sessionId);
-      }, Math.max(VALIDATE_THROTTLE_MS - elapsed, 200));
+      }, delayMs);
     };
     let prevActivity = useActivityStore.getState().sessions[sessionId];
     const unsubActivity = useActivityStore.subscribe((state) => {

@@ -37,8 +37,8 @@ class TapEventBus {
   dispatchBatch(sessionId: string, events: TapEvent[]): void {
     const set = this.handlers.get(sessionId);
     if (!set || events.length === 0) return;
-    for (const handler of set) {
-      for (const event of events) {
+    for (const event of events) {
+      for (const handler of set) {
         handler(event);
       }
     }
