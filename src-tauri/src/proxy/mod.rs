@@ -22,7 +22,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::observability::{
     record_backend_event, record_backend_perf_end, record_backend_perf_fail,
@@ -282,8 +282,8 @@ pub fn update_system_prompt_rules(
 }
 
 // [CM-32] Per-session rule match counters: HashMap<ruleId, count>;
-// incremented on each proxy match; get_rule_match_counts exposes it
-// to the frontend (PromptsTab polls every 2s).
+// incremented on each proxy match, emitted to the frontend, and exposed
+// through get_rule_match_counts for initial state.
 #[tauri::command]
 pub fn get_rule_match_counts(
     proxy_state: State<'_, ProxyState>,
@@ -565,10 +565,16 @@ async fn handle_connection(
         }
     };
     if !matched_ids.is_empty() {
-        if let Ok(mut s) = proxy_state.lock() {
+        let counts = if let Ok(mut s) = proxy_state.lock() {
             for id in &matched_ids {
                 *s.rule_match_counts.entry(id.clone()).or_insert(0) += 1;
             }
+            Some(s.rule_match_counts.clone())
+        } else {
+            None
+        };
+        if let Some(counts) = counts {
+            let _ = app.emit("rule_match_counts", counts);
         }
     }
 

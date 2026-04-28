@@ -4,6 +4,7 @@ import { scopePath, SCOPES } from "./ThreePaneEditor";
 import type { PaneComponentProps } from "./ThreePaneEditor";
 import type { CliKind } from "../../types/session";
 import { formatScopePath } from "../../lib/paths";
+import { useLocalStorageBoolean } from "../../hooks/useLocalStorageBoolean";
 import { useSettingsStore } from "../../store/settings";
 import { highlightJson } from "./SettingsPane";
 import { EnvVarsReference } from "./EnvVarsReference";
@@ -27,17 +28,7 @@ export function EnvVarsTab({ projectDir, cli, onStatus }: EnvVarsTabProps) {
     "project-local": new Set(),
   });
   const [filter, setFilter] = useState("");
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem("env-vars-ref-collapsed") === "true"; } catch { return false; }
-  });
-
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem("env-vars-ref-collapsed", String(next));
-      return next;
-    });
-  }, []);
+  const [collapsed, toggleCollapsed] = useLocalStorageBoolean("env-vars-ref-collapsed");
 
   const insertRefs = {
     user: useRef<((name: string) => void) | null>(null),

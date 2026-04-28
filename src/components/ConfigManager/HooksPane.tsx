@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../../store/sessions";
 import { Dropdown } from "../Dropdown/Dropdown";
 import type { PaneComponentProps } from "./ThreePaneEditor";
+import { useUnsavedTextEditor } from "./UnsavedTextEditors";
 import "./HooksPane.css";
 
 // [HM-05] Custom events: includes "Custom event..." option with freeform text input
@@ -72,6 +73,41 @@ const EMPTY_FORM: FormState = {
   timeout: 60,
   statusMessage: "",
 };
+
+function flatHookToForm(flat: FlatHook): FormState {
+  return {
+    eventName: flat.eventName,
+    matcher: flat.matcher,
+    type: flat.hook.type || "command",
+    command: flat.hook.command || "",
+    ifCondition: flat.hook["if"] ?? "",
+    timeout: flat.hook.timeout ?? 60,
+    statusMessage: flat.hook.statusMessage ?? "",
+  };
+}
+
+function formChanged(a: FormState, b: FormState): boolean {
+  return a.eventName !== b.eventName ||
+    a.matcher !== b.matcher ||
+    a.type !== b.type ||
+    a.command !== b.command ||
+    a.ifCondition !== b.ifCondition ||
+    a.timeout !== b.timeout ||
+    a.statusMessage !== b.statusMessage;
+}
+
+function formToDiffText(form: FormState): string {
+  const lines = [
+    `event=${form.eventName}`,
+    `matcher=${form.matcher}`,
+    `type=${form.type}`,
+    `command=${form.command}`,
+    `if=${form.ifCondition}`,
+    `timeout=${form.timeout}`,
+    `status=${form.statusMessage}`,
+  ];
+  return lines.join("\n");
+}
 
 // [CM-15] Per-scope hooks CRUD. Scope is a prop, not a dropdown. Calls bumpHookChange() after save.
 // [HM-01] Three scopes: User, Project, Project Local
@@ -193,15 +229,7 @@ export function HooksPane({ scope, projectDir, cli, onStatus }: PaneComponentPro
 
   const handleEdit = useCallback((flat: FlatHook) => {
     setEditing(flat);
-    setForm({
-      eventName: flat.eventName,
-      matcher: flat.matcher,
-      type: flat.hook.type || "command",
-      command: flat.hook.command || "",
-      ifCondition: flat.hook["if"] ?? "",
-      timeout: flat.hook.timeout ?? 60,
-      statusMessage: flat.hook.statusMessage ?? "",
-    });
+    setForm(flatHookToForm(flat));
     setShowForm(true);
   }, []);
 
@@ -215,6 +243,18 @@ export function HooksPane({ scope, projectDir, cli, onStatus }: PaneComponentPro
   const hookTypes = cli === "codex" ? CODEX_HOOK_TYPES : CLAUDE_HOOK_TYPES;
   const isCustomEvent = !hookEvents.some((e) => e.name === form.eventName);
   const eventHasMatcher = isCustomEvent || (hookEvents.find((e) => e.name === form.eventName)?.hasMatcher ?? false);
+
+  useUnsavedTextEditor(`${cli}:hooks:${scope}:${projectDir}:${editing ? `${editing.eventName}:${editing.matcherIndex}:${editing.hookIndex}` : "new"}`, () => {
+    if (!showForm) return null;
+    const beforeForm = editing ? flatHookToForm(editing) : { ...EMPTY_FORM };
+    if (!formChanged(form, beforeForm)) return null;
+    const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
+    return {
+      title: editing ? `Hook ${editing.eventName} (${scopeLabel})` : `New hook (${scopeLabel})`,
+      before: formToDiffText(beforeForm),
+      after: formToDiffText(form),
+    };
+  });
 
   return (
     <div className="hooks-pane">

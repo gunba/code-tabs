@@ -48,6 +48,12 @@ const EMPTY_FORM: FormState = {
   headerText: "",
 };
 
+const MCP_TRANSPORT_OPTIONS = [
+  { value: "stdio", label: "stdio" },
+  { value: "sse", label: "sse" },
+  { value: "http", label: "http" },
+];
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 function detectTransport(s: McpServerEntry): Transport {
@@ -438,17 +444,7 @@ export function McpPane({ scope, projectDir, cli, onStatus }: PaneComponentProps
               value={form.transport}
               onChange={(v) => setForm((f) => ({ ...f, transport: v as Transport }))}
               ariaLabel="MCP transport"
-              options={cli === "codex"
-                ? [
-                    { value: "stdio", label: "stdio" },
-                    { value: "sse", label: "sse" },
-                    { value: "http", label: "http" },
-                  ]
-                : [
-                    { value: "stdio", label: "stdio" },
-                    { value: "sse", label: "sse" },
-                    { value: "http", label: "http" },
-                  ]}
+              options={MCP_TRANSPORT_OPTIONS}
             />
           </div>
 

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useSettingsStore } from "../../store/settings";
 import { PillGroup } from "../PillGroup/PillGroup";
 import { IconClose } from "../Icons/Icons";
@@ -272,15 +273,24 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
 
   useEffect(() => {
     if (activeSubTab !== "rules") return;
-    let cancelled = false;
-    const fetch = () => {
-      invoke<Record<string, number>>("get_rule_match_counts")
-        .then((counts) => { if (!cancelled) setRuleMatchCounts(counts); })
-        .catch(() => {});
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    invoke<Record<string, number>>("get_rule_match_counts")
+      .then((counts) => { if (!disposed) setRuleMatchCounts(counts); })
+      .catch(() => {});
+
+    listen<Record<string, number>>("rule_match_counts", (event) => {
+      if (!disposed) setRuleMatchCounts(event.payload);
+    }).then((dispose) => {
+      if (disposed) dispose();
+      else unlisten = dispose;
+    }).catch(() => {});
+
+    return () => {
+      disposed = true;
+      unlisten?.();
     };
-    fetch();
-    const id = window.setInterval(fetch, 2000);
-    return () => { cancelled = true; window.clearInterval(id); };
   }, [activeSubTab]);
 
   // Load saved prompt into editor. We only reseed (bump seedKey + remount the

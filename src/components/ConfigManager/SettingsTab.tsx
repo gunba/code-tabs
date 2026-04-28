@@ -4,6 +4,7 @@ import { scopePath, SCOPES } from "./ThreePaneEditor";
 import type { PaneComponentProps } from "./ThreePaneEditor";
 import type { CliKind } from "../../types/session";
 import { formatScopePath } from "../../lib/paths";
+import { useLocalStorageBoolean } from "../../hooks/useLocalStorageBoolean";
 import { useSettingsStore } from "../../store/settings";
 import {
   buildSettingsSchema,
@@ -40,17 +41,7 @@ export function SettingsTab({ projectDir, cli, onStatus }: SettingsTabProps) {
     "project-local": new Set(),
   });
   const [filter, setFilter] = useState("");
-  const [refCollapsed, setRefCollapsed] = useState(() => {
-    try { return localStorage.getItem("settings-ref-collapsed") === "true"; } catch { return false; }
-  });
-
-  const toggleRefCollapsed = useCallback(() => {
-    setRefCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem("settings-ref-collapsed", String(next));
-      return next;
-    });
-  }, []);
+  const [refCollapsed, toggleRefCollapsed] = useLocalStorageBoolean("settings-ref-collapsed");
 
   const insertRefs = {
     user: useRef<((key: string, value: unknown) => void) | null>(null),

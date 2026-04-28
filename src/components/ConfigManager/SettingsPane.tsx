@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { PaneComponentProps } from "./ThreePaneEditor";
 import { useSettingsStore } from "../../store/settings";
 import { replaceTextareaValue } from "../../lib/domEdit";
+import { useLocalStorageBoolean } from "../../hooks/useLocalStorageBoolean";
 import {
   buildSettingsSchema,
   groupByCategory,
@@ -129,17 +130,7 @@ function SettingsReference({
   defaultFor: (field: SettingField) => unknown;
 }) {
   const [filter, setFilter] = useState("");
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem("settings-ref-collapsed") === "true"; } catch { return false; }
-  });
-
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem("settings-ref-collapsed", String(next));
-      return next;
-    });
-  }, []);
+  const [collapsed, toggleCollapsed] = useLocalStorageBoolean("settings-ref-collapsed");
 
   const grouped = useMemo(() => {
     const lf = filter.toLowerCase();

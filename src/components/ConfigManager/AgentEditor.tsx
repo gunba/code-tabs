@@ -140,13 +140,20 @@ export function AgentEditor({ scope, projectDir, onStatus }: PaneComponentProps)
   useUnsavedTextEditor(`agent:${scope}:${projectDir}:${selectedAgent ?? "none"}`, () => {
     if (loading || !selectedAgent) return null;
     const after = textareaRef.current?.value ?? content;
-    if (isNew ? after === "" : after === savedContent) return null;
     const scopeLabel = scope === "project" ? "Project" : "User";
+    if (isNew) {
+      const name = newAgentName.trim();
+      if (!name && after === "") return null;
+      return {
+        title: `New agent${name ? ` "${name}"` : ""} (${scopeLabel})`,
+        before: "",
+        after: `name=${name}\n\n${after}`,
+      };
+    }
+    if (after === savedContent) return null;
     return {
-      title: isNew
-        ? `New agent${newAgentName.trim() ? ` "${newAgentName.trim()}"` : ""} (${scopeLabel})`
-        : `Agent ${selectedAgent}.md (${scopeLabel})`,
-      before: isNew ? "" : savedContent,
+      title: `Agent ${selectedAgent}.md (${scopeLabel})`,
+      before: savedContent,
       after,
     };
   });

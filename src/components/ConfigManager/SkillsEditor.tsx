@@ -213,8 +213,17 @@ export function SkillsEditor({ scope, projectDir, cli, onStatus }: PaneComponent
   useUnsavedTextEditor(`${cli}:skill:${scope}:${projectDir}:${selected ?? "none"}`, () => {
     if (loading || !selected) return null;
     const after = textareaRef.current?.value ?? content;
-    if (isNew ? after === "" : after === savedContent) return null;
     const scopeLabel = scope === "project" ? "Project" : "User";
+    if (isNew) {
+      const name = newName.trim();
+      if (!name && after === "") return null;
+      return {
+        title: `New ${newKind}${name ? ` "${name}"` : ""} (${scopeLabel})`,
+        before: "",
+        after: `name=${name}\n\n${after}`,
+      };
+    }
+    if (after === savedContent) return null;
     const parsed = selected && !isNew ? parseKey(selected) : null;
     const existingTitle = parsed
       ? parsed.kind === "skill"
@@ -222,10 +231,8 @@ export function SkillsEditor({ scope, projectDir, cli, onStatus }: PaneComponent
         : `Command /${parsed.name}.md`
       : null;
     return {
-      title: isNew
-        ? `New ${newKind}${newName.trim() ? ` "${newName.trim()}"` : ""} (${scopeLabel})`
-        : `${existingTitle ?? "Skill or command"} (${scopeLabel})`,
-      before: isNew ? "" : savedContent,
+      title: `${existingTitle ?? "Skill or command"} (${scopeLabel})`,
+      before: savedContent,
       after,
     };
   });
