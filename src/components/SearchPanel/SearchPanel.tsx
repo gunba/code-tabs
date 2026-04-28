@@ -304,6 +304,7 @@ export function SearchPanel() {
   // Abort scroll on unmount
   useEffect(() => {
     return () => {
+      searchGenRef.current += 1;
       abortRef.current?.abort();
     };
   }, []);

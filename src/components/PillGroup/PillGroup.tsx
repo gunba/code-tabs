@@ -25,7 +25,11 @@ function PillGroupInner<T extends string>({
   className,
 }: PillGroupProps<T>) {
   return (
-    <div className={`pill-group${className ? ` ${className}` : ""}${disabled ? " pill-group-disabled" : ""}`}>
+    <div
+      className={`pill-group${className ? ` ${className}` : ""}${disabled ? " pill-group-disabled" : ""}`}
+      role="group"
+      aria-disabled={disabled ? true : undefined}
+    >
       {options.map((opt) => {
         const isSelected = opt.value === selected;
         const color = isSelected && colorFn ? colorFn(opt.value) : undefined;
@@ -35,6 +39,7 @@ function PillGroupInner<T extends string>({
             className={`pill-option${isSelected ? " pill-option-selected" : ""}`}
             onClick={() => onChange(isSelected ? null : opt.value)}
             disabled={disabled}
+            aria-pressed={isSelected}
             type="button"
             style={
               isSelected && color

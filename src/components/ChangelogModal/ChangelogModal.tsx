@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import ReactMarkdown, { type Components } from "react-markdown";
 import type { CliKind } from "../../types/session";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
 import { IconClose } from "../Icons/Icons";
@@ -18,47 +19,21 @@ type LoadState =
   | { status: "ready"; data: CliChangelog }
   | { status: "error"; error: string };
 
+type ChangelogFetchTarget = {
+  fromVersion: string | null;
+  toVersion: string | null;
+};
+
 const CLI_ORDER: CliKind[] = ["claude", "codex"];
+const changelogMarkdownComponents: Components = {
+  h2: ({ node: _node, ...props }) => <h2 {...props} className="changelog-entry-heading" />,
+  h3: ({ node: _node, ...props }) => <h3 {...props} className="changelog-entry-heading" />,
+  h4: ({ node: _node, ...props }) => <h4 {...props} className="changelog-entry-heading" />,
+  ul: ({ node: _node, ...props }) => <ul {...props} className="changelog-entry-list" />,
+};
 
 function cliLabel(cli: CliKind): string {
   return cli === "codex" ? "Codex" : "Claude";
-}
-
-function renderBody(body: string) {
-  const nodes: React.ReactNode[] = [];
-  let bullets: string[] = [];
-  const flushBullets = () => {
-    if (bullets.length === 0) return;
-    const current = bullets;
-    bullets = [];
-    nodes.push(
-      <ul key={`ul-${nodes.length}`} className="changelog-entry-list">
-        {current.map((item, idx) => <li key={idx}>{item}</li>)}
-      </ul>
-    );
-  };
-
-  for (const rawLine of body.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) {
-      flushBullets();
-      continue;
-    }
-    const bullet = line.match(/^[-*]\s+(.+)$/);
-    if (bullet) {
-      bullets.push(bullet[1]);
-      continue;
-    }
-    flushBullets();
-    const heading = line.match(/^#{2,4}\s+(.+)$/);
-    if (heading) {
-      nodes.push(<div key={`h-${nodes.length}`} className="changelog-entry-heading">{heading[1]}</div>);
-    } else {
-      nodes.push(<p key={`p-${nodes.length}`}>{line}</p>);
-    }
-  }
-  flushBullets();
-  return nodes;
 }
 
 function EntryView({ entry }: { entry: ChangelogEntry }) {
@@ -68,7 +43,9 @@ function EntryView({ entry }: { entry: ChangelogEntry }) {
         <div className="changelog-entry-version">v{entry.version}</div>
         {entry.date && <div className="changelog-entry-date">{entry.date.slice(0, 10)}</div>}
       </div>
-      <div className="changelog-entry-body">{renderBody(entry.body)}</div>
+      <div className="changelog-entry-body">
+        <ReactMarkdown components={changelogMarkdownComponents}>{entry.body}</ReactMarkdown>
+      </div>
       {entry.url && (
         <button
           className="changelog-source-link"
@@ -88,22 +65,33 @@ export function ChangelogModal({ request, currentVersions, onClose }: ChangelogM
     codex: { status: "idle" },
   });
 
-  const requestKey = useMemo(() => JSON.stringify({
-    kind: request.kind,
-    ranges: request.ranges,
-    versions: currentVersions,
-  }), [currentVersions, request.kind, request.ranges]);
+  const changelogTargets = useMemo<Record<CliKind, ChangelogFetchTarget>>(() => ({
+    claude: {
+      fromVersion: request.ranges.claude?.fromVersion ?? null,
+      toVersion: request.ranges.claude?.toVersion ?? currentVersions.claude,
+    },
+    codex: {
+      fromVersion: request.ranges.codex?.fromVersion ?? null,
+      toVersion: request.ranges.codex?.toVersion ?? currentVersions.codex,
+    },
+  }), [
+    currentVersions.claude,
+    currentVersions.codex,
+    request.ranges.claude?.fromVersion,
+    request.ranges.claude?.toVersion,
+    request.ranges.codex?.fromVersion,
+    request.ranges.codex?.toVersion,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
     setStates({ claude: { status: "loading" }, codex: { status: "loading" } });
     for (const cli of CLI_ORDER) {
-      const range = request.ranges[cli] ?? {};
-      const toVersion = range.toVersion ?? currentVersions[cli];
+      const target = changelogTargets[cli];
       void invoke<CliChangelog>("fetch_cli_changelog", {
         cli,
-        fromVersion: range.fromVersion ?? null,
-        toVersion: toVersion ?? null,
+        fromVersion: target.fromVersion,
+        toVersion: target.toVersion,
       })
         .then((data) => {
           if (cancelled) return;
@@ -115,7 +103,7 @@ export function ChangelogModal({ request, currentVersions, onClose }: ChangelogM
         });
     }
     return () => { cancelled = true; };
-  }, [requestKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [changelogTargets]);
 
   const activeState = states[activeCli];
   const readyData = activeState.status === "ready" ? activeState.data : null;

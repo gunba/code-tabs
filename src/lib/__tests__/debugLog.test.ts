@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { dlog, getDebugLog, getDebugLogForSession, clearDebugLog, removeDebugLogSession, getDebugLogGeneration, setDebugCaptureEnabled, setDebugCaptureResolver, configureObservability, shouldRecordDebugLog } from "../debugLog";
+import { dlog, getDebugLog, getDebugLogForSession, clearDebugLog, removeDebugLogSession, getDebugLogGeneration, subscribeDebugLog, setDebugCaptureEnabled, setDebugCaptureResolver, configureObservability, shouldRecordDebugLog } from "../debugLog";
 import type { DebugLogEntry } from "../debugLog";
 
 const MAX_BUFFER_ENTRIES = 3000;
@@ -178,6 +178,25 @@ describe("debugLog", () => {
     expect(getDebugLogGeneration()).toBe(g0 + 1);
     dlog("m", "b", "y");
     expect(getDebugLogGeneration()).toBe(g0 + 2);
+  });
+
+  it("notifies subscribers when the buffer generation changes", () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const listener = vi.fn();
+    const unsubscribe = subscribeDebugLog(listener);
+
+    dlog("m", "a", "x");
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    removeDebugLogSession("a");
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    clearDebugLog();
+    expect(listener).toHaveBeenCalledTimes(3);
+
+    unsubscribe();
+    dlog("m", "b", "y");
+    expect(listener).toHaveBeenCalledTimes(3);
   });
 
   // --- Debug capture toggle ---

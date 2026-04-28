@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
 import { MessageEntry } from "../ContextViewer/ContextViewer";
 import { IconClose } from "../Icons/Icons";
+import { useExpandableSet } from "../../hooks/useExpandableSet";
 import type { CapturedMessage } from "../../types/session";
 import "../ContextViewer/ContextViewer.css";
 import "./ConversationViewer.css";
@@ -18,7 +19,6 @@ export function ConversationViewer({ filePath, displayName, directory, onClose }
   const [messages, setMessages] = useState<CapturedMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedSet, setExpandedSet] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -39,33 +39,12 @@ export function ConversationViewer({ filePath, displayName, directory, onClose }
     return () => { cancelled = true; };
   }, [filePath]);
 
-  const toggleEntry = useCallback((key: string) => {
-    setExpandedSet((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
-
   const allKeys = useMemo(
     () => messages.map((_, i) => `cv-msg-${i}`),
     [messages],
   );
 
-  const allExpanded = allKeys.length > 0 && allKeys.every((k) => expandedSet.has(k));
-
-  const toggleAll = useCallback(() => {
-    setExpandedSet((prev) => {
-      const next = new Set(prev);
-      if (allExpanded) {
-        for (const k of allKeys) next.delete(k);
-      } else {
-        for (const k of allKeys) next.add(k);
-      }
-      return next;
-    });
-  }, [allExpanded, allKeys]);
+  const { expandedSet, allExpanded, toggle: toggleEntry, toggleAll } = useExpandableSet(allKeys);
 
   const title = displayName || directory.split(/[\\/]/).filter(Boolean).pop() || "Conversation";
 

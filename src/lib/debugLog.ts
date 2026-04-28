@@ -42,6 +42,7 @@ const FLUSH_INTERVAL_MS = 1500;
 const FLUSH_THRESHOLD = 25;
 const buffers = new Map<string, DebugLogEntry[]>(); // [DP-13] Per-session ring buffers
 const pendingByKey = new Map<string, string[]>();
+const debugLogListeners = new Set<() => void>();
 
 let generation = 0;
 let nextId = 1;
@@ -59,6 +60,13 @@ let bridgeStarted = false;
 let bridgeUnlisten: (() => void) | null = null;
 
 (globalThis as Record<string, unknown>).__debugLogBuffers = buffers;
+
+function bumpGeneration(): void {
+  generation++;
+  for (const listener of [...debugLogListeners]) {
+    listener();
+  }
+}
 
 function bufferKey(sessionId: string | null): string {
   return sessionId ?? GLOBAL_KEY;
@@ -234,7 +242,7 @@ function pushEntry(entry: DebugLogEntry, persist: boolean): void {
     totalEntryCount -= removeCount;
   }
   trimTotalBuffers();
-  generation++;
+  bumpGeneration();
 
   if (persist) queuePersist(entry);
   forwardToConsole(entry);
@@ -326,7 +334,7 @@ export function clearDebugLog(): void {
   pendingByKey.clear();
   totalEntryCount = 0;
   stopFlushTimer();
-  generation++;
+  bumpGeneration();
 }
 
 export function getDebugLog(limit?: number): DebugLogEntry[] {
@@ -350,11 +358,18 @@ export function removeDebugLogSession(sessionId: string): void {
   totalEntryCount -= buffers.get(key)?.length ?? 0;
   buffers.delete(key);
   pendingByKey.delete(bufferKey(sessionId));
-  generation++;
+  bumpGeneration();
 }
 
 export function getDebugLogGeneration(): number {
   return generation;
+}
+
+export function subscribeDebugLog(listener: () => void): () => void {
+  debugLogListeners.add(listener);
+  return () => {
+    debugLogListeners.delete(listener);
+  };
 }
 
 export function setDebugCaptureEnabled(enabled: boolean): void {

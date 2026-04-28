@@ -3,7 +3,7 @@ import { useSessionStore } from "../../store/sessions";
 import { sessionColor } from "../../lib/claude";
 import { dirToTabName } from "../../lib/paths";
 // [DP-12] Strategic logging at key points: PTY spawn/kill/exit, TerminalPanel respawn, inspector connect/disconnect, tap pipeline, session lifecycle. All flow through dlog() and surface here via per-session ring buffers.
-import { dlog, getDebugLog, getDebugLogForSession, getDebugLogGeneration, clearDebugLog, type DebugLogEntry, type DebugLogSource } from "../../lib/debugLog";
+import { dlog, getDebugLog, getDebugLogForSession, subscribeDebugLog, clearDebugLog, type DebugLogEntry, type DebugLogSource } from "../../lib/debugLog";
 import "./DebugPanel.css";
 
 const MARKERS = [
@@ -69,36 +69,54 @@ export function DebugPanel() {
   const [showDebug, setShowDebug] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
-  const prevGenRef = useRef(0);
   const prevLenRef = useRef(0);
   const markerCounterRef = useRef(0);
+  const pendingRefreshRef = useRef(false);
 
   const sessions = useSessionStore((s) => s.sessions);
   const activeTabId = useSessionStore((s) => s.activeTabId);
 
-  // [DP-05] Poll getDebugLog() every 500ms — use generation counter to detect ring-buffer changes.
-  // Skip update while user has active text selection in the panel to preserve highlight.
-  // Uses per-session fetch when a specific filter is active to avoid merge cost.
+  const hasActivePanelSelection = useCallback(() => {
+    const panel = scrollRef.current;
+    if (!panel) return false;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+    return (
+      (sel.anchorNode != null && panel.contains(sel.anchorNode)) ||
+      (sel.focusNode != null && panel.contains(sel.focusNode))
+    );
+  }, []);
+
+  // [DP-05] Subscribe to debug-log generation changes instead of polling. Defer
+  // refresh while the user has an active text selection in the panel.
+  const refreshLogs = useCallback(() => {
+    if (hasActivePanelSelection()) {
+      pendingRefreshRef.current = true;
+      return;
+    }
+    pendingRefreshRef.current = false;
+    if (sessionFilter === "all") {
+      setLogs(getDebugLog(MAX_LOG_SNAPSHOT));
+    } else if (sessionFilter === "global") {
+      setLogs([...getDebugLogForSession(null)].slice(-MAX_LOG_SNAPSHOT));
+    } else {
+      setLogs([...getDebugLogForSession(sessionFilter)].slice(-MAX_LOG_SNAPSHOT));
+    }
+  }, [hasActivePanelSelection, sessionFilter]);
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      const gen = getDebugLogGeneration();
-      if (gen !== prevGenRef.current) {
-        const sel = window.getSelection();
-        if (sel && sel.rangeCount > 0 && !sel.isCollapsed && scrollRef.current?.contains(sel.anchorNode)) {
-          return; // defer — user is selecting text
-        }
-        prevGenRef.current = gen;
-        if (sessionFilter === "all") {
-          setLogs(getDebugLog(MAX_LOG_SNAPSHOT));
-        } else if (sessionFilter === "global") {
-          setLogs([...getDebugLogForSession(null)].slice(-MAX_LOG_SNAPSHOT));
-        } else {
-          setLogs([...getDebugLogForSession(sessionFilter)].slice(-MAX_LOG_SNAPSHOT));
-        }
-      }
-    }, 500);
-    return () => clearInterval(interval);
-  }, [sessionFilter]);
+    refreshLogs();
+    return subscribeDebugLog(refreshLogs);
+  }, [refreshLogs]);
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      if (!pendingRefreshRef.current || hasActivePanelSelection()) return;
+      refreshLogs();
+    };
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+  }, [hasActivePanelSelection, refreshLogs]);
 
   // [DP-07] Auto-scroll to bottom on new entries (pauses if user scrolls up)
   useEffect(() => {
