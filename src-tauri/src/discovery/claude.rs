@@ -8,9 +8,79 @@
 //! (`DiscoveredEnvVar`, `PluginScanRejection`, `scan_skill_md`, …) live in
 //! `super` (`discovery/mod.rs`).
 
+use regex::Regex;
 use serde_json::json;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
-use super::{DiscoveredEnvVar, PluginScanRejection, scan_skill_md};
+use super::{scan_skill_md, DiscoveredEnvVar, PluginScanRejection};
+
+// Current Claude Code standalone binaries can be well over 200 MB. Keep this
+// as a guardrail against accidental huge-file reads, not as a shape assertion.
+const CLAUDE_BINARY_MAX_BYTES: u64 = 500 * 1024 * 1024;
+const MAX_PLUGIN_SCAN_DEPTH: usize = 8;
+
+static CMD_SHIM_JS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"(?i)"([^"]+\.js)""#).unwrap());
+static BUILTIN_NAME_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"name:"([\w][\w-]*)""#).unwrap());
+static DESC_LITERAL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"description:"([^"]*?)""#).unwrap());
+static DESC_COMPUTED_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"description[^"]{0,80}"([^"]*?)""#).unwrap());
+static DESC_TEMPLATE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"description[^`]{0,80}`([^`]*?)`"#).unwrap());
+static STRIP_INTERPOLATIONS_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\$\{[^}]*\}"#).unwrap());
+static SETTINGS_DESC_DOUBLE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\.describe\("([^"]{4,500})"\)"#).unwrap());
+static SETTINGS_DESC_SINGLE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\.describe\('([^']{4,500})'\)"#).unwrap());
+static SETTINGS_DESC_TEMPLATE_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\.describe\(`([^`]{4,500})`\)"#).unwrap());
+static ENUM_CHOICES_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\[([^\]]{1,200})\]"#).unwrap());
+static SETTINGS_METADATA_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"([a-zA-Z][a-zA-Z0-9]{1,40}):\{source:"(?:global|project|local|user|managed|policy|dynamic)","#,
+    )
+    .unwrap()
+});
+static SETTINGS_FACTORY_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"([a-zA-Z][a-zA-Z0-9]{1,40}):[a-zA-Z_$][a-zA-Z0-9_$]{0,20}\([^)]{0,160}\)(?:\.[a-zA-Z]+\([^)]*\))*\.describe\("#,
+    )
+    .unwrap()
+});
+static GLOBAL_CONFIG_LITERAL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#""([a-z][a-zA-Z0-9]{1,40})""#).unwrap());
+static ZOD_ESM_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"import\s*\*\s*as\s+([a-zA-Z_$][a-zA-Z0-9_$]{0,3})\s*from\s*["']zod["']"#).unwrap()
+});
+static ZOD_CJS_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"([a-zA-Z_$][a-zA-Z0-9_$]{0,3})\s*=\s*require\(\s*["']zod["']\s*\)"#).unwrap()
+});
+static ZOD_ESBUILD_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"[,;(]\s*([a-zA-Z_$][a-zA-Z0-9_$]{0,3})\s*=\s*[a-zA-Z_$][a-zA-Z0-9_$]{0,3}\(\s*["']zod["']\s*\)"#)
+        .unwrap()
+});
+static ZOD_SIGNAL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"([a-zA-Z_$][a-zA-Z0-9_$]{0,3})\.(object|string|boolean|number|enum|array|record|literal|union|discriminatedUnion)\("#,
+    )
+    .unwrap()
+});
+static ENV_DOT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"process\.env\.([A-Z][A-Z0-9_]{2,})").unwrap());
+static ENV_BRACKET_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"process\.env\[["']([A-Z][A-Z0-9_]{2,})["']\]"#).unwrap());
+static ENV_LITERAL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"["']([A-Z][A-Z0-9_]{5,})["']"#).unwrap());
+static ENV_ASSIGN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"["']([A-Z][A-Z0-9_]{5,})=[^"']{0,80}["']"#).unwrap());
+static ENV_WORD_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"\b([A-Z][A-Z0-9_]{5,})\b"#).unwrap());
 
 /// Content + provenance of a Claude Code binary read from disk.
 pub struct ClaudeBinaryRead {
@@ -19,102 +89,143 @@ pub struct ClaudeBinaryRead {
     pub path: Option<String>,
 }
 
-// [RC-16] 5-step binary resolution: .cmd shim -> direct -> sibling node_modules -> legacy versions -> npm root -g
-/// Read the Claude Code binary content for pattern scanning.
-/// Resolution chain: direct CLI path -> .cmd shim -> sibling node_modules -> legacy versions dir -> npm root -g.
-pub fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, String> {
-    // Helper: read a file if it exists and is under 500MB, return lossy UTF-8
-    let read_if_exists = |p: &std::path::Path| -> Option<String> {
-        let meta = std::fs::metadata(p).ok()?;
-        if meta.len() > 500 * 1024 * 1024 {
-            return None;
+#[derive(Clone, Copy)]
+enum ClaudeBinarySource {
+    CmdShimJs,
+    SymlinkTarget,
+    DirectCliPath,
+    SiblingNodeModules,
+    LegacyVersionsDir,
+    NpmRootGlobal,
+}
+
+impl ClaudeBinarySource {
+    fn as_str(self) -> &'static str {
+        match self {
+            ClaudeBinarySource::CmdShimJs => "cmd_shim_js",
+            ClaudeBinarySource::SymlinkTarget => "symlink_target",
+            ClaudeBinarySource::DirectCliPath => "direct_cli_path",
+            ClaudeBinarySource::SiblingNodeModules => "sibling_node_modules",
+            ClaudeBinarySource::LegacyVersionsDir => "legacy_versions_dir",
+            ClaudeBinarySource::NpmRootGlobal => "npm_root_global",
         }
-        let bytes = std::fs::read(p).ok()?;
-        Some(String::from_utf8_lossy(&bytes).to_string())
+    }
+}
+
+struct ClaudeBinaryCandidate {
+    path: PathBuf,
+    source: ClaudeBinarySource,
+}
+
+enum CandidateRead {
+    Missing,
+    Unreadable(String),
+    TooLarge(u64),
+    Readable(String),
+}
+
+fn read_candidate(path: &Path) -> CandidateRead {
+    let meta = match std::fs::metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return CandidateRead::Missing,
+        Err(e) => return CandidateRead::Unreadable(e.to_string()),
     };
+    if !meta.is_file() {
+        return CandidateRead::Missing;
+    }
+    if meta.len() > CLAUDE_BINARY_MAX_BYTES {
+        return CandidateRead::TooLarge(meta.len());
+    }
 
-    // Helper: validate content looks like a Claude binary (has command registration patterns)
-    let is_claude_content = |content: &str| -> bool {
-        content.contains(r#"name:""#) && content.contains(r#"",description:""#)
-    };
-
-    // 1. Direct CLI path
-    if let Some(path_str) = cli_path {
-        let path = std::path::Path::new(path_str);
-
-        // 2. Resolve .cmd shim — parse for quoted JS path
-        if path_str.to_lowercase().ends_with(".cmd") {
-            if let Ok(shim) = std::fs::read_to_string(path) {
-                // .cmd shims contain lines like: "C:\path\to\node.exe" "C:\path\to\cli.js" %*
-                for line in shim.lines() {
-                    // Find quoted paths ending in .js
-                    for segment in line.split('"') {
-                        if segment.ends_with(".js") {
-                            let js_path = std::path::Path::new(segment);
-                            if let Some(content) = read_if_exists(js_path) {
-                                if is_claude_content(&content) {
-                                    return Ok(ClaudeBinaryRead {
-                                        content,
-                                        source: "cmd_shim_js",
-                                        path: Some(js_path.to_string_lossy().to_string()),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Resolve symlink (Linux npm creates symlinks to node_modules)
-        #[cfg(not(target_os = "windows"))]
-        if path.is_symlink() {
-            if let Ok(resolved) = std::fs::canonicalize(path) {
-                if let Some(content) = read_if_exists(&resolved) {
-                    if is_claude_content(&content) {
-                        return Ok(ClaudeBinaryRead {
-                            content,
-                            source: "symlink_target",
-                            path: Some(resolved.to_string_lossy().to_string()),
-                        });
-                    }
-                }
-            }
-        }
-
-        // Direct read of the CLI path itself (standalone exe or JS entry)
-        if path.exists() {
-            if let Some(content) = read_if_exists(path) {
-                if is_claude_content(&content) {
-                    return Ok(ClaudeBinaryRead {
-                        content,
-                        source: "direct_cli_path",
-                        path: Some(path.to_string_lossy().to_string()),
-                    });
-                }
-            }
-        }
-
-        // 3. Sibling node_modules
-        if let Some(parent) = path.parent() {
-            let sibling = parent
-                .join("node_modules")
-                .join("@anthropic-ai")
-                .join("claude-code")
-                .join("cli.js");
-            if let Some(content) = read_if_exists(&sibling) {
-                if is_claude_content(&content) {
-                    return Ok(ClaudeBinaryRead {
-                        content,
-                        source: "sibling_node_modules",
-                        path: Some(sibling.to_string_lossy().to_string()),
-                    });
-                }
-            }
+    let likely_text = matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("js" | "mjs" | "cjs")
+    );
+    if likely_text {
+        match std::fs::read_to_string(path) {
+            Ok(content) => return CandidateRead::Readable(content),
+            Err(_) => {}
         }
     }
 
-    // 4. Legacy versions dir (~/.local/share/claude/versions/<latest>)
+    match std::fs::read(path) {
+        Ok(bytes) => CandidateRead::Readable(String::from_utf8_lossy(&bytes).into_owned()),
+        Err(e) => CandidateRead::Unreadable(e.to_string()),
+    }
+}
+
+fn is_claude_content(content: &str) -> bool {
+    let has_command_shape = content.contains(r#"name:""#) && content.contains("description:");
+    let has_claude_anchor = [
+        "@anthropic-ai/claude-code",
+        "getPromptForCommand",
+        "userInvocable:!0",
+        "whenToUse:",
+        "pluginCommand:",
+    ]
+    .iter()
+    .any(|anchor| content.contains(anchor));
+
+    has_command_shape && has_claude_anchor
+}
+
+fn resolve_cmd_shim_targets(path: &Path) -> Vec<PathBuf> {
+    let shim = match std::fs::read_to_string(path) {
+        Ok(shim) => shim,
+        Err(_) => return Vec::new(),
+    };
+    CMD_SHIM_JS_RE
+        .captures_iter(&shim)
+        .filter_map(|cap| cap.get(1).map(|m| PathBuf::from(m.as_str())))
+        .collect()
+}
+
+fn push_candidate(
+    candidates: &mut Vec<ClaudeBinaryCandidate>,
+    path: PathBuf,
+    source: ClaudeBinarySource,
+) {
+    candidates.push(ClaudeBinaryCandidate { path, source });
+}
+
+fn initial_claude_binary_candidates(cli_path: Option<&str>) -> Vec<ClaudeBinaryCandidate> {
+    let mut candidates = Vec::new();
+
+    if let Some(path_str) = cli_path {
+        let path = Path::new(path_str);
+
+        if path_str.to_lowercase().ends_with(".cmd") {
+            for js_path in resolve_cmd_shim_targets(path) {
+                push_candidate(&mut candidates, js_path, ClaudeBinarySource::CmdShimJs);
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        if path.is_symlink() {
+            if let Ok(resolved) = std::fs::canonicalize(path) {
+                push_candidate(&mut candidates, resolved, ClaudeBinarySource::SymlinkTarget);
+            }
+        }
+
+        push_candidate(
+            &mut candidates,
+            path.to_path_buf(),
+            ClaudeBinarySource::DirectCliPath,
+        );
+
+        if let Some(parent) = path.parent() {
+            push_candidate(
+                &mut candidates,
+                parent
+                    .join("node_modules")
+                    .join("@anthropic-ai")
+                    .join("claude-code")
+                    .join("cli.js"),
+                ClaudeBinarySource::SiblingNodeModules,
+            );
+        }
+    }
+
     if let Some(home) = dirs::home_dir() {
         let versions_dir = home
             .join(".local")
@@ -126,48 +237,114 @@ pub fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, St
                 .flatten()
                 .map(|e| e.file_name().to_string_lossy().to_string())
                 .collect();
-            // Sort by parsed semver tuple so "2.1.104" > "2.1.92" (numeric, not
-            // lexicographic). Non-numeric segments fall back to string compare
-            // so non-semver dirs still sort deterministically.
+            // Sort by parsed semver tuple so "2.1.104" > "2.1.92". Non-numeric
+            // segments sort after numeric ones but still deterministically.
             versions.sort_by(|a, b| version_key(a).cmp(&version_key(b)));
             if let Some(v) = versions.last() {
-                let binary_path = versions_dir.join(v);
-                if let Some(content) = read_if_exists(&binary_path) {
-                    if is_claude_content(&content) {
-                        return Ok(ClaudeBinaryRead {
-                            content,
-                            source: "legacy_versions_dir",
-                            path: Some(binary_path.to_string_lossy().to_string()),
-                        });
-                    }
-                }
+                push_candidate(
+                    &mut candidates,
+                    versions_dir.join(v),
+                    ClaudeBinarySource::LegacyVersionsDir,
+                );
             }
         }
     }
 
-    // 5. npm root -g fallback
+    candidates
+}
+
+fn npm_global_candidate() -> Option<ClaudeBinaryCandidate> {
     #[cfg(target_os = "windows")]
     use std::os::windows::process::CommandExt;
+
     let mut npm_cmd = std::process::Command::new("npm");
     npm_cmd.args(["root", "-g"]);
     #[cfg(target_os = "windows")]
     npm_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    if let Ok(output) = npm_cmd.output() {
-        let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !root.is_empty() {
-            let npm_cli = std::path::Path::new(&root)
-                .join("@anthropic-ai")
-                .join("claude-code")
-                .join("cli.js");
-            if let Some(content) = read_if_exists(&npm_cli) {
+
+    let output = npm_cmd.output().ok()?;
+    let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if root.is_empty() {
+        return None;
+    }
+    Some(ClaudeBinaryCandidate {
+        path: Path::new(&root)
+            .join("@anthropic-ai")
+            .join("claude-code")
+            .join("cli.js"),
+        source: ClaudeBinarySource::NpmRootGlobal,
+    })
+}
+
+fn read_first_valid_candidate(
+    candidates: Vec<ClaudeBinaryCandidate>,
+) -> Result<Option<ClaudeBinaryRead>, String> {
+    let mut seen = HashSet::new();
+    let mut rejected = Vec::new();
+
+    for candidate in candidates {
+        let dedup_key = std::fs::canonicalize(&candidate.path).unwrap_or(candidate.path.clone());
+        if !seen.insert(dedup_key) {
+            continue;
+        }
+
+        match read_candidate(&candidate.path) {
+            CandidateRead::Missing => {}
+            CandidateRead::Unreadable(err) => rejected.push(format!(
+                "{} ({}): unreadable: {}",
+                candidate.path.to_string_lossy(),
+                candidate.source.as_str(),
+                err
+            )),
+            CandidateRead::TooLarge(len) => rejected.push(format!(
+                "{} ({}): {} bytes exceeds {} byte cap",
+                candidate.path.to_string_lossy(),
+                candidate.source.as_str(),
+                len,
+                CLAUDE_BINARY_MAX_BYTES
+            )),
+            CandidateRead::Readable(content) => {
                 if is_claude_content(&content) {
-                    return Ok(ClaudeBinaryRead {
+                    return Ok(Some(ClaudeBinaryRead {
                         content,
-                        source: "npm_root_global",
-                        path: Some(npm_cli.to_string_lossy().to_string()),
-                    });
+                        source: candidate.source.as_str(),
+                        path: Some(candidate.path.to_string_lossy().to_string()),
+                    }));
                 }
+                rejected.push(format!(
+                    "{} ({}): did not match Claude Code binary markers",
+                    candidate.path.to_string_lossy(),
+                    candidate.source.as_str()
+                ));
             }
+        }
+    }
+
+    if rejected.is_empty() {
+        Ok(None)
+    } else {
+        Err(format!(
+            "Could not locate Claude Code binary; rejected candidate(s): {}",
+            rejected.join("; ")
+        ))
+    }
+}
+
+// [RC-16] 5-step binary resolution: .cmd shim -> direct -> sibling node_modules -> legacy versions -> npm root -g
+/// Read the Claude Code binary content for pattern scanning.
+/// Resolution chain: direct CLI path -> .cmd shim -> sibling node_modules -> legacy versions dir -> npm root -g.
+pub fn read_claude_binary(cli_path: Option<&str>) -> Result<ClaudeBinaryRead, String> {
+    match read_first_valid_candidate(initial_claude_binary_candidates(cli_path))? {
+        Some(binary) => return Ok(binary),
+        None => {}
+    }
+
+    // `npm root -g` is a slow process fallback. Only use it after all cheap
+    // filesystem candidates are absent; if a readable candidate was rejected,
+    // returning that reason is more accurate than silently scanning elsewhere.
+    if let Some(candidate) = npm_global_candidate() {
+        if let Some(binary) = read_first_valid_candidate(vec![candidate])? {
+            return Ok(binary);
         }
     }
 
@@ -193,10 +370,9 @@ fn version_key(s: &str) -> Vec<(u32, String)> {
 /// within `max` bytes. `open` and `close` must be ASCII and not appear in
 /// multi-byte UTF-8 sequences — true for `{}`, `[]`, `()`.
 ///
-/// The walker does not try to parse string literals or template interpolations,
-/// which means stray `}` inside a quoted string can prematurely terminate the
-/// region. In minified JS bundles this is rare enough not to matter; callers
-/// that need exact balancing should use a real JS parser.
+/// This is a lightweight JS lexer, not a parser. It ignores delimiters inside
+/// strings, template literals, comments, and regex literals so schema walkers
+/// don't terminate on quoted text.
 fn walk_balanced(
     content: &str,
     start: usize,
@@ -205,18 +381,124 @@ fn walk_balanced(
     max: usize,
 ) -> Option<usize> {
     let limit = (start + max).min(content.len());
-    let slice = content.get(start..limit)?;
+    content.get(start..limit)?;
+    let bytes = content.as_bytes();
     let mut depth: i32 = 1;
-    for (i, ch) in slice.char_indices() {
-        if ch == open {
-            depth += 1;
-        } else if ch == close {
-            depth -= 1;
-            if depth == 0 {
-                return Some(start + i);
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum LexState {
+        Code,
+        Single,
+        Double,
+        Template,
+        Regex,
+        LineComment,
+        BlockComment,
+    }
+
+    let open = open as u8;
+    let close = close as u8;
+    let mut state = LexState::Code;
+    let mut escaped = false;
+    let mut in_regex_class = false;
+    let mut prev_sig: Option<u8> = None;
+    let mut i = start;
+
+    while i < limit {
+        let b = bytes[i];
+        match state {
+            LexState::Code => {
+                if b == b'\'' {
+                    state = LexState::Single;
+                    escaped = false;
+                } else if b == b'"' {
+                    state = LexState::Double;
+                    escaped = false;
+                } else if b == b'`' {
+                    state = LexState::Template;
+                    escaped = false;
+                } else if b == b'/' && i + 1 < limit && bytes[i + 1] == b'/' {
+                    state = LexState::LineComment;
+                    i += 1;
+                } else if b == b'/' && i + 1 < limit && bytes[i + 1] == b'*' {
+                    state = LexState::BlockComment;
+                    i += 1;
+                } else if b == b'/'
+                    && prev_sig
+                        .map(|p| b"([{=:;,!&|?+-*%^~<>".contains(&p))
+                        .unwrap_or(true)
+                {
+                    state = LexState::Regex;
+                    escaped = false;
+                    in_regex_class = false;
+                } else if b == open {
+                    depth += 1;
+                } else if b == close {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                }
+
+                if !b.is_ascii_whitespace() {
+                    prev_sig = Some(b);
+                }
+            }
+            LexState::Single => {
+                if escaped {
+                    escaped = false;
+                } else if b == b'\\' {
+                    escaped = true;
+                } else if b == b'\'' {
+                    state = LexState::Code;
+                }
+            }
+            LexState::Double => {
+                if escaped {
+                    escaped = false;
+                } else if b == b'\\' {
+                    escaped = true;
+                } else if b == b'"' {
+                    state = LexState::Code;
+                }
+            }
+            LexState::Template => {
+                if escaped {
+                    escaped = false;
+                } else if b == b'\\' {
+                    escaped = true;
+                } else if b == b'`' {
+                    state = LexState::Code;
+                }
+            }
+            LexState::Regex => {
+                if escaped {
+                    escaped = false;
+                } else if b == b'\\' {
+                    escaped = true;
+                } else if b == b'[' {
+                    in_regex_class = true;
+                } else if b == b']' {
+                    in_regex_class = false;
+                } else if b == b'/' && !in_regex_class {
+                    state = LexState::Code;
+                }
+            }
+            LexState::LineComment => {
+                if b == b'\n' {
+                    state = LexState::Code;
+                }
+            }
+            LexState::BlockComment => {
+                if b == b'*' && i + 1 < limit && bytes[i + 1] == b'/' {
+                    state = LexState::Code;
+                    i += 1;
+                }
             }
         }
+        i += 1;
     }
+
     None
 }
 
@@ -226,24 +508,15 @@ fn walk_balanced(
 pub fn discover_builtin_commands_sync(
     cli_path: Option<&str>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let content = match read_claude_binary(cli_path) {
-        Ok(c) => c.content,
-        Err(_) => return Ok(Vec::new()),
-    };
+    let content = read_claude_binary(cli_path)?.content;
 
     let mut commands = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    // Two-step scan: first find all name:"..." positions, then look for descriptions
-    // in a window around each. This handles intervening properties (aliases, type, etc.),
-    // reversed property order, computed descriptions (ternaries, getters), and template literals.
-    let name_re = regex::Regex::new(r#"name:"([\w][\w-]*)""#).unwrap();
-    let desc_literal_re = regex::Regex::new(r#"description:"([^"]*?)""#).unwrap();
-    let desc_computed_re = regex::Regex::new(r#"description[^"]{0,80}"([^"]*?)""#).unwrap();
-    let desc_template_re = regex::Regex::new(r#"description[^`]{0,80}`([^`]*?)`"#).unwrap();
-
-    for name_match in name_re.find_iter(&content) {
-        let name_cap = name_re.captures(&content[name_match.start()..]).unwrap();
+    for name_match in BUILTIN_NAME_RE.find_iter(&content) {
+        let name_cap = BUILTIN_NAME_RE
+            .captures(&content[name_match.start()..])
+            .unwrap();
         let name = name_cap[1].to_string();
         // Filter MCP prompt template fragments (name:"mcp__"+serverName+"__"+promptName)
         if name.contains("__") {
@@ -333,44 +606,46 @@ pub fn discover_builtin_commands_sync(
 
         // Try patterns in priority order — search both forward and reverse windows
         let strip_interpolations = |raw: &str| -> String {
-            let re = regex::Regex::new(r#"\$\{[^}]*\}"#).unwrap();
-            re.replace_all(raw, "").trim().to_string()
+            STRIP_INTERPOLATIONS_RE
+                .replace_all(raw, "")
+                .trim()
+                .to_string()
         };
 
         let desc = None
             // 1. Literal description in forward window
             .or_else(|| {
-                desc_literal_re
+                DESC_LITERAL_RE
                     .captures(fwd_window)
                     .map(|c| c[1].to_string())
             })
             // 2. Literal description in reverse window (reversed property order)
             .or_else(|| {
-                desc_literal_re
+                DESC_LITERAL_RE
                     .captures(rev_window)
                     .map(|c| c[1].to_string())
             })
             // 3. Computed description in forward window
             .or_else(|| {
-                desc_computed_re
+                DESC_COMPUTED_RE
                     .captures(fwd_window)
                     .map(|c| c[1].to_string())
             })
             // 4. Computed description in reverse window
             .or_else(|| {
-                desc_computed_re
+                DESC_COMPUTED_RE
                     .captures(rev_window)
                     .map(|c| c[1].to_string())
             })
             // 5. Template literal in forward window
             .or_else(|| {
-                desc_template_re
+                DESC_TEMPLATE_RE
                     .captures(fwd_window)
                     .map(|c| strip_interpolations(&c[1]))
             })
             // 6. Template literal in reverse window
             .or_else(|| {
-                desc_template_re
+                DESC_TEMPLATE_RE
                     .captures(rev_window)
                     .map(|c| strip_interpolations(&c[1]))
             })
@@ -408,10 +683,7 @@ pub fn discover_builtin_commands_sync(
 pub fn discover_settings_schema_sync(
     cli_path: Option<&str>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let content = match read_claude_binary(cli_path) {
-        Ok(c) => c.content,
-        Err(_) => return Ok(Vec::new()),
-    };
+    let content = read_claude_binary(cli_path)?.content;
 
     let aliases = detect_zod_aliases(&content);
     let alias_pattern = if aliases.is_empty() {
@@ -432,14 +704,7 @@ pub fn discover_settings_schema_sync(
         r#"([a-zA-Z][a-zA-Z0-9]{{1,40}}):{}\.(enum|string|boolean|number|array|record|object|lazy|union|literal)\("#,
         alias_pattern
     );
-    let key_re = regex::Regex::new(&key_pattern).map_err(|e| format!("regex error: {}", e))?;
-
-    // Describe-string extractors: double-quoted, single-quoted, or template-literal.
-    // Template literals may contain interpolations — we strip them post-match.
-    let desc_double_re = regex::Regex::new(r#"\.describe\("([^"]{4,500})"\)"#).unwrap();
-    let desc_single_re = regex::Regex::new(r#"\.describe\('([^']{4,500})'\)"#).unwrap();
-    let desc_template_re = regex::Regex::new(r#"\.describe\(`([^`]{4,500})`\)"#).unwrap();
-    let strip_interpolations = regex::Regex::new(r#"\$\{[^}]*\}"#).unwrap();
+    let key_re = Regex::new(&key_pattern).map_err(|e| format!("regex error: {}", e))?;
 
     for cap in key_re.captures_iter(&content) {
         let key = cap[1].to_string();
@@ -451,42 +716,7 @@ pub fn discover_settings_schema_sync(
         if key.len() < 2 || key.chars().all(|c| c.is_uppercase()) {
             continue;
         }
-        // Skip common JS/minification noise
-        if matches!(
-            key.as_str(),
-            "type"
-                | "name"
-                | "value"
-                | "message"
-                | "data"
-                | "error"
-                | "status"
-                | "content"
-                | "role"
-                | "input"
-                | "output"
-                | "result"
-                | "text"
-                | "key"
-                | "description"
-                | "title"
-                | "path"
-                | "args"
-                | "options"
-                | "config"
-                | "params"
-                | "command"
-                | "event"
-                | "action"
-                | "state"
-                | "context"
-                | "source"
-                | "target"
-                | "children"
-                | "parent"
-                | "index"
-                | "length"
-        ) {
+        if is_settings_key_noise(&key) {
             continue;
         }
 
@@ -500,14 +730,18 @@ pub fn discover_settings_schema_sync(
         let lookahead = &content[match_end..std::cmp::min(match_end + 1200, content.len())];
 
         // Extract description — try double, single, then template-literal form.
-        let description = desc_double_re
+        let description = SETTINGS_DESC_DOUBLE_RE
             .captures(lookahead)
             .map(|c| c[1].to_string())
-            .or_else(|| desc_single_re.captures(lookahead).map(|c| c[1].to_string()))
             .or_else(|| {
-                desc_template_re
+                SETTINGS_DESC_SINGLE_RE
                     .captures(lookahead)
-                    .map(|c| strip_interpolations.replace_all(&c[1], "").to_string())
+                    .map(|c| c[1].to_string())
+            })
+            .or_else(|| {
+                SETTINGS_DESC_TEMPLATE_RE
+                    .captures(lookahead)
+                    .map(|c| STRIP_INTERPOLATIONS_RE.replace_all(&c[1], "").to_string())
             })
             .map(|d| d.replace("\\n", " "));
 
@@ -519,21 +753,18 @@ pub fn discover_settings_schema_sync(
 
         // Extract enum choices from <alias>.enum(["a","b","c"])
         let choices: Option<Vec<String>> = if base_type == "enum" {
-            regex::Regex::new(r#"\[([^\]]{1,200})\]"#)
-                .ok()
-                .and_then(|re| re.captures(lookahead))
-                .map(|c| {
-                    c[1].split(',')
-                        .filter_map(|s| {
-                            let trimmed = s.trim().trim_matches('"').trim_matches('\'');
-                            if !trimmed.is_empty() {
-                                Some(trimmed.to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
-                })
+            ENUM_CHOICES_RE.captures(lookahead).map(|c| {
+                c[1].split(',')
+                    .filter_map(|s| {
+                        let trimmed = s.trim().trim_matches('"').trim_matches('\'');
+                        if !trimmed.is_empty() {
+                            Some(trimmed.to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
         } else {
             None
         };
@@ -590,12 +821,17 @@ pub fn discover_settings_schema_sync(
         push_extra(key, "metadata", &mut fields);
     }
 
-    // Pass B: GlobalConfig key array anchored on "apiKeyHelper"
+    // Pass B: schema-factory settings like `permissions:$Kq(H).optional().describe(...)`
+    for key in scan_settings_factory_keys(&content) {
+        push_extra(key, "schema_factory", &mut fields);
+    }
+
+    // Pass C: GlobalConfig key array anchored on "apiKeyHelper"
     for key in scan_global_config_keys(&content) {
         push_extra(key, "global_config_array", &mut fields);
     }
 
-    // Pass C: dotted forms for nested namespaces (filesystem.allowRead, etc.)
+    // Pass D: dotted forms for nested namespaces (filesystem.allowRead, etc.)
     for key in scan_nested_namespaces(&content, &alias_pattern) {
         push_extra(key, "nested", &mut fields);
     }
@@ -621,15 +857,34 @@ pub fn discover_settings_schema_sync(
 /// libraries. We keep an explicit blocklist for the handful of object-property
 /// names that happen to neighbor a `source:` string for unrelated reasons.
 fn scan_settings_metadata(content: &str) -> Vec<String> {
-    let re = regex::Regex::new(
-        r#"([a-zA-Z][a-zA-Z0-9]{1,40}):\{source:"(?:global|project|local|user|managed|policy|dynamic)","#,
-    )
-    .unwrap();
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    for cap in re.captures_iter(content) {
+    for cap in SETTINGS_METADATA_RE.captures_iter(content) {
         let key = cap[1].to_string();
         if is_settings_key_noise(&key) {
+            continue;
+        }
+        if seen.insert(key.clone()) {
+            out.push(key);
+        }
+    }
+    out
+}
+
+/// Find settings whose schema is produced by a helper/factory call rather than
+/// by a direct Zod alias method. Example:
+///     permissions:$Kq(H).optional().describe("Tool usage permissions")
+fn scan_settings_factory_keys(content: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for cap in SETTINGS_FACTORY_KEY_RE.captures_iter(content) {
+        let key = cap[1].to_string();
+        if is_settings_key_noise(&key) {
+            continue;
+        }
+        let desc_start = cap.get(0).map(|m| m.end()).unwrap_or(0);
+        let desc_window = &content[desc_start..std::cmp::min(desc_start + 180, content.len())];
+        if !desc_window.to_ascii_lowercase().contains("configuration") {
             continue;
         }
         if seen.insert(key.clone()) {
@@ -677,8 +932,7 @@ fn scan_global_config_keys(content: &str) -> Vec<String> {
         let body = &content[bracket_abs + 1..end];
         // Pure-identifier literal: "[a-z][a-zA-Z0-9]{1,40}" (no dots, no slashes,
         // no spaces). Excludes URLs, paths, descriptions.
-        let lit_re = regex::Regex::new(r#""([a-z][a-zA-Z0-9]{1,40})""#).unwrap();
-        for cap in lit_re.captures_iter(body) {
+        for cap in GLOBAL_CONFIG_LITERAL_RE.captures_iter(body) {
             let key = cap[1].to_string();
             if is_settings_key_noise(&key) {
                 continue;
@@ -693,7 +947,7 @@ fn scan_global_config_keys(content: &str) -> Vec<String> {
 
 /// Find dotted forms for nested-object settings.
 ///
-/// For each known parent namespace, detect either:
+/// For each parent namespace, detect either:
 ///     namespace:<alias>.object({ innerKey:<alias>.type(…), … })
 /// or the function-returning variant:
 ///     namespace:abc()  // where `function abc(){ return <alias>.object({ innerKey:… }) }`
@@ -702,31 +956,9 @@ fn scan_global_config_keys(content: &str) -> Vec<String> {
 /// form — the flat inner key is already caught by the top-level Zod scan, and
 /// doubling it up would inflate the "extras" diff with redundant entries.
 fn scan_nested_namespaces(content: &str, alias_pattern: &str) -> Vec<String> {
-    const NAMESPACES: &[&str] = &[
-        "filesystem",
-        "network",
-        "worktree",
-        "permissions",
-        "attribution",
-        "statusLine",
-        "sandbox",
-        "hooks",
-        "mcp",
-        "remote",
-        "voice",
-        "proactive",
-        "autoMode",
-        "spinnerVerbs",
-        "spinnerTipsOverride",
-        "ripgrep",
-        "xaaIdp",
-        "metadata",
-        "fileSuggestion",
-    ];
-
     // Reuse the same inner-key pattern the top-level Zod scan uses so we pick
     // up exactly the same key shapes.
-    let inner_key_re = regex::Regex::new(&format!(
+    let inner_key_re = Regex::new(&format!(
         r#"([a-zA-Z][a-zA-Z0-9]{{1,40}}):{}\.(enum|string|boolean|number|array|record|object|lazy|union|literal)\("#,
         alias_pattern
     ))
@@ -735,78 +967,74 @@ fn scan_nested_namespaces(content: &str, alias_pattern: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
-    for ns in NAMESPACES {
-        // Track whether we find a schema definition for this namespace. When
-        // yes, emit the namespace itself as a top-level key — docs list e.g.
-        // `permissions` as its own entry in addition to `permissions.allow`.
-        let mut ns_has_schema = false;
-
-        // Variant 1: namespace:<alias>.object({ … })
-        let direct_pattern = format!(
-            r#"[,{{]{}:{}\.object\(\{{"#,
-            regex::escape(ns),
-            alias_pattern
-        );
-        let direct_re = regex::Regex::new(&direct_pattern).unwrap();
-        for m in direct_re.find_iter(content) {
-            ns_has_schema = true;
-            // Find the `{` that begins the object body inside the match.
-            let brace_pos = content[m.start()..m.end()]
-                .rfind('{')
-                .map(|p| m.start() + p);
-            let brace_pos = match brace_pos {
-                Some(p) => p,
-                None => continue,
-            };
-            let end = match walk_balanced(content, brace_pos + 1, '{', '}', 16_384) {
-                Some(e) => e,
-                None => continue,
-            };
-            let body = &content[brace_pos + 1..end];
-            extract_inner_dotted(&inner_key_re, ns, body, &mut seen, &mut out);
+    // Variant 1: namespace:<alias>.object({ … })
+    let direct_re = Regex::new(&format!(
+        r#"[,{{]([a-zA-Z][a-zA-Z0-9]{{2,30}}):{}\.object\(\{{"#,
+        alias_pattern
+    ))
+    .unwrap();
+    for cap in direct_re.captures_iter(content) {
+        let ns = &cap[1];
+        if is_settings_key_noise(ns) {
+            continue;
         }
-
-        // Variant 2: namespace:shortFnName() — lazy schema factories like
-        //   `,network:_S7(),filesystem:fS7(),permissions:HR7()`
-        // The function body lives elsewhere, usually as `fS7=mH(()=>N.object({…}))`
-        // or `fS7=()=>N.object({…})`. We resolve by searching for `<fnName>=`
-        // and walking forward to the next `.object({` inside a small window.
-        let fn_pattern = format!(
-            r#"[,{{]{}:([a-zA-Z_$][a-zA-Z0-9_$]{{0,6}})\(\)"#,
-            regex::escape(ns)
-        );
-        let fn_re = regex::Regex::new(&fn_pattern).unwrap();
-        let mut resolved_fns: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for cap in fn_re.captures_iter(content) {
-            let fn_name = cap[1].to_string();
-            if !resolved_fns.insert(fn_name.clone()) {
-                continue;
-            }
-            if let Some(body) = resolve_lazy_schema_body(content, &fn_name, alias_pattern) {
-                ns_has_schema = true;
-                extract_inner_dotted(&inner_key_re, ns, body, &mut seen, &mut out);
-            }
+        let m = cap.get(0).unwrap();
+        let brace_pos = match content[m.start()..m.end()].rfind('{') {
+            Some(p) => m.start() + p,
+            None => continue,
+        };
+        let end = match walk_balanced(content, brace_pos + 1, '{', '}', 16_384) {
+            Some(e) => e,
+            None => continue,
+        };
+        let body = &content[brace_pos + 1..end];
+        if extract_inner_dotted(&inner_key_re, ns, body, &mut seen, &mut out) {
+            emit_namespace(ns, &mut seen, &mut out);
         }
+    }
 
-        // Docs list the namespace itself as a top-level key alongside its
-        // dotted children (e.g. `permissions`, `attribution`, `statusLine`).
-        // Emit the unadorned form only when we actually resolved a schema so
-        // we don't invent keys for namespaces that aren't real settings.
-        if ns_has_schema && seen.insert(ns.to_string()) {
-            out.push(ns.to_string());
+    // Variant 2: namespace:shortFnName() — lazy schema factories like
+    //   `,network:_S7(),filesystem:fS7(),permissions:HR7()`
+    let fn_re = Regex::new(r#"[,{]([a-zA-Z][a-zA-Z0-9]{2,30}):([a-zA-Z_$][a-zA-Z0-9_$]{0,6})\(\)"#)
+        .unwrap();
+    let mut resolved_pairs: HashSet<(String, String)> = HashSet::new();
+    for cap in fn_re.captures_iter(content) {
+        let ns = cap[1].to_string();
+        if is_settings_key_noise(&ns) {
+            continue;
+        }
+        let fn_name = cap[2].to_string();
+        if !resolved_pairs.insert((ns.clone(), fn_name.clone())) {
+            continue;
+        }
+        if let Some(body) = resolve_lazy_schema_body(content, &fn_name, alias_pattern) {
+            if extract_inner_dotted(&inner_key_re, &ns, body, &mut seen, &mut out) {
+                emit_namespace(&ns, &mut seen, &mut out);
+            }
         }
     }
 
     out
 }
 
+fn emit_namespace(
+    namespace: &str,
+    seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    if seen.insert(namespace.to_string()) {
+        out.push(namespace.to_string());
+    }
+}
+
 fn extract_inner_dotted(
-    inner_key_re: &regex::Regex,
+    inner_key_re: &Regex,
     namespace: &str,
     body: &str,
     seen: &mut std::collections::HashSet<String>,
     out: &mut Vec<String>,
-) {
+) -> bool {
+    let mut added = false;
     for cap in inner_key_re.captures_iter(body) {
         let inner = &cap[1];
         if is_settings_key_noise(inner) {
@@ -815,8 +1043,10 @@ fn extract_inner_dotted(
         let dotted = format!("{}.{}", namespace, inner);
         if seen.insert(dotted.clone()) {
             out.push(dotted);
+            added = true;
         }
     }
+    added
 }
 
 /// Resolve a lazy schema factory like `fS7=mH(()=>N.object({…}))` and return
@@ -908,27 +1138,17 @@ fn detect_zod_aliases(content: &str) -> Vec<String> {
     let mut aliases = std::collections::BTreeSet::new();
 
     // ES-module `import * as X from "zod"`
-    let re_esm = regex::Regex::new(
-        r#"import\s*\*\s*as\s+([a-zA-Z_$][a-zA-Z0-9_$]{0,3})\s*from\s*["']zod["']"#,
-    )
-    .unwrap();
-    for cap in re_esm.captures_iter(content) {
+    for cap in ZOD_ESM_RE.captures_iter(content) {
         aliases.insert(cap[1].to_string());
     }
 
     // CommonJS `X=require("zod")` or `var X=require("zod")`
-    let re_cjs =
-        regex::Regex::new(r#"([a-zA-Z_$][a-zA-Z0-9_$]{0,3})\s*=\s*require\(\s*["']zod["']\s*\)"#)
-            .unwrap();
-    for cap in re_cjs.captures_iter(content) {
+    for cap in ZOD_CJS_RE.captures_iter(content) {
         aliases.insert(cap[1].to_string());
     }
 
     // esbuild-style `,X=e("zod")` / `,X=r("zod")` — the loader variable varies
-    let re_esbuild =
-        regex::Regex::new(r#"[,;(]\s*([a-zA-Z_$][a-zA-Z0-9_$]{0,3})\s*=\s*[a-zA-Z_$][a-zA-Z0-9_$]{0,3}\(\s*["']zod["']\s*\)"#)
-            .unwrap();
-    for cap in re_esbuild.captures_iter(content) {
+    for cap in ZOD_ESBUILD_RE.captures_iter(content) {
         aliases.insert(cap[1].to_string());
     }
 
@@ -938,12 +1158,8 @@ fn detect_zod_aliases(content: &str) -> Vec<String> {
     // `.string()`, `.boolean()` etc. hundreds of times — far more often than
     // any unrelated variable.
     if aliases.is_empty() {
-        let signal_re = regex::Regex::new(
-            r#"([a-zA-Z_$][a-zA-Z0-9_$]{0,3})\.(object|string|boolean|number|enum|array|record|literal|union|discriminatedUnion)\("#,
-        )
-        .unwrap();
         let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-        for cap in signal_re.captures_iter(content) {
+        for cap in ZOD_SIGNAL_RE.captures_iter(content) {
             *counts.entry(cap[1].to_string()).or_insert(0) += 1;
         }
         // 50-hit threshold: real zod aliases in the bundle fire 500-5000 times;
@@ -1135,7 +1351,9 @@ pub fn discover_env_vars_sync(cli_path: Option<&str>) -> Result<Vec<DiscoveredEn
 
     let mut result: Vec<DiscoveredEnvVar> = catalog;
 
-    if let Ok(content) = read_claude_binary(cli_path) {
+    let content = read_claude_binary(cli_path)?;
+
+    {
         let mut seen: std::collections::HashSet<String> = catalog_names;
         let push = |name: String,
                     result: &mut Vec<DiscoveredEnvVar>,
@@ -1151,15 +1369,12 @@ pub fn discover_env_vars_sync(cli_path: Option<&str>) -> Result<Vec<DiscoveredEn
         };
 
         // Pass 1: process.env.NAME (dot access)
-        let dot_re = regex::Regex::new(r"process\.env\.([A-Z][A-Z0-9_]{2,})").unwrap();
-        for cap in dot_re.captures_iter(&content.content) {
+        for cap in ENV_DOT_RE.captures_iter(&content.content) {
             push(cap[1].to_string(), &mut result, &mut seen);
         }
 
         // Pass 2: process.env['NAME'] / ["NAME"] (bracket + literal)
-        let bracket_re =
-            regex::Regex::new(r#"process\.env\[["']([A-Z][A-Z0-9_]{2,})["']\]"#).unwrap();
-        for cap in bracket_re.captures_iter(&content.content) {
+        for cap in ENV_BRACKET_RE.captures_iter(&content.content) {
             push(cap[1].to_string(), &mut result, &mut seen);
         }
 
@@ -1211,8 +1426,7 @@ pub fn discover_env_vars_sync(cli_path: Option<&str>) -> Result<Vec<DiscoveredEn
             }
         };
 
-        let literal_re = regex::Regex::new(r#"["']([A-Z][A-Z0-9_]{5,})["']"#).unwrap();
-        for cap in literal_re.captures_iter(&content.content) {
+        for cap in ENV_LITERAL_RE.captures_iter(&content.content) {
             let name = &cap[1];
             let has_prefix = ENV_PREFIXES.iter().any(|p| name.starts_with(p));
             let has_underscore = name.contains('_') || name == "CLAUDECODE";
@@ -1229,8 +1443,7 @@ pub fn discover_env_vars_sync(cli_path: Option<&str>) -> Result<Vec<DiscoveredEn
         // Pass 4: NAME=value assignments inside quoted strings like
         //   "CLAUDECODE=1"
         // Common for env vars that parent process passes to children.
-        let assign_re = regex::Regex::new(r#"["']([A-Z][A-Z0-9_]{5,})=[^"']{0,80}["']"#).unwrap();
-        for cap in assign_re.captures_iter(&content.content) {
+        for cap in ENV_ASSIGN_RE.captures_iter(&content.content) {
             let name = &cap[1];
             if ENV_PREFIXES.iter().any(|p| name.starts_with(p)) {
                 push(name.to_string(), &mut result, &mut seen);
@@ -1242,8 +1455,7 @@ pub fn discover_env_vars_sync(cli_path: Option<&str>) -> Result<Vec<DiscoveredEn
         // error messages (e.g. `"…or set CLAUDE_CODE_TEAM_NAME."`) that the
         // quoted-literal passes miss because the name sits mid-string. The
         // proximity gate and prefix allowlist together keep this tight.
-        let word_re = regex::Regex::new(r#"\b([A-Z][A-Z0-9_]{5,})\b"#).unwrap();
-        for cap in word_re.captures_iter(&content.content) {
+        for cap in ENV_WORD_RE.captures_iter(&content.content) {
             let name = &cap[1];
             let has_prefix = ENV_PREFIXES.iter().any(|p| name.starts_with(p));
             let has_underscore = name.contains('_');
@@ -1300,12 +1512,22 @@ pub(crate) fn discover_plugin_commands_sync_with_home(
         dir: &std::path::Path,
         commands: &mut Vec<serde_json::Value>,
         rejections: &mut Vec<PluginScanRejection>,
+        visited: &mut HashSet<PathBuf>,
+        depth: usize,
     ) {
+        if depth > MAX_PLUGIN_SCAN_DEPTH {
+            return;
+        }
+        let visited_key = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+        if !visited.insert(visited_key) {
+            return;
+        }
+
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
-                    scan_dir(&path, commands, rejections);
+                    scan_dir(&path, commands, rejections, visited, depth + 1);
                 } else if path.file_name().and_then(|n| n.to_str()) == Some("SKILL.md") {
                     scan_skill_md(&path, commands, rejections);
                 } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
@@ -1337,33 +1559,59 @@ pub(crate) fn discover_plugin_commands_sync_with_home(
         }
     }
 
+    let mut visited = HashSet::new();
+
     // 1. Global plugins
     let plugins_dir = home.join(".claude").join("plugins");
     if plugins_dir.exists() {
-        scan_dir(&plugins_dir, &mut commands, &mut rejections);
+        scan_dir(
+            &plugins_dir,
+            &mut commands,
+            &mut rejections,
+            &mut visited,
+            0,
+        );
     }
 
     // 2. User-level custom commands (~/.claude/commands/)
     let user_cmds = home.join(".claude").join("commands");
     if user_cmds.exists() {
-        scan_dir(&user_cmds, &mut commands, &mut rejections);
+        scan_dir(&user_cmds, &mut commands, &mut rejections, &mut visited, 0);
     }
 
     // 3. User-level skills (~/.claude/skills/)
     let user_skills = home.join(".claude").join("skills");
     if user_skills.exists() {
-        scan_dir(&user_skills, &mut commands, &mut rejections);
+        scan_dir(
+            &user_skills,
+            &mut commands,
+            &mut rejections,
+            &mut visited,
+            0,
+        );
     }
 
     // 4. Project-level custom commands and skills for each provided directory
     for dir in extra_dirs {
         let project_cmds = std::path::Path::new(dir).join(".claude").join("commands");
         if project_cmds.exists() {
-            scan_dir(&project_cmds, &mut commands, &mut rejections);
+            scan_dir(
+                &project_cmds,
+                &mut commands,
+                &mut rejections,
+                &mut visited,
+                0,
+            );
         }
         let project_skills = std::path::Path::new(dir).join(".claude").join("skills");
         if project_skills.exists() {
-            scan_dir(&project_skills, &mut commands, &mut rejections);
+            scan_dir(
+                &project_skills,
+                &mut commands,
+                &mut rejections,
+                &mut visited,
+                0,
+            );
         }
     }
 
@@ -1508,6 +1756,29 @@ mod tests {
         assert_eq!(same[0]["desc"], "from 0");
     }
 
+    #[test]
+    fn plugin_scan_respects_depth_limit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut deep = tmp.path().join(".claude").join("skills");
+        for part in ["a", "b", "c", "d", "e", "f", "g", "h", "i"] {
+            deep = deep.join(part);
+        }
+        std::fs::create_dir_all(&deep).unwrap();
+        std::fs::write(
+            deep.join("SKILL.md"),
+            "---\nname: too-deep\ndescription: Too deep\n---\n",
+        )
+        .unwrap();
+
+        let (cmds, rejections) = discover_plugin_commands_sync_with_home(&[], tmp.path()).unwrap();
+        assert!(rejections.is_empty(), "rejections: {:?}", rejections);
+        assert!(
+            !cmds.iter().any(|c| c["cmd"] == "/too-deep"),
+            "depth-limited scan should not include deeply nested skills: {:?}",
+            cmds
+        );
+    }
+
     // ---- detect_zod_aliases + discover_settings_schema_sync ----
 
     #[test]
@@ -1527,9 +1798,8 @@ mod tests {
     #[test]
     fn settings_regex_catches_show_thinking_summaries_shape() {
         // Synthetic minified-style blob.
-        // The prefix `name:"",description:""` satisfies `is_claude_content` so
-        // `read_claude_binary` returns our file instead of falling through to
-        // the real Claude binary installed on the dev machine.
+        // The test helper adds a Claude-specific anchor so `read_claude_binary`
+        // returns our file instead of falling through to a system binary.
         let content = concat!(
             r#"name:"",description:"" "#,
             r#"import*as u from"zod";"#,
@@ -1541,7 +1811,7 @@ mod tests {
         );
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("cli.js");
-        std::fs::write(&p, content).unwrap();
+        write_claude_fixture(&p, content);
 
         let fields = discover_settings_schema_sync(Some(p.to_str().unwrap())).unwrap();
         let keys: Vec<&str> = fields
@@ -1578,7 +1848,7 @@ mod tests {
         );
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("cli.js");
-        std::fs::write(&p, content).unwrap();
+        write_claude_fixture(&p, content);
 
         let fields = discover_settings_schema_sync(Some(p.to_str().unwrap())).unwrap();
         assert!(fields.iter().any(|f| f["key"] == "showThinkingSummaries"));
@@ -1595,7 +1865,7 @@ mod tests {
         );
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("cli.js");
-        std::fs::write(&p, content).unwrap();
+        write_claude_fixture(&p, content);
 
         let fields = discover_settings_schema_sync(Some(p.to_str().unwrap())).unwrap();
         assert!(fields.iter().any(|f| f["key"] == "fastMode"));
@@ -1612,7 +1882,7 @@ mod tests {
         );
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("cli.js");
-        std::fs::write(&p, &content).unwrap();
+        write_claude_fixture(&p, &content);
 
         let fields = discover_settings_schema_sync(Some(p.to_str().unwrap())).unwrap();
         assert!(
@@ -1627,12 +1897,17 @@ mod tests {
     /// A unique marker embedded in test content to prove the returned content
     /// came from our temp file rather than a system-installed Claude binary.
     const TEST_MARKER: &str = "TEST_MARKER_7f3a9c2e";
+    const TEST_CLAUDE_ANCHOR: &str = "getPromptForCommand";
+
+    fn write_claude_fixture(path: &std::path::Path, content: impl AsRef<str>) {
+        std::fs::write(path, format!("{};{}", TEST_CLAUDE_ANCHOR, content.as_ref())).unwrap();
+    }
 
     /// Valid content with an embedded marker for origin verification.
     fn valid_content_with_marker() -> String {
         format!(
-            r#"stuff name:"review",description:"Review code" {} more stuff"#,
-            TEST_MARKER
+            r#"{};stuff name:"review",description:"Review code" {} more stuff"#,
+            TEST_CLAUDE_ANCHOR, TEST_MARKER
         )
     }
 
@@ -1643,7 +1918,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let js_path = dir.path().join("cli.js");
         let content = valid_content_with_marker();
-        std::fs::write(&js_path, &content).unwrap();
+        write_claude_fixture(&js_path, &content);
 
         let result = read_claude_binary(Some(js_path.to_str().unwrap()));
         assert!(result.is_ok(), "should read valid JS file directly");
@@ -1690,7 +1965,7 @@ mod tests {
         // Create the JS file with valid content and marker
         let js_path = dir.path().join("cli.js");
         let content = valid_content_with_marker();
-        std::fs::write(&js_path, &content).unwrap();
+        write_claude_fixture(&js_path, &content);
 
         // Create a .cmd shim pointing to it (mimics npm's Windows shims)
         let cmd_path = dir.path().join("claude.cmd");
@@ -1814,6 +2089,17 @@ mod tests {
         let _ = result;
     }
 
+    #[test]
+    fn claude_content_requires_claude_specific_anchor() {
+        assert!(
+            !is_claude_content(r#"var x={name:"build",description:"Build"};"#),
+            "generic name/description objects must not pass binary validation"
+        );
+        assert!(is_claude_content(
+            r#"getPromptForCommand;var x={name:"build",description:"Build"};"#
+        ));
+    }
+
     // --- discover_builtin_commands_sync tests ---
 
     #[test]
@@ -1828,7 +2114,7 @@ mod tests {
             r#"var c={type:"local",name:"compact",description:"Compact conversation history"}; "#,
             r#"var d={type:"prompt",name:"bug-report",description:"Report a bug"};"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         assert!(result.is_ok());
@@ -1855,7 +2141,7 @@ mod tests {
         let js_path = dir.path().join("cli.js");
 
         let content = r#"var a={type:"local",name:"review",description:"First"};var b={type:"local",name:"review",description:"Second"}"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -1875,7 +2161,7 @@ mod tests {
             r#"var a={type:"local",name:"review",description:"Review code"}; "#,
             r#"var b={type:"local",name:"browser-tool",description:"Interact with DOM elements"}"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -1894,7 +2180,7 @@ mod tests {
         let js_path = dir.path().join("cli.js");
 
         let content = r#"var a={type:"local",name:"review",description:"Line one\nLine two"}"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -1914,7 +2200,7 @@ mod tests {
         let js_path = dir.path().join("cli.js");
         // Minimal valid content — "ab" is too short to pass the >=4 char filter
         let content = r#"var a={type:"local",name:"ab",description:"Too short"}"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         assert!(result.is_ok());
@@ -1938,7 +2224,7 @@ mod tests {
             r#" var y={type:"local-jsx",name:"branch",aliases:["fork"],description:"Create a branch",argumentHint:"[name]",load:()=>null};"#,
             r#" var z={type:"local-jsx",name:"permissions",aliases:["allowed-tools"],description:"Manage allow and deny tool permission rules",load:()=>null};"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -1975,7 +2261,7 @@ mod tests {
             r#"var x={description:"Restore the code and/or conversation to a previous point",name:"rewind",aliases:["checkpoint"],type:"local"};"#,
             r#" var y={description:"View release notes",name:"release-notes",type:"local",supportsNonInteractive:!0};"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -2011,7 +2297,7 @@ mod tests {
             r#"var x={type:"local-jsx",name:"login",description:yv$()?"Switch Anthropic accounts":"Sign in with your Anthropic account",load:()=>null};"#,
             r#" var y={type:"local-jsx",name:"terminal-setup",description:M6==="Apple"?"Enable Option key":"Install Shift key",load:()=>null};"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -2044,7 +2330,7 @@ mod tests {
         let js_path = dir.path().join("cli.js");
 
         let content = r#"var x={type:"local-jsx",name:"model",get description(){return`Set the AI model for Claude Code (currently ${Bw(Zf())})`}}"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -2082,7 +2368,7 @@ mod tests {
             r#"var z={type:"local",name:"review",description:"Review code"};"#,
             r#"var x={type:"local",name:"fast",get description(){return someVar},load:()=>null}"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -2111,7 +2397,7 @@ mod tests {
             r#"var a={name:"foo",type:"local",load:()=>null};"#,
             r#"var b={type:"local",name:"bar",description:"Bar description",load:()=>null};"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -2146,7 +2432,7 @@ mod tests {
             r#"{name:"SIGABRT",number:6,action:"core",description:"Aborted",standard:"ansi"}; "#,
             r#"NK({tag:"div",name:"HTMLDivElement",ctor:function($,q,K){i_.call(this,$,q,K)}})"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -2173,7 +2459,7 @@ mod tests {
             r#"var a={type:"local",name:"heapdump",description:"Dump the JS heap",isHidden:!0,load:()=>null};"#,
             r#"var b={type:"local-jsx",name:"help",description:"Show help",load:()=>null};"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -2195,7 +2481,7 @@ mod tests {
             r#"var a={type:"prompt",name:"mcp__",description:"MCP prompt"}; "#,
             r#"var b={type:"local-jsx",name:"mcp",description:"Manage MCP servers"};"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_builtin_commands_sync(Some(js_path.to_str().unwrap()));
         let commands = result.unwrap();
@@ -2220,7 +2506,7 @@ mod tests {
             r#"name:"init",description:"Initialize" "#,
             r#"verboseMode:u.boolean().optional().describe("Enable verbose logging")"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         assert!(result.is_ok());
@@ -2245,7 +2531,7 @@ mod tests {
             r#"name:"init",description:"Initialize" "#,
             r#"themeMode:u.enum(["light","dark","system"]).optional().describe("UI theme preference")"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         let fields = result.unwrap();
@@ -2274,7 +2560,7 @@ mod tests {
             r#"value:u.string().describe("Should be skipped") "#,
             r#"customSetting:u.string().describe("Should be kept")"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         let fields = result.unwrap();
@@ -2303,7 +2589,7 @@ mod tests {
             r#"name:"init",description:"Initialize" noDescription:u.boolean().optional() {}hasDescription:u.boolean().optional().describe("Has a description")"#,
             padding
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         let fields = result.unwrap();
@@ -2324,7 +2610,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let js_path = dir.path().join("cli.js");
         let content = r#"name:"init",description:"Initialize" no zod here"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         assert!(result.is_ok());
@@ -2345,7 +2631,7 @@ mod tests {
             r#"alphaSetting:u.string().describe("Alpha setting") "#,
             r#"middleSetting:u.string().describe("Middle setting")"#,
         );
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let result = discover_settings_schema_sync(Some(js_path.to_str().unwrap()));
         let fields = result.unwrap();
@@ -2402,6 +2688,13 @@ mod tests {
         assert!(end.is_none());
     }
 
+    #[test]
+    fn walk_balanced_ignores_delimiters_inside_strings_and_comments() {
+        let s = r#"{a:"}",b:'}',c:`}`,d:/}/,e:/* } */{f:1}}"#;
+        let end = walk_balanced(s, 1, '{', '}', 100).unwrap();
+        assert_eq!(&s[..=end], s);
+    }
+
     // ---- scan_settings_metadata ----
 
     #[test]
@@ -2426,6 +2719,13 @@ mod tests {
         let content = r#"value:{source:"global",type:"string"}"#;
         let keys = scan_settings_metadata(content);
         assert!(keys.is_empty(), "noise key `value` should be filtered");
+    }
+
+    #[test]
+    fn scan_settings_factory_keys_finds_helper_schema_setting() {
+        let content = r#"settings={permissions:$Kq(H).optional().describe("Tool usage permissions configuration")}"#;
+        let keys = scan_settings_factory_keys(content);
+        assert_eq!(keys, vec!["permissions".to_string()]);
     }
 
     // ---- scan_global_config_keys ----
@@ -2490,6 +2790,16 @@ mod tests {
         assert!(keys.is_empty(), "mismatched alias should capture nothing");
     }
 
+    #[test]
+    fn scan_nested_namespaces_discovers_new_namespace() {
+        let content =
+            r#"schema={futureThing:N.object({enabled:N.boolean().optional(),mode:N.string()})}"#;
+        let keys = scan_nested_namespaces(content, "N");
+        assert!(keys.contains(&"futureThing.enabled".to_string()));
+        assert!(keys.contains(&"futureThing.mode".to_string()));
+        assert!(keys.contains(&"futureThing".to_string()));
+    }
+
     // ---- command marker expansion ----
 
     #[test]
@@ -2498,7 +2808,7 @@ mod tests {
         let js_path = dir.path().join("cli.js");
         // Must pass is_claude_content check, so include the sentinel strings.
         let content = r#"{name:"init",description:"init",type:"local",x:1}{name:"batch",description:"Run batch",whenToUse:'…',userInvocable:!0}"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let cmds = discover_builtin_commands_sync(Some(js_path.to_str().unwrap())).unwrap();
         let names: Vec<&str> = cmds.iter().filter_map(|c| c["cmd"].as_str()).collect();
@@ -2519,7 +2829,7 @@ mod tests {
             r#"{{isMcp:!0,name:"mcp",description:"mcp tool",x:1}}{}{{type:"local-jsx",name:"mcp",description:"Manage MCP servers"}}"#,
             filler
         );
-        std::fs::write(&js_path, &content).unwrap();
+        write_claude_fixture(&js_path, &content);
 
         let cmds = discover_builtin_commands_sync(Some(js_path.to_str().unwrap())).unwrap();
         let names: Vec<&str> = cmds.iter().filter_map(|c| c["cmd"].as_str()).collect();
@@ -2536,7 +2846,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let js_path = dir.path().join("cli.js");
         let content = r#"name:"init",description:"init",x=process.env['ANTHROPIC_LOG']||''"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let vars = discover_env_vars_sync(Some(js_path.to_str().unwrap())).unwrap();
         assert!(
@@ -2552,7 +2862,7 @@ mod tests {
         // `VERTEX_REGION_CLAUDE_4_0_OPUS` is a bare literal; must be within
         // 64 KB of a `process.env` anchor to pass.
         let content = r#"name:"init",description:"init",process.env.ANTHROPIC_API_KEY;table=[["claude-opus-4","VERTEX_REGION_CLAUDE_4_0_OPUS"]]"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let vars = discover_env_vars_sync(Some(js_path.to_str().unwrap())).unwrap();
         assert!(
@@ -2569,7 +2879,7 @@ mod tests {
         let js_path = dir.path().join("cli.js");
         let content =
             r#"name:"init",description:"init",process.env.ANTHROPIC_API_KEY;x="RANDOM_CONSTANT""#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let vars = discover_env_vars_sync(Some(js_path.to_str().unwrap())).unwrap();
         assert!(
@@ -2583,7 +2893,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let js_path = dir.path().join("cli.js");
         let content = r#"name:"init",description:"init",args=["CLAUDECODE=1","CLAUDE_CODE_EXPERIMENTAL_X=y"]"#;
-        std::fs::write(&js_path, content).unwrap();
+        write_claude_fixture(&js_path, content);
 
         let vars = discover_env_vars_sync(Some(js_path.to_str().unwrap())).unwrap();
         assert!(vars.iter().any(|v| v.name == "CLAUDECODE"));
