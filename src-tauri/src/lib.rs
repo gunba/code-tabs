@@ -9,6 +9,7 @@ mod proxy;
 mod pty;
 mod session;
 mod tap_server;
+mod weather;
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -175,6 +176,8 @@ pub fn run() {
                 }
             }
             metrics::spawn_collector(app.handle().clone());
+            // [WX-01] Weather poll loop driven by cf-ipcountry from proxy responses.
+            weather::init(app.handle().clone());
             Ok(())
         })
         .manage(SessionManager::new())
@@ -264,6 +267,7 @@ pub fn run() {
             commands::fetch_cli_changelog,
             commands::check_latest_cli_version,
             commands::update_cli,
+            weather::get_current_weather,
             observability::append_observability_data,
             observability::get_observability_info,
             observability::open_observability_log,

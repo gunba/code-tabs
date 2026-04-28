@@ -689,6 +689,17 @@ async fn handle_connection(
     let status_code = resp.status().as_u16();
     let status_text = resp.status().canonical_reason().unwrap_or("Unknown");
 
+    // [WX-01] Cloudflare's edge tags every Anthropic / OpenAI response with
+    // `cf-ipcountry`. Forward the value to the weather module for ambient-
+    // viz weather. Fire-and-forget; never blocks the response stream.
+    if let Some(cc) = resp
+        .headers()
+        .get("cf-ipcountry")
+        .and_then(|v| v.to_str().ok())
+    {
+        crate::weather::set_country(cc);
+    }
+
     let mut resp_hdrs = format!("HTTP/1.1 {status_code} {status_text}\r\n");
     for (k, v) in resp.headers() {
         let lower = k.as_str().to_lowercase();

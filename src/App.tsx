@@ -20,6 +20,7 @@ import { useProcessMetrics } from "./hooks/useProcessMetrics";
 import { useCtrlKey } from "./hooks/useCtrlKey";
 import { useUiConfigStore } from "./lib/uiConfig";
 import { useVersionStore } from "./store/version";
+import { useWeatherStore } from "./store/weather";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { killAllActivePtys } from "./lib/ptyProcess";
 import { killPty, writeToPty } from "./lib/ptyRegistry";
@@ -134,6 +135,8 @@ export default function App() {
       useVersionStore.getState().loadBuildInfo();
       useVersionStore.getState().checkForAppUpdate();
       useVersionStore.getState().checkLatestCliVersion();
+      // [WX-01] Hydrate ambient-viz weather from cache + subscribe to updates.
+      void useWeatherStore.getState().init();
     })();
   }, [init, loadRuntimeInfo]);
 

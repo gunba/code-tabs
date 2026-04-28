@@ -15,6 +15,19 @@
   border-right: 1px solid var(--border-subtle);
 }
 
+.header-activity-viz-beach {
+  position: absolute;
+  inset: 0 82% 0 0;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, #d6b87a 26%, transparent) 0%,
+    color-mix(in srgb, #d6b87a 14%, transparent) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
 .header-activity-viz-wave {
   position: absolute;
   inset: 0;
@@ -23,6 +36,7 @@
   gap: 2px;
   padding: 2px 6px;
   box-sizing: border-box;
+  z-index: 1;
 }
 
 .header-activity-viz-bar {
@@ -37,7 +51,35 @@
   will-change: transform;
 }
 
-.header-activity-viz-mascot {
+.header-activity-viz-bubbles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.header-activity-viz-bubble {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, white 70%, transparent);
+  pointer-events: none;
+  /* Inline `transform` carries the spawn (x, y); the keyframe animates only
+     `margin` and `opacity` so it doesn't fight the inline transform. */
+  animation: header-activity-viz-bubble-rise 1.2s ease-out forwards;
+  will-change: margin, opacity;
+}
+
+@keyframes header-activity-viz-bubble-rise {
+  0%   { margin-top: 0;     margin-left: 0; opacity: 0; }
+  20%  {                                       opacity: 0.85; }
+  100% { margin-top: -22px; margin-left: 3px; opacity: 0; }
+}
+
+.header-activity-viz-mascot-wrap {
   position: absolute;
   top: 0;
   left: 0;
@@ -48,6 +90,148 @@
   transition: opacity 0.4s ease;
   will-change: transform, opacity;
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.4));
+  z-index: 2;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0;
+}
+
+.header-activity-viz-vehicle {
+  display: block;
+  margin-top: -1px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* ── Weather layer ──────────────────────────────────────────────────────
+   All variants live in a single absolutely-positioned overlay clipped by
+   the host container. Sun bulges in from a corner, clouds drift across
+   the top edge, rain / snow exit the bottom. Nothing implies a full
+   sun / cloud body; it's all corners and slivers. */
+
+.viz-weather {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.viz-sun {
+  position: absolute;
+  top: -28px;
+  right: -28px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 65%,
+    rgba(255, 224, 130, 0.85) 0%,
+    rgba(255, 196, 96, 0.55) 40%,
+    rgba(255, 196, 96, 0) 70%
+  );
+  opacity: 0.6;
+}
+
+.viz-cloud {
+  position: absolute;
+  top: -8px;
+  height: 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, white 70%, transparent);
+  opacity: 0.35;
+  will-change: transform;
+}
+
+.viz-cloud-a {
+  width: 42px;
+  animation: viz-cloud-drift 92s linear infinite;
+}
+.viz-cloud-b {
+  width: 56px;
+  top: -6px;
+  animation: viz-cloud-drift 138s linear -32s infinite;
+  opacity: 0.28;
+}
+.viz-cloud-c {
+  width: 32px;
+  top: -10px;
+  animation: viz-cloud-drift 74s linear -55s infinite;
+  opacity: 0.4;
+}
+
+@keyframes viz-cloud-drift {
+  /* Drifts past any plausible container width — the host is at most a few
+     hundred px wide. Past 900px is reliably off-screen, then it wraps. */
+  0%   { transform: translateX(-80px); }
+  100% { transform: translateX(900px); }
+}
+
+.viz-rain {
+  position: absolute;
+  top: -10px;
+  width: 1px;
+  height: 9px;
+  background: linear-gradient(
+    to bottom,
+    rgba(160, 200, 240, 0) 0%,
+    rgba(160, 200, 240, 0.7) 100%
+  );
+  transform: rotate(14deg);
+  animation: viz-rain-fall linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes viz-rain-fall {
+  0%   { transform: translate(0, 0) rotate(14deg); opacity: 0; }
+  10%  { opacity: 0.7; }
+  100% { transform: translate(8px, 90px) rotate(14deg); opacity: 0; }
+}
+
+.viz-flash {
+  position: absolute;
+  inset: 0;
+  background: rgba(220, 230, 255, 0.18);
+  opacity: 0;
+  animation: viz-flash 9s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes viz-flash {
+  0%, 96%  { opacity: 0; }
+  97%      { opacity: 0.5; }
+  97.5%    { opacity: 0; }
+  98%      { opacity: 0.7; }
+  99%      { opacity: 0; }
+}
+
+.viz-snow {
+  position: absolute;
+  top: -6px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  animation: viz-snow-fall linear infinite;
+  opacity: 0.85;
+  will-change: transform;
+}
+
+@keyframes viz-snow-fall {
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(10px, 80px); }
+}
+
+.viz-fog {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 60%;
+  background: linear-gradient(
+    to top,
+    rgba(220, 220, 220, 0.18) 0%,
+    rgba(220, 220, 220, 0) 100%
+  );
 }
 
 /* No room? min-width: 0 + flex-shrink: 1 lets the visualizer collapse to
