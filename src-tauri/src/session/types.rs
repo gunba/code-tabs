@@ -50,6 +50,14 @@ pub struct SessionConfig {
     pub cli: CliKind,
     pub model: Option<String>,
     pub permission_mode: PermissionMode,
+    /// Codex `--sandbox` selection (`read-only` | `workspace-write` | `danger-full-access`).
+    /// None = leave Codex default. Claude sessions ignore this field.
+    #[serde(default)]
+    pub codex_sandbox_mode: Option<String>,
+    /// Codex `--ask-for-approval` selection (`untrusted` | `on-request` | `never`).
+    /// None = leave Codex default. Claude sessions ignore this field.
+    #[serde(default)]
+    pub codex_approval_policy: Option<String>,
     pub dangerously_skip_permissions: bool,
     pub system_prompt: Option<String>,
     pub append_system_prompt: Option<String>,
@@ -82,6 +90,8 @@ impl Default for SessionConfig {
             cli: CliKind::Claude,
             model: None,
             permission_mode: PermissionMode::Default,
+            codex_sandbox_mode: None,
+            codex_approval_policy: None,
             dangerously_skip_permissions: false,
             system_prompt: None,
             append_system_prompt: None,

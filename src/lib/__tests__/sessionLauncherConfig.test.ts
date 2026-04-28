@@ -73,4 +73,102 @@ describe("buildInitialLauncherConfig", () => {
     expect(result.runMode).toBe(false);
     expect(result.forkSession).toBe(false);
   });
+
+  it("defaults Codex sandbox/approval to null on a fresh config", () => {
+    const result = buildInitialLauncherConfig({
+      lastConfig: config({ cli: "claude" }),
+      savedDefaults: null,
+      workspaceDefaults: {},
+    });
+
+    expect(result.codexSandboxMode).toBeNull();
+    expect(result.codexApprovalPolicy).toBeNull();
+  });
+
+  it("migrates legacy Codex permissionMode=planMode to read-only + untrusted", () => {
+    const result = buildInitialLauncherConfig({
+      lastConfig: config({
+        cli: "codex",
+        permissionMode: "planMode",
+        codexSandboxMode: null,
+        codexApprovalPolicy: null,
+      }),
+      savedDefaults: null,
+      workspaceDefaults: {},
+    });
+
+    expect(result.codexSandboxMode).toBe("read-only");
+    expect(result.codexApprovalPolicy).toBe("untrusted");
+    // permissionMode reset so we don't re-migrate next time and so the
+    // Claude pill row (if the user switches CLI) starts clean.
+    expect(result.permissionMode).toBe("default");
+  });
+
+  it("migrates legacy Codex permissionMode=acceptEdits to workspace-write + never", () => {
+    const result = buildInitialLauncherConfig({
+      lastConfig: config({
+        cli: "codex",
+        permissionMode: "acceptEdits",
+        codexSandboxMode: null,
+        codexApprovalPolicy: null,
+      }),
+      savedDefaults: null,
+      workspaceDefaults: {},
+    });
+
+    expect(result.codexSandboxMode).toBe("workspace-write");
+    expect(result.codexApprovalPolicy).toBe("never");
+    expect(result.permissionMode).toBe("default");
+  });
+
+  it("migrates legacy Codex permissionMode=bypassPermissions to dangerouslySkipPermissions", () => {
+    const result = buildInitialLauncherConfig({
+      lastConfig: config({
+        cli: "codex",
+        permissionMode: "bypassPermissions",
+        codexSandboxMode: null,
+        codexApprovalPolicy: null,
+      }),
+      savedDefaults: null,
+      workspaceDefaults: {},
+    });
+
+    expect(result.dangerouslySkipPermissions).toBe(true);
+    expect(result.codexSandboxMode).toBeNull();
+    expect(result.codexApprovalPolicy).toBeNull();
+    expect(result.permissionMode).toBe("default");
+  });
+
+  it("does not re-migrate when Codex fields are already set", () => {
+    const result = buildInitialLauncherConfig({
+      lastConfig: config({
+        cli: "codex",
+        permissionMode: "planMode", // would otherwise migrate to read-only/untrusted
+        codexSandboxMode: "workspace-write",
+        codexApprovalPolicy: "on-request",
+      }),
+      savedDefaults: null,
+      workspaceDefaults: {},
+    });
+
+    expect(result.codexSandboxMode).toBe("workspace-write");
+    expect(result.codexApprovalPolicy).toBe("on-request");
+    // permissionMode passes through untouched in the no-op path.
+    expect(result.permissionMode).toBe("planMode");
+  });
+
+  it("does not migrate when cli is claude", () => {
+    const result = buildInitialLauncherConfig({
+      lastConfig: config({
+        cli: "claude",
+        permissionMode: "planMode",
+      }),
+      savedDefaults: null,
+      workspaceDefaults: {},
+    });
+
+    expect(result.permissionMode).toBe("planMode");
+    expect(result.codexSandboxMode).toBeNull();
+    expect(result.codexApprovalPolicy).toBeNull();
+  });
 });

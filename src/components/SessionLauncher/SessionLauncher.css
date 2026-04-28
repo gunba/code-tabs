@@ -264,6 +264,21 @@
   color: var(--text-primary);
 }
 
+/* Fixed-width launcher dropdowns. Pinning the trigger width prevents the
+   pill row from re-flowing (and wrapping later items like System Prompt)
+   when the selected effort/model label gets longer. The
+   .dropdown-trigger-label inside already has text-overflow: ellipsis. */
+.launcher-select.launcher-select-model,
+.launcher-select.launcher-select-effort {
+  width: 110px;
+  flex: 0 0 110px;
+}
+
+.launcher-select.launcher-select-codex {
+  width: 130px;
+  flex: 0 0 130px;
+}
+
 /* ── Toggle pills (Skip, Sandbox, TAP, TFC) ────────────── */
 
 .launcher-toggle-pill {
@@ -292,10 +307,10 @@
   background: color-mix(in srgb, var(--warning) 10%, transparent);
 }
 
-.launcher-toggle-skip.launcher-toggle-pill-on {
-  border-color: var(--error);
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 10%, transparent);
+.launcher-toggle-bypass.launcher-toggle-pill-on {
+  border-color: var(--mode-bypass);
+  color: var(--mode-bypass);
+  background: color-mix(in srgb, var(--mode-bypass) 10%, transparent);
 }
 
 

@@ -28,6 +28,13 @@ export type PermissionMode =
   | "planMode"
   | "auto";
 
+/** Codex `--sandbox` enum (mirrors SandboxMode in codex_schema.json). */
+export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+
+/** Codex `--ask-for-approval` enum (mirrors AskForApproval in codex_schema.json,
+ *  excluding deprecated `on-failure` and complex `granular`). */
+export type CodexApprovalPolicy = "untrusted" | "on-request" | "never";
+
 /** Which CLI a session runs. Per-session, no global mode. */
 export type CliKind = "claude" | "codex";
 
@@ -37,6 +44,10 @@ export interface SessionConfig {
   cli: CliKind;
   model: string | null;
   permissionMode: PermissionMode;
+  /** Codex `--sandbox` selection. null = leave Codex default (workspace-write). Claude-only sessions ignore. */
+  codexSandboxMode: CodexSandboxMode | null;
+  /** Codex `--ask-for-approval` selection. null = leave Codex default (on-request). Claude-only sessions ignore. */
+  codexApprovalPolicy: CodexApprovalPolicy | null;
   dangerouslySkipPermissions: boolean;
   systemPrompt: string | null;
   appendSystemPrompt: string | null;
@@ -286,6 +297,18 @@ export const ANTHROPIC_EFFORTS: ProviderEffort[] = [
   { value: "max",    label: "max" },
 ];
 
+export const CODEX_SANDBOX_OPTIONS: Array<{ value: CodexSandboxMode; label: string }> = [
+  { value: "read-only",          label: "Read Only" },
+  { value: "workspace-write",    label: "Workspace" },
+  { value: "danger-full-access", label: "Full Access" },
+];
+
+export const CODEX_APPROVAL_OPTIONS: Array<{ value: CodexApprovalPolicy; label: string }> = [
+  { value: "untrusted",  label: "Untrusted" },
+  { value: "on-request", label: "On Request" },
+  { value: "never",      label: "Never" },
+];
+
 export interface SystemPromptBlock {
   text: string;
   cacheControl?: { type: string };
@@ -325,6 +348,8 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   cli: "claude",
   model: null,
   permissionMode: "default",
+  codexSandboxMode: null,
+  codexApprovalPolicy: null,
   dangerouslySkipPermissions: false,
   systemPrompt: null,
   appendSystemPrompt: null,

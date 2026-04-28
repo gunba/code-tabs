@@ -9,6 +9,8 @@ const DEFAULT_CONFIG: SessionConfig = {
   workingDir: "/test",
   model: null,
   permissionMode: "default",
+  codexSandboxMode: null,
+  codexApprovalPolicy: null,
   dangerouslySkipPermissions: false,
   systemPrompt: null,
   appendSystemPrompt: null,

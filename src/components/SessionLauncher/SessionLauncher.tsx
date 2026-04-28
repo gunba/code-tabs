@@ -11,9 +11,13 @@ import { buildInitialLauncherConfig } from "../../lib/sessionLauncherConfig";
 import {
   type SessionConfig,
   type PermissionMode,
+  type CodexSandboxMode,
+  type CodexApprovalPolicy,
   DEFAULT_SESSION_CONFIG,
   ANTHROPIC_EFFORTS,
   ANTHROPIC_MODELS,
+  CODEX_SANDBOX_OPTIONS,
+  CODEX_APPROVAL_OPTIONS,
 } from "../../types/session";
 import { IconReturn, IconFolder, IconModelDiamond, IconLock, IconLightning, IconSkull, IconBulldozer, IconDocument } from "../Icons/Icons";
 import { ProviderLogo } from "../ProviderLogo/ProviderLogo";
@@ -30,6 +34,19 @@ const PERM_PILLS: Array<{ value: PermissionMode; label: string }> = [
   { value: "bypassPermissions", label: "Bypass" },
   { value: "dontAsk", label: "Don't Ask" },
 ];
+
+// CSS-var color for each Claude permission mode. Mirrors the hues Claude Code
+// itself uses in its TUI so the launcher pill matches the in-session indicator.
+// Vars defined in src/lib/theme.ts applyTheme().
+const MODE_COLORS: Record<PermissionMode, string> = {
+  default: "var(--accent)",
+  auto: "var(--mode-auto)",
+  acceptEdits: "var(--mode-accept)",
+  planMode: "var(--mode-plan)",
+  bypassPermissions: "var(--mode-bypass)",
+  dontAsk: "var(--mode-dont-ask)",
+};
+const modeColor = (m: PermissionMode): string => MODE_COLORS[m] ?? "var(--accent)";
 
 // [SL-11] Flags with dedicated UI controls excluded from the options grid
 const DEDICATED_FLAGS = new Set([
@@ -124,7 +141,15 @@ export function SessionLauncher() {
       if (cfg.effort && CODEX_EFFORT_VALUES.has(cfg.effort)) {
         parts.push("-c", `model_reasoning_effort="${cfg.effort}"`);
       }
-      if (cfg.dangerouslySkipPermissions || cfg.permissionMode === "bypassPermissions") {
+      // Permission/sandbox precedence — must mirror push_codex_perm_args
+      // in src-tauri/src/cli_adapter/codex.rs so the previewed command line
+      // matches what build_spawn will actually emit.
+      if (cfg.dangerouslySkipPermissions) {
+        parts.push("--dangerously-bypass-approvals-and-sandbox");
+      } else if (cfg.codexSandboxMode || cfg.codexApprovalPolicy) {
+        if (cfg.codexSandboxMode) parts.push("--sandbox", cfg.codexSandboxMode);
+        if (cfg.codexApprovalPolicy) parts.push("--ask-for-approval", cfg.codexApprovalPolicy);
+      } else if (cfg.permissionMode === "bypassPermissions") {
         parts.push("--dangerously-bypass-approvals-and-sandbox");
       } else if (cfg.permissionMode === "planMode") {
         parts.push("--sandbox", "read-only", "--ask-for-approval", "untrusted");
@@ -163,7 +188,7 @@ export function SessionLauncher() {
     if (!mountedRef.current) { mountedRef.current = true; return; }
     if (isUtilityRef.current) return;
     setCommandLine(buildFullCommand(config, config.extraFlags || undefined));
-  }, [config.cli, config.workingDir, config.model, config.permissionMode, config.effort, config.dangerouslySkipPermissions, config.projectDir, config.resumeSession, config.extraFlags, buildFullCommand]);
+  }, [config.cli, config.workingDir, config.model, config.permissionMode, config.effort, config.codexSandboxMode, config.codexApprovalPolicy, config.dangerouslySkipPermissions, config.projectDir, config.resumeSession, config.extraFlags, buildFullCommand]);
 
   useEffect(() => {
     const el = document.getElementById("launcher-path");
@@ -576,7 +601,7 @@ export function SessionLauncher() {
                 title="Claude Code"
               >
                 <ProviderLogo cli="claude" size={16} className="launcher-cli-choice-logo" />
-                Claude Code
+                Code
               </button>
             )}
             {codexPath && (
@@ -593,7 +618,7 @@ export function SessionLauncher() {
             )}
             <span className="launcher-pill-icon" title="Model"><IconModelDiamond size={13} /></span>
             <Dropdown
-              className="launcher-select"
+              className="launcher-select launcher-select-model"
               value={config.model ?? ""}
               onChange={handleModelSelect}
               disabled={isNonSessionCommand}
@@ -602,7 +627,7 @@ export function SessionLauncher() {
             />
             <span className="launcher-pill-icon" title="Effort"><IconLightning size={13} /></span>
             <Dropdown
-              className="launcher-select"
+              className="launcher-select launcher-select-effort"
               value={config.effort ?? ""}
               onChange={handleEffortSelect}
               disabled={isNonSessionCommand}
@@ -650,34 +675,62 @@ export function SessionLauncher() {
           </div>
 
           <div className="launcher-pills-row launcher-pills-row-secondary">
-            <div className="launcher-permissions-group">
-              <span className="launcher-pill-icon" title="Permissions"><IconLock size={13} /></span>
-              <PillGroup
-                options={PERM_PILLS}
-                selected={config.permissionMode === "default" ? null : config.permissionMode}
-                onChange={handlePermChange}
-                disabled={isNonSessionCommand}
-              />
-            </div>
-
-            <button
-              className={`launcher-toggle-pill${config.dangerouslySkipPermissions ? " launcher-toggle-pill-on launcher-toggle-skip" : ""}`}
-              onClick={() => updateConfig("dangerouslySkipPermissions", !config.dangerouslySkipPermissions)}
-              aria-pressed={config.dangerouslySkipPermissions}
-              title="Skip all permission prompts (--dangerously-skip-permissions)"
-              type="button"
-            >
-              <IconSkull size={12} /> Skip
-            </button>
-            <button
-              className={`launcher-toggle-pill${config.projectDir ? " launcher-toggle-pill-on launcher-toggle-sandbox" : ""}`}
-              onClick={() => updateConfig("projectDir", !config.projectDir)}
-              aria-pressed={config.projectDir}
-              title="Restrict Claude to the working directory (--project-dir)"
-              type="button"
-            >
-              <IconBulldozer size={12} /> Sandbox
-            </button>
+            {config.cli === "codex" ? (
+              <>
+                <span className="launcher-pill-icon" title="Sandbox"><IconBulldozer size={13} /></span>
+                <Dropdown
+                  className="launcher-select launcher-select-codex"
+                  value={config.codexSandboxMode ?? ""}
+                  onChange={(v) => updateConfig("codexSandboxMode", (v || null) as CodexSandboxMode | null)}
+                  disabled={config.dangerouslySkipPermissions || isNonSessionCommand}
+                  ariaLabel="Sandbox"
+                  title="Codex --sandbox"
+                  options={[{ value: "", label: "default" }, ...CODEX_SANDBOX_OPTIONS]}
+                />
+                <span className="launcher-pill-icon" title="Approval"><IconLock size={13} /></span>
+                <Dropdown
+                  className="launcher-select launcher-select-codex"
+                  value={config.codexApprovalPolicy ?? ""}
+                  onChange={(v) => updateConfig("codexApprovalPolicy", (v || null) as CodexApprovalPolicy | null)}
+                  disabled={config.dangerouslySkipPermissions || isNonSessionCommand}
+                  ariaLabel="Approval"
+                  title="Codex --ask-for-approval"
+                  options={[{ value: "", label: "default" }, ...CODEX_APPROVAL_OPTIONS]}
+                />
+                <button
+                  className={`launcher-toggle-pill${config.dangerouslySkipPermissions ? " launcher-toggle-pill-on launcher-toggle-bypass" : ""}`}
+                  onClick={() => updateConfig("dangerouslySkipPermissions", !config.dangerouslySkipPermissions)}
+                  aria-pressed={config.dangerouslySkipPermissions}
+                  disabled={isNonSessionCommand}
+                  title="Bypass approvals and sandbox (--dangerously-bypass-approvals-and-sandbox)"
+                  type="button"
+                >
+                  <IconSkull size={12} /> Bypass
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="launcher-permissions-group">
+                  <span className="launcher-pill-icon" title="Permissions"><IconLock size={13} /></span>
+                  <PillGroup
+                    options={PERM_PILLS}
+                    selected={config.permissionMode === "default" ? null : config.permissionMode}
+                    onChange={handlePermChange}
+                    colorFn={modeColor}
+                    disabled={isNonSessionCommand}
+                  />
+                </div>
+                <button
+                  className={`launcher-toggle-pill${config.projectDir ? " launcher-toggle-pill-on launcher-toggle-sandbox" : ""}`}
+                  onClick={() => updateConfig("projectDir", !config.projectDir)}
+                  aria-pressed={config.projectDir}
+                  title="Restrict Claude to the working directory (--project-dir)"
+                  type="button"
+                >
+                  <IconBulldozer size={12} /> Sandbox
+                </button>
+              </>
+            )}
           </div>
         </div>
         {!selectedCliInstalled && (

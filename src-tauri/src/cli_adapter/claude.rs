@@ -129,6 +129,8 @@ mod tests {
             cli: CliKind::Claude,
             model: Some("sonnet".into()),
             permission_mode: PermissionMode::AcceptEdits,
+            codex_sandbox_mode: None,
+            codex_approval_policy: None,
             dangerously_skip_permissions: false,
             system_prompt: None,
             append_system_prompt: Some("hi".into()),

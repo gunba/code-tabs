@@ -176,6 +176,14 @@ export function applyTheme(theme: Theme): void {
   root.style.setProperty("--rarity-epic", "#a335ee");
   root.style.setProperty("--rarity-legendary", "#ff8000");
 
+  // Permission-mode pill colors. Picked to mirror Claude Code's TUI hues so
+  // the launcher pill matches what the user will see once the session starts.
+  root.style.setProperty("--mode-plan",     "#39c5cf"); // dark cyan
+  root.style.setProperty("--mode-auto",     "#daa520"); // amber / orangey-yellow
+  root.style.setProperty("--mode-accept",   "#bc8cff"); // purple (matches --accent-tertiary)
+  root.style.setProperty("--mode-bypass",   "#d84b4b"); // red (matches --error)
+  root.style.setProperty("--mode-dont-ask", "#6ea8e0"); // soft blue (matches --accent-secondary)
+
   // Legacy provider aliases kept for older component CSS.
   root.style.setProperty("--accent-claude", c.cliClaude);
   root.style.setProperty("--accent-codex", c.cliCodex);

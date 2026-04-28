@@ -121,47 +121,8 @@ impl CliAdapter for CodexAdapter {
             ));
         }
 
-        // Permission/sandbox mapping — locked. Document explicitly so
-        // a future tightening of Codex defaults doesn't silently
-        // weaken our `PermissionMode::PlanMode` translation.
-        // [CC-03] PermissionMode-to-Codex sandbox flag table (locked): Default/AcceptEdits/DontAsk->workspace-write, BypassPermissions->bypass, PlanMode->read-only+untrusted, Auto->full-auto
-        match cfg.permission_mode {
-            PermissionMode::Default => {
-                args.push("--sandbox".into());
-                args.push("workspace-write".into());
-            }
-            PermissionMode::AcceptEdits => {
-                args.push("--sandbox".into());
-                args.push("workspace-write".into());
-                args.push("--ask-for-approval".into());
-                args.push("never".into());
-            }
-            PermissionMode::BypassPermissions => {
-                args.push("--dangerously-bypass-approvals-and-sandbox".into());
-            }
-            PermissionMode::DontAsk => {
-                // Pin the sandbox explicitly so a future Codex change
-                // to the unspecified-flag default cannot silently
-                // weaken DontAsk semantics. Locked.
-                args.push("--sandbox".into());
-                args.push("workspace-write".into());
-                args.push("--ask-for-approval".into());
-                args.push("never".into());
-            }
-            PermissionMode::PlanMode => {
-                args.push("--sandbox".into());
-                args.push("read-only".into());
-                args.push("--ask-for-approval".into());
-                args.push("untrusted".into());
-            }
-            PermissionMode::Auto => {
-                args.push("--full-auto".into());
-            }
-        }
-
-        if cfg.dangerously_skip_permissions {
-            args.push("--dangerously-bypass-approvals-and-sandbox".into());
-        }
+        // Permission/sandbox precedence — see push_codex_perm_args.
+        push_codex_perm_args(&mut args, cfg);
 
         for dir in &cfg.additional_dirs {
             if !dir.is_empty() {
@@ -319,6 +280,81 @@ fn quote_toml_value(v: &str) -> String {
     }
 }
 
+/// Push Codex permission/sandbox flags using the documented precedence:
+///
+/// 1. `dangerously_skip_permissions` wins — emit only `--dangerously-bypass-approvals-and-sandbox`.
+/// 2. Otherwise, if `codex_sandbox_mode` and/or `codex_approval_policy` are set
+///    (Codex-native launcher dropdowns), emit them directly. `permission_mode`
+///    is ignored.
+/// 3. Otherwise, fall through to the locked [CC-03] `PermissionMode` mapping
+///    so Codex configs saved before the Codex-native dropdowns existed keep
+///    producing the same argv.
+///
+/// [CC-03] Codex-flag mapping (locked): codex_sandbox_mode/codex_approval_policy take precedence; legacy fallback maps Default/AcceptEdits/DontAsk->workspace-write, BypassPermissions->bypass, PlanMode->read-only+untrusted, Auto->full-auto
+fn push_codex_perm_args(args: &mut Vec<String>, cfg: &SessionConfig) {
+    if cfg.dangerously_skip_permissions {
+        args.push("--dangerously-bypass-approvals-and-sandbox".into());
+        return;
+    }
+
+    let has_native_sandbox = cfg
+        .codex_sandbox_mode
+        .as_deref()
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    let has_native_approval = cfg
+        .codex_approval_policy
+        .as_deref()
+        .map(|a| !a.is_empty())
+        .unwrap_or(false);
+
+    if has_native_sandbox || has_native_approval {
+        if has_native_sandbox {
+            args.push("--sandbox".into());
+            args.push(cfg.codex_sandbox_mode.as_deref().unwrap().to_string());
+        }
+        if has_native_approval {
+            args.push("--ask-for-approval".into());
+            args.push(cfg.codex_approval_policy.as_deref().unwrap().to_string());
+        }
+        return;
+    }
+
+    match cfg.permission_mode {
+        PermissionMode::Default => {
+            args.push("--sandbox".into());
+            args.push("workspace-write".into());
+        }
+        PermissionMode::AcceptEdits => {
+            args.push("--sandbox".into());
+            args.push("workspace-write".into());
+            args.push("--ask-for-approval".into());
+            args.push("never".into());
+        }
+        PermissionMode::BypassPermissions => {
+            args.push("--dangerously-bypass-approvals-and-sandbox".into());
+        }
+        PermissionMode::DontAsk => {
+            // Pin the sandbox explicitly so a future Codex change to the
+            // unspecified-flag default cannot silently weaken DontAsk
+            // semantics. Locked.
+            args.push("--sandbox".into());
+            args.push("workspace-write".into());
+            args.push("--ask-for-approval".into());
+            args.push("never".into());
+        }
+        PermissionMode::PlanMode => {
+            args.push("--sandbox".into());
+            args.push("read-only".into());
+            args.push("--ask-for-approval".into());
+            args.push("untrusted".into());
+        }
+        PermissionMode::Auto => {
+            args.push("--full-auto".into());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,6 +367,8 @@ mod tests {
             cli: CliKind::Codex,
             model: Some("gpt-5.5".into()),
             permission_mode: PermissionMode::Default,
+            codex_sandbox_mode: None,
+            codex_approval_policy: None,
             dangerously_skip_permissions: false,
             system_prompt: None,
             append_system_prompt: None,
@@ -406,18 +444,12 @@ mod tests {
 
     #[test]
     fn permission_mode_plan() {
+        // Legacy fallback: codex_sandbox_mode/codex_approval_policy unset,
+        // permission_mode drives the argv via the [CC-03] locked table.
         let mut c = cfg();
         c.permission_mode = PermissionMode::PlanMode;
         let mut args: Vec<String> = Vec::new();
-        match c.permission_mode {
-            PermissionMode::PlanMode => {
-                args.push("--sandbox".into());
-                args.push("read-only".into());
-                args.push("--ask-for-approval".into());
-                args.push("untrusted".into());
-            }
-            _ => unreachable!(),
-        }
+        push_codex_perm_args(&mut args, &c);
         assert_eq!(
             args,
             vec!["--sandbox", "read-only", "--ask-for-approval", "untrusted"]
@@ -428,11 +460,64 @@ mod tests {
     fn permission_mode_bypass_uses_yolo_equivalent() {
         let mut c = cfg();
         c.permission_mode = PermissionMode::BypassPermissions;
-        let arg = match c.permission_mode {
-            PermissionMode::BypassPermissions => "--dangerously-bypass-approvals-and-sandbox",
-            _ => unreachable!(),
-        };
-        assert_eq!(arg, "--dangerously-bypass-approvals-and-sandbox");
+        let mut args: Vec<String> = Vec::new();
+        push_codex_perm_args(&mut args, &c);
+        assert_eq!(args, vec!["--dangerously-bypass-approvals-and-sandbox"]);
+    }
+
+    #[test]
+    fn codex_native_dropdowns_take_precedence_over_permission_mode() {
+        // When the launcher writes the Codex-native sandbox + approval
+        // selections, they win — permission_mode (a stale value from
+        // pre-dropdown UI) is ignored.
+        let mut c = cfg();
+        c.permission_mode = PermissionMode::PlanMode; // would otherwise force read-only/untrusted
+        c.codex_sandbox_mode = Some("workspace-write".into());
+        c.codex_approval_policy = Some("never".into());
+        let mut args: Vec<String> = Vec::new();
+        push_codex_perm_args(&mut args, &c);
+        assert_eq!(
+            args,
+            vec!["--sandbox", "workspace-write", "--ask-for-approval", "never"]
+        );
+    }
+
+    #[test]
+    fn codex_native_partial_sandbox_only() {
+        // Only sandbox set → emit only --sandbox; do not fall through to
+        // the legacy mapping for the missing axis.
+        let mut c = cfg();
+        c.permission_mode = PermissionMode::AcceptEdits; // would add --ask-for-approval=never
+        c.codex_sandbox_mode = Some("read-only".into());
+        c.codex_approval_policy = None;
+        let mut args: Vec<String> = Vec::new();
+        push_codex_perm_args(&mut args, &c);
+        assert_eq!(args, vec!["--sandbox", "read-only"]);
+    }
+
+    #[test]
+    fn dangerously_skip_overrides_native_dropdowns() {
+        // Bypass toggle wins regardless of what the dropdowns hold.
+        let mut c = cfg();
+        c.dangerously_skip_permissions = true;
+        c.codex_sandbox_mode = Some("read-only".into());
+        c.codex_approval_policy = Some("untrusted".into());
+        let mut args: Vec<String> = Vec::new();
+        push_codex_perm_args(&mut args, &c);
+        assert_eq!(args, vec!["--dangerously-bypass-approvals-and-sandbox"]);
+    }
+
+    #[test]
+    fn legacy_fallback_when_native_dropdowns_unset() {
+        // Codex configs saved before the Codex-native dropdowns existed:
+        // both new fields are None, so permission_mode still drives argv.
+        let mut c = cfg();
+        c.codex_sandbox_mode = None;
+        c.codex_approval_policy = None;
+        c.permission_mode = PermissionMode::Auto;
+        let mut args: Vec<String> = Vec::new();
+        push_codex_perm_args(&mut args, &c);
+        assert_eq!(args, vec!["--full-auto"]);
     }
 
     #[test]
