@@ -1,11 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
-import { MessageEntry } from "../ContextViewer/ContextViewer";
+import { MessageEntry } from "../ContextViewer/blocks";
 import { IconClose } from "../Icons/Icons";
 import { useExpandableSet } from "../../hooks/useExpandableSet";
 import type { CapturedMessage } from "../../types/session";
-import "../ContextViewer/ContextViewer.css";
 import "./ConversationViewer.css";
 
 interface ConversationViewerProps {
