@@ -375,8 +375,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       // [PE-02] [CM-10] Per-CLI JSON Schema fetch. Claude pulls schemastore.org via
       // the existing fetch_settings_schema Tauri command (reqwest, avoids
-      // CORS). Codex extracts the embedded Draft-07 schema from the
-      // installed native binary via discover_codex_settings_schema (Phase 2).
+      // CORS). Codex asks the backend to mine the installed binary first, then
+      // fetch the matching openai/codex release schema at runtime.
       loadSettingsSchemaForCli: async (cli, cliPath) => {
         try {
           dlog("discovery", null, `settings JSON schema fetch started for ${cli}`, "DEBUG", {
@@ -384,6 +384,9 @@ export const useSettingsStore = create<SettingsState>()(
             data: { cli },
           });
           let schema: JsonSchema | null = null;
+          let codexSchemaSource: "binary" | "remote" | null = null;
+          let codexSchemaVersion: string | null = null;
+          let codexSchemaUrl: string | null = null;
           if (cli === "claude") {
             const raw = await traceAsync("discovery.fetch_settings_schema", () => invoke<string>("fetch_settings_schema"), {
               module: "discovery",
@@ -394,10 +397,10 @@ export const useSettingsStore = create<SettingsState>()(
             schema = JSON.parse(raw) as JsonSchema;
           } else {
             const path = cliPath ?? useSessionStore.getState().codexPath;
-            // Backend returns CodexSchemaResult { schema, source }; unwrap to the schema.
+            // Backend returns CodexSchemaResult { schema, source, version?, url? }; unwrap to the schema.
             const result = await traceAsync(
               "discovery.discover_codex_settings_schema",
-              () => invoke<{ schema: JsonSchema; source: "binary" | "bundled" }>(
+              () => invoke<{ schema: JsonSchema; source: "binary" | "remote"; version?: string; url?: string }>(
                 "discover_codex_settings_schema",
                 { cliPath: path ?? null },
               ),
@@ -409,6 +412,9 @@ export const useSettingsStore = create<SettingsState>()(
               },
             );
             schema = result.schema;
+            codexSchemaSource = result.source;
+            codexSchemaVersion = result.version ?? null;
+            codexSchemaUrl = result.url ?? null;
           }
           set((s) => ({
             settingsSchemaByCli: { ...s.settingsSchemaByCli, [cli]: schema },
@@ -423,6 +429,9 @@ export const useSettingsStore = create<SettingsState>()(
               title: schemaTitle,
               hasProperties: !!schema?.properties,
               topLevelPropertyCount: schema?.properties ? Object.keys(schema.properties).length : 0,
+              codexSchemaSource,
+              codexSchemaVersion,
+              codexSchemaUrl,
             },
           });
         } catch (err) {
@@ -608,7 +617,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "code-tabs-settings",
-      version: 24,
+      version: 25,
       storage: createJSONStorage(() => localStorage),
       migrate: migrateSettings,
       // Don't persist transient UI state

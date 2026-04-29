@@ -1,6 +1,7 @@
 //! Integration test: extract the ConfigToml schema from the locally installed
-//! Codex native binary. Skipped (with a printed reason) if the binary isn't
-//! present on this developer's machine.
+//! Codex native binary, or opt into the runtime remote fetch path. Skipped
+//! (with a printed reason) if the binary isn't present on this developer's
+//! machine.
 //!
 //! Run with: cargo test --test codex_schema_extract -- --nocapture
 
@@ -8,10 +9,9 @@ use std::path::PathBuf;
 
 use code_tabs_lib::discovery::codex::{
     discover_codex_env_vars_sync, discover_codex_settings_schema_sync,
-    vendored_codex_settings_schema,
 };
 
-fn locate_codex_native() -> Option<PathBuf> {
+fn locate_codex() -> Option<(PathBuf, PathBuf)> {
     // Mirror the production walk: detect the wrapper, then the platform vendor path.
     let wrapper_str = std::process::Command::new("which")
         .arg("codex")
@@ -22,7 +22,7 @@ fn locate_codex_native() -> Option<PathBuf> {
     let wrapper = PathBuf::from(wrapper_str.trim());
     let canonical = std::fs::canonicalize(&wrapper).unwrap_or(wrapper);
     if canonical.extension().and_then(|e| e.to_str()) != Some("js") {
-        return Some(canonical);
+        return Some((canonical.clone(), canonical));
     }
     // npm wrapper layout: <root>/bin/codex.js → <root>/node_modules/@openai/codex-<triple>/vendor/<triple>/codex/codex
     let triple = "x86_64-unknown-linux-musl";
@@ -39,29 +39,47 @@ fn locate_codex_native() -> Option<PathBuf> {
             .join(exe),
         root.join("vendor").join(triple).join("codex").join(exe),
     ];
-    candidates.into_iter().find(|p| p.is_file())
+    candidates
+        .into_iter()
+        .find(|p| p.is_file())
+        .map(|native| (canonical, native))
+}
+
+fn codex_version(wrapper: &PathBuf) -> Option<String> {
+    std::process::Command::new(wrapper)
+        .arg("--version")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|raw| raw.trim().to_string())
 }
 
 #[test]
-fn resolves_codex_schema_from_real_binary_or_bundled() {
-    let bundled = vendored_codex_settings_schema();
-    let bundled_props = bundled
-        .get("properties")
-        .and_then(|p| p.as_object())
-        .expect("bundled schema has properties");
-    eprintln!(
-        "Bundled schema: {} top-level properties",
-        bundled_props.len()
-    );
-    assert!(bundled_props.len() >= 20);
-
-    let Some(bin) = locate_codex_native() else {
+fn resolves_codex_schema_from_real_binary_or_remote() {
+    let Some((wrapper, bin)) = locate_codex() else {
         eprintln!("SKIP: no Codex native binary on this machine");
         return;
     };
+    let version = codex_version(&wrapper);
     eprintln!("Using Codex binary: {}", bin.display());
+    eprintln!("Codex version: {:?}", version);
 
-    let result = discover_codex_settings_schema_sync(&bin);
+    let result = match discover_codex_settings_schema_sync(Some(&bin), None) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("No embedded ConfigToml schema: {err}");
+            if std::env::var_os("CODE_TABS_TEST_REMOTE_CODEX_SCHEMA").is_none() {
+                eprintln!(
+                    "SKIP: set CODE_TABS_TEST_REMOTE_CODEX_SCHEMA=1 to exercise runtime remote schema fetch"
+                );
+                return;
+            }
+            discover_codex_settings_schema_sync(Some(&bin), version.as_deref())
+                .expect("remote schema fetch")
+        }
+    };
+
     eprintln!("Schema source: {}", result.source);
     let props = result
         .schema
@@ -84,12 +102,12 @@ fn resolves_codex_schema_from_real_binary_or_bundled() {
         prop_count >= 20,
         "expected >=20 top-level keys, got {prop_count}"
     );
-    assert!(matches!(result.source, "binary" | "bundled"));
+    assert!(matches!(result.source, "binary" | "remote"));
 }
 
 #[test]
 fn mines_real_codex_env_vars_when_binary_present() {
-    let Some(bin) = locate_codex_native() else {
+    let Some((_wrapper, bin)) = locate_codex() else {
         eprintln!("SKIP: no Codex native binary on this machine");
         return;
     };

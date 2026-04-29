@@ -22,8 +22,7 @@
     "codex:delegate": "python tools/codex_delegate.py",
     "discover:dump": "cargo run --manifest-path src-tauri/Cargo.toml --bin discover_audit -- dump",
     "discover:audit": "cargo run --manifest-path src-tauri/Cargo.toml --bin discover_audit -- audit",
-    "discover:fetch-docs": "cargo run --manifest-path src-tauri/Cargo.toml --bin discover_audit -- fetch-docs --out src-tauri/tests/fixtures",
-    "discover:fetch-codex-schema": "curl -fsSL https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/config.schema.json -o src-tauri/src/discovery/codex_schema.json && echo 'Refreshed src-tauri/src/discovery/codex_schema.json from openai/codex@main'"
+    "discover:fetch-docs": "cargo run --manifest-path src-tauri/Cargo.toml --bin discover_audit -- fetch-docs --out src-tauri/tests/fixtures"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.5.0",

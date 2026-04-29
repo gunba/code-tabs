@@ -30,6 +30,8 @@ if (!globalThis.crypto?.randomUUID) {
 }
 
 import { DEFAULT_RECORDING_CONFIG, DEFAULT_RECORDING_CONFIGS_BY_CLI, useSettingsStore } from "../settings";
+import { migrateSettings } from "../settings/migrations";
+import { partializeSettings } from "../settings/partialize";
 
 function resetStore() {
   useSettingsStore.setState({
@@ -115,6 +117,34 @@ describe("per-CLI discovery state", () => {
       claude: "2.1.119",
       codex: "0.125.0",
     });
+  });
+});
+
+describe("settings schema persistence", () => {
+  it("does not persist runtime settings schemas", () => {
+    const partial = partializeSettings({
+      ...useSettingsStore.getState(),
+      settingsSchemaByCli: {
+        claude: { properties: { oldClaude: { type: "string" } } },
+        codex: { properties: { oldCodex: { type: "string" } } },
+      },
+    });
+
+    expect("settingsSchemaByCli" in partial).toBe(false);
+  });
+
+  it("clears previously persisted schemas during migration", () => {
+    const migrated = migrateSettings(
+      {
+        settingsSchemaByCli: {
+          claude: { properties: { oldClaude: { type: "string" } } },
+          codex: { properties: { oldCodex: { type: "string" } } },
+        },
+      },
+      24,
+    ) as { settingsSchemaByCli?: unknown };
+
+    expect(migrated.settingsSchemaByCli).toEqual({ claude: null, codex: null });
   });
 });
 

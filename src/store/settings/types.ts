@@ -40,9 +40,8 @@ export interface SettingsState {
   lastOpenedCliVersions: Record<CliKind, string | null>;
   previousCliVersions: Record<CliKind, string | null>;
   cliCapabilitiesByCli: Record<CliKind, CliCapabilities>;
-  // [PE-02] Per-CLI schema/env-var caches. Codex schema is mined from the
-  // installed native binary; Claude schema is fetched from schemastore +
-  // supplemented by binary Zod scan.
+  // [PE-02] Per-CLI discovery state. Settings schemas are runtime-only;
+  // env vars and binary fields remain persisted discovery outputs.
   binarySettingsFieldsByCli: Record<CliKind, BinarySettingField[]>;
   settingsSchemaByCli: Record<CliKind, JsonSchema | null>;
   knownEnvVarsByCli: Record<CliKind, EnvVarEntry[]>;

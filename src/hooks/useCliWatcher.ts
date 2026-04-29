@@ -155,7 +155,7 @@ export function useCliWatcher(): void {
             },
           });
 
-          // [PR-02] Discover Codex settings schema (vendored + future binary mine) and env var catalog. Both run in background; failures degrade UI gracefully.
+          // [PR-02] Discover Codex settings schema (binary mine + runtime remote fetch) and env var catalog. Both run in background; failures degrade UI gracefully.
           useSettingsStore.getState().loadSettingsSchemaForCli("codex");
           useSettingsStore.getState().loadKnownEnvVarsForCli("codex");
         } catch (err) {

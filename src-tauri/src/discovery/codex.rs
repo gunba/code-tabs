@@ -6,13 +6,14 @@
 //! from Rust by `schemars` at *build* time (via the `codex-write-config-schema`
 //! binary) and committed to the openai/codex repo as
 //! `codex-rs/core/config.schema.json`. It is **not** embedded in the runtime
-//! binary — only event/protocol schemas are. We therefore vendor a copy at
-//! `src-tauri/src/discovery/codex_schema.json` (loaded via `include_str!`)
-//! and refresh it via `npm run discover:fetch-codex-schema` (Phase 6).
+//! binary today — only event/protocol schemas are. We therefore fetch the
+//! schema at runtime from the matching Codex release tag instead of shipping a
+//! stale copy inside Code Tabs.
 //!
 //! Future-proofing: `discover_codex_settings_schema_sync` first attempts to
 //! mine the schema from the installed binary (matches the four distinctive
-//! ConfigToml top-level keys); if that fails it returns the bundled copy.
+//! ConfigToml top-level keys); if that fails it downloads the remote schema for
+//! the installed Codex CLI version.
 //! When/if Codex starts shipping the schema in the runtime binary, the
 //! frontend automatically picks up the live version with no code change.
 //!
@@ -26,34 +27,38 @@
 //!
 //! ## Public surface
 //!
-//!   * `discover_codex_settings_schema_sync(&Path)` → ConfigToml schema
-//!     (binary-mined when present, bundled otherwise).
+//!   * `discover_codex_settings_schema_sync(Option<&Path>, Option<&str>)` →
+//!     ConfigToml schema (binary-mined when present, remote otherwise).
 //!   * `discover_codex_env_vars_sync(&Path)` → curated + mined env vars.
 //!   * `codex_env_var_catalog()` → curated table alone (tests, fallback).
-//!   * `vendored_codex_settings_schema()` → bundled copy (tests, refresh).
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Duration;
 
+use semver::Version;
 use serde_json::Value;
 
 use super::DiscoveredEnvVar;
 
 /// Result envelope for `discover_codex_settings_schema_sync`. Tells the UI
-/// where the schema came from so the Settings header can show "bundled
-/// (vN)" vs "from installed binary".
+/// where the schema came from so logs can distinguish "remote release schema"
+/// from "from installed binary".
 #[derive(Debug, serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexSchemaResult {
     pub schema: serde_json::Value,
-    /// `"binary"` when extracted from the user's installed Codex; `"bundled"`
-    /// when sourced from the vendored copy compiled into Code Tabs.
+    /// `"binary"` when extracted from the user's installed Codex; `"remote"`
+    /// when fetched from openai/codex at runtime.
     pub source: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 /// Why binary mining didn't yield a schema. Used internally; the public
-/// API always returns at least the bundled schema, so this never reaches
-/// the frontend.
+/// API reports this alongside the remote fetch error when both sources fail.
 #[derive(Debug)]
 pub(crate) enum BinaryMineError {
     NoBinary,
@@ -71,14 +76,11 @@ impl std::fmt::Display for BinaryMineError {
     }
 }
 
-/// The bundled ConfigToml schema (Draft-07). Always succeeds. Refresh with
-/// `npm run discover:fetch-codex-schema` (Phase 6).
-pub fn vendored_codex_settings_schema() -> serde_json::Value {
-    serde_json::from_str(include_str!("codex_schema.json"))
-        .expect("vendored codex_schema.json must be valid JSON")
-}
-
 const MAX_BINARY_BYTES: u64 = 500 * 1024 * 1024;
+const CODEX_CONFIG_SCHEMA_REL_PATH: &str = "codex-rs/core/config.schema.json";
+const CODEX_CONFIG_SCHEMA_MAIN_URL: &str =
+    "https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/config.schema.json";
+const REMOTE_SCHEMA_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The probe we look for in the binary. `schemars` emits this exact prefix
 /// for every Draft-07 schema. As of Codex 0.125.0 the binary contains
@@ -96,6 +98,12 @@ const CONFIG_TOML_SIGNATURE: &[&str] = &[
     "profiles",
     "shell_environment_policy",
 ];
+
+#[derive(Debug, Clone)]
+struct RemoteCodexSchema {
+    schema: Value,
+    url: String,
+}
 
 /// Read a binary file into memory with a hard cap. Codex's native binary is
 /// ~196 MiB on Linux; the cap protects against an unexpectedly huge file
@@ -115,21 +123,167 @@ pub(crate) fn read_binary_capped(path: &Path) -> Result<Vec<u8>, BinaryMineError
         .map_err(|e| BinaryMineError::IoError(format!("read({}): {}", path.display(), e)))
 }
 
-// [CY-01] discover_codex_settings_schema_sync: binary-mine attempt (memchr Draft-07 probe + 4-key ConfigToml signature) -> vendored fallback (include_str! codex_schema.json). Refresh bundled copy via npm run discover:fetch-codex-schema.
+// [CY-01] discover_codex_settings_schema_sync: binary-mine attempt (memchr Draft-07 probe + 4-key ConfigToml signature) -> runtime remote fetch from openai/codex rust-v<installed-version>/codex-rs/core/config.schema.json, with main as a last remote candidate. No vendored schema is compiled into Code Tabs.
 /// Resolve the Codex ConfigToml JSON Schema. Tries binary mining first
 /// (future-proof: works automatically when/if Codex starts embedding the
-/// schema in the runtime binary); falls back to the bundled vendored copy.
-/// The result envelope reports which source actually fired.
-pub fn discover_codex_settings_schema_sync(native_binary_path: &Path) -> CodexSchemaResult {
-    match mine_schema_from_binary(native_binary_path) {
-        Ok(schema) => CodexSchemaResult {
-            schema,
-            source: "binary",
+/// schema in the runtime binary); falls back to a runtime HTTP fetch for the
+/// installed Codex CLI version. No schema is bundled into Code Tabs.
+pub fn discover_codex_settings_schema_sync(
+    native_binary_path: Option<&Path>,
+    codex_cli_version: Option<&str>,
+) -> Result<CodexSchemaResult, String> {
+    discover_codex_settings_schema_with_fetcher(
+        native_binary_path,
+        codex_cli_version,
+        fetch_codex_settings_schema_for_version,
+    )
+}
+
+fn discover_codex_settings_schema_with_fetcher<F>(
+    native_binary_path: Option<&Path>,
+    codex_cli_version: Option<&str>,
+    fetcher: F,
+) -> Result<CodexSchemaResult, String>
+where
+    F: FnOnce(&str) -> Result<RemoteCodexSchema, String>,
+{
+    let binary_error = match native_binary_path {
+        Some(path) => match mine_schema_from_binary(path) {
+            Ok(schema) => {
+                return Ok(CodexSchemaResult {
+                    schema,
+                    source: "binary",
+                    version: codex_cli_version.and_then(normalize_codex_cli_version),
+                    url: None,
+                });
+            }
+            Err(err) => err.to_string(),
         },
-        Err(_) => CodexSchemaResult {
-            schema: vendored_codex_settings_schema(),
-            source: "bundled",
-        },
+        None => BinaryMineError::NoBinary.to_string(),
+    };
+
+    let Some(raw_version) = codex_cli_version else {
+        return Err(format!(
+            "Codex settings schema unavailable: binary source failed ({binary_error}); remote source requires Codex CLI version"
+        ));
+    };
+    let Some(version) = normalize_codex_cli_version(raw_version) else {
+        return Err(format!(
+            "Codex settings schema unavailable: binary source failed ({binary_error}); could not parse Codex CLI version from {raw_version:?}"
+        ));
+    };
+
+    match fetcher(&version) {
+        Ok(remote) => Ok(CodexSchemaResult {
+            schema: remote.schema,
+            source: "remote",
+            version: Some(version),
+            url: Some(remote.url),
+        }),
+        Err(remote_error) => Err(format!(
+            "Codex settings schema unavailable: binary source failed ({binary_error}); remote source failed ({remote_error})"
+        )),
+    }
+}
+
+fn normalize_codex_cli_version(raw: &str) -> Option<String> {
+    raw.split(|c: char| c.is_whitespace() || matches!(c, ',' | '(' | ')' | ':'))
+        .find_map(|token| {
+            let token = token.trim().trim_start_matches('v');
+            if token.is_empty() {
+                return None;
+            }
+            Version::parse(token)
+                .ok()
+                .map(|version| version.to_string())
+        })
+}
+
+fn codex_schema_urls_for_version(version: &str) -> Result<Vec<String>, String> {
+    let normalized = normalize_codex_cli_version(version)
+        .ok_or_else(|| format!("could not parse Codex CLI version from {version:?}"))?;
+    let mut urls = vec![
+        format!(
+            "https://raw.githubusercontent.com/openai/codex/rust-v{normalized}/{CODEX_CONFIG_SCHEMA_REL_PATH}"
+        ),
+        format!(
+            "https://raw.githubusercontent.com/openai/codex/v{normalized}/{CODEX_CONFIG_SCHEMA_REL_PATH}"
+        ),
+        format!(
+            "https://raw.githubusercontent.com/openai/codex/{normalized}/{CODEX_CONFIG_SCHEMA_REL_PATH}"
+        ),
+        CODEX_CONFIG_SCHEMA_MAIN_URL.to_string(),
+    ];
+    urls.dedup();
+    Ok(urls)
+}
+
+fn fetch_codex_settings_schema_for_version(version: &str) -> Result<RemoteCodexSchema, String> {
+    let urls = codex_schema_urls_for_version(version)?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(REMOTE_SCHEMA_TIMEOUT)
+        .user_agent("code-tabs")
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let mut errors = Vec::new();
+    for url in urls {
+        let response = match client.get(&url).send() {
+            Ok(response) => response,
+            Err(err) => {
+                errors.push(format!("{url}: {err}"));
+                continue;
+            }
+        };
+        let status = response.status();
+        if !status.is_success() {
+            errors.push(format!("{url}: HTTP {status}"));
+            continue;
+        }
+        let text = match response.text() {
+            Ok(text) => text,
+            Err(err) => {
+                errors.push(format!("{url}: response body error: {err}"));
+                continue;
+            }
+        };
+        let schema: Value = match serde_json::from_str(&text) {
+            Ok(schema) => schema,
+            Err(err) => {
+                errors.push(format!("{url}: invalid JSON: {err}"));
+                continue;
+            }
+        };
+        if let Err(err) = validate_config_toml_schema(&schema) {
+            errors.push(format!("{url}: {err}"));
+            continue;
+        }
+        return Ok(RemoteCodexSchema { schema, url });
+    }
+
+    Err(format!(
+        "tried {} URL(s): {}",
+        errors.len(),
+        errors.join("; ")
+    ))
+}
+
+fn validate_config_toml_schema(schema: &Value) -> Result<(), String> {
+    let Some(props) = schema.get("properties").and_then(|p| p.as_object()) else {
+        return Err("schema missing top-level properties".into());
+    };
+    let missing: Vec<&str> = CONFIG_TOML_SIGNATURE
+        .iter()
+        .copied()
+        .filter(|key| !props.contains_key(*key))
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "schema missing ConfigToml signature keys: {}",
+            missing.join(", ")
+        ))
     }
 }
 
@@ -165,14 +319,7 @@ fn mine_schema_from_binary(native_binary_path: &Path) -> Result<Value, BinaryMin
                 _ => continue, // not a valid JSON object here, walk back further
             };
 
-            // Verify it's the ConfigToml schema, not a sub-schema.
-            let Some(props) = parsed.get("properties").and_then(|p| p.as_object()) else {
-                continue;
-            };
-            let has_signature = CONFIG_TOML_SIGNATURE
-                .iter()
-                .all(|key| props.contains_key(*key));
-            if !has_signature {
+            if validate_config_toml_schema(&parsed).is_err() {
                 continue;
             }
 
@@ -379,6 +526,21 @@ pub fn codex_env_var_catalog() -> Vec<DiscoveredEnvVar> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    fn minimal_config_schema() -> Value {
+        json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "ConfigToml",
+            "properties": {
+                "model": { "type": "string" },
+                "model_providers": { "type": "object" },
+                "mcp_servers": { "type": "object" },
+                "profiles": { "type": "object" },
+                "shell_environment_policy": { "type": "object" },
+            }
+        })
+    }
 
     #[test]
     fn signature_constants_match_codex_config() {
@@ -392,20 +554,15 @@ mod tests {
     }
 
     #[test]
-    fn vendored_schema_loads_and_has_signature() {
-        let schema = vendored_codex_settings_schema();
-        let props = schema
-            .get("properties")
-            .and_then(|p| p.as_object())
-            .expect("vendored schema has properties");
-        for key in CONFIG_TOML_SIGNATURE {
-            assert!(props.contains_key(*key), "vendored schema missing {key}");
-        }
-        assert!(
-            props.len() >= 20,
-            "vendored schema has {} top-level keys, expected >=20",
-            props.len()
+    fn codex_schema_urls_prefer_matching_rust_tag() {
+        let urls = codex_schema_urls_for_version("codex-cli 0.125.0").unwrap();
+        assert_eq!(
+            urls.first().map(String::as_str),
+            Some(
+                "https://raw.githubusercontent.com/openai/codex/rust-v0.125.0/codex-rs/core/config.schema.json"
+            )
         );
+        assert!(urls.iter().any(|url| url == CODEX_CONFIG_SCHEMA_MAIN_URL));
     }
 
     #[test]
@@ -422,7 +579,8 @@ mod tests {
         let tmp = std::env::temp_dir().join("codex_discovery_binary_mine.bin");
         std::fs::write(&tmp, &bytes).unwrap();
 
-        let result = discover_codex_settings_schema_sync(&tmp);
+        let result = discover_codex_settings_schema_sync(Some(&tmp), Some("codex-cli 0.125.0"))
+            .expect("embedded schema should resolve");
         assert_eq!(result.source, "binary");
         assert_eq!(
             result.schema.get("title").and_then(|v| v.as_str()),
@@ -432,8 +590,8 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_bundled_when_binary_lacks_signature() {
-        // Decoy schema only — no ConfigToml signature → should serve bundled.
+    fn fetches_remote_when_binary_lacks_signature() {
+        // Decoy schema only — no ConfigToml signature → should fetch remotely.
         let only_decoy = r#"{"$schema": "http://json-schema.org/draft-07/schema#","title":"ProfileToml","properties":{"model":{"type":"string"}}}"#;
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"\0\0junk\0\0");
@@ -443,19 +601,36 @@ mod tests {
         let tmp = std::env::temp_dir().join("codex_discovery_fallback.bin");
         std::fs::write(&tmp, &bytes).unwrap();
 
-        let result = discover_codex_settings_schema_sync(&tmp);
-        assert_eq!(result.source, "bundled");
-        // Bundled schema must still be valid.
+        let result = discover_codex_settings_schema_with_fetcher(
+            Some(&tmp),
+            Some("codex-cli 0.125.0"),
+            |version| {
+                assert_eq!(version, "0.125.0");
+                Ok(RemoteCodexSchema {
+                    schema: minimal_config_schema(),
+                    url: "https://example.invalid/config.schema.json".into(),
+                })
+            },
+        )
+        .expect("remote schema should resolve");
+        assert_eq!(result.source, "remote");
+        assert_eq!(result.version.as_deref(), Some("0.125.0"));
+        assert_eq!(
+            result.url.as_deref(),
+            Some("https://example.invalid/config.schema.json")
+        );
         assert!(result.schema.get("properties").is_some());
         let _ = std::fs::remove_file(tmp);
     }
 
     #[test]
-    fn falls_back_to_bundled_when_binary_missing() {
-        let result =
-            discover_codex_settings_schema_sync(Path::new("/nonexistent/codex/binary/path/codex"));
-        assert_eq!(result.source, "bundled");
-        assert!(result.schema.get("properties").is_some());
+    fn errors_when_binary_missing_and_version_missing() {
+        let err = discover_codex_settings_schema_sync(
+            Some(Path::new("/nonexistent/codex/binary/path/codex")),
+            None,
+        )
+        .expect_err("missing binary and version should fail");
+        assert!(err.contains("remote source requires Codex CLI version"));
     }
 
     #[test]

@@ -28,10 +28,10 @@ export type PermissionMode =
   | "planMode"
   | "auto";
 
-/** Codex `--sandbox` enum (mirrors SandboxMode in codex_schema.json). */
+/** Codex `--sandbox` enum (mirrors SandboxMode in Codex's ConfigToml schema). */
 export type CodexSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
 
-/** Codex `--ask-for-approval` enum (mirrors AskForApproval in codex_schema.json,
+/** Codex `--ask-for-approval` enum (mirrors AskForApproval in Codex's ConfigToml schema,
  *  excluding deprecated `on-failure` and complex `granular`). */
 export type CodexApprovalPolicy = "untrusted" | "on-request" | "never";
 

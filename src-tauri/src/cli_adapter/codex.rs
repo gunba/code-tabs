@@ -23,7 +23,7 @@ use super::{
 pub struct CodexAdapter;
 
 // [CC-08] CODEX_EFFORT_VALUES enum gate: mirrors the model_reasoning_effort
-// enum in Codex's ConfigToml schema (src-tauri/src/discovery/codex_schema.json).
+// enum in Codex's ConfigToml schema.
 // build_spawn skips the -c model_reasoning_effort=... override when SessionConfig.effort
 // is not in this list, so a stale Claude-side value (e.g. "max") never reaches
 // Codex's config.toml parser at launch. The same set is mirrored in

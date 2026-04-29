@@ -221,5 +221,10 @@ export function migrateSettings(persisted: unknown, version: number) {
     delete state.knownEnvVars;
     delete state.slashCommands;
   }
+  if (version < 25) {
+    // Settings schemas are runtime discovery results. Do not carry stale
+    // persisted schemas across app starts; loaders repopulate these in-memory.
+    state.settingsSchemaByCli = { claude: null, codex: null };
+  }
   return state;
 }

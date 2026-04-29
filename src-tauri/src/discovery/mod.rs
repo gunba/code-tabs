@@ -1,7 +1,7 @@
 //! Discovery primitives shared between CLIs.
 //!
-//! Per-CLI mining (Claude .js binary scanning, Codex native-binary schema
-//! extraction) lives in `claude` and `codex` submodules. This file holds:
+//! Per-CLI mining and fetches (Claude .js binary scanning, Codex schema
+//! resolution) live in `claude` and `codex` submodules. This file holds:
 //!   * shared cross-CLI types (`DiscoveredEnvVar`, `PluginScanRejection`),
 //!   * shared SKILL.md parsing helpers used by both Claude plugin discovery
 //!     and Codex skill discovery (`scan_skill_md`, `parse_skill_frontmatter`,

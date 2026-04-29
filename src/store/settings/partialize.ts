@@ -17,9 +17,6 @@ export function partializeSettings(state: SettingsState) {
     previousCliVersions: state.previousCliVersions,
     cliCapabilitiesByCli: state.cliCapabilitiesByCli,
     binarySettingsFieldsByCli: state.binarySettingsFieldsByCli,
-    // [CM-10] Persist per-CLI settings schemas in the zustand store so the
-    // settings panes do not have to re-fetch or re-mine on every startup.
-    settingsSchemaByCli: state.settingsSchemaByCli,
     knownEnvVarsByCli: state.knownEnvVarsByCli,
     slashCommandsByCli: state.slashCommandsByCli,
     commandUsage: state.commandUsage,
