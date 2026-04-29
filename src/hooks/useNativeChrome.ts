@@ -6,11 +6,10 @@ import { IS_LINUX } from "../lib/paths";
 export function useNativeChrome(): boolean {
   const [useNativeChrome, setUseNativeChrome] = useState(false);
 
-  // [PL-01] Linux custom titlebar: tauri.conf.json sets decorations:false globally so non-KDE
-  // Wayland compositors honor it at window creation. Non-Linux re-enables native decorations
-  // at runtime. KDE+Wayland is a known upstream Tauri bug (issues #6162/#6562 — KWin ignores
-  // decorations:false from wry's GTK-Wayland window), so on that combo we restore native
-  // decorations and skip our custom Header to avoid a duplicated titlebar.
+  // [PL-01] Linux custom titlebar: tauri.conf.json sets decorations:false globally.
+  // Linux normally keeps the custom Header; non-Linux re-enables native decorations
+  // at runtime. KDE+Wayland only restores native chrome when GTK is actually using
+  // Wayland, where KWin can ignore decorations:false from wry's GTK-Wayland window.
   useEffect(() => {
     (async () => {
       const native = IS_LINUX ? await invoke<boolean>("linux_use_native_chrome").catch(() => false) : true;

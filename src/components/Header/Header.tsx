@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSettingsStore } from "../../store/settings";
 import { useVersionStore } from "../../store/version";
 import { ProviderLogo } from "../ProviderLogo/ProviderLogo";
-import { IconCode } from "../Icons/Icons";
+import appIcon from "../../../src-tauri/icons/32x32.png";
 // [DR-04] Components live in src/components/<Name>/<Name>.tsx with co-located <Name>.css. Header is the canonical example: Header.tsx + Header.css side by side.
 import "./Header.css";
 
@@ -62,7 +62,7 @@ export function Header() {
       <div className="app-header-title">
         {/* [BR-01] Brand: 'Code Tabs'; shows both Claude and Codex versions */}
         <span className="app-header-brand">
-          <IconCode size={14} className="app-header-brand-icon" />
+          <img className="app-header-app-logo" src={appIcon} alt="" draggable={false} />
           <span className="app-header-name">
             Code Tabs{appVersion ? ` v${appVersion}` : ""}
           </span>
