@@ -96,6 +96,19 @@ describe("activity store", () => {
       expect(activity.turns[0].files[0].agentId).toBeNull();
       expect(activity.allFiles["/p/search.txt"].agentId).toBeNull();
     });
+
+    it("does not lose known folder status when later activity omits folder metadata", () => {
+      const store = useActivityStore.getState();
+      store.addFileActivity(SID, "/p/Folder With Spaces", "searched", {
+        toolName: "Glob",
+        isFolder: true,
+      });
+      store.addFileActivity(SID, "/p/Folder With Spaces", "read", { toolName: "Read" });
+
+      const activity = useActivityStore.getState().sessions[SID];
+      expect(activity.turns[0].files[0].isFolder).toBe(true);
+      expect(activity.allFiles["/p/Folder With Spaces"].isFolder).toBe(true);
+    });
   });
 
   describe("confirmEntries", () => {

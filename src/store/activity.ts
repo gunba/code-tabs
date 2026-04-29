@@ -97,9 +97,12 @@ function mergeFileActivity(
   next: FileActivity,
   options: { refreshSearchedMetadataForRealKind?: boolean } = {},
 ): FileActivity | null {
+  const preserveKnownFolder = (merged: FileActivity): FileActivity =>
+    prev.isFolder && !merged.isFolder ? { ...merged, isFolder: true } : merged;
+
   if (next.kind === "searched" && prev.kind !== "searched") {
     return options.refreshSearchedMetadataForRealKind
-      ? { ...prev, agentId: next.agentId, timestamp: next.timestamp }
+      ? preserveKnownFolder({ ...prev, agentId: next.agentId, timestamp: next.timestamp })
       : null;
   }
   if (
@@ -116,9 +119,9 @@ function mergeFileActivity(
   // [AP-03] Preserve the original creation event when later edits report the
   // same path as modified.
   if (prev.kind === "created" && next.kind === "modified") {
-    return { ...next, kind: "created" };
+    return preserveKnownFolder({ ...next, kind: "created" });
   }
-  return next;
+  return preserveKnownFolder(next);
 }
 
 export const useActivityStore = create<ActivityState>()((set) => ({

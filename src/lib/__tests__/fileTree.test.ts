@@ -202,6 +202,19 @@ describe("buildFileTree", () => {
     expect(fileNames).toEqual(["deep.ts", "shallow.ts"]);
   });
 
+  it("keeps a path with children as a folder when activity metadata says file", () => {
+    const files = toMap([
+      makeActivity("/workspace/Folder With Spaces", "read"),
+      makeActivity("/workspace/Folder With Spaces/child.ts"),
+    ]);
+    const tree = buildFileTree(files, "/workspace");
+
+    const folder = findNode(tree, "Folder With Spaces");
+    expect(folder).toBeDefined();
+    expect(folder!.isFile).toBe(false);
+    expect(folder!.children.map((child) => child.name)).toEqual(["child.ts"]);
+  });
+
   it("normalizes mixed separator paths to avoid duplicates", () => {
     const files = toMap([
       makeActivity("C:/Users/jorda/project/a.ts"),

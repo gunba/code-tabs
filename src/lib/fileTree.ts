@@ -22,7 +22,7 @@ export interface FileTreeNode {
   isFile: boolean;
   /** Sorted children: directories first, then case-insensitive alphabetical. */
   children: FileTreeNode[];
-  /** Non-null for file (leaf) nodes — the latest activity record. */
+  /** Non-null when this node has direct activity, either as a file or searched folder. */
   activity: FileActivity | null;
   /** True when this folder node is the workspace root directory. */
   isWorkspaceRoot: boolean;
@@ -31,7 +31,7 @@ export interface FileTreeNode {
 /** Intermediate trie node used during tree construction. */
 interface TrieNode {
   children: Map<string, TrieNode>;
-  /** Set when this node corresponds to an actual visited file. */
+  /** Set when this node has direct activity, either as a file or searched folder. */
   activity: FileActivity | null;
   /** Original full path for file leaves. */
   originalPath: string | null;
@@ -131,7 +131,8 @@ function trieToNodes(trie: TrieNode, parentPath: string): FileTreeNode[] {
 
   for (const [name, child] of trie.children) {
     const fullPath = parentPath ? `${parentPath}/${name}` : name;
-    const isFile = child.activity !== null && !child.activity.isFolder;
+    const isFile =
+      child.activity !== null && !child.activity.isFolder && child.children.size === 0;
 
     const node: FileTreeNode = {
       name,
