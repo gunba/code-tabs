@@ -9,14 +9,14 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## Hooks Manager
 
-- [HM-05 L9] Custom events: event dropdown includes a "Custom event..." option with freeform text input, so users aren't locked to the hardcoded event list
-- [HM-09 L33] Three hook types supported: `command`, `prompt`, `agent`
-- [HM-01 L113] Three scopes: User (`~/.claude/settings.json`), Project (`.claude/settings.json`), Project Local (`.claude/settings.local.json`)
-- [HM-03 L114] Non-destructive saves: merges hooks into existing settings file (preserves other keys like `permissions`)
-- [HM-06 L147] Existing hooks with unknown event names (from file) are displayed and editable
-- [HM-04 L176] Edit preserves unknown fields: editing a hook spreads the original entry before applying form values, so fields added by future CLI versions are not stripped
-- [HM-12 L340] Hook form includes an optional 'if' field (permission-rule syntax filter, placeholder 'Bash(git *)'). Saved as the 'if' key on HookEntry when non-empty, omitted (undefined) when blank. Populated from flat.hook['if'] on edit. Displayed as an 'If:' row on hook cards when set. The field is outside the eventHasMatcher conditional and applies to all event types.
+- [HM-05 L10] Custom events: event dropdown includes a "Custom event..." option with freeform text input, so users aren't locked to the hardcoded event list
+- [HM-09 L34] Three hook types supported: `command`, `prompt`, `agent`
+- [HM-01 L114] Three scopes: User (`~/.claude/settings.json`), Project (`.claude/settings.json`), Project Local (`.claude/settings.local.json`)
+- [HM-03 L115] Non-destructive saves: merges hooks into existing settings file (preserves other keys like `permissions`)
+- [HM-06 L149] Existing hooks with unknown event names (from file) are displayed and editable
+- [HM-04 L177] Edit preserves unknown fields: editing a hook spreads the original entry before applying form values, so fields added by future CLI versions are not stripped
+- [HM-12 L341] Hook form includes an optional 'if' field (permission-rule syntax filter, placeholder 'Bash(git *)'). Saved as the 'if' key on HookEntry when non-empty, omitted (undefined) when blank. Populated from flat.hook['if'] on edit. Displayed as an 'If:' row on hook cards when set. The field is outside the eventHasMatcher conditional and applies to all event types.
 
 ## Config Editors
 
-- [CM-15 L112] HooksPane: per-scope CRUD absorbed from standalone HooksManager. Hook cards, inline Add/Edit form. Scope is a prop, not a dropdown. Calls bumpHookChange() after save.
+- [CM-15 L113] HooksPane: per-scope CRUD absorbed from standalone HooksManager. Hook cards, inline Add/Edit form. Scope is a prop, not a dropdown. Calls bumpHookChange() after save.

@@ -95,6 +95,7 @@ export function Tab({
   };
 
   return (
+    // [CV-01] Per-tab CLI identity: class tab-cli-{cli} plus ProviderLogo in the CLI row.
     <div
       className={`tab tab-cli-${session.config.cli}${isActive ? " tab-active" : ""}${isDead ? " tab-dead" : ""}${session.config.runMode ? " tab-run" : ""}${dragOver ? " tab-drag-over" : ""}${settledKind === "idle" ? " tab-settled-idle" : ""}${settledKind === "actionNeeded" || settledKind === "waitingPermission" ? " tab-settled-action" : ""}`}
       role="button"

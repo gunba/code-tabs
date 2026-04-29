@@ -15,7 +15,7 @@ Startup env vars and runtime tweaks needed for webkit2gtk/Wayland/KDE to work re
 
 ## Rust System Command Modules
 
-- [RC-11 L395] register_active_pid / unregister_active_pid -- Frontend registers OS PIDs of PTY children; RunEvent::Exit handler in lib.rs iterates ActivePids and calls kill_process_tree_sync for each.
+- [RC-11 L400] register_active_pid / unregister_active_pid -- Frontend registers OS PIDs of PTY children; RunEvent::Exit handler in lib.rs iterates ActivePids and calls kill_process_tree_sync for each.
 
 ## Window
 
@@ -33,8 +33,8 @@ Ambient weather data pipeline for the header activity visualizer.
 
 ## Development Rules
 
-- [DR-01 L240] Rust IPC commands live under `src-tauri/src/commands/*.rs` (session, cli, config, git, process, data), plus `output_filter.rs`, `proxy.rs`, `tap_server.rs`, `path_utils.rs`, and are registered in `lib.rs` via `generate_handler!`
+- [DR-01 L243] Rust IPC commands live under `src-tauri/src/commands/*.rs` (session, cli, config, git, process, data), plus `output_filter.rs`, `proxy.rs`, `tap_server.rs`, `path_utils.rs`, and are registered in `lib.rs` via `generate_handler!`
 
 ## Project Conventions
 
-- [AR-01 L240] Core data flow: React UI (WebView2) communicates with Rust backend via Tauri IPC, which manages PTY sessions to the Claude Code CLI ``` React UI (WebView2) <-> Tauri IPC <-> Rust Backend <-> PTY (ConPTY/openpty) <-> Claude Code CLI ```
+- [AR-01 L243] Core data flow: React UI (WebView2) communicates with Rust backend via Tauri IPC, which manages PTY sessions to the Claude Code CLI ``` React UI (WebView2) <-> Tauri IPC <-> Rust Backend <-> PTY (ConPTY/openpty) <-> Claude Code CLI ```

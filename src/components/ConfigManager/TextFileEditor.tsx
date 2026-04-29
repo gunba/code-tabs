@@ -30,7 +30,7 @@ export interface TextFileEditorController {
   syncScroll: () => void;
 }
 
-// [CM-26] Shared uncontrolled text-file editor lifecycle: load/reseed,
+// [CM-34] Shared uncontrolled text-file editor lifecycle: load/reseed,
 // DOM-fresh save, dirty tracking, syntax-overlay scroll sync, and unsaved guard.
 export function useTextFileEditor({
   id,
