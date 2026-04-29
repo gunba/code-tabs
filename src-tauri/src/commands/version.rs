@@ -20,31 +20,17 @@ pub fn get_build_info() -> BuildInfo {
     }
 }
 
-fn gdk_backend_prefers_x11(gdk_backend: &str) -> bool {
-    matches!(
-        gdk_backend
-            .split(',')
-            .map(str::trim)
-            .find(|backend| !backend.is_empty()),
-        Some(backend) if backend.eq_ignore_ascii_case("x11")
-    )
-}
-
-fn linux_use_native_chrome_from_env(session: &str, desktop: &str, gdk_backend: &str) -> bool {
+fn linux_use_native_chrome_from_env(session: &str, desktop: &str) -> bool {
     if !session.eq_ignore_ascii_case("wayland") {
-        return false;
-    }
-    if gdk_backend_prefers_x11(gdk_backend) {
         return false;
     }
     let desktop = desktop.to_uppercase();
     desktop.split(':').any(|s| s == "KDE")
 }
 
-// [PL-01] Returns true only for Linux + KDE + Wayland when GTK is actually using
-// a Wayland-capable backend. The app forces GDK_BACKEND=x11 by default in lib.rs,
-// which avoids KWin's decorations:false bug and lets the custom Header render.
-// If a user overrides that back to Wayland, frontend falls back to native chrome.
+// [PL-01] Returns true on Linux + KDE + Wayland — the combination where native
+// window decorations can still appear despite `decorations:false`. Frontend uses
+// this to skip the custom Header and keep a single OS-provided titlebar.
 #[tauri::command]
 pub fn linux_use_native_chrome() -> bool {
     if !cfg!(target_os = "linux") {
@@ -52,8 +38,7 @@ pub fn linux_use_native_chrome() -> bool {
     }
     let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
     let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
-    let gdk_backend = std::env::var("GDK_BACKEND").unwrap_or_default();
-    linux_use_native_chrome_from_env(&session, &desktop, &gdk_backend)
+    linux_use_native_chrome_from_env(&session, &desktop)
 }
 
 // [CN-01] Per-CLI changelog fetch: claude raw GitHub markdown CHANGELOG.md vs codex GitHub releases atom feed + GitHub releases API fallback; semver-aware filter selects entries strictly after fromVersion through toVersion (inclusive), capped at 12 (or 5 default).
@@ -660,27 +645,11 @@ mod tests {
     }
 
     #[test]
-    fn linux_native_chrome_skips_kde_wayland_when_gtk_backend_is_x11() {
-        assert!(!linux_use_native_chrome_from_env("wayland", "KDE", "x11"));
-        assert!(!linux_use_native_chrome_from_env(
-            "wayland",
-            "KDE",
-            "x11,wayland"
-        ));
-    }
-
-    #[test]
-    fn linux_native_chrome_keeps_fallback_for_kde_wayland_gtk_wayland() {
-        assert!(linux_use_native_chrome_from_env("wayland", "KDE", ""));
-        assert!(linux_use_native_chrome_from_env(
-            "wayland",
-            "GNOME:KDE",
-            "wayland"
-        ));
-        assert!(!linux_use_native_chrome_from_env("x11", "KDE", "wayland"));
-        assert!(!linux_use_native_chrome_from_env(
-            "wayland", "GNOME", "wayland"
-        ));
+    fn linux_native_chrome_uses_os_titlebar_for_kde_wayland() {
+        assert!(linux_use_native_chrome_from_env("wayland", "KDE"));
+        assert!(linux_use_native_chrome_from_env("wayland", "GNOME:KDE"));
+        assert!(!linux_use_native_chrome_from_env("x11", "KDE"));
+        assert!(!linux_use_native_chrome_from_env("wayland", "GNOME"));
     }
 
     #[test]
