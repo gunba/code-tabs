@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PaneComponentProps } from "./ThreePaneEditor";
 import { useSettingsStore } from "../../store/settings";
@@ -22,7 +22,7 @@ import {
 } from "../../lib/codexSchema";
 import { parseToml, flattenTomlKeys } from "../../lib/tomlParse";
 import { highlightToml } from "../../lib/tomlHighlight";
-import { useUnsavedTextEditor } from "./UnsavedTextEditors";
+import { HighlightedTextFileEditor, useTextFileEditor } from "./TextFileEditor";
 
 // [CM-13] JSON textarea with syntax highlighting overlay (pre behind transparent textarea)
 /** Tokenize JSON text and wrap tokens in colored spans. */
@@ -223,13 +223,6 @@ export interface SettingsPaneExtraProps {
 }
 
 export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, onKeysChange, insertRef, onEditorFocus }: PaneComponentProps & SettingsPaneExtraProps) {
-  const [text, setText] = useState("");
-  const [saved, setSaved] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [seedKey, setSeedKey] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const preRef = useRef<HTMLPreElement>(null);
-
   const cliCapabilitiesByCli = useSettingsStore((s) => s.cliCapabilitiesByCli);
   const binarySettingsFieldsByCli = useSettingsStore((s) => s.binarySettingsFieldsByCli);
   const settingsSchemaByCli = useSettingsStore((s) => s.settingsSchemaByCli);
@@ -244,12 +237,62 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
     sourceInfo: getSchemaSourceInfo(cliCapabilities.options, binarySettingsSchema, settingsJsonSchema),
   }), [cli, cliCapabilities.options, binarySettingsSchema, settingsJsonSchema, settingsSchemaByCli.codex]);
 
+  const workingDir = scope === "user" ? "" : projectDir;
+  const fileType = cli === "codex" ? "codex-config" : "settings";
+  const initialText = cli === "codex" ? "" : "{}";
+  const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
+  const title = `${cli === "codex" ? "Codex config" : "Settings"} (${scopeLabel})`;
+
+  const read = useCallback(async () => {
+    try {
+      const result = await invoke<string>("read_config_file", {
+        scope,
+        workingDir,
+        fileType,
+      });
+      return cli === "codex"
+        ? result
+        : result ? JSON.stringify(JSON.parse(result), null, 2) : "{}";
+    } catch {
+      return initialText;
+    }
+  }, [scope, workingDir, fileType, cli, initialText]);
+
+  const write = useCallback(async (value: string) => {
+    if (cli === "claude") {
+      try {
+        JSON.parse(value);
+      } catch (err) {
+        throw new Error(`Invalid JSON: ${err}`);
+      }
+    } else {
+      const result = parseToml(value);
+      if (!result.ok) {
+        throw new Error(`Invalid TOML: ${result.error}`);
+      }
+    }
+    await invoke("write_config_file", {
+      scope,
+      workingDir,
+      fileType,
+      content: value,
+    });
+  }, [cli, scope, workingDir, fileType]);
+
+  const editor = useTextFileEditor({
+    id: `${cli}:settings:${scope}:${projectDir}`,
+    title,
+    initialText,
+    read,
+    write,
+  });
+
   // Parse current text for validation + "already set" tracking. Codex uses
   // smol-toml + flattenTomlKeys (dotted paths matching the flattened schema);
   // Claude uses native JSON.parse on the raw object.
   const { currentKeys, unknownKeys, typeMismatches, parseError } = useMemo(() => {
     if (cli === "codex") {
-      const result = parseToml(text);
+      const result = parseToml(editor.text);
       if (!result.ok) {
         return {
           currentKeys: new Set<string>(),
@@ -267,7 +310,7 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
       };
     }
     try {
-      const obj = JSON.parse(text) as Record<string, unknown>;
+      const obj = JSON.parse(editor.text) as Record<string, unknown>;
       return {
         currentKeys: new Set(Object.keys(obj)),
         unknownKeys: getUnknownKeys(obj, schema),
@@ -282,61 +325,18 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
         parseError: e instanceof Error ? e.message : String(e),
       };
     }
-  }, [cli, text, schema]);
-
-  const load = useCallback(async () => {
-    let formatted: string;
-    try {
-      const result = await invoke<string>("read_config_file", {
-        scope,
-        workingDir: scope === "user" ? "" : projectDir,
-        fileType: cli === "codex" ? "codex-config" : "settings",
-      });
-      formatted = cli === "codex"
-        ? result
-        : result ? JSON.stringify(JSON.parse(result), null, 2) : "{}";
-    } catch {
-      formatted = cli === "codex" ? "" : "{}";
-    }
-    setText(formatted);
-    setSaved(formatted);
-    setSeedKey((k) => k + 1);
-    setLoading(false);
-  }, [scope, projectDir, cli]);
-
-  useEffect(() => { load(); }, [load]);
+  }, [cli, editor.text, schema]);
 
   const handleSave = useCallback(async () => {
-    const value = textareaRef.current?.value ?? "";
-    if (cli === "claude") {
-      try {
-        JSON.parse(value); // validate
-      } catch (err) {
-        onStatus({ text: `Invalid JSON: ${err}`, type: "error" });
-        return;
-      }
-    } else {
-      // Codex TOML — let smol-toml flag malformed input before the round-trip.
-      const result = parseToml(value);
-      if (!result.ok) {
-        onStatus({ text: `Invalid TOML: ${result.error}`, type: "error" });
-        return;
-      }
-    }
     try {
-      await invoke("write_config_file", {
-        scope,
-        workingDir: scope === "user" ? "" : projectDir,
-        fileType: cli === "codex" ? "codex-config" : "settings",
-        content: value,
-      });
-      setSaved(value);
+      await editor.save();
       onStatus({ text: cli === "codex" ? "Codex config saved" : "Settings saved", type: "success" });
       setTimeout(() => onStatus(null), 2000);
     } catch (err) {
-      onStatus({ text: `Save failed: ${err}`, type: "error" });
+      const message = err instanceof Error ? err.message : String(err);
+      onStatus({ text: message.startsWith("Invalid ") ? message : `Save failed: ${message}`, type: "error" });
     }
-  }, [cli, scope, projectDir, onStatus]);
+  }, [cli, editor, onStatus]);
 
   // Insert reformats the entire JSON / TOML document. We replace the textarea
   // value through the browser's edit history (execCommand) so the change is a
@@ -345,7 +345,7 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
   // stale data. Codex uses a backend command (toml_edit) for format-preserving
   // insertion of dotted paths; Claude does the JSON edit in-memory.
   const handleInsert = useCallback(async (key: string, value: unknown) => {
-    const el = textareaRef.current;
+    const el = editor.textareaRef.current;
     if (!el) return;
     if (cli === "codex") {
       try {
@@ -368,7 +368,7 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
       }
     })();
     replaceTextareaValue(el, newJson);
-  }, [cli, onStatus]);
+  }, [cli, editor.textareaRef, onStatus]);
 
   // Report current keys to parent
   useEffect(() => {
@@ -383,28 +383,7 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
     return () => { if (insertRef) insertRef.current = null; };
   }, [handleInsert, insertRef]);
 
-  const syncScroll = () => {
-    if (textareaRef.current && preRef.current) {
-      preRef.current.scrollTop = textareaRef.current.scrollTop;
-      preRef.current.scrollLeft = textareaRef.current.scrollLeft;
-    }
-  };
-
-  const dirty = text !== saved;
-
-  useUnsavedTextEditor(`${cli}:settings:${scope}:${projectDir}`, () => {
-    if (loading) return null;
-    const after = textareaRef.current?.value ?? text;
-    if (after === saved) return null;
-    const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
-    return {
-      title: `${cli === "codex" ? "Codex config" : "Settings"} (${scopeLabel})`,
-      before: saved,
-      after,
-    };
-  });
-
-  if (loading) return <div className="pane-hint">Loading...</div>;
+  if (editor.loading) return <div className="pane-hint">Loading...</div>;
 
   // [CM-25] Validation segments for footer (rendered as separate spans for per-segment tooltips)
   const hasErrors = !!parseError || typeMismatches.length > 0;
@@ -428,7 +407,7 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
 
   const hasValidation = !!parseError || !!unknownLabel || !!mismatchLabel;
 
-  const highlighted = cli === "codex" ? highlightToml(text) : highlightJson(text);
+  const highlighted = cli === "codex" ? highlightToml(editor.text) : highlightJson(editor.text);
   const placeholder = cli === "codex"
     ? "No config.toml found - type TOML or click a setting from the reference panel below to add it"
     : undefined;
@@ -436,30 +415,12 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
 
   return (
     <div className="pane-editor" onFocus={onEditorFocus}>
-      <div className="sh-container">
-        <pre
-          ref={preRef}
-          className="sh-pre"
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: highlighted + "\n" }}
-        />
-        <textarea
-          // Remount on each successful load (or scope change) so `defaultValue`
-          // reseeds. The browser owns the textarea's value and undo stack
-          // mid-edit; React mirrors via onInput for the overlay/validation.
-          key={seedKey}
-          ref={textareaRef}
-          className="pane-textarea sh-textarea"
-          defaultValue={text}
-          onInput={(e) => setText(e.currentTarget.value)}
-          spellCheck={false}
-          placeholder={placeholder}
-          onScroll={syncScroll}
-          onKeyDown={(e) => {
-            if (e.ctrlKey && e.key === "s") { e.preventDefault(); handleSave(); }
-          }}
-        />
-      </div>
+      <HighlightedTextFileEditor
+        editor={editor}
+        highlightedHtml={highlighted}
+        placeholder={placeholder}
+        onSave={handleSave}
+      />
 
       {!hideReference && schema.length > 0 && (
         <SettingsReference
@@ -483,8 +444,8 @@ export function SettingsPane({ scope, projectDir, cli, onStatus, hideReference, 
         {!hasValidation && !parseError && currentKeys.size > 0 && (
           <span className="sr-validation sr-validation-ok">Valid</span>
         )}
-        <button className="pane-save-btn" onClick={handleSave} disabled={!dirty}>
-          {dirty ? "Save" : "Saved"}
+        <button className="pane-save-btn" onClick={handleSave} disabled={!editor.dirty}>
+          {editor.dirty ? "Save" : "Saved"}
         </button>
       </div>
     </div>

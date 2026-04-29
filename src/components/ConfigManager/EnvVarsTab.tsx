@@ -10,7 +10,7 @@ import { highlightJson } from "./SettingsPane";
 import { EnvVarsReference } from "./EnvVarsReference";
 import { replaceTextareaValue } from "../../lib/domEdit";
 import type { StatusMessage } from "../../lib/settingsSchema";
-import { useUnsavedTextEditor } from "./UnsavedTextEditors";
+import { HighlightedTextFileEditor, useTextFileEditor } from "./TextFileEditor";
 
 type Scope = PaneComponentProps["scope"];
 
@@ -111,15 +111,10 @@ interface EnvPaneProps {
 }
 
 function EnvPane({ cli, scope, projectDir, onStatus, onEnvKeysChange, insertRef, onEditorFocus }: EnvPaneProps) {
-  const [text, setText] = useState("{}");
-  const [saved, setSaved] = useState("{}");
-  const [loading, setLoading] = useState(true);
-  const [seedKey, setSeedKey] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const preRef = useRef<HTMLPreElement>(null);
+  const workingDir = scope === "user" ? "" : projectDir;
+  const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
 
-  const load = useCallback(async () => {
-    let formatted = "{}";
+  const read = useCallback(async () => {
     try {
       if (cli === "codex") {
         // Codex spawn env lives in a sidecar JSON in Code Tabs appdata,
@@ -127,46 +122,81 @@ function EnvPane({ cli, scope, projectDir, onStatus, onEnvKeysChange, insertRef,
         // when spawning the codex process.
         const env = await invoke<Record<string, string>>("read_codex_spawn_env", {
           scope,
-          workingDir: scope === "user" ? "" : projectDir,
+          workingDir,
         });
-        formatted = JSON.stringify(env ?? {}, null, 2);
+        return JSON.stringify(env ?? {}, null, 2);
       } else {
         const result = await invoke<string>("read_config_file", {
           scope,
-          workingDir: scope === "user" ? "" : projectDir,
+          workingDir,
           fileType: "settings",
         });
         const settings = result ? (JSON.parse(result) as Record<string, unknown>) : {};
         const env = (settings.env && typeof settings.env === "object" && !Array.isArray(settings.env))
           ? settings.env as Record<string, unknown>
           : {};
-        formatted = JSON.stringify(env, null, 2);
+        return JSON.stringify(env, null, 2);
       }
     } catch {
-      formatted = "{}";
+      return "{}";
     }
-    setText(formatted);
-    setSaved(formatted);
-    setSeedKey((k) => k + 1);
-    setLoading(false);
-  }, [cli, scope, projectDir]);
+  }, [cli, scope, workingDir]);
 
-  useEffect(() => { load(); }, [load]);
+  const write = useCallback(async (value: string) => {
+    let newEnv: Record<string, string>;
+    try {
+      const parsed = JSON.parse(value) as Record<string, unknown>;
+      // Coerce to string-only for both backends (settings.env is string-keyed too).
+      newEnv = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, String(v)]));
+    } catch (err) {
+      throw new Error(`Invalid JSON: ${err}`);
+    }
+    if (cli === "codex") {
+      await invoke("write_codex_spawn_env", {
+        scope,
+        workingDir,
+        env: newEnv,
+      });
+    } else {
+      const current = await invoke<string>("read_config_file", {
+        scope,
+        workingDir,
+        fileType: "settings",
+      });
+      const full = current ? (JSON.parse(current) as Record<string, unknown>) : {};
+      full.env = newEnv;
+      const content = JSON.stringify(full, null, 2);
+      await invoke("write_config_file", {
+        scope,
+        workingDir,
+        fileType: "settings",
+        content,
+      });
+    }
+  }, [cli, scope, workingDir]);
+
+  const editor = useTextFileEditor({
+    id: `env:${scope}:${projectDir}`,
+    title: `Env vars (${scopeLabel})`,
+    initialText: "{}",
+    read,
+    write,
+  });
 
   const { envKeys, parseError } = useMemo(() => {
     try {
-      return { envKeys: new Set(Object.keys(JSON.parse(text))), parseError: null as string | null };
+      return { envKeys: new Set(Object.keys(JSON.parse(editor.text))), parseError: null as string | null };
     } catch (e) {
       return { envKeys: new Set<string>(), parseError: e instanceof Error ? e.message : String(e) };
     }
-  }, [text]);
+  }, [editor.text]);
 
   useEffect(() => { onEnvKeysChange?.(envKeys); }, [envKeys, onEnvKeysChange]);
 
   // Insert via execCommand so the change becomes one undoable step rather than
   // wiping the native undo stack. Read from the DOM (not state) for freshness.
   const handleInsert = useCallback((name: string) => {
-    const el = textareaRef.current;
+    const el = editor.textareaRef.current;
     if (!el) return;
     let next: string | null = null;
     try {
@@ -177,7 +207,7 @@ function EnvPane({ cli, scope, projectDir, onStatus, onEnvKeysChange, insertRef,
       return;
     }
     if (next != null) replaceTextareaValue(el, next);
-  }, []);
+  }, [editor.textareaRef]);
 
   useEffect(() => {
     if (insertRef) insertRef.current = handleInsert;
@@ -185,95 +215,25 @@ function EnvPane({ cli, scope, projectDir, onStatus, onEnvKeysChange, insertRef,
   }, [handleInsert, insertRef]);
 
   const handleSave = useCallback(async () => {
-    const value = textareaRef.current?.value ?? text;
-    let newEnv: Record<string, string>;
     try {
-      const parsed = JSON.parse(value) as Record<string, unknown>;
-      // Coerce to string-only for both backends (settings.env is string-keyed too).
-      newEnv = Object.fromEntries(Object.entries(parsed).map(([k, v]) => [k, String(v)]));
-    } catch (err) {
-      onStatus({ text: `Invalid JSON: ${err}`, type: "error" });
-      return;
-    }
-    try {
-      if (cli === "codex") {
-        await invoke("write_codex_spawn_env", {
-          scope,
-          workingDir: scope === "user" ? "" : projectDir,
-          env: newEnv,
-        });
-      } else {
-        const current = await invoke<string>("read_config_file", {
-          scope,
-          workingDir: scope === "user" ? "" : projectDir,
-          fileType: "settings",
-        });
-        const full = current ? (JSON.parse(current) as Record<string, unknown>) : {};
-        full.env = newEnv;
-        const content = JSON.stringify(full, null, 2);
-        await invoke("write_config_file", {
-          scope,
-          workingDir: scope === "user" ? "" : projectDir,
-          fileType: "settings",
-          content,
-        });
-      }
-      setSaved(value);
+      await editor.save();
       onStatus({ text: "Env vars saved", type: "success" });
       setTimeout(() => onStatus(null), 2000);
     } catch (err) {
-      onStatus({ text: `Save failed: ${err}`, type: "error" });
+      const message = err instanceof Error ? err.message : String(err);
+      onStatus({ text: message.startsWith("Invalid JSON:") ? message : `Save failed: ${message}`, type: "error" });
     }
-  }, [cli, text, scope, projectDir, onStatus]);
+  }, [editor, onStatus]);
 
-  const syncScroll = () => {
-    if (textareaRef.current && preRef.current) {
-      preRef.current.scrollTop = textareaRef.current.scrollTop;
-      preRef.current.scrollLeft = textareaRef.current.scrollLeft;
-    }
-  };
-
-  const dirty = text !== saved;
-
-  useUnsavedTextEditor(`env:${scope}:${projectDir}`, () => {
-    if (loading) return null;
-    const after = textareaRef.current?.value ?? text;
-    if (after === saved) return null;
-    const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
-    return {
-      title: `Env vars (${scopeLabel})`,
-      before: saved,
-      after,
-    };
-  });
-
-  if (loading) return <div className="pane-hint">Loading...</div>;
+  if (editor.loading) return <div className="pane-hint">Loading...</div>;
 
   return (
     <div className="pane-editor" onFocus={onEditorFocus}>
-      <div className="sh-container">
-        <pre
-          ref={preRef}
-          className="sh-pre"
-          aria-hidden="true"
-          dangerouslySetInnerHTML={{ __html: highlightJson(text) + "\n" }}
-        />
-        <textarea
-          // Remount on each successful load so `defaultValue` reseeds. Mid-edit
-          // the textarea owns its value and undo stack; React mirrors via
-          // onInput so the overlay and validation stay in sync.
-          key={seedKey}
-          ref={textareaRef}
-          className="pane-textarea sh-textarea"
-          defaultValue={text}
-          onInput={(e) => setText(e.currentTarget.value)}
-          spellCheck={false}
-          onScroll={syncScroll}
-          onKeyDown={(e) => {
-            if (e.ctrlKey && e.key === "s") { e.preventDefault(); handleSave(); }
-          }}
-        />
-      </div>
+      <HighlightedTextFileEditor
+        editor={editor}
+        highlightedHtml={highlightJson(editor.text)}
+        onSave={handleSave}
+      />
 
       <div className="pane-footer">
         {parseError && (
@@ -284,8 +244,8 @@ function EnvPane({ cli, scope, projectDir, onStatus, onEnvKeysChange, insertRef,
         {!parseError && envKeys.size > 0 && (
           <span className="sr-validation sr-validation-ok">Valid</span>
         )}
-        <button className="pane-save-btn" onClick={handleSave} disabled={!dirty}>
-          {dirty ? "Save" : "Saved"}
+        <button className="pane-save-btn" onClick={handleSave} disabled={!editor.dirty}>
+          {editor.dirty ? "Save" : "Saved"}
         </button>
       </div>
     </div>

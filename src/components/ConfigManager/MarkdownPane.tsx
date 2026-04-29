@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ReactMarkdown from "react-markdown";
 import type { PaneComponentProps } from "./ThreePaneEditor";
 import { insertTextAtCursor } from "../../lib/domEdit";
-import { useUnsavedTextEditor } from "./UnsavedTextEditors";
+import { TextFileTextarea, useTextFileEditor } from "./TextFileEditor";
 import "./MarkdownPane.css";
 
 // [CM-14] Scope-to-fileType mapping.
@@ -20,12 +20,7 @@ const CODEX_SCOPE_TO_FILETYPE: Record<string, string> = {
 };
 
 export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponentProps) {
-  const [saved, setSaved] = useState("");
-  const [current, setCurrent] = useState("");
-  const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [seedKey, setSeedKey] = useState(0);
 
   const fileType = (cli === "codex" ? CODEX_SCOPE_TO_FILETYPE : CLAUDE_SCOPE_TO_FILETYPE)[scope];
   const docName = cli === "codex" ? "AGENTS.md" : "CLAUDE.md";
@@ -33,42 +28,46 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
   const peerName = peerCli === "codex" ? "Codex" : "Claude";
   const peerFileType = (peerCli === "codex" ? CODEX_SCOPE_TO_FILETYPE : CLAUDE_SCOPE_TO_FILETYPE)[scope];
   const workingDir = scope === "user" ? "" : projectDir;
+  const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
 
-  const load = useCallback(async () => {
-    let result = "";
+  const read = useCallback(async () => {
     try {
-      result = await invoke<string>("read_config_file", {
+      return await invoke<string>("read_config_file", {
         scope,
         workingDir,
         fileType,
       });
     } catch {
-      result = "";
+      return "";
     }
-    setSaved(result);
-    setCurrent(result);
-    setSeedKey((k) => k + 1);
-    setLoading(false);
   }, [scope, workingDir, fileType]);
 
-  useEffect(() => { load(); }, [load]);
+  const write = useCallback(async (value: string) => {
+    await invoke("write_config_file", {
+      scope,
+      workingDir,
+      fileType,
+      content: value,
+    });
+  }, [scope, workingDir, fileType]);
+
+  const editor = useTextFileEditor({
+    id: `${cli}:instructions:${scope}:${projectDir}`,
+    title: `${docName} (${scopeLabel})`,
+    initialText: "",
+    read,
+    write,
+  });
 
   const handleSave = useCallback(async () => {
-    const value = textareaRef.current?.value ?? current;
     try {
-      await invoke("write_config_file", {
-        scope,
-        workingDir,
-        fileType,
-        content: value,
-      });
-      setSaved(value);
+      await editor.save();
       onStatus({ text: `${docName} saved`, type: "success" });
       setTimeout(() => onStatus(null), 2000);
     } catch (err) {
       onStatus({ text: `Save failed: ${err}`, type: "error" });
     }
-  }, [current, scope, workingDir, fileType, docName, onStatus]);
+  }, [editor, docName, onStatus]);
 
   const handleCopyFromPeer = useCallback(async () => {
     try {
@@ -87,9 +86,7 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
         fileType,
         content: result,
       });
-      setSaved(result);
-      setCurrent(result);
-      setSeedKey((k) => k + 1);
+      editor.reset(result);
       onStatus({ text: `Copied instructions from ${peerName}`, type: "success" });
       setTimeout(() => onStatus(null), 2000);
     } catch (err) {
@@ -106,50 +103,29 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
         destFileType: fileType,
         overwrite: true,
       });
-      await load();
+      await editor.reload();
       onStatus({ text: `Linked instructions from ${peerName}`, type: "success" });
       setTimeout(() => onStatus(null), 2000);
     } catch (err) {
       onStatus({ text: `Link failed: ${err}`, type: "error" });
     }
-  }, [scope, workingDir, peerFileType, fileType, peerName, load, onStatus]);
+  }, [scope, workingDir, peerFileType, fileType, peerName, editor, onStatus]);
 
-  const dirty = current !== saved;
-
-  useUnsavedTextEditor(`${cli}:instructions:${scope}:${projectDir}`, () => {
-    if (loading) return null;
-    const after = textareaRef.current?.value ?? current;
-    if (after === saved) return null;
-    const scopeLabel = scope === "project-local" ? "Project local" : scope === "project" ? "Project" : "User";
-    return {
-      title: `${docName} (${scopeLabel})`,
-      before: saved,
-      after,
-    };
-  });
-
-  if (loading) return <div className="pane-hint">Loading...</div>;
+  if (editor.loading) return <div className="pane-hint">Loading...</div>;
 
   return (
     <div className="pane-editor">
       {preview ? (
         <div className="md-preview">
-          <ReactMarkdown>{current || "*No content*"}</ReactMarkdown>
+          <ReactMarkdown>{editor.text || "*No content*"}</ReactMarkdown>
         </div>
       ) : (
-        <textarea
-          // [NU-01] Uncontrolled (defaultValue+onInput): browser owns value and native undo stack; key={seedKey} remounts on source change
-          // Remount on each successful load so `defaultValue` reseeds. Mid-edit
-          // the browser owns the value and the native undo stack.
-          key={seedKey}
-          ref={textareaRef}
+        <TextFileTextarea
+          editor={editor}
           className="pane-textarea pane-textarea-md"
-          defaultValue={current}
-          onInput={(e) => setCurrent(e.currentTarget.value)}
-          spellCheck={false}
           placeholder={`No ${docName} found - type to create`}
+          onSave={handleSave}
           onKeyDown={(e) => {
-            if (e.ctrlKey && e.key === "s") { e.preventDefault(); handleSave(); }
             if (e.key === "Tab") {
               e.preventDefault();
               insertTextAtCursor(e.currentTarget, "  ");
@@ -170,8 +146,8 @@ export function MarkdownPane({ scope, projectDir, cli, onStatus }: PaneComponent
         <button className="pane-secondary-btn" onClick={handleLinkFromPeer}>
           Link from {peerName}
         </button>
-        <button className="pane-save-btn" onClick={handleSave} disabled={!dirty}>
-          {dirty ? "Save" : "Saved"}
+        <button className="pane-save-btn" onClick={handleSave} disabled={!editor.dirty}>
+          {editor.dirty ? "Save" : "Saved"}
         </button>
       </div>
     </div>
