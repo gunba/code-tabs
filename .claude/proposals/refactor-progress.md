@@ -22,7 +22,7 @@ Updated: 2026-04-29
 - [x] R5-F12 move weather forwarding out of proxy hot path
 - [x] F4-05 unify terminal write/writeBytes paths
 - [x] F4-09 theme variable ownership refactor
-- [ ] F6-7 split claude.ts
+- [x] F6-7 split claude.ts
 - [ ] F6-8 delete or inline usePty.ts
 - [ ] F9 reducer-per-pane/lifted form state decision
 
