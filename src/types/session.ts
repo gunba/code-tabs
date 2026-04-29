@@ -92,6 +92,10 @@ export interface SessionMetadata {
   runtimeModel: string | null;
   // Tap-derived enrichments
   apiRegion: string | null;
+  /** Upstream API host inferred from ApiFetch events. */
+  apiHost?: string | null;
+  /** Resolved IP for apiHost, populated asynchronously for status display. */
+  apiIp?: string | null;
   lastRequestId: string | null;
   subscriptionType: string | null;
   hookStatus: string | null;

@@ -1,4 +1,5 @@
 import { getNoisyEventKinds } from "./noisyEventKinds";
+import { apiHostForFetch } from "./apiEndpoint";
 import type { TapEvent } from "../types/tapEvents";
 import type { CliKind, SessionMetadata, SystemPromptBlock, CapturedMessage } from "../types/session";
 
@@ -66,6 +67,7 @@ export class TapMetadataAccumulator {
   private contextDebugSource: "turnStart" | "codexTokenCount" = "turnStart";
   // API region + request ID
   private apiRegion: string | null = null;
+  private apiHost: string | null = null;
   private lastRequestId: string | null = null;
   // API request structure
   private systemPromptLength = 0;
@@ -335,6 +337,7 @@ export class TapMetadataAccumulator {
 
       // API region from cf-ray header; rate-limit tracking; latency from round-trip time
       case "ApiFetch": {
+        this.apiHost = apiHostForFetch(event.url, this.cli);
         const h = event.headers;
         const cfRay = h["cf-ray"] || "";
         if (cfRay) {
@@ -609,6 +612,7 @@ export class TapMetadataAccumulator {
       runtimeModel: this.runtimeModel,
       assistantMessageCount: this.assistantMessageCount,
       apiRegion: this.apiRegion,
+      apiHost: this.apiHost,
       lastRequestId: this.lastRequestId,
       subscriptionType: this.subscriptionType,
       hookStatus: this.hookStatus,
@@ -685,6 +689,7 @@ export class TapMetadataAccumulator {
     this.lastCacheCreation = 0;
     this.contextDebugSource = "turnStart";
     this.apiRegion = null;
+    this.apiHost = null;
     this.lastRequestId = null;
     this.systemPromptLength = 0;
     this.toolCount = 0;

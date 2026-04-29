@@ -341,6 +341,27 @@ describe("TapMetadataAccumulator", () => {
       headers: { "request-id": "req-1", "cf-ray": "abc123-IAD", "x-ratelimit-limit-tokens": "1000", "x-ratelimit-reset-tokens": "2026-01-01T00:00:00Z" },
     });
     expect(diff?.apiLatencyMs).toBe(245);
+    expect(diff?.apiHost).toBe("api.anthropic.com");
+  });
+
+  it("maps local proxy ApiFetch URLs to upstream API hosts", () => {
+    const claude = new TapMetadataAccumulator("claude");
+    const claudeDiff = claude.process({
+      kind: "ApiFetch", ts: 0,
+      url: "http://127.0.0.1:4567/v1/messages", method: "POST",
+      status: 200, bodyLen: 100, durationMs: 42,
+      headers: {},
+    });
+    expect(claudeDiff?.apiHost).toBe("api.anthropic.com");
+
+    const codex = new TapMetadataAccumulator("codex");
+    const codexDiff = codex.process({
+      kind: "ApiFetch", ts: 0,
+      url: "http://127.0.0.1:4567/s/session-1/backend-api/codex/responses", method: "POST",
+      status: 200, bodyLen: 100, durationMs: 42,
+      headers: {},
+    });
+    expect(codexDiff?.apiHost).toBe("chatgpt.com");
   });
 
   it("populates contextDebug with all TurnStart token components", () => {

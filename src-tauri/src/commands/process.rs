@@ -474,3 +474,35 @@ pub async fn send_notification(
 pub fn check_port_available(port: u16) -> bool {
     std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()
 }
+
+#[tauri::command]
+pub async fn resolve_api_host(host: String) -> Result<String, String> {
+    let host = host.trim().to_string();
+    if host.is_empty()
+        || host.len() > 253
+        || host.contains('/')
+        || host.contains('\\')
+        || host.contains(':')
+        || !host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+    {
+        return Err("Invalid API host".to_string());
+    }
+
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::task::spawn_blocking(move || {
+            use std::net::ToSocketAddrs;
+            (host.as_str(), 443)
+                .to_socket_addrs()
+                .map_err(|e| e.to_string())?
+                .next()
+                .map(|addr| addr.ip().to_string())
+                .ok_or_else(|| "No addresses found".to_string())
+        }),
+    )
+    .await
+    .map_err(|_| "DNS lookup timed out".to_string())?
+    .map_err(|e| e.to_string())?
+}

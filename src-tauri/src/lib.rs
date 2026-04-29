@@ -299,6 +299,7 @@ pub fn run() {
             commands::check_port_available,
             commands::shell_open,
             commands::reveal_in_file_manager,
+            commands::resolve_api_host,
             commands::append_tap_data,
             commands::open_tap_log,
             commands::open_session_data_dir,

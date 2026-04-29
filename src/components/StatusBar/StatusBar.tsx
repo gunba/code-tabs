@@ -109,8 +109,10 @@ function SessionStatus({
           <ProviderLogo cli={session.config.cli} size={12} />
         </span>
         <span className="status-item status-model" title={
-          (m.apiRegion || m.pingRttMs > 0)
+          (m.apiRegion || m.apiIp || m.pingRttMs > 0)
             ? `Cloudflare POP: ${m.apiRegion || "—"}` +
+              (m.apiHost ? ` · Host: ${m.apiHost}` : "") +
+              (m.apiIp ? ` · IP: ${m.apiIp}` : "") +
               (m.pingRttMs > 0 ? ` · RTT: ${Math.round(m.pingRttMs)}ms` : "") +
               (m.tokPerSec > 0 ? ` · ${Math.round(m.tokPerSec)} tok/s` : "")
             : "Model"
@@ -127,8 +129,19 @@ function SessionStatus({
             {perm.icon}
           </span>
         )}
-        {(m.pingRttMs > 0 || m.tokPerSec > 0) && (
-          <span className="status-item" title="Network round-trip time / output tokens per second (EMA)" style={{ opacity: 0.5 }}>
+        {(m.apiIp || m.pingRttMs > 0 || m.tokPerSec > 0) && (
+          <span
+            className="status-item"
+            title={
+              `${m.apiHost ? `API host: ${m.apiHost}` : "API endpoint"}` +
+              (m.apiIp ? `\nIP: ${m.apiIp}` : "") +
+              (m.pingRttMs > 0 ? `\nRTT: ${Math.round(m.pingRttMs)}ms` : "") +
+              (m.tokPerSec > 0 ? `\nOutput: ${Math.round(m.tokPerSec)} tok/s` : "")
+            }
+            style={{ opacity: 0.5 }}
+          >
+            {m.apiIp && m.apiIp}
+            {m.apiIp && (m.pingRttMs > 0 || m.tokPerSec > 0) && " "}
             {m.pingRttMs > 0 && `${Math.round(m.pingRttMs)}ms`}
             {m.pingRttMs > 0 && m.tokPerSec > 0 && " "}
             {m.tokPerSec > 0 && `(${Math.round(m.tokPerSec)} tok/s)`}

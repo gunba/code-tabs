@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/sessions";
 import { tapEventBus } from "../lib/tapEventBus";
 import { reduceTapEvent, shouldSuppressParentStateTransition } from "../lib/tapStateReducer";
@@ -9,6 +10,7 @@ import { useSettingsStore } from "../store/settings";
 import { dlog } from "../lib/debugLog";
 import { getNoisyEventKinds } from "../lib/noisyEventKinds";
 import { traceSync } from "../lib/perfTrace";
+import { apiHostForFetch } from "../lib/apiEndpoint";
 import type { TapEvent } from "../types/tapEvents";
 import type { SessionState, PermissionMode } from "../types/session";
 import { getTapCategoryLabel, getTapCategoryMeta } from "../lib/tapCatalog";
@@ -89,6 +91,7 @@ export function useTapEventProcessor(
   const subTrackerRef = useRef<TapSubagentTracker | null>(null);
   const healthCountRef = useRef(0);
   const lastHighMemWarnRef = useRef(0);
+  const apiIpResolveHostRef = useRef<string | null>(null);
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
@@ -108,6 +111,7 @@ export function useTapEventProcessor(
     const codexNaming = createTapCodexNaming(sessionId);
     setClaudeSessionId(null);
     setUserPrompt(null);
+    apiIpResolveHostRef.current = null;
 
     const handleEvent = (event: TapEvent) => {
       const sid = sessionIdRef.current;
@@ -173,6 +177,26 @@ export function useTapEventProcessor(
       }
       if (metaDiff) {
         updateMetadata(sid, metaDiff);
+      }
+
+      if (event.kind === "ApiFetch") {
+        const apiHost = apiHostForFetch(event.url, sessionCli);
+        if (apiHost && apiHost !== apiIpResolveHostRef.current) {
+          apiIpResolveHostRef.current = apiHost;
+          updateMetadata(sid, { apiHost, apiIp: null });
+          invoke<string>("resolve_api_host", { host: apiHost })
+            .then((apiIp) => {
+              if (apiIpResolveHostRef.current === apiHost) {
+                updateMetadata(sid, { apiHost, apiIp });
+              }
+            })
+            .catch((err: unknown) => {
+              if (apiIpResolveHostRef.current === apiHost) {
+                apiIpResolveHostRef.current = null;
+              }
+              dlog("session", sid, `API IP resolve failed for ${apiHost}: ${err}`, "WARN");
+            });
+        }
       }
 
       // 2a. [TA-02] Track unique tool names seen across all sessions
