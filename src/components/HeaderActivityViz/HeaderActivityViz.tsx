@@ -289,16 +289,19 @@ interface Layout {
 }
 
 function computeLayout(w: number, h: number): Layout {
-  const beachW = Math.max(70, Math.min(140, Math.round(w * 0.10)));
-  const seaMeanY = Math.round(h * 0.62);
+  const beachW = Math.max(80, Math.min(160, Math.round(w * 0.11)));
+  const seaMeanY = Math.round(h * 0.6);
   const waveAmpMaxPx = Math.max(5, Math.round(h * 0.13));
-  const beachShoreSlope = Math.round(h * 0.18);
+  // Gentle dune profile: 4 px raised inland, descending to meet the water
+  // exactly at the wave's resting line. The visible "slope" disappears
+  // (≈4 px over ~100 px) so the sand reads as flush with the sea.
+  const beachShoreSlope = Math.max(3, Math.round(h * 0.05));
   return {
     beachW,
     beachShoreSlope,
     seaMeanY,
     waveAmpMaxPx,
-    beachTopYAtZero: seaMeanY - Math.round(h * 0.05),
+    beachTopYAtZero: seaMeanY - beachShoreSlope,
     skyHorizonY: Math.round(h * 0.45),
   };
 }
@@ -332,59 +335,179 @@ function computeWaveCrests(
   }
 }
 
+// Day/night phase from local clock. Returns:
+//   light    — 0 (night) … 1 (peak day)
+//   twilight — 0..1 amount of dawn/dusk warm tint
+//   isNight  — true when the moon should be drawn instead of the sun
+function celestialPhase(date = new Date()): { light: number; twilight: number; isNight: boolean } {
+  const h = date.getHours() + date.getMinutes() / 60;
+  // Smooth daylight curve peaking at solar noon (12:00).
+  const daylight = Math.max(0, Math.sin(((h - 6) / 12) * Math.PI));
+  // Twilight bumps at ~5:30am and ~6:30pm — narrow Gaussian-ish peaks.
+  const dawn = Math.exp(-Math.pow((h - 5.5) / 0.9, 2));
+  const dusk = Math.exp(-Math.pow((h - 18.5) / 0.9, 2));
+  const twilight = Math.max(dawn, dusk);
+  const isNight = h < 6 || h >= 19;
+  return { light: daylight, twilight, isNight };
+}
+
 function drawSky(
   ctx: CanvasRenderingContext2D,
   scene: WeatherScene,
   w: number,
   h: number,
   theme: ThemeProps,
+  phase: { light: number; twilight: number; isNight: boolean },
 ): void {
-  // Solid surface base — keeps app background colour underneath the tint.
   ctx.fillStyle = theme.bgSurface;
   ctx.fillRect(0, 0, w, h);
-  // Sky tint per scene, stops ramped from horizon up.
-  let topHex: string;
-  let midHex: string;
+  // Choose sky stops by weather, then darken/lighten by daylight.
+  let topR: number;
+  let topG: number;
+  let topB: number;
+  let midR: number;
+  let midG: number;
+  let midB: number;
+  let topA = 0.55;
+  let midA = 0.32;
   switch (scene) {
     case "clear":
-      topHex = "rgba(40, 60, 95, 0.55)";
-      midHex = "rgba(80, 110, 150, 0.32)";
+      [topR, topG, topB] = [40, 60, 95];
+      [midR, midG, midB] = [80, 110, 150];
       break;
     case "clouds":
-      topHex = "rgba(70, 80, 95, 0.55)";
-      midHex = "rgba(110, 120, 135, 0.35)";
+      [topR, topG, topB] = [70, 80, 95];
+      [midR, midG, midB] = [110, 120, 135];
+      topA = 0.55;
+      midA = 0.35;
       break;
     case "rain":
-      topHex = "rgba(60, 70, 95, 0.65)";
-      midHex = "rgba(100, 115, 145, 0.45)";
+      [topR, topG, topB] = [60, 70, 95];
+      [midR, midG, midB] = [100, 115, 145];
+      topA = 0.65;
+      midA = 0.45;
       break;
     case "storm":
-      topHex = "rgba(35, 35, 55, 0.78)";
-      midHex = "rgba(70, 75, 100, 0.55)";
+      [topR, topG, topB] = [35, 35, 55];
+      [midR, midG, midB] = [70, 75, 100];
+      topA = 0.78;
+      midA = 0.55;
       break;
     case "snow":
-      topHex = "rgba(85, 95, 115, 0.5)";
-      midHex = "rgba(140, 150, 170, 0.35)";
+      [topR, topG, topB] = [85, 95, 115];
+      [midR, midG, midB] = [140, 150, 170];
+      topA = 0.5;
+      midA = 0.35;
       break;
     case "fog":
-      topHex = "rgba(80, 85, 95, 0.55)";
-      midHex = "rgba(135, 140, 150, 0.45)";
+      [topR, topG, topB] = [80, 85, 95];
+      [midR, midG, midB] = [135, 140, 150];
+      topA = 0.55;
+      midA = 0.45;
       break;
   }
+  // At night, push the sky toward deep navy. During day, lighten toward the
+  // chosen stops. Twilight introduces an orange/pink horizon.
+  const nightMix = 1 - phase.light;
+  const nightTopR = 14;
+  const nightTopG = 22;
+  const nightTopB = 50;
+  const finalTopR = Math.round(topR * (1 - nightMix * 0.7) + nightTopR * nightMix * 0.7);
+  const finalTopG = Math.round(topG * (1 - nightMix * 0.7) + nightTopG * nightMix * 0.7);
+  const finalTopB = Math.round(topB * (1 - nightMix * 0.5) + nightTopB * nightMix * 0.5);
+  const finalMidR = Math.round(midR * (1 - nightMix * 0.6));
+  const finalMidG = Math.round(midG * (1 - nightMix * 0.6));
+  const finalMidB = Math.round(midB * (1 - nightMix * 0.4) + 30 * nightMix * 0.4);
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, topHex);
-  grad.addColorStop(0.7, midHex);
+  grad.addColorStop(0, `rgba(${finalTopR}, ${finalTopG}, ${finalTopB}, ${topA})`);
+  grad.addColorStop(0.7, `rgba(${finalMidR}, ${finalMidG}, ${finalMidB}, ${midA})`);
   grad.addColorStop(1, "rgba(0, 0, 0, 0)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, w, h);
-  // Subtle horizon glow (warm at horizon for clear, cool otherwise).
-  if (scene === "clear") {
+
+  // Twilight horizon glow (warm orange/pink) — strongest at dawn/dusk only.
+  if (phase.twilight > 0.01) {
+    const a = phase.twilight * 0.35;
+    const glow = ctx.createLinearGradient(0, h * 0.25, 0, h * 0.62);
+    glow.addColorStop(0, `rgba(255, 150, 100, 0)`);
+    glow.addColorStop(1, `rgba(255, 165, 110, ${a.toFixed(3)})`);
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, w, h);
+  } else if (scene === "clear" && !phase.isNight) {
+    // Soft warm horizon for clear daytime.
     const horizonGrad = ctx.createLinearGradient(0, h * 0.35, 0, h * 0.62);
     horizonGrad.addColorStop(0, "rgba(255, 200, 130, 0)");
     horizonGrad.addColorStop(1, "rgba(255, 195, 130, 0.18)");
     ctx.fillStyle = horizonGrad;
     ctx.fillRect(0, 0, w, h);
   }
+}
+
+function drawStars(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  t: number,
+  alpha: number,
+): void {
+  if (alpha <= 0) return;
+  // Deterministic star field via mulberry32 — same dots every frame, twinkle
+  // alpha modulated by sin(t + seed).
+  const rng = mulberry32(0x51eed1ed);
+  const starCount = Math.max(20, Math.round(w / 28));
+  for (let i = 0; i < starCount; i++) {
+    const x = Math.floor(rng() * w);
+    const y = Math.floor(rng() * h * 0.5);
+    const seed = rng() * Math.PI * 2;
+    const twinkle = 0.55 + 0.45 * Math.sin(t * 1.6 + seed);
+    const a = alpha * twinkle * (0.4 + rng() * 0.6);
+    ctx.fillStyle = `rgba(255, 252, 220, ${a.toFixed(3)})`;
+    ctx.fillRect(x, y, 1, 1);
+    // Very occasional brighter star with a 1px halo.
+    if (rng() < 0.08) {
+      ctx.fillStyle = `rgba(255, 248, 200, ${(a * 0.45).toFixed(3)})`;
+      ctx.fillRect(x - 1, y, 1, 1);
+      ctx.fillRect(x + 1, y, 1, 1);
+      ctx.fillRect(x, y - 1, 1, 1);
+      ctx.fillRect(x, y + 1, 1, 1);
+    }
+  }
+}
+
+function drawMoon(ctx: CanvasRenderingContext2D, w: number, _h: number, t: number): void {
+  const cx = w - 32;
+  const cy = 18;
+  const radius = 8;
+  // Outer halo, much fainter than the sun's.
+  const halo = ctx.createRadialGradient(cx, cy, radius - 1, cx, cy, radius + 10);
+  halo.addColorStop(0, "rgba(225, 232, 255, 0.32)");
+  halo.addColorStop(1, "rgba(225, 232, 255, 0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(cx - radius - 10, cy - radius - 10, (radius + 10) * 2, (radius + 10) * 2);
+  // Disc with subtle crater texture (waxing-gibbous shadow on the right edge).
+  const disc = ctx.createRadialGradient(cx - 2, cy - 2, 1, cx, cy, radius);
+  disc.addColorStop(0, "#f5f3e3");
+  disc.addColorStop(0.7, "#dcd4b0");
+  disc.addColorStop(1, "#9c9477");
+  ctx.fillStyle = disc;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+  // Shadow crescent — gives the moon a phase rather than looking flat.
+  ctx.fillStyle = "rgba(20, 25, 45, 0.45)";
+  ctx.beginPath();
+  ctx.arc(cx + 3, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  // Two small craters.
+  ctx.fillStyle = "rgba(120, 110, 80, 0.35)";
+  ctx.fillRect(cx - 3, cy - 1, 2, 2);
+  ctx.fillRect(cx, cy + 2, 1, 1);
+  void t;
 }
 
 function drawSun(ctx: CanvasRenderingContext2D, w: number, _h: number, t: number): void {
@@ -499,6 +622,24 @@ function drawCloud(
   }
 }
 
+function darkenForNight(hex: string, nightMix: number): string {
+  // Mixes a hex sea color toward deep navy so the ocean reads as dark at
+  // night while still preserving the per-scene tint by day.
+  const m = hex.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return hex;
+  const r = parseInt(m[1], 16);
+  const g = parseInt(m[2], 16);
+  const b = parseInt(m[3], 16);
+  // Stronger pull on the red/green channels than blue keeps the shift cool.
+  const tr = 6;
+  const tg = 14;
+  const tb = 34;
+  const nr = Math.round(r * (1 - nightMix * 0.7) + tr * nightMix * 0.7);
+  const ng = Math.round(g * (1 - nightMix * 0.7) + tg * nightMix * 0.7);
+  const nb = Math.round(b * (1 - nightMix * 0.45) + tb * nightMix * 0.45);
+  return `rgb(${nr}, ${ng}, ${nb})`;
+}
+
 function drawSea(
   ctx: CanvasRenderingContext2D,
   layout: Layout,
@@ -507,28 +648,36 @@ function drawSea(
   h: number,
   scene: WeatherScene,
   t: number,
+  phase: { light: number; twilight: number; isNight: boolean },
 ): void {
   const { beachW } = layout;
   if (beachW >= w) return;
-  // Sea polygon (under-wave fill) with vertical gradient.
+  const nightMix = 1 - phase.light;
+  // Sea polygon (under-wave fill) with vertical gradient, darkened at night.
   const seaGrad = ctx.createLinearGradient(0, layout.seaMeanY - layout.waveAmpMaxPx, 0, h);
+  let topHex: string;
+  let midHex: string;
+  let botHex: string;
   if (scene === "storm") {
-    seaGrad.addColorStop(0, "#143845");
-    seaGrad.addColorStop(0.7, "#0c2230");
-    seaGrad.addColorStop(1, "#070f18");
+    topHex = "#143845";
+    midHex = "#0c2230";
+    botHex = "#070f18";
   } else if (scene === "rain") {
-    seaGrad.addColorStop(0, "#1f5763");
-    seaGrad.addColorStop(0.7, "#0f3340");
-    seaGrad.addColorStop(1, "#091e29");
+    topHex = "#1f5763";
+    midHex = "#0f3340";
+    botHex = "#091e29";
   } else if (scene === "fog") {
-    seaGrad.addColorStop(0, "#456870");
-    seaGrad.addColorStop(0.7, "#2c4750");
-    seaGrad.addColorStop(1, "#1a2c33");
+    topHex = "#456870";
+    midHex = "#2c4750";
+    botHex = "#1a2c33";
   } else {
-    seaGrad.addColorStop(0, "#2f8290");
-    seaGrad.addColorStop(0.55, "#155060");
-    seaGrad.addColorStop(1, "#06222e");
+    topHex = "#2f8290";
+    midHex = "#155060";
+    botHex = "#06222e";
   }
+  seaGrad.addColorStop(0, darkenForNight(topHex, nightMix));
+  seaGrad.addColorStop(0.55, darkenForNight(midHex, nightMix));
+  seaGrad.addColorStop(1, darkenForNight(botHex, nightMix));
   ctx.fillStyle = seaGrad;
   ctx.beginPath();
   ctx.moveTo(beachW, h + 1);
@@ -559,23 +708,25 @@ function drawSea(
     }
   }
 
-  // Foam line: white at peaks, lighter speckle elsewhere.
+  // Foam line: a continuous white edge along the wave top, with broader,
+  // slightly irregular foam patches on the leading face of each crest.
+  // No isolated dot above the peak — that produced an obvious bead pattern.
+  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
   for (let x = beachW; x < w; x++) {
     const y = Math.floor(crests[x]);
     if (y < 0 || y >= h) continue;
-    const left = crests[Math.max(0, x - 2)];
-    const right = crests[Math.min(w - 1, x + 2)];
-    const isPeak = crests[x] <= left && crests[x] <= right;
-    if (isPeak) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
-      ctx.fillRect(x - 2, y, 5, 1);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-      ctx.fillRect(x - 1, y - 1, 3, 1);
-      ctx.fillRect(x, y - 2, 1, 1);
-    } else {
-      ctx.fillStyle = "rgba(240, 248, 252, 0.55)";
-      ctx.fillRect(x, y, 1, 1);
-    }
+    ctx.fillRect(x, y, 1, 1);
+  }
+  ctx.fillStyle = "rgba(240, 250, 252, 0.55)";
+  for (let x = beachW + 1; x < w; x++) {
+    const y = Math.floor(crests[x]);
+    if (y - 1 < 0 || y - 1 >= h) continue;
+    // Foam thickens on the descending (leading) side of a crest, where waves
+    // would actually break — gives the wave a direction of travel.
+    const left = crests[Math.max(0, x - 1)];
+    const next = crests[Math.min(w - 1, x + 3)];
+    const breaking = crests[x] < left && next > crests[x] + 0.3;
+    if (breaking) ctx.fillRect(x, y - 1, 1, 1);
   }
 }
 
@@ -589,10 +740,10 @@ function drawBeach(
   intensity: number,
   t: number,
 ): void {
-  const { beachW, beachTopYAtZero, beachShoreSlope } = layout;
+  const { beachW, beachTopYAtZero, beachShoreSlope, seaMeanY } = layout;
   if (!beachTile || !decoTile) return;
-  // Sand fill: clip to the trapezoidal shape (top slopes down from left edge
-  // to where the shore meets the wave), then tile the pre-rendered sand.
+  // Sand fill: nearly-flat trapezoid (4 px dune rise on the left). The clip
+  // path lets the sand tile repeat without bleeding into the sea.
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(0, beachTopYAtZero);
@@ -601,7 +752,6 @@ function drawBeach(
   ctx.lineTo(0, h);
   ctx.closePath();
   ctx.clip();
-  // Pre-rendered sand pattern repeats horizontally; the clip handles the slope.
   const tileH = beachTile.height;
   const tileW = beachTile.width;
   for (let x = 0; x < beachW + tileW; x += tileW) {
@@ -609,34 +759,35 @@ function drawBeach(
       ctx.drawImage(beachTile, x, y);
     }
   }
-  // Decorations layer (shells, pebbles): alpha-on-top of the sand.
   ctx.drawImage(decoTile, 0, 0);
   ctx.restore();
 
-  // Wet shore wash: foamy edge between sand and sea, animated by t and
-  // intensity, sitting just inside the right slope of the beach.
-  const washAmp = 1 + intensity * 1.6;
+  // Damp-sand band just inside the shore — darker, wet, ~3 px tall.
+  ctx.fillStyle = "rgba(80, 50, 25, 0.32)";
+  ctx.fillRect(0, seaMeanY - 3, beachW, 3);
+
+  // Foam wash: the edge where sea climbs the sand. We draw two animated
+  // sine ripples that overlap, giving an organic frothy line instead of a
+  // ruler-straight stripe.
   const washPhase = t * 1.8;
-  ctx.fillStyle = "rgba(255, 255, 255, 0.72)";
-  for (let yi = 0; yi < beachShoreSlope + 4; yi++) {
-    const y = beachTopYAtZero + yi * (1 - 0); // walk down the slope
-    const slopeX = beachW * (yi / Math.max(1, beachShoreSlope));
-    const wobble = Math.sin(yi * 0.4 + washPhase) * washAmp;
-    const x = Math.round(slopeX + wobble - 1);
-    if (x < 0 || x >= beachW) continue;
-    if (y < 0 || y >= h) continue;
-    ctx.fillRect(x, Math.round(y), 2, 1);
-  }
-  // Damp-sand band just behind the wash.
-  ctx.fillStyle = "rgba(120, 80, 40, 0.32)";
-  for (let yi = 0; yi < beachShoreSlope + 6; yi++) {
-    const y = beachTopYAtZero + yi;
-    const slopeX = beachW * (yi / Math.max(1, beachShoreSlope));
-    const wobble = Math.sin(yi * 0.4 + washPhase + 1.2) * washAmp;
-    const x = Math.round(slopeX + wobble - 4);
-    if (x < 0 || x >= beachW) continue;
-    if (y < 0 || y >= h) continue;
-    ctx.fillRect(x, Math.round(y), 3, 1);
+  const washAmp = 0.6 + intensity * 1.2;
+  for (let x = 0; x < beachW; x++) {
+    const local = x / Math.max(1, beachW);
+    const s1 = Math.sin(x * 0.32 + washPhase) * washAmp;
+    const s2 = Math.sin(x * 0.18 - washPhase * 0.7 + 1.4) * washAmp * 0.6;
+    const baseY = beachTopYAtZero + local * beachShoreSlope;
+    const yEdge = Math.round(baseY + s1 + s2);
+    if (yEdge >= 0 && yEdge < h) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.fillRect(x, yEdge, 1, 1);
+    }
+    if (yEdge - 1 >= 0 && yEdge - 1 < h) {
+      const sparkle = ((x * 7 + Math.floor(t * 6)) >>> 0) % 5;
+      if (sparkle === 0) {
+        ctx.fillStyle = "rgba(220, 240, 250, 0.7)";
+        ctx.fillRect(x, yEdge - 1, 1, 1);
+      }
+    }
   }
   void w;
 }
@@ -688,28 +839,126 @@ function makeSandTile(width = 96, height = 56): HTMLCanvasElement {
 function makeBeachDecoTile(beachW: number, h: number, layout: Layout): HTMLCanvasElement {
   const c = makeOffscreen(beachW, h);
   const ctx = c.getContext("2d")!;
+  // Reserve slots for the big landmarks (umbrella, towel, sandcastle) so they
+  // don't collide. Each landmark gets a horizontal third of the beach.
+  const minY = layout.beachTopYAtZero + 4;
+  const maxY = h - 3;
+  const landmarkY = h - 4;
+  const sectionW = beachW / 3;
+
+  // Umbrella + pole — leftmost section, anchored toward the back of the beach.
+  const umbrellaCx = Math.round(sectionW * 0.55);
+  drawUmbrella(ctx, umbrellaCx, layout.beachTopYAtZero + 1);
+
+  // Beach towel — middle section.
+  const towelX = Math.round(sectionW * 1.2);
+  drawTowel(ctx, towelX, landmarkY - 1);
+
+  // Sandcastle — rightmost section, near the water (but inland of foam).
+  const castleX = Math.round(sectionW * 2.05);
+  drawSandcastle(ctx, castleX, landmarkY - 1);
+
+  // Smaller scattered ornaments fill in around the landmarks.
   const rng = mulberry32(0x9e3779b1);
-  const decoCount = Math.max(2, Math.round(beachW / 28));
-  const minY = layout.beachTopYAtZero + 6;
-  const maxY = h - 4;
+  const decoCount = Math.max(3, Math.round(beachW / 22));
   for (let i = 0; i < decoCount; i++) {
     const x = Math.floor(rng() * (beachW - 6)) + 1;
     const y = minY + Math.floor(rng() * Math.max(1, maxY - minY));
+    // Skip decorations that would overlap a landmark footprint.
+    if (Math.abs(x - umbrellaCx) < 8 && y < layout.beachTopYAtZero + 18) continue;
+    if (Math.abs(x - towelX) < 12 && y > landmarkY - 4) continue;
+    if (Math.abs(x - castleX) < 10 && y > landmarkY - 7) continue;
     const kind = Math.floor(rng() * 5);
     drawDeco(ctx, x, y, kind, rng);
   }
-  // Footprint trail leading toward the sea.
+
+  // Footprint trail meandering from the towel toward the sea.
   const trailRng = mulberry32(0xabcdef01);
-  let fx = 4 + Math.floor(trailRng() * 6);
-  let fy = h - 6;
-  const steps = 4;
-  for (let s = 0; s < steps; s++) {
+  let fx = Math.round(sectionW * 1.5);
+  let fy = h - 5;
+  for (let s = 0; s < 4; s++) {
     drawFootprint(ctx, fx, fy, s % 2 === 0);
-    fx += 6 + Math.floor(trailRng() * 4);
-    fy -= 3 + Math.floor(trailRng() * 2);
-    if (fx > beachW - 4) break;
+    fx += 5 + Math.floor(trailRng() * 4);
+    fy -= 2 + Math.floor(trailRng() * 2);
+    if (fx > beachW - 4 || fy < layout.beachTopYAtZero) break;
   }
   return c;
+}
+
+function drawUmbrella(ctx: CanvasRenderingContext2D, cx: number, topY: number): void {
+  // Pole: dark vertical line.
+  ctx.fillStyle = "#5b3a1c";
+  ctx.fillRect(cx, topY + 1, 1, 16);
+  // Canopy: red-and-white striped half-disc using horizontal slats.
+  const stripes = ["#d44a3a", "#f4f1e6", "#d44a3a", "#f4f1e6", "#d44a3a"];
+  // Wedge widths (radii) per row, top to bottom.
+  const widths = [3, 5, 7, 9, 10];
+  for (let i = 0; i < widths.length; i++) {
+    ctx.fillStyle = stripes[i];
+    ctx.fillRect(cx - widths[i], topY + i, widths[i] * 2 + 1, 1);
+  }
+  // Tip dot at the top of the canopy.
+  ctx.fillStyle = "#b8362b";
+  ctx.fillRect(cx, topY - 1, 1, 1);
+  // Underside shadow.
+  ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+  ctx.fillRect(cx - widths[widths.length - 1] + 1, topY + widths.length, widths[widths.length - 1] * 2 - 1, 1);
+}
+
+function drawTowel(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  // Striped beach towel: 14 px wide, 4 px tall, with cyan/yellow/red stripes.
+  const w = 14;
+  const stripes = ["#3aa1c0", "#f4d35a", "#d96666", "#5fb09a"];
+  ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.fillRect(x - 1, y + 1, w + 2, 1); // shadow under the towel
+  for (let i = 0; i < w; i++) {
+    const s = Math.floor((i / w) * stripes.length);
+    ctx.fillStyle = stripes[Math.min(stripes.length - 1, s)];
+    ctx.fillRect(x + i, y - 2, 1, 3);
+  }
+  // Fringe
+  ctx.fillStyle = "#ece5cf";
+  ctx.fillRect(x, y - 3, w, 1);
+}
+
+function drawSandcastle(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  // Three-tower castle silhouette in slightly-darker damp sand colour.
+  const sand = "#b8893f";
+  const sandLight = "#e0b878";
+  const sandShadow = "#7d5828";
+  // Base
+  ctx.fillStyle = sand;
+  ctx.fillRect(x, y, 12, 3);
+  ctx.fillStyle = sandShadow;
+  ctx.fillRect(x, y + 2, 12, 1);
+  // Left tower
+  ctx.fillStyle = sand;
+  ctx.fillRect(x, y - 5, 3, 5);
+  ctx.fillStyle = sandLight;
+  ctx.fillRect(x, y - 5, 1, 5);
+  // Right tower
+  ctx.fillStyle = sand;
+  ctx.fillRect(x + 9, y - 5, 3, 5);
+  ctx.fillStyle = sandLight;
+  ctx.fillRect(x + 9, y - 5, 1, 5);
+  // Center keep
+  ctx.fillStyle = sand;
+  ctx.fillRect(x + 4, y - 7, 4, 7);
+  ctx.fillStyle = sandLight;
+  ctx.fillRect(x + 4, y - 7, 1, 7);
+  // Crenellations on the towers
+  ctx.fillStyle = sand;
+  ctx.fillRect(x, y - 6, 1, 1);
+  ctx.fillRect(x + 2, y - 6, 1, 1);
+  ctx.fillRect(x + 9, y - 6, 1, 1);
+  ctx.fillRect(x + 11, y - 6, 1, 1);
+  ctx.fillRect(x + 4, y - 8, 1, 1);
+  ctx.fillRect(x + 6, y - 8, 1, 1);
+  // Tiny flag on the keep
+  ctx.fillStyle = "#d44a3a";
+  ctx.fillRect(x + 5, y - 9, 2, 1);
+  ctx.fillStyle = sandShadow;
+  ctx.fillRect(x + 5, y - 9, 1, 3);
 }
 
 function drawDeco(
@@ -773,6 +1022,84 @@ function drawDeco(
       break;
     }
   }
+}
+
+// Chaotic break/chop where the wave meets the beach. Produces an irregular
+// band of foam pixels scattered around the shore line plus a few "splash"
+// columns that briefly shoot up the beach. All driven by deterministic
+// time-bucketed hashes so the noise looks organic but not random per frame.
+function drawShoreChop(
+  ctx: CanvasRenderingContext2D,
+  layout: Layout,
+  _w: number,
+  h: number,
+  t: number,
+  intensity: number,
+): void {
+  const { beachW, beachTopYAtZero, beachShoreSlope, seaMeanY } = layout;
+  if (beachW <= 0) return;
+  const tBucket = Math.floor(t * 4);
+  const tSubBucket = Math.floor(t * 8);
+  const chopAmp = 1.5 + intensity * 2.4;
+  const breakColumns = Math.max(2, Math.round(beachW / 18));
+
+  // Foam splatter scattered around the shore line (across the entire beach
+  // width and a few pixels into the water on the right side).
+  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  for (let x = 0; x < beachW + 14; x++) {
+    const local = x / Math.max(1, beachW);
+    const baseY = beachTopYAtZero + Math.min(1, local) * beachShoreSlope;
+    const seed = (x * 47 + tSubBucket * 31) >>> 0;
+    const noise = ((seed % 211) / 211) - 0.5;
+    const y = Math.round(baseY + Math.sin(x * 0.55 + t * 4) * chopAmp + noise * chopAmp * 1.5);
+    if (y >= 0 && y < h) {
+      ctx.fillRect(x, y, 1, 1);
+    }
+    // A second, lighter band immediately above for spray.
+    if (((seed >>> 5) % 6) === 0 && y - 1 >= 0 && y - 1 < h) {
+      ctx.fillStyle = "rgba(225, 240, 250, 0.6)";
+      ctx.fillRect(x, y - 1, 1, 1);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    }
+  }
+
+  // Splash plumes: short vertical foam columns that fire occasionally at the
+  // shore edge, the way a wave would crash and throw spray up the beach.
+  for (let i = 0; i < breakColumns; i++) {
+    const seed = (i * 1103515245 + tBucket * 12345) >>> 0;
+    const phase = (seed % 9) - 1; // 0..7 step within the bucket
+    if (phase < 0 || phase > 3) continue;
+    const xPlume = Math.round(((seed >>> 8) % beachW));
+    const lifeT = phase / 3; // 0..1 over four sub-buckets
+    const heightPx = (3 + ((seed >>> 12) % 4)) * (1 - lifeT * 0.5);
+    const baseY = beachTopYAtZero + (xPlume / Math.max(1, beachW)) * beachShoreSlope;
+    for (let dy = 0; dy < heightPx; dy++) {
+      const y = Math.round(baseY - dy);
+      if (y < 0 || y >= h) continue;
+      const a = (1 - dy / heightPx) * (1 - lifeT) * 0.85;
+      ctx.fillStyle = `rgba(255, 255, 255, ${a.toFixed(3)})`;
+      ctx.fillRect(xPlume + ((dy & 1) ? 1 : 0), y, 1, 1);
+    }
+    // Side spray
+    const sideY = Math.round(baseY - heightPx + 1);
+    if (sideY >= 0 && sideY < h) {
+      const a = 0.55 * (1 - lifeT);
+      ctx.fillStyle = `rgba(245, 250, 255, ${a.toFixed(3)})`;
+      ctx.fillRect(xPlume - 2, sideY, 1, 1);
+      ctx.fillRect(xPlume + 2, sideY, 1, 1);
+    }
+  }
+
+  // Receding-wash dark stripe just inland — wet sand left by the chop.
+  ctx.fillStyle = "rgba(60, 35, 18, 0.22)";
+  for (let x = 0; x < beachW; x++) {
+    const local = x / Math.max(1, beachW);
+    const baseY = beachTopYAtZero + local * beachShoreSlope;
+    const wobble = Math.sin(x * 0.35 - t * 1.6) * (chopAmp * 0.6);
+    const y = Math.round(baseY + 1 + wobble);
+    if (y >= 0 && y < h) ctx.fillRect(x, y, 1, 1);
+  }
+  void seaMeanY;
 }
 
 function drawFootprint(ctx: CanvasRenderingContext2D, x: number, y: number, left: boolean): void {
@@ -1168,25 +1495,34 @@ export function HeaderActivityViz() {
       computeWaveCrests(layout, w, t, intensity, waveCrests.current);
       const crests = waveCrests.current;
 
-      // 1. Sky (gradient + horizon glow).
-      drawSky(ctx, scene, w, h, theme);
+      // 1. Sky (gradient + horizon glow + day/night tint).
+      const phase = celestialPhase();
+      drawSky(ctx, scene, w, h, theme, phase);
 
-      // 2. Sun and clouds (clouds for clouds/rain/storm; sun only when clear).
+      // 2. Stars at night (only when sky isn't fully blanketed by storm clouds).
+      const nightAlpha = Math.max(0, 1 - phase.light);
+      if (scene !== "fog" && scene !== "storm" && nightAlpha > 0.15) {
+        drawStars(ctx, w, h, t, nightAlpha * (scene === "clear" ? 1 : 0.55));
+      }
+
+      // 3. Celestial body — sun by day, moon by night, hidden when overcast.
       if (scene === "clouds" || scene === "rain" || scene === "storm") {
         drawClouds(ctx, cloudsRef, w, h, dtSec, scene);
       }
-      if (scene === "clear") {
-        drawSun(ctx, w, h, t);
+      if (scene === "clear" || scene === "snow") {
+        if (phase.isNight) drawMoon(ctx, w, h, t);
+        else drawSun(ctx, w, h, t);
       }
       if (scene === "fog") {
         drawFog(ctx, w, h, t);
       }
 
-      // 3. Sea + waves + foam crest.
-      drawSea(ctx, layout, crests, w, h, scene, t);
+      // 4. Sea + waves + foam crest (darkened at night).
+      drawSea(ctx, layout, crests, w, h, scene, t, phase);
 
-      // 4. Beach (tiled sand + decorations + shore wash).
+      // 5. Beach (tiled sand + decorations + shore wash with chop).
       drawBeach(ctx, layout, beachTileRef.current, decoTileRef.current, w, h, intensity, t);
+      drawShoreChop(ctx, layout, w, h, t, intensity);
 
       // 5. Slots (mascots / icons) and their bubble trails.
       const atlas = atlasRef.current;
@@ -1361,6 +1697,11 @@ function drawSlots(
       ctx.rotate(tilt);
       ctx.translate(-cx, -cy);
     }
+    // Surfboard sits beneath the mascot when actively riding the wave.
+    // Subagents and idle/errored mascots don't get one.
+    if (isActive && !slot.isSubagent) {
+      drawSurfboard(ctx, cx, cy + sizePx / 2 - 1, slot.cli);
+    }
     if (slot.isSubagent && atlas) {
       const key = subagentKeyFor(slot.subagentType);
       const sprite = atlas.subagent.get(key);
@@ -1384,4 +1725,36 @@ function drawSlots(
     }
     ctx.restore();
   }
+}
+
+function drawSurfboard(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  cli: "claude" | "codex",
+): void {
+  // 24 px long, 4 px tall stylised surfboard. Slight overhang either side of
+  // the mascot reads clearly without looking comically large.
+  const half = 12;
+  const top = cli === "claude" ? "#f0a06c" : "#7ad6dc";
+  const body = cli === "claude" ? "#c46e3a" : "#3aa5b0";
+  const dark = cli === "claude" ? "#7c3f1c" : "#1f6973";
+  const x0 = Math.round(cx - half);
+  const y0 = Math.round(cy);
+  // Drop shadow on the wave below the board.
+  ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+  ctx.fillRect(x0 + 2, y0 + 3, half * 2 - 3, 1);
+  // Body with tucked tips.
+  ctx.fillStyle = body;
+  ctx.fillRect(x0 + 1, y0, half * 2 - 1, 3);
+  // Pointed nose & tail.
+  ctx.fillStyle = top;
+  ctx.fillRect(x0, y0 + 1, 1, 2);
+  ctx.fillRect(x0 + half * 2 - 1, y0 + 1, 1, 2);
+  // Bright top stripe runs the length of the deck.
+  ctx.fillStyle = top;
+  ctx.fillRect(x0 + 1, y0, half * 2 - 1, 1);
+  // Centre grip/fin accent.
+  ctx.fillStyle = dark;
+  ctx.fillRect(x0 + half - 1, y0 + 1, 2, 2);
 }
