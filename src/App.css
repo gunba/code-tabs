@@ -373,7 +373,7 @@
 }
 
 .tab-resume {
-  --tab-action-color: var(--rarity-rare);
+  --tab-action-color: var(--accent-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -395,7 +395,7 @@
 }
 
 .tab-config {
-  --tab-action-color: var(--rarity-epic);
+  --tab-action-color: var(--accent-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
