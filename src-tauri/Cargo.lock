@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "code-tabs"
-version = "0.64.10"
+version = "0.64.11"
 dependencies = [
  "base64 0.22.1",
  "chrono",
