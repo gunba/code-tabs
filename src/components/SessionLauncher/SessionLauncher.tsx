@@ -7,6 +7,7 @@ import { dlog } from "../../lib/debugLog";
 import type { CliOption, CliCommand } from "../../store/settings";
 import { dirToTabName, computeHeatLevel, heatClassName } from "../../lib/claude";
 import { normalizePath, parseWorktreePath } from "../../lib/paths";
+import { workspaceDefaultsKey } from "../../lib/sessionLauncherConfig";
 import {
   type SessionConfig,
   type PermissionMode,
@@ -63,6 +64,7 @@ const DEDICATED_FLAGS = new Set([
 // will actually emit. Source of truth is the Rust const in
 // src-tauri/src/cli_adapter/codex.rs.
 const CODEX_EFFORT_VALUES = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
+const CODEX_EFFORT_OPTIONS = Array.from(CODEX_EFFORT_VALUES, (value) => ({ value, label: value }));
 
 // [SL-14] Non-session flags rendered in separate Utility Commands section
 const NON_SESSION_FLAGS = new Set([
@@ -97,6 +99,7 @@ export function SessionLauncher() {
 
   const {
     config,
+    switchCli,
     switchWorkspace,
     updateConfig: dispatchConfigUpdate,
     validateAdapterOption,
@@ -108,6 +111,10 @@ export function SessionLauncher() {
   const isUtilityRef = useRef(false);
   const mountedRef = useRef(false);
   const launchingRef = useRef(false);
+  const cliSelectionsRef = useRef<Record<SessionConfig["cli"], { model: string | null; effort: string | null }>>({
+    claude: { model: config.cli === "claude" ? config.model : null, effort: config.cli === "claude" ? config.effort : null },
+    codex: { model: config.cli === "codex" ? config.model : null, effort: config.cli === "codex" ? config.effort : null },
+  });
   const [launchError, setLaunchError] = useState<string>("");
   const [showCliOptions, setShowCliOptions] = useState(true);
   const [showUtility, setShowUtility] = useState(false);
@@ -137,9 +144,9 @@ export function SessionLauncher() {
   useEffect(() => {
     if (availableCliKinds.length === 0) return;
     if (!config.resumeSession && !availableCliKinds.includes(config.cli)) {
-      updateConfig("cli", availableCliKinds[0]);
+      switchCli(availableCliKinds[0], null, null);
     }
-  }, [availableCliKinds, config.cli, config.resumeSession, updateConfig]);
+  }, [availableCliKinds, config.cli, config.resumeSession, switchCli]);
 
   // Unified command line: editable string that starts from config selections.
   // User can edit freely; reset button regenerates from current dropdowns.
@@ -215,19 +222,34 @@ export function SessionLauncher() {
     for (const dir of recentDirs) {
       const wt = parseWorktreePath(dir);
       const resolved = normalizePath(wt ? wt.projectRoot : dir);
-      const key = resolved.replace(/\\/g, "/").toLowerCase();
+      const key = workspaceDefaultsKey(resolved);
       if (seen.has(key)) continue;
       seen.add(key);
       result.push(resolved);
     }
     return result;
   }, [recentDirs]);
+  const selectedRecentDirKey = useMemo(
+    () => config.workingDir ? workspaceDefaultsKey(config.workingDir) : "",
+    [config.workingDir],
+  );
 
   // [SL-21] Load workspace-specific defaults when switching workspace via browse or recent chip
   const applyWorkspaceDefaults = useCallback((dir: string) => {
     switchWorkspace(dir);
     setLaunchError("");
   }, [switchWorkspace]);
+
+  useEffect(() => {
+    cliSelectionsRef.current[config.cli] = { model: config.model, effort: config.effort };
+  }, [config.cli, config.model, config.effort]);
+
+  const handleCliSelect = useCallback((cli: SessionConfig["cli"]) => {
+    if (cli === config.cli) return;
+    cliSelectionsRef.current[config.cli] = { model: config.model, effort: config.effort };
+    const selection = cliSelectionsRef.current[cli] ?? { model: null, effort: null };
+    switchCli(cli, selection.model, selection.effort);
+  }, [config.cli, config.model, config.effort, switchCli]);
 
   const handlePermChange = useCallback((value: PermissionMode | null) => {
     updateConfig("permissionMode", value ?? "default");
@@ -240,18 +262,32 @@ export function SessionLauncher() {
   const [adapterModels, setAdapterModels] = useState<Array<{ value: string; label: string }>>([]);
   const [adapterEfforts, setAdapterEfforts] = useState<Array<{ value: string; label: string }>>([]);
 
-  useAbortableEffect((signal) => {
+  const fallbackAdapterModels = useMemo(() => {
     if (config.cli === "claude") {
-      setAdapterModels(ANTHROPIC_MODELS.map((m) => ({ value: m.id, label: m.id })));
-      setAdapterEfforts(ANTHROPIC_EFFORTS.map((e) => ({ value: e.value, label: e.label })));
+      return ANTHROPIC_MODELS.map((m) => ({ value: m.id, label: m.id }));
+    }
+    return (cliCapabilities.models || []).map((model) => ({ value: model, label: model }));
+  }, [config.cli, cliCapabilities.models]);
+
+  const fallbackAdapterEfforts = useMemo(() => {
+    if (config.cli === "claude") {
+      return ANTHROPIC_EFFORTS.map((e) => ({ value: e.value, label: e.label }));
+    }
+    return CODEX_EFFORT_OPTIONS;
+  }, [config.cli]);
+
+  useAbortableEffect((signal) => {
+    const fallbackModels = config.cli === "claude"
+      ? ANTHROPIC_MODELS.map((m) => ({ value: m.id, label: m.id }))
+      : (cliCapabilities.models || []).map((model) => ({ value: model, label: model }));
+    const fallbackEfforts = config.cli === "claude"
+      ? ANTHROPIC_EFFORTS.map((e) => ({ value: e.value, label: e.label }))
+      : CODEX_EFFORT_OPTIONS;
+    setAdapterModels(fallbackModels);
+    setAdapterEfforts(fallbackEfforts);
+    if (config.cli === "claude") {
       return;
     }
-    // Clear synchronously so the validator below can't accept a stale
-    // value (e.g. Claude's "max") while the new CLI's options are still
-    // in flight. config.effort/model gets reset to null by the existing
-    // validator effect once the fetch resolves.
-    setAdapterModels([]);
-    setAdapterEfforts([]);
     invoke<{ models: Array<{ id: string; displayName: string }>; effortLevels: Array<{ id: string; displayName: string }> }>(
       "cli_launch_options",
       { cli: config.cli }
@@ -263,13 +299,13 @@ export function SessionLauncher() {
       })
       .catch(() => {
         if (signal.aborted) return;
-        setAdapterModels([]);
-        setAdapterEfforts([]);
+        setAdapterModels(fallbackModels);
+        setAdapterEfforts(fallbackEfforts);
       });
-  }, [config.cli]);
+  }, [config.cli, cliCapabilities.models]);
 
-  const modelOptions = adapterModels;
-  const effortOptions = adapterEfforts;
+  const modelOptions = adapterModels.length > 0 ? adapterModels : fallbackAdapterModels;
+  const effortOptions = adapterEfforts.length > 0 ? adapterEfforts : fallbackAdapterEfforts;
   const modelDropdownOptions = useMemo(
     () => [{ value: "", label: "default" }, ...modelOptions],
     [modelOptions]
@@ -294,12 +330,12 @@ export function SessionLauncher() {
   // When switching CLIs, the previously-selected model/effort may not exist
   // on the new CLI. Drop back to "default" instead of leaving an empty box.
   useEffect(() => {
-    validateAdapterOption("model", adapterModels);
-  }, [adapterModels, validateAdapterOption]);
+    validateAdapterOption("model", modelOptions);
+  }, [modelOptions, validateAdapterOption]);
 
   useEffect(() => {
-    validateAdapterOption("effort", adapterEfforts);
-  }, [adapterEfforts, validateAdapterOption]);
+    validateAdapterOption("effort", effortOptions);
+  }, [effortOptions, validateAdapterOption]);
 
   const handleModelSelect = useCallback((value: string) => {
     updateConfig("model", value || null);
@@ -591,9 +627,10 @@ export function SessionLauncher() {
               {uniqueRecentDirs.map((dir) => (
                 <button
                   key={dir}
-                  className="recent-chip"
+                  className={`recent-chip${workspaceDefaultsKey(dir) === selectedRecentDirKey ? " recent-chip-selected" : ""}`}
                   onClick={() => applyWorkspaceDefaults(dir)}
                   onContextMenu={(e) => { e.preventDefault(); removeRecentDir(dir); }}
+                  aria-pressed={workspaceDefaultsKey(dir) === selectedRecentDirKey}
                   title={`${dir}\nRight-click to remove`}
                   type="button"
                 >
@@ -611,7 +648,7 @@ export function SessionLauncher() {
               <button
                 type="button"
                 className={`launcher-cli-choice launcher-cli-choice--claude${config.cli === "claude" ? " launcher-cli-choice--active" : ""}`}
-                onClick={() => updateConfig("cli", "claude")}
+                onClick={() => handleCliSelect("claude")}
                 disabled={isNonSessionCommand}
                 title="Claude Code"
               >
@@ -623,7 +660,7 @@ export function SessionLauncher() {
               <button
                 type="button"
                 className={`launcher-cli-choice launcher-cli-choice--codex${config.cli === "codex" ? " launcher-cli-choice--active" : ""}`}
-                onClick={() => updateConfig("cli", "codex")}
+                onClick={() => handleCliSelect("codex")}
                 disabled={isNonSessionCommand}
                 title="Codex"
               >
@@ -680,10 +717,12 @@ export function SessionLauncher() {
                 <button
                   className="launcher-toggle-pill launcher-prompt-config-btn"
                   onClick={() => setShowConfigManager("prompts")}
-                  title="Open system prompt configuration"
+                  title={`Open ${promptKindLabel.toLowerCase()} configuration`}
+                  aria-label={promptKindLabel}
                   type="button"
                 >
-                  <IconDocument size={12} /> System Prompt
+                  <IconDocument size={12} />
+                  <span className="launcher-prompt-config-label">Prompt</span>
                 </button>
               )}
             </div>

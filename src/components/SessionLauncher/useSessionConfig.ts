@@ -19,7 +19,7 @@ type SessionConfigAction =
     key: keyof SessionConfig;
     value: SessionConfig[keyof SessionConfig];
   }
-  | { type: "switchCli"; cli: CliKind }
+  | { type: "switchCli"; cli: CliKind; model: string | null; effort: string | null }
   | {
     type: "switchWorkspace";
     workingDir: string;
@@ -41,7 +41,7 @@ function sessionConfigReducer(
     case "set":
       return { ...state, [action.key]: action.value };
     case "switchCli":
-      return { ...state, cli: action.cli };
+      return { ...state, cli: action.cli, model: action.model, effort: action.effort };
     case "switchWorkspace":
       return buildWorkspaceLauncherConfig(action);
     case "validateAdapterOption": {
@@ -67,8 +67,8 @@ export function useSessionConfig(params: UseSessionConfigParams) {
     [],
   );
 
-  const switchCli = useCallback((cli: CliKind) => {
-    dispatch({ type: "switchCli", cli });
+  const switchCli = useCallback((cli: CliKind, model: string | null, effort: string | null) => {
+    dispatch({ type: "switchCli", cli, model, effort });
   }, []);
 
   const switchWorkspace = useCallback((workingDir: string) => {

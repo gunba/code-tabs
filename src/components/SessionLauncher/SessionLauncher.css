@@ -144,6 +144,12 @@
   background: var(--bg-surface-hover);
 }
 
+.recent-chip-selected {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-primary));
+}
+
 /* ── Pill selectors (grouped rows) ────────────────────────── */
 
 /* CLI choice (Claude Code / Codex) — sits inline at the start of the
@@ -156,7 +162,7 @@
   color: var(--text-secondary);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -164,7 +170,7 @@
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .launcher-cli-choice-logo {
@@ -203,7 +209,7 @@
 .launcher-pills-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
 }
 
@@ -215,7 +221,7 @@
 .launcher-permissions-group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: nowrap;
   min-width: 0;
 }
@@ -223,7 +229,7 @@
 .launcher-prompt-slot {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex-wrap: nowrap;
   min-width: 0;
   flex-shrink: 1;
@@ -264,20 +270,17 @@
   color: var(--text-primary);
 }
 
-/* Fixed-width launcher dropdowns. Pinning the trigger width prevents the
-   pill row from re-flowing (and wrapping later items like System Prompt)
-   when the selected effort/model label gets longer. The
-   .dropdown-trigger-label inside already has text-overflow: ellipsis.
-   Sized to fit the longest real labels (model: "sonnet[1m]"; effort:
-   "minimal") so the System Prompt pill stays on the same row. */
+/* Fixed-width launcher dropdowns. Pinning the compact trigger widths prevents
+   the pill row from re-flowing when selected effort/model labels get longer;
+   .dropdown-trigger-label already ellipsizes overflow. */
 .launcher-select.launcher-select-model {
-  width: 96px;
-  flex: 0 0 96px;
+  width: 82px;
+  flex: 0 0 82px;
 }
 
 .launcher-select.launcher-select-effort {
-  width: 80px;
-  flex: 0 0 80px;
+  width: 66px;
+  flex: 0 0 66px;
 }
 
 .launcher-select.launcher-select-codex {
@@ -305,6 +308,14 @@
 .launcher-toggle-pill:hover {
   color: var(--text-secondary);
   border-color: var(--text-muted);
+}
+
+.launcher-prompt-config-btn {
+  padding-inline: 8px;
+}
+
+.launcher-prompt-config-label {
+  min-width: 0;
 }
 
 .launcher-toggle-sandbox.launcher-toggle-pill-on {
