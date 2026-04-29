@@ -26,6 +26,30 @@ function viewportIncludesTarget(sessionId: string, normalizedTargets: string[]):
   return normalizedTargets.some((target) => normalized.includes(target));
 }
 
+async function sendScrollKeyAndWait(
+  sessionId: string,
+  key: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (signal.aborted) return false;
+
+  const waitController = new AbortController();
+  const abortWait = () => waitController.abort();
+  signal.addEventListener("abort", abortWait, { once: true });
+  const activity = waitForRender(sessionId, waitController.signal);
+
+  if (!writeToPty(sessionId, key)) {
+    waitController.abort();
+    signal.removeEventListener("abort", abortWait);
+    await activity;
+    return false;
+  }
+
+  const hadActivity = await activity;
+  signal.removeEventListener("abort", abortWait);
+  return hadActivity && !signal.aborted;
+}
+
 async function scrollToTuiEdge(
   sessionId: string,
   key: string,
@@ -35,10 +59,7 @@ async function scrollToTuiEdge(
   let prevViewport = getSessionViewport(sessionId) ?? "";
 
   while (!signal.aborted) {
-    if (signal.aborted) return false;
-    writeToPty(sessionId, key);
-    await waitForRender(sessionId);
-    if (signal.aborted) return false;
+    if (!await sendScrollKeyAndWait(sessionId, key, signal)) return false;
 
     if (viewportIncludesTarget(sessionId, normalizedTargets)) return true;
 
@@ -53,9 +74,11 @@ async function scrollToTuiEdge(
 /**
  * Scroll a Claude Code TUI to make `targetText` visible in the terminal viewport.
  *
- * Sends Page Up keys to the PTY (Claude Code's TUI handles the scroll), waits for
- * xterm.js onRender (deterministic — no timers), and checks the viewport text after
- * each scroll. Stops when the target is found or the viewport stops changing (edge).
+ * Sends Page Up keys to the PTY (Claude Code's TUI handles the scroll), waits
+ * for xterm.js render/write/scroll activity (deterministic — no timers), and
+ * checks the viewport text after each scroll. Stops when the target is found,
+ * the viewport stops changing (edge), the PTY writer is gone, or the caller
+ * aborts.
  *
  * Returns true if the text was found in the viewport, false otherwise.
  */
@@ -92,11 +115,7 @@ export async function scrollTuiToText(
     if (signal.aborted) return false;
     scrollCount++;
 
-    // Send Page Up
-    writeToPty(sessionId, PAGE_UP);
-    await waitForRender(sessionId);
-
-    if (signal.aborted) return false;
+    if (!await sendScrollKeyAndWait(sessionId, PAGE_UP, signal)) return false;
 
     const viewport = getSessionViewport(sessionId) ?? "";
     const normalized = normalizeText(viewport);

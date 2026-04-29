@@ -66,22 +66,41 @@ export function getRegisteredTerminalStats(): Array<{
   });
 }
 
-/** Returns a Promise that resolves after the next xterm.js render for the given session. */
-export function waitForRender(sessionId: string, timeoutMs = 120): Promise<void> {
+/**
+ * Resolve on the next deterministic xterm.js activity signal.
+ *
+ * No timeout fallback: callers must pass an AbortSignal when the wait is tied
+ * to a cancellable workflow.
+ */
+export function waitForRender(sessionId: string, signal?: AbortSignal): Promise<boolean> {
   return new Promise((resolve) => {
     const term = terminals.get(sessionId);
-    if (!term) { resolve(); return; }
+    if (!term || signal?.aborted) { resolve(false); return; }
+
     let done = false;
-    let disposable: { dispose(): void } | null = null;
-    const finish = () => {
+    const disposables: Array<{ dispose(): void }> = [];
+    const finish = (activity: boolean) => {
       if (done) return;
       done = true;
-      disposable?.dispose();
-      clearTimeout(timeout);
-      resolve();
+      for (const disposable of disposables) disposable.dispose();
+      signal?.removeEventListener("abort", abort);
+      resolve(activity);
     };
-    const timeout = setTimeout(finish, timeoutMs);
-    disposable = term.onRender(finish);
+    const abort = () => finish(false);
+
+    signal?.addEventListener("abort", abort, { once: true });
+    disposables.push(term.onRender(() => finish(true)));
+
+    const maybeTerm = term as Terminal & {
+      onWriteParsed?: (listener: () => void) => { dispose(): void };
+      onScroll?: (listener: (position: number) => void) => { dispose(): void };
+    };
+    if (maybeTerm.onWriteParsed) {
+      disposables.push(maybeTerm.onWriteParsed(() => finish(true)));
+    }
+    if (maybeTerm.onScroll) {
+      disposables.push(maybeTerm.onScroll(() => finish(true)));
+    }
   });
 }
 

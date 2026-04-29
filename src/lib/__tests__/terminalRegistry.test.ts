@@ -16,6 +16,8 @@ import {
 
 function mockTerminal(altScreen = false) {
   const renderListeners: Array<(range: { start: number; end: number }) => void> = [];
+  const writeParsedListeners: Array<() => void> = [];
+  const scrollListeners: Array<(position: number) => void> = [];
   return {
     onRender: vi.fn((cb: (range: { start: number; end: number }) => void) => {
       renderListeners.push(cb);
@@ -24,11 +26,37 @@ function mockTerminal(altScreen = false) {
         if (idx >= 0) renderListeners.splice(idx, 1);
       }) };
     }),
+    onWriteParsed: vi.fn((cb: () => void) => {
+      writeParsedListeners.push(cb);
+      return { dispose: vi.fn(() => {
+        const idx = writeParsedListeners.indexOf(cb);
+        if (idx >= 0) writeParsedListeners.splice(idx, 1);
+      }) };
+    }),
+    onScroll: vi.fn((cb: (position: number) => void) => {
+      scrollListeners.push(cb);
+      return { dispose: vi.fn(() => {
+        const idx = scrollListeners.indexOf(cb);
+        if (idx >= 0) scrollListeners.splice(idx, 1);
+      }) };
+    }),
     buffer: {
       active: { type: altScreen ? "alternate" : "normal" },
     },
     _fireRender: () => { renderListeners.forEach(cb => cb({ start: 0, end: 24 })); },
-  } as unknown as import("@xterm/xterm").Terminal & { _fireRender: () => void };
+    _fireWriteParsed: () => { writeParsedListeners.forEach(cb => cb()); },
+    _fireScroll: () => { scrollListeners.forEach(cb => cb(1)); },
+    _listenerCounts: () => ({
+      render: renderListeners.length,
+      writeParsed: writeParsedListeners.length,
+      scroll: scrollListeners.length,
+    }),
+  } as unknown as import("@xterm/xterm").Terminal & {
+    _fireRender: () => void;
+    _fireWriteParsed: () => void;
+    _fireScroll: () => void;
+    _listenerCounts: () => { render: number; writeParsed: number; scroll: number };
+  };
 }
 
 /** Terminal mock with scrollable buffer lines for scrollBufferToText tests. */
@@ -156,15 +184,36 @@ describe("terminalRegistry", () => {
 
   describe("waitForRender", () => {
     it("resolves immediately for unregistered session", async () => {
-      await waitForRender("nonexistent");
+      await expect(waitForRender("nonexistent")).resolves.toBe(false);
     });
 
-    it("resolves when terminal fires onRender", async () => {
+    it("resolves true when terminal fires onRender", async () => {
       const term = mockTerminal();
       registerTerminal(SID, term);
       const promise = waitForRender(SID);
       term._fireRender();
-      await promise;
+      await expect(promise).resolves.toBe(true);
+      expect(term._listenerCounts()).toEqual({ render: 0, writeParsed: 0, scroll: 0 });
+    });
+
+    it("resolves true when terminal write parsing completes", async () => {
+      const term = mockTerminal();
+      registerTerminal(SID, term);
+      const promise = waitForRender(SID);
+      term._fireWriteParsed();
+      await expect(promise).resolves.toBe(true);
+      expect(term._listenerCounts()).toEqual({ render: 0, writeParsed: 0, scroll: 0 });
+    });
+
+    it("resolves false on abort and disposes listeners", async () => {
+      const term = mockTerminal();
+      const controller = new AbortController();
+      registerTerminal(SID, term);
+      const promise = waitForRender(SID, controller.signal);
+      expect(term._listenerCounts()).toEqual({ render: 1, writeParsed: 1, scroll: 1 });
+      controller.abort();
+      await expect(promise).resolves.toBe(false);
+      expect(term._listenerCounts()).toEqual({ render: 0, writeParsed: 0, scroll: 0 });
     });
   });
 
