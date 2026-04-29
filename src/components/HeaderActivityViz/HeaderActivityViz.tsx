@@ -299,13 +299,12 @@ interface Layout {
 
 function computeLayout(w: number, h: number): Layout {
   const beachW = Math.max(96, Math.min(180, Math.round(w * 0.13)));
-  const seaMeanY = Math.round(h * 0.62);
+  const seaMeanY = Math.round(h * 0.6);
   const waveAmpMaxPx = Math.max(5, Math.round(h * 0.13));
-  // Maximum dune crest elevation above sea level. Side-view ("ant-farm")
-  // perspective: the beach is a real silhouette against the sky, not a
-  // top-down ribbon, so the elevation is set boldly to give the dune
-  // visible profile and somewhere for landmarks to stand.
-  const beachShoreSlope = Math.max(14, Math.round(h * 0.32));
+  // Maximum dune crest elevation above sea level. Side-view perspective
+  // but more restrained than the previous pass — half the dune height so
+  // there's room for sky above the umbrella canopy.
+  const beachShoreSlope = Math.max(9, Math.round(h * 0.18));
   return {
     beachW,
     beachShoreSlope,
@@ -902,49 +901,9 @@ function drawBeach(
   // Big landmarks (umbrella, towel, sandcastle) drawn ON TOP of the dune
   // curve so they sit as silhouettes against the sky, not embedded inside.
   drawBeachLandmarks(ctx, layout);
-
-  // Bank shadow: the curved drop near the water edge gets a 1–2 px
-  // darkening to imply the cliff face — not a real 3D normal, just a hint.
-  ctx.fillStyle = "rgba(60, 40, 22, 0.45)";
-  for (let x = Math.round(beachW * 0.7); x < beachW; x++) {
-    const local = x / Math.max(1, beachW);
-    const yTop = Math.round(shoreYAt(layout, local));
-    if (yTop >= 0 && yTop < h) ctx.fillRect(x, yTop, 1, 1);
-    if (yTop + 1 < h) {
-      ctx.fillStyle = "rgba(60, 40, 22, 0.25)";
-      ctx.fillRect(x, yTop + 1, 1, 1);
-      ctx.fillStyle = "rgba(60, 40, 22, 0.45)";
-    }
-  }
-
-  // Damp-sand band just inside the shore — darker, wet, ~3 px tall, but
-  // only along the lower (sloped) portion of the beach.
-  ctx.fillStyle = "rgba(80, 50, 25, 0.28)";
-  for (let x = Math.round(beachW * 0.5); x < beachW; x++) {
-    const local = x / Math.max(1, beachW);
-    const yTop = Math.round(shoreYAt(layout, local));
-    for (let dy = 1; dy <= 3; dy++) {
-      if (yTop + dy < h) ctx.fillRect(x, yTop + dy, 1, 1);
-    }
-  }
-
-  // Foam wash kissing the bank — clipped to the water side so it never
-  // appears on the sand. Two overlapping sines produce an organic edge.
-  const washPhase = t * 1.8;
-  const washAmp = 0.6 + intensity * 1.2;
-  for (let x = 0; x < beachW; x++) {
-    const local = x / Math.max(1, beachW);
-    const baseY = shoreYAt(layout, local);
-    const s1 = Math.sin(x * 0.32 + washPhase) * washAmp;
-    const s2 = Math.sin(x * 0.18 - washPhase * 0.7 + 1.4) * washAmp * 0.6;
-    // Foam is ALWAYS at-or-below the bank line — never above it.
-    const yEdge = Math.max(Math.round(baseY) + 1, Math.round(baseY + s1 + s2));
-    if (yEdge >= 0 && yEdge < h) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-      ctx.fillRect(x, yEdge, 1, 1);
-    }
-  }
   void w;
+  void intensity;
+  void t;
 }
 
 function makeSandTile(width = 96, height = 56): HTMLCanvasElement {
@@ -1234,6 +1193,11 @@ function drawDeco(
 // band of foam pixels scattered around the shore line plus a few "splash"
 // columns that briefly shoot up the beach. All driven by deterministic
 // time-bucketed hashes so the noise looks organic but not random per frame.
+// Shore chop: the foamy white band where the sea hits the bank. The
+// previous pass scattered single white dots that read as random pixels.
+// This version paints a thick three-row foam band along the bank edge
+// with bright top, mid-tone middle, faint trailing wash — recognisable
+// as chunky breaking-wave foam rather than grit.
 function drawShoreChop(
   ctx: CanvasRenderingContext2D,
   layout: Layout,
@@ -1244,52 +1208,72 @@ function drawShoreChop(
 ): void {
   const { beachW } = layout;
   if (beachW <= 0) return;
-  const tSubBucket = Math.floor(t * 8);
-  const chopAmp = 1.5 + intensity * 2.4;
 
-  // Foam splatter at the bank's water-facing edge. Pixels are clipped to
-  // never appear above the bank line — chop must look like the sea
-  // hitting the bank, not foam climbing onto the sand.
-  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-  for (let x = 0; x < beachW + 14; x++) {
-    const local = x / Math.max(1, beachW);
-    const bankY = x < beachW ? shoreYAt(layout, local) : layout.seaMeanY;
-    const seed = (x * 47 + tSubBucket * 31) >>> 0;
-    const noise = ((seed % 211) / 211); // 0..1, all positive — only push DOWN.
-    const wobble = Math.abs(Math.sin(x * 0.55 + t * 4)) * chopAmp;
-    const y = Math.round(bankY + 1 + wobble + noise * chopAmp);
-    if (y >= 0 && y < h) {
-      ctx.fillRect(x, y, 1, 1);
+  // 1. Three-row foam band along the bank/water boundary. Each row gets a
+  // coordinated wobble so the band rolls together rather than flickering.
+  const wobblePhase = t * 1.8;
+  const ampBase = 1.0 + intensity * 1.4;
+  for (let x = 0; x < beachW + 12; x++) {
+    const local = x < beachW ? x / beachW : 1;
+    const bankY = shoreYAt(layout, local);
+    const wobble =
+      Math.sin(x * 0.32 + wobblePhase) * ampBase +
+      Math.sin(x * 0.18 - wobblePhase * 0.7 + 1.4) * ampBase * 0.45;
+    // Top row of foam: brightest, sits 1–2 px below the bank line.
+    const yTop = Math.max(Math.round(bankY) + 1, Math.round(bankY + 1 + wobble));
+    if (yTop >= 0 && yTop < h) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.fillRect(x, yTop, 1, 1);
     }
-    if (((seed >>> 5) % 6) === 0 && y + 1 < h) {
-      ctx.fillStyle = "rgba(225, 240, 250, 0.6)";
-      ctx.fillRect(x, y + 1, 1, 1);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    // Mid foam: lightly cooler, denser fill.
+    if (yTop + 1 < h) {
+      ctx.fillStyle = "rgba(228, 240, 250, 0.78)";
+      ctx.fillRect(x, yTop + 1, 1, 1);
+    }
+    // Trailing wash: faint blue-white that tapers off into the sea.
+    if (yTop + 2 < h) {
+      ctx.fillStyle = "rgba(190, 220, 240, 0.45)";
+      ctx.fillRect(x, yTop + 2, 1, 1);
     }
   }
 
-  // Spray plumes from waves slapping the bank. They rise UP to a few px
-  // above the bank line — visible ABOVE the bank but not as a band that
-  // implies water flowing onto the beach. We constrain them to the bank
-  // shoulder (the right ~25% of the beach), where a real wave would break
-  // against the small cliff.
+  // 2. Bursting whitecaps just inland of the bank where the wave actually
+  // breaks. These are the obvious "chop" splashes — a vertical column of
+  // foam pixels with side-spray at the apex, fading over four sub-frames.
   const tBucket = Math.floor(t * 4);
-  const breakColumns = Math.max(2, Math.round(beachW / 24));
-  for (let i = 0; i < breakColumns; i++) {
+  const breakSlots = Math.max(2, Math.round(beachW / 32));
+  for (let i = 0; i < breakSlots; i++) {
     const seed = (i * 1103515245 + tBucket * 12345) >>> 0;
     const phase = (seed % 9) - 1;
     if (phase < 0 || phase > 3) continue;
-    const xPlume = Math.round(beachW * 0.75 + ((seed >>> 8) % Math.max(1, Math.round(beachW * 0.25))));
+    // Anchor splashes to the bank shoulder, where the wave would actually
+    // break against the cliff — not on the flat dune top.
+    const xPlume = Math.round(beachW * 0.75 + ((seed >>> 8) % Math.max(1, Math.round(beachW * 0.3))));
     const lifeT = phase / 3;
-    const heightPx = (2 + ((seed >>> 12) % 3)) * (1 - lifeT * 0.5);
+    const heightPx = (3 + ((seed >>> 12) % 4)) * (1 - lifeT * 0.4);
     const local = xPlume / Math.max(1, beachW);
     const bankY = shoreYAt(layout, local);
+    // Vertical foam column.
     for (let dy = 0; dy < heightPx; dy++) {
       const y = Math.round(bankY - dy);
       if (y < 0 || y >= h) continue;
-      const a = (1 - dy / heightPx) * (1 - lifeT) * 0.85;
-      ctx.fillStyle = `rgba(255, 255, 255, ${a.toFixed(3)})`;
+      const a = (1 - dy / heightPx) * (1 - lifeT);
+      ctx.fillStyle = `rgba(255, 255, 255, ${(a * 0.95).toFixed(3)})`;
       ctx.fillRect(xPlume + ((dy & 1) ? 1 : 0), y, 1, 1);
+      if (dy > 0 && (seed >>> (dy + 4)) & 1) {
+        ctx.fillStyle = `rgba(240, 248, 252, ${(a * 0.6).toFixed(3)})`;
+        ctx.fillRect(xPlume - ((dy & 1) ? 1 : 0), y, 1, 1);
+      }
+    }
+    // Side-spray droplets at the apex of the splash.
+    const apexY = Math.round(bankY - heightPx);
+    if (apexY >= 0 && apexY + 1 < h) {
+      const a = (1 - lifeT) * 0.75;
+      ctx.fillStyle = `rgba(255, 255, 255, ${a.toFixed(3)})`;
+      ctx.fillRect(xPlume - 2, apexY + 1, 1, 1);
+      ctx.fillRect(xPlume + 2, apexY + 1, 1, 1);
+      ctx.fillRect(xPlume - 1, apexY, 1, 1);
+      ctx.fillRect(xPlume + 1, apexY, 1, 1);
     }
   }
 }
