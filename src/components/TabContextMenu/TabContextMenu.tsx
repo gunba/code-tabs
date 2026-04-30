@@ -20,7 +20,7 @@ interface TabContextMenuProps {
   sessions: Session[];
   groups: TabGroup[];
   regularSessions: Session[];
-  debugBuild: boolean;
+  observabilityEnabled: boolean;
   inspectorOffSessions: Set<string>;
   onClose: () => void;
   onCloseSession: (sessionId: string) => void;
@@ -35,7 +35,7 @@ export function TabContextMenu({
   sessions,
   groups,
   regularSessions,
-  debugBuild,
+  observabilityEnabled,
   inspectorOffSessions,
   onClose,
   onCloseSession,
@@ -130,7 +130,7 @@ export function TabContextMenu({
             )}
           </>
         )}
-        {debugBuild && (
+        {observabilityEnabled && (
           <>
             <div className="tab-context-menu-label">Observability</div>
             <button

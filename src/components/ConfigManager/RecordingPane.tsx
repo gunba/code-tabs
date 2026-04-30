@@ -23,9 +23,12 @@ export function RecordingPane({ cli, onStatus }: RecordingPaneProps) {
   const seenEventKinds = useSessionStore((s) => s.seenEventKinds);
   const observabilityInfo = useRuntimeStore((s) => s.observabilityInfo);
   const setObservabilityEnabled = useRuntimeStore((s) => s.setObservabilityEnabled);
+  const setDevtoolsEnabled = useRuntimeStore((s) => s.setDevtoolsEnabled);
+  const openMainDevtools = useRuntimeStore((s) => s.openMainDevtools);
   const globalLogPath = observabilityInfo.globalLogPath;
   const [cleaning, setCleaning] = useState(false);
   const [updatingObservability, setUpdatingObservability] = useState(false);
+  const [updatingDevtools, setUpdatingDevtools] = useState(false);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevSeenCountRef = useRef(0);
 
@@ -157,23 +160,47 @@ export function RecordingPane({ cli, onStatus }: RecordingPaneProps) {
     }
   }, [observabilityInfo.observabilityEnabled, onStatus, setObservabilityEnabled]);
 
+  const toggleDevtools = useCallback(async () => {
+    setUpdatingDevtools(true);
+    try {
+      await setDevtoolsEnabled(!observabilityInfo.devtoolsEnabled);
+      onStatus({
+        type: "success",
+        text: !observabilityInfo.devtoolsEnabled
+          ? "DevTools enabled"
+          : "DevTools disabled",
+      });
+    } catch {
+      onStatus({ type: "error", text: "Could not update DevTools" });
+    } finally {
+      setUpdatingDevtools(false);
+    }
+  }, [observabilityInfo.devtoolsEnabled, onStatus, setDevtoolsEnabled]);
+
+  const openDevtools = useCallback(async () => {
+    try {
+      await openMainDevtools();
+    } catch (e) {
+      onStatus({ type: "error", text: typeof e === "string" ? e : "Could not open DevTools" });
+    }
+  }, [openMainDevtools, onStatus]);
+
   const discoveredCount = allKinds.filter((k) => !seedSet.has(k)).length;
 
   return (
     <div className="recording-pane">
+      {/* [DP-17] App Observability + DevTools master toggles persist to ui-config.json (set_observability_enabled / set_devtools_enabled) and survive across sessions. */}
       <div className="recording-section">
         <label className="recording-master-toggle">
           <input
             type="checkbox"
             checked={observabilityInfo.observabilityEnabled}
             onChange={toggleObservability}
-            disabled={observabilityInfo.debugBuild || updatingObservability}
+            disabled={updatingObservability}
           />
           <span className="recording-section-title">App Observability</span>
           <span className="recording-hint">
-            {observabilityInfo.debugBuild
-              ? "Always enabled in debug builds"
-              : "Persist backend and frontend diagnostic events"}
+            Persist backend and frontend diagnostic events
           </span>
         </label>
         <div className="recording-data-row">
@@ -189,6 +216,33 @@ export function RecordingPane({ cli, onStatus }: RecordingPaneProps) {
           {Math.round((observabilityInfo.globalLogSize ?? 0) / 1024)} KiB |{" "}
           {observabilityInfo.globalRotationCount ?? 0} rotated
         </span>
+      </div>
+
+      <div className="recording-section">
+        <label className="recording-master-toggle">
+          <input
+            type="checkbox"
+            checked={observabilityInfo.devtoolsEnabled}
+            onChange={toggleDevtools}
+            disabled={updatingDevtools}
+          />
+          <span className="recording-section-title">DevTools</span>
+          <span className="recording-hint">
+            Allow opening the WebView inspector for UI debugging
+          </span>
+        </label>
+        <div className="recording-data-row">
+          <button
+            className="recording-btn"
+            onClick={openDevtools}
+            disabled={!observabilityInfo.devtoolsEnabled}
+          >
+            Open DevTools
+          </button>
+          <span className="recording-hint">
+            Or press Ctrl+Shift+I when enabled
+          </span>
+        </div>
       </div>
 
       {/* TAP Recording */}

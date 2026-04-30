@@ -19,7 +19,7 @@ Startup env vars and runtime tweaks needed for webkit2gtk/Wayland/KDE to work re
 
 ## Window
 
-- [WN-01 L201] Native Windows decorations with dark theme — no custom HTML titlebar or window control buttons
+- [WN-01 L200] Native Windows decorations with dark theme — no custom HTML titlebar or window control buttons
 
 ## PTY Spawn
 
@@ -29,12 +29,12 @@ Startup env vars and runtime tweaks needed for webkit2gtk/Wayland/KDE to work re
 ## Weather
 Ambient weather data pipeline for the header activity visualizer.
 
-- [WX-01 L230] Cloudflare-derived weather for the header activity visualizer flows through the proxy and Tauri weather module: proxy responses from Anthropic/OpenAI read cf-ipcountry and call weather::set_country without blocking response streaming; lib.rs starts weather::init and registers get_current_weather; weather/mod.rs accepts two-letter non-XX country codes, maps known countries to representative coordinates, fetches Open-Meteo current conditions, persists the latest payload, emits weather-changed, and exposes the cached payload for startup hydration; useStartupBootstrap hydrates and subscribes once, and the weather store mirrors WeatherPayload fields for the renderer.
+- [WX-01 L229] Cloudflare-derived weather for the header activity visualizer flows through the proxy and Tauri weather module: proxy responses from Anthropic/OpenAI read cf-ipcountry and call weather::set_country without blocking response streaming; lib.rs starts weather::init and registers get_current_weather; weather/mod.rs accepts two-letter non-XX country codes, maps known countries to representative coordinates, fetches Open-Meteo current conditions, persists the latest payload, emits weather-changed, and exposes the cached payload for startup hydration; useStartupBootstrap hydrates and subscribes once, and the weather store mirrors WeatherPayload fields for the renderer.
 
 ## Development Rules
 
-- [DR-01 L243] Rust IPC commands live under `src-tauri/src/commands/*.rs` (session, cli, config, git, process, data), plus `output_filter.rs`, `proxy.rs`, `tap_server.rs`, `path_utils.rs`, and are registered in `lib.rs` via `generate_handler!`
+- [DR-01 L242] Rust IPC commands live under `src-tauri/src/commands/*.rs` (session, cli, config, git, process, data), plus `output_filter.rs`, `proxy.rs`, `tap_server.rs`, `path_utils.rs`, and are registered in `lib.rs` via `generate_handler!`
 
 ## Project Conventions
 
-- [AR-01 L243] Core data flow: React UI (WebView2) communicates with Rust backend via Tauri IPC, which manages PTY sessions to the Claude Code CLI ``` React UI (WebView2) <-> Tauri IPC <-> Rust Backend <-> PTY (ConPTY/openpty) <-> Claude Code CLI ```
+- [AR-01 L242] Core data flow: React UI (WebView2) communicates with Rust backend via Tauri IPC, which manages PTY sessions to the Claude Code CLI ``` React UI (WebView2) <-> Tauri IPC <-> Rust Backend <-> PTY (ConPTY/openpty) <-> Claude Code CLI ```

@@ -193,7 +193,6 @@ pub fn run() {
                 "app.startup",
                 "Tauri application setup",
                 serde_json::json!({
-                    "debugBuild": cfg!(debug_assertions),
                     "platform": std::env::consts::OS,
                     "arch": std::env::consts::ARCH,
                 }),
@@ -332,6 +331,7 @@ pub fn run() {
             observability::open_observability_log,
             observability::open_main_devtools,
             observability::set_observability_enabled,
+            observability::set_devtools_enabled,
             tap_server::start_tap_server,
             tap_server::stop_tap_server,
             proxy::start_api_proxy,

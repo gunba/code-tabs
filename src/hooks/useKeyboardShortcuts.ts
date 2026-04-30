@@ -19,7 +19,7 @@ type ShortcutSnapshot = {
   showContextViewer: boolean;
   inspectedSubagent: { sessionId: string; subagentId: string } | null;
   tabContextMenu: TabContextMenuRequest | null;
-  devtoolsAvailable: boolean;
+  devtoolsEnabled: boolean;
 };
 
 type ShortcutActions = {
@@ -56,7 +56,7 @@ export function useKeyboardShortcuts(snapshot: ShortcutSnapshot, actions: Shortc
           showContextViewer,
           inspectedSubagent,
           tabContextMenu,
-          devtoolsAvailable,
+          devtoolsEnabled,
         },
         actions: {
           quickLaunch,
@@ -124,7 +124,7 @@ export function useKeyboardShortcuts(snapshot: ShortcutSnapshot, actions: Shortc
         }
       }
 
-      if (devtoolsAvailable && e.ctrlKey && e.shiftKey && e.key === "I") {
+      if (devtoolsEnabled && e.ctrlKey && e.shiftKey && e.key === "I") {
         e.preventDefault();
         openMainDevtools().catch(() => {});
       }

@@ -49,8 +49,8 @@ const SubagentInspector = lazy(() => import("./components/SubagentInspector/Suba
 export default function App() {
   const init = useSessionStore((s) => s.init);
   const loadRuntimeInfo = useRuntimeStore((s) => s.loadRuntimeInfo);
-  const devtoolsAvailable = useRuntimeStore((s) => s.observabilityInfo.devtoolsAvailable);
-  const debugBuild = useRuntimeStore((s) => s.observabilityInfo.debugBuild);
+  const devtoolsEnabled = useRuntimeStore((s) => s.observabilityInfo.devtoolsEnabled);
+  const observabilityEnabled = useRuntimeStore((s) => s.observabilityInfo.observabilityEnabled);
   const openMainDevtools = useRuntimeStore((s) => s.openMainDevtools);
   const sessions = useSessionStore((s) => s.sessions);
   const initialized = useSessionStore((s) => s.initialized);
@@ -178,7 +178,7 @@ export default function App() {
     showContextViewer,
     inspectedSubagent,
     tabContextMenu,
-    devtoolsAvailable,
+    devtoolsEnabled,
   }, {
     quickLaunch: () => void quickLaunch(),
     closeActiveTab: handleCloseSession,
@@ -380,7 +380,7 @@ export default function App() {
           sessions={sessions}
           groups={groups}
           regularSessions={regularSessions}
-          debugBuild={debugBuild}
+          observabilityEnabled={observabilityEnabled}
           inspectorOffSessions={inspectorOffSessions}
           onClose={() => setTabContextMenu(null)}
           onCloseSession={handleCloseSession}

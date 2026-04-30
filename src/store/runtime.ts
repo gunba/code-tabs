@@ -9,10 +9,9 @@ import {
 import { startFrontendPerfTelemetry, stopFrontendPerfTelemetry } from "../lib/perfTelemetry";
 
 const DEFAULT_OBSERVABILITY_INFO: ObservabilityInfo = {
-  debugBuild: false,
   observabilityEnabled: false,
   runtimeOverride: false,
-  devtoolsAvailable: false,
+  devtoolsEnabled: false,
   globalLogPath: null,
   globalLogSize: 0,
   globalRotationCount: 0,
@@ -25,6 +24,7 @@ interface RuntimeState {
   loadRuntimeInfo: () => Promise<void>;
   openMainDevtools: () => Promise<void>;
   setObservabilityEnabled: (enabled: boolean) => Promise<void>;
+  setDevtoolsEnabled: (enabled: boolean) => Promise<void>;
 }
 
 export const useRuntimeStore = create<RuntimeState>((set) => ({
@@ -49,6 +49,11 @@ export const useRuntimeStore = create<RuntimeState>((set) => ({
 
   setObservabilityEnabled: async (enabled: boolean) => {
     const info = await invoke<ObservabilityInfo>("set_observability_enabled", { enabled });
+    await applyObservabilityInfo(info, set);
+  },
+
+  setDevtoolsEnabled: async (enabled: boolean) => {
+    const info = await invoke<ObservabilityInfo>("set_devtools_enabled", { enabled });
     await applyObservabilityInfo(info, set);
   },
 }));

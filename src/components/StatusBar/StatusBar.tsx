@@ -345,7 +345,7 @@ export function StatusBar({ onOpenContextViewer, onOpenChangelog }: StatusBarPro
   const activeSession = sessions.find((s) => s.id === activeTabId);
   const [hookCount, setHookCount] = useState(0);
   const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
-  const devtoolsAvailable = useRuntimeStore((s) => s.observabilityInfo.devtoolsAvailable);
+  const devtoolsEnabled = useRuntimeStore((s) => s.observabilityInfo.devtoolsEnabled);
   const openMainDevtools = useRuntimeStore((s) => s.openMainDevtools);
 
   // Update state
@@ -476,7 +476,7 @@ export function StatusBar({ onOpenContextViewer, onOpenChangelog }: StatusBarPro
             Changelog
           </button>
         )}
-        {devtoolsAvailable && (
+        {devtoolsEnabled && (
           <button
             className="status-item status-hooks-btn"
             onClick={() => openMainDevtools().catch(() => {})}

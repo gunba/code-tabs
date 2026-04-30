@@ -25,7 +25,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const setActiveTab = useSessionStore((s) => s.setActiveTab);
   const setShowLauncher = useSettingsStore((s) => s.setShowLauncher);
-  const devtoolsAvailable = useRuntimeStore((s) => s.observabilityInfo.devtoolsAvailable);
+  const devtoolsEnabled = useRuntimeStore((s) => s.observabilityInfo.devtoolsEnabled);
   const openMainDevtools = useRuntimeStore((s) => s.openMainDevtools);
 
   // Build command list
@@ -60,7 +60,7 @@ export function CommandPalette({ onClose }: CommandPaletteProps) {
         onClose();
       },
     }] : []),
-    ...(devtoolsAvailable ? [{
+    ...(devtoolsEnabled ? [{
       id: "open-devtools",
       label: "Open DevTools",
       description: "Open app devtools (Ctrl+Shift+I)",

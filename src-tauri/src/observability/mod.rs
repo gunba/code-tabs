@@ -19,15 +19,16 @@ const WRITER_FLUSH_BYTES: usize = 64 * 1024;
 static OBSERVABILITY_RUNTIME_ENABLED: AtomicBool = AtomicBool::new(false);
 static OBSERVABILITY_INIT: Once = Once::new();
 static OBSERVABILITY_MIN_LEVEL: AtomicU8 = AtomicU8::new(10);
+static DEVTOOLS_RUNTIME_ENABLED: AtomicBool = AtomicBool::new(false);
+static DEVTOOLS_INIT: Once = Once::new();
 static WRITER_POOL: OnceLock<WriterPool> = OnceLock::new();
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObservabilityInfo {
-    debug_build: bool,
     observability_enabled: bool,
     runtime_override: bool,
-    devtools_available: bool,
+    devtools_enabled: bool,
     global_log_path: Option<String>,
     global_log_size: u64,
     global_rotation_count: usize,
@@ -231,11 +232,7 @@ fn env_min_level() -> u8 {
     if let Ok(level) = std::env::var("CODE_TABS_OBSERVABILITY_LEVEL") {
         return level_value(&level.to_ascii_uppercase());
     }
-    if cfg!(debug_assertions) {
-        level_value("DEBUG")
-    } else {
-        level_value("LOG")
-    }
+    level_value("LOG")
 }
 
 fn ui_config_path() -> Result<PathBuf, String> {
@@ -276,7 +273,69 @@ fn runtime_observability_enabled() -> bool {
 }
 
 fn observability_enabled() -> bool {
-    cfg!(debug_assertions) || runtime_observability_enabled()
+    runtime_observability_enabled()
+}
+
+// [DP-16] Runtime-only gating: observability and DevTools each have an env-var
+// override (CODE_TABS_OBSERVABILITY / CODE_TABS_DEVTOOLS) and a persisted flag
+// in ui-config.json (observability.enabled / devtools.enabled). No
+// cfg!(debug_assertions) anywhere in the gate.
+fn env_devtools_enabled() -> bool {
+    std::env::var("CODE_TABS_DEVTOOLS")
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+fn persisted_devtools_enabled() -> bool {
+    let Ok(path) = ui_config_path() else {
+        return false;
+    };
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    serde_json::from_str::<Value>(&content)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("devtools")
+                .and_then(|v| v.get("enabled"))
+                .and_then(|v| v.as_bool())
+        })
+        .unwrap_or(false)
+}
+
+fn init_devtools_runtime() {
+    DEVTOOLS_INIT.call_once(|| {
+        DEVTOOLS_RUNTIME_ENABLED.store(
+            env_devtools_enabled() || persisted_devtools_enabled(),
+            Ordering::Relaxed,
+        );
+    });
+}
+
+fn devtools_enabled() -> bool {
+    init_devtools_runtime();
+    DEVTOOLS_RUNTIME_ENABLED.load(Ordering::Relaxed)
+}
+
+fn write_persisted_devtools_enabled(enabled: bool) -> Result<(), String> {
+    let path = ui_config_path()?;
+    let mut root = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<Value>(&content).ok())
+        .unwrap_or_else(|| json!({ "version": 3 }));
+    if !root.is_object() {
+        root = json!({ "version": 3 });
+    }
+    if root.get("version").and_then(|v| v.as_u64()).unwrap_or(0) < 3 {
+        root["version"] = json!(3);
+    }
+    if !root.get("devtools").is_some_and(Value::is_object) {
+        root["devtools"] = json!({});
+    }
+    root["devtools"]["enabled"] = json!(enabled);
+    let bytes = serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?;
+    atomic_write(&path, &bytes).map_err(|e| format!("Failed to write ui-config.json: {e}"))
 }
 
 fn observability_level_enabled(level: &str) -> bool {
@@ -348,10 +407,9 @@ pub fn get_observability_info() -> Result<ObservabilityInfo, String> {
     };
 
     Ok(ObservabilityInfo {
-        debug_build: cfg!(debug_assertions),
         observability_enabled: enabled,
         runtime_override: runtime_observability_enabled(),
-        devtools_available: cfg!(debug_assertions),
+        devtools_enabled: devtools_enabled(),
         global_log_path,
         global_log_size,
         global_rotation_count,
@@ -367,6 +425,14 @@ pub fn set_observability_enabled(enabled: bool) -> Result<ObservabilityInfo, Str
     if !enabled {
         writer_pool().flush();
     }
+    get_observability_info()
+}
+
+#[tauri::command]
+pub fn set_devtools_enabled(enabled: bool) -> Result<ObservabilityInfo, String> {
+    init_devtools_runtime();
+    DEVTOOLS_RUNTIME_ENABLED.store(enabled, Ordering::Relaxed);
+    write_persisted_devtools_enabled(enabled)?;
     get_observability_info()
 }
 
@@ -400,29 +466,24 @@ pub fn open_observability_log(app: AppHandle, session_id: Option<String>) -> Res
 
 #[tauri::command]
 pub fn open_main_devtools(app: AppHandle) -> Result<(), String> {
-    #[cfg(not(debug_assertions))]
-    {
-        let _ = app;
-        return Err("Devtools are only available in debug builds".into());
+    if !devtools_enabled() {
+        return Err("DevTools are disabled. Enable them in Config -> Observability.".into());
     }
-    #[cfg(debug_assertions)]
-    {
-        record_backend_event(
-            &app,
-            "LOG",
-            "app",
-            None,
-            "app.devtools_open",
-            "Opening main webview devtools",
-            json!({}),
-        );
-        let window = app
-            .get_webview_window("main")
-            .ok_or("Main window not found")?;
-        window.open_devtools();
-        let _ = window.set_focus();
-        Ok(())
-    }
+    record_backend_event(
+        &app,
+        "LOG",
+        "app",
+        None,
+        "app.devtools_open",
+        "Opening main webview devtools",
+        json!({}),
+    );
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Main window not found")?;
+    window.open_devtools();
+    let _ = window.set_focus();
+    Ok(())
 }
 
 pub fn record_backend_event(

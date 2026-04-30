@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
-import { useRuntimeStore } from "../../store/runtime";
 import { ModalOverlay } from "../ModalOverlay/ModalOverlay";
 import { ThreePaneEditor } from "./ThreePaneEditor";
 import { SettingsTab } from "./SettingsTab";
@@ -189,7 +188,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 // [DL-01] ConfigManager Claude/Codex switch (only when both installed); visibleTabs filtered per CLI (Codex hides envvars/Claude file-agents); shared panes own their copy/import actions; ThreePaneEditor + PaneComponentProps thread cli; SettingsPane TOML-aware for Codex; SettingsTab hides project-local for Codex; HooksPane CODEX_HOOK_EVENTS + remaps project-local->project on save
-// [CM-11] Config modal (84vw, max 1500px, 78vh), store-controlled active tab; Observability is debug-build only.
+// [CM-11] Config modal (84vw, max 1500px, 78vh), store-controlled active tab; Observability tab is always available (toggles inside it gate logging and DevTools at runtime).
 // [CM-05] Tab routing: editor tabs plus dedicated Plugins/Prompts/Providers/Recording panes; MCP/Agents/Skills use 2-col ThreePaneEditor
 // [CM-18] Inline SVG icons per tab — monochrome, cross-platform
 export function ConfigManager() {
@@ -199,7 +198,6 @@ export function ConfigManager() {
   const codexPath = useSessionStore((s) => s.codexPath);
   const showConfigManager = useSettingsStore((s) => s.showConfigManager);
   const setShowConfigManager = useSettingsStore((s) => s.setShowConfigManager);
-  const debugBuild = useRuntimeStore((s) => s.observabilityInfo.debugBuild);
   const [tab, setTab] = useState<Tab>((showConfigManager || "settings") as Tab);
   const [configCli, setConfigCli] = useState<CliKind>(() => {
     const active = sessions.find((s) => s.id === activeTabId)?.config.cli;
@@ -227,8 +225,8 @@ export function ConfigManager() {
   }, [availableCliKinds, configCli]);
 
   const visibleTabs = useMemo(
-    () => visibleConfigTabs(TABS, { configCli, debugBuild }),
-    [configCli, debugBuild],
+    () => visibleConfigTabs(TABS, { configCli }),
+    [configCli],
   );
 
   // Sync tab from store when opened with a specific tab
@@ -434,7 +432,7 @@ export function ConfigManager() {
           {tab === "skills" && (
             <ThreePaneEditor component={SkillsEditor} projectDir={projectDir} cli={configCli} onStatus={setStatusMsg} tabId="skills" scopes={["user", "project"]} />
           )}
-          {debugBuild && tab === "recording" && (
+          {tab === "recording" && (
             <RecordingPane cli={configCli} onStatus={setStatusMsg} />
           )}
         </div>

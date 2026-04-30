@@ -5,10 +5,9 @@ export type LogLevel = "DEBUG" | "LOG" | "WARN" | "ERR";
 export type DebugLogSource = "frontend" | "backend";
 
 export interface ObservabilityInfo {
-  debugBuild: boolean;
   observabilityEnabled: boolean;
   runtimeOverride?: boolean;
-  devtoolsAvailable: boolean;
+  devtoolsEnabled: boolean;
   globalLogPath: string | null;
   globalLogSize?: number;
   globalRotationCount?: number;
@@ -54,10 +53,9 @@ let totalEntryCount = 0;
 let debugCaptureEnabled = true;
 let debugCaptureResolver: ((sessionId: string | null) => boolean) | null = null;
 let observabilityInfo: ObservabilityInfo = {
-  debugBuild: false,
   observabilityEnabled: false,
   runtimeOverride: false,
-  devtoolsAvailable: false,
+  devtoolsEnabled: false,
   globalLogPath: null,
   globalLogSize: 0,
   globalRotationCount: 0,
@@ -144,7 +142,7 @@ function forwardToConsoleRaw(level: LogLevel, module: string, message: string): 
   if (level === "DEBUG") {
     return;
   }
-  if (!observabilityInfo.debugBuild && level !== "WARN" && level !== "ERR") {
+  if (!observabilityInfo.observabilityEnabled && level !== "WARN" && level !== "ERR") {
     return;
   }
   const fmt = `[${module}] ${message}`;

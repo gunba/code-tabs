@@ -14,23 +14,18 @@ const tabs = [
   "recording",
 ].map((id) => ({ id: id as ConfigManagerTab }));
 
-function visibleIds(configCli: "claude" | "codex", debugBuild: boolean): ConfigManagerTab[] {
-  return visibleConfigTabs(tabs, { configCli, debugBuild }).map((tab) => tab.id);
+function visibleIds(configCli: "claude" | "codex"): ConfigManagerTab[] {
+  return visibleConfigTabs(tabs, { configCli }).map((tab) => tab.id);
 }
 
 describe("visibleConfigTabs", () => {
-  it("hides Observability outside debug builds", () => {
-    expect(visibleIds("claude", false)).not.toContain("recording");
-    expect(visibleIds("codex", false)).not.toContain("recording");
+  it("always shows the Observability tab", () => {
+    expect(visibleIds("claude")).toContain("recording");
+    expect(visibleIds("codex")).toContain("recording");
   });
 
-  it("shows Observability in debug builds", () => {
-    expect(visibleIds("claude", true)).toContain("recording");
-    expect(visibleIds("codex", true)).toContain("recording");
-  });
-
-  it("keeps Codex-specific tab filtering independent from debug gating", () => {
-    expect(visibleIds("codex", true)).not.toContain("agents");
-    expect(visibleIds("claude", true)).toContain("agents");
+  it("hides Claude-only tabs when Codex is the active CLI", () => {
+    expect(visibleIds("codex")).not.toContain("agents");
+    expect(visibleIds("claude")).toContain("agents");
   });
 });

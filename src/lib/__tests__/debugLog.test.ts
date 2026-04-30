@@ -16,9 +16,8 @@ describe("debugLog", () => {
   beforeEach(() => {
     clearDebugLog();
     configureObservability({
-      debugBuild: true,
       observabilityEnabled: true,
-      devtoolsAvailable: true,
+      devtoolsEnabled: true,
       globalLogPath: null,
     });
     setDebugCaptureResolver(null);
@@ -240,9 +239,8 @@ describe("debugLog", () => {
   it("does not capture non-error logs when observability is disabled", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     configureObservability({
-      debugBuild: false,
       observabilityEnabled: false,
-      devtoolsAvailable: false,
+      devtoolsEnabled: false,
       globalLogPath: null,
     });
     dlog("m", null, "hidden");
@@ -251,9 +249,8 @@ describe("debugLog", () => {
 
   it("does not normalize dropped payloads", () => {
     configureObservability({
-      debugBuild: false,
       observabilityEnabled: false,
-      devtoolsAvailable: false,
+      devtoolsEnabled: false,
       globalLogPath: null,
     });
     const data = {

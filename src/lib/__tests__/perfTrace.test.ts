@@ -13,9 +13,8 @@ beforeEach(async () => {
   const debugLog = await import("../debugLog");
   debugLog.clearDebugLog();
   debugLog.configureObservability({
-    debugBuild: true,
     observabilityEnabled: true,
-    devtoolsAvailable: true,
+    devtoolsEnabled: true,
     globalLogPath: null,
   });
   debugLog.setDebugCaptureResolver(null);
