@@ -54,6 +54,19 @@
 
 .mcp-pane-copy-mode {
   min-width: 120px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mcp-pane-copy-mode:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .mcp-server-name {
