@@ -641,20 +641,22 @@ pub fn build_claude_args(config: SessionConfig) -> Result<Vec<String>, String> {
 
     if config.continue_session {
         args.push("--continue".into());
+        if config.fork_session {
+            args.push("--fork-session".into());
+        }
     } else if let Some(ref session_id) = config.resume_session {
         if !session_id.is_empty() {
+            args.push("--resume".into());
+            args.push(session_id.clone());
             if config.fork_session {
                 args.push("--fork-session".into());
-                args.push(session_id.clone());
-            } else {
-                args.push("--resume".into());
-                args.push(session_id.clone());
             }
         }
     }
 
-    // [RS-05] Skip --session-id when using --resume or --continue
-    // Claude CLI rejects the combination unless --fork-session is also specified.
+    // [RS-05] Skip --session-id when using --resume or --continue. Claude can
+    // accept it with --fork-session, but Code Tabs lets Claude generate the fork
+    // id and records the real id from TAP after launch.
     if !config.continue_session && config.resume_session.is_none() {
         if let Some(ref sid) = config.session_id {
             args.push("--session-id".into());
@@ -957,6 +959,28 @@ mod tests {
         let args = build_claude_args(config).unwrap();
         assert!(args.contains(&"--config=instructions=be precise".to_string()));
         assert!(args.contains(&"--debug".to_string()));
+    }
+
+    #[test]
+    fn build_args_fork_resume_uses_boolean_modifier() {
+        let config = SessionConfig {
+            resume_session: Some("abc123".into()),
+            fork_session: true,
+            ..Default::default()
+        };
+        let args = build_claude_args(config).unwrap();
+        assert_eq!(args, vec!["--resume", "abc123", "--fork-session"]);
+    }
+
+    #[test]
+    fn build_args_fork_continue_uses_boolean_modifier() {
+        let config = SessionConfig {
+            continue_session: true,
+            fork_session: true,
+            ..Default::default()
+        };
+        let args = build_claude_args(config).unwrap();
+        assert_eq!(args, vec!["--continue", "--fork-session"]);
     }
 
     #[test]

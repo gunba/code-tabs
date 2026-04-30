@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { parse, quote } from "shell-quote";
 import type { PastSession, Session, SessionConfig, SessionState, Subagent } from "../types/session";
 import { isSessionIdle, isSubagentActive } from "../types/session";
 import { canonicalizePath } from "./paths";
@@ -11,6 +12,7 @@ export async function buildClaudeArgs(
 
 /** [RS-02] Resume target: chains through revivals to find the original CLI session ID. */
 export function getResumeId(session: Session): string {
+  if (session.config.forkSession && session.config.sessionId) return session.config.sessionId;
   return session.config.resumeSession || session.config.sessionId || session.id;
 }
 
@@ -34,7 +36,9 @@ export function resolveResumeId(
   );
   if (candidates.length === 0) return null;
 
-  const storedId = session.config.resumeSession || session.config.sessionId;
+  const storedId = session.config.forkSession
+    ? session.config.sessionId || session.config.resumeSession
+    : session.config.resumeSession || session.config.sessionId;
   if (storedId) {
     const exact = candidates.find((p) => p.id === storedId);
     if (exact) return exact.id;
@@ -82,11 +86,27 @@ export function findNearestLiveTab(sessions: Session[], fromIndex: number): stri
   return null;
 }
 
-/** [SR-08] Strip -w/--worktree from extraFlags on resume/respawn to avoid duplicate worktree. */
+/** [SR-08] Strip -w/--worktree and named worktree values on resume/respawn. */
 export function stripWorktreeFlags(flags: string | null): string | null {
   if (!flags) return null;
-  const stripped = flags.replace(/\s*--?w(?:orktree)?\b/g, "").trim();
-  return stripped || null;
+  const parsed = parse(flags);
+  const tokens: string[] = [];
+
+  for (let i = 0; i < parsed.length; i++) {
+    const token = parsed[i];
+    if (typeof token !== "string") return flags.trim() || null;
+
+    if (token === "-w" || token === "--worktree") {
+      const next = parsed[i + 1];
+      if (typeof next === "string" && next && !next.startsWith("-")) i++;
+      continue;
+    }
+    if (token.startsWith("--worktree=")) continue;
+
+    tokens.push(token);
+  }
+
+  return tokens.length > 0 ? quote(tokens) : null;
 }
 
 /** Effective model: user-configured model, falling back to runtime-detected model. */

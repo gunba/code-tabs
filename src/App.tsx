@@ -2,7 +2,13 @@ import { lazy, Suspense, useEffect, useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "./store/sessions";
 import { useSettingsStore } from "./store/settings";
-import { getResumeId, getLaunchWorkingDir, canResumeSession } from "./lib/claude";
+import {
+  buildForkSessionConfig,
+  buildForkSessionName,
+  getResumeId,
+  getLaunchWorkingDir,
+  canResumeSession,
+} from "./lib/claude";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 
 import { SessionLauncher } from "./components/SessionLauncher/SessionLauncher";
@@ -215,11 +221,36 @@ export default function App() {
       workingDir: getLaunchWorkingDir(session),
       launchWorkingDir: getLaunchWorkingDir(session),
       resumeSession: getResumeId(session),
+      forkSession: false,
       continueSession: false,
     });
     useSettingsStore.getState().setReplaceSessionId(session.id);
     setShowLauncher(true);
   }, [setLastConfig, setShowLauncher]);
+
+  // [SL-24] Tab context-menu fork creates a separate forked session.
+  const handleForkIntoNewTab = useCallback(async (session: Session) => {
+    const settings = useSettingsStore.getState();
+    if (!session.config.sessionId && !session.config.resumeSession) {
+      await settings.loadPastSessions();
+    }
+
+    const forkConfig = buildForkSessionConfig(
+      session,
+      useSettingsStore.getState().pastSessions,
+    );
+    if (!forkConfig) return;
+
+    settings.addRecentDir(forkConfig.workingDir);
+    try {
+      await createSession(
+        buildForkSessionName(session.name, forkConfig.workingDir),
+        forkConfig,
+      );
+    } catch (err) {
+      dlog("session", session.id, `fork into new tab failed: ${err}`, "ERR");
+    }
+  }, [createSession]);
 
   const handleKeepWorktree = useCallback((request: PruneRequest) => {
     closeSession(request.sessionId);
@@ -388,6 +419,7 @@ export default function App() {
           onSetLastConfig={setLastConfig}
           onSetInspectorOff={setInspectorOff}
           onSetShowLauncher={setShowLauncher}
+          onForkIntoNewTab={handleForkIntoNewTab}
         />
       )}
     </div>

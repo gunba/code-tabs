@@ -81,10 +81,10 @@ export function useKeyboardShortcuts(snapshot: ShortcutSnapshot, actions: Shortc
           // [SL-02] Ctrl+Shift+T: quick launch without modal.
           quickLaunch();
         } else {
-          // [KB-01] [SL-01] Ctrl+T: open new session (clears resume/continue).
+          // [KB-01] [SL-01] Ctrl+T: open new session (clears resume/fork/continue).
           const lc = useSettingsStore.getState().lastConfig;
-          if (lc.resumeSession || lc.continueSession) {
-            setLastConfig({ ...lc, resumeSession: null, continueSession: false });
+          if (lc.resumeSession || lc.forkSession || lc.continueSession) {
+            setLastConfig({ ...lc, resumeSession: null, forkSession: false, continueSession: false });
           }
           setShowLauncher(true);
         }

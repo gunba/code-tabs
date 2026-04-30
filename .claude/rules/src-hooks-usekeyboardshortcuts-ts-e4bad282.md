@@ -21,5 +21,7 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 
 ## Session Launcher
 
-- [SL-02 L81] Quick launch: Ctrl+Click "+" or Ctrl+Shift+T instantly launches without showing modal; uses saved defaults if set, otherwise falls back to last-used config (including folder)
-- [SL-01 L84] Modal for new session or resume — Ctrl+T opens fresh (clears resume/continue flags)
+- [SL-02 L81] Quick launch: Ctrl+Click + or Ctrl+Shift+T launches without the modal using saved defaults or lastConfig, after clearing resumeSession, forkSession, continueSession, sessionId, and runMode.
+  - quickLaunchSession() strips transient one-shot fields before createSession; App.tsx Ctrl+Shift+T delegates to this path.
+- [SL-01 L84] SessionLauncher opens for new, resume, or fork launches; Ctrl+T opens a fresh launcher and clears resumeSession, forkSession, and continueSession from lastConfig.
+  - SessionLauncher renders Fork Session/Forking from when config.resumeSession && config.forkSession. The Ctrl+T global shortcut strips all one-shot resume/fork/continue fields before showing the modal.

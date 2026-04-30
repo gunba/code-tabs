@@ -53,7 +53,7 @@ const modeColor = (m: PermissionMode): string => MODE_COLORS[m] ?? "var(--accent
 const DEDICATED_FLAGS = new Set([
   "--model", "--permission-mode", "--effort",
   "--dangerously-skip-permissions", "--project-dir",
-  "--resume", "--session-id", "--continue",
+  "--resume", "--session-id", "--continue", "--fork-session",
   "--cd", "--profile", "--sandbox", "--ask-for-approval", "--full-auto",
   "--dangerously-bypass-approvals-and-sandbox", "--add-dir",
 ]);
@@ -77,8 +77,8 @@ const NON_SESSION_FLAGS = new Set([
 
 // ── Main component ──────────────────────────────────────────────────
 
-// [SL-01] Modal for new session or resume
-// [SL-09] Config restore: savedDefaults with lastConfig fallback, clears one-shot fields
+// [SL-01] Modal for new session, resume, or fork.
+// [SL-09] Config restore: savedDefaults with lastConfig fallback, clearing stale one-shot fields.
 export function SessionLauncher() {
   const createSession = useSessionStore((s) => s.createSession);
   const claudePath = useSessionStore((s) => s.claudePath);
@@ -130,7 +130,8 @@ export function SessionLauncher() {
     [dispatchConfigUpdate],
   );
 
-  // [DU-01] availableCliKinds gating; selectedCliInstalled error banner; buildFullCommand maps Codex permissionMode -> --sandbox/--ask-for-approval combinations and effort -> -c model_reasoning_effort="..."
+  // [DU-01] availableCliKinds gating; selectedCliInstalled error banner;
+  // buildFullCommand maps Codex/Claude resume/fork and launch options.
   const availableCliKinds = useMemo(() => {
     const kinds: Array<SessionConfig["cli"]> = [];
     if (claudePath) kinds.push("claude");
@@ -153,7 +154,7 @@ export function SessionLauncher() {
   const buildFullCommand = useCallback((cfg: SessionConfig, extra?: string) => {
     const parts: string[] = [cfg.cli === "codex" ? "codex" : "claude"];
     if (cfg.cli === "codex") {
-      if (cfg.resumeSession) parts.push("resume", cfg.resumeSession);
+      if (cfg.resumeSession) parts.push(cfg.forkSession ? "fork" : "resume", cfg.resumeSession);
       if (cfg.workingDir) parts.push("--cd", cfg.workingDir);
       if (cfg.model) parts.push("--model", cfg.model);
       if (cfg.effort && CODEX_EFFORT_VALUES.has(cfg.effort)) {
@@ -184,7 +185,13 @@ export function SessionLauncher() {
       if (cfg.effort) parts.push("--effort", cfg.effort);
       if (cfg.dangerouslySkipPermissions) parts.push("--dangerously-skip-permissions");
       if (cfg.projectDir) parts.push("--project-dir", cfg.workingDir || ".");
-      if (cfg.resumeSession) parts.push("--resume", cfg.resumeSession);
+      if (cfg.continueSession) {
+        parts.push("--continue");
+        if (cfg.forkSession) parts.push("--fork-session");
+      } else if (cfg.resumeSession) {
+        parts.push("--resume", cfg.resumeSession);
+        if (cfg.forkSession) parts.push("--fork-session");
+      }
     }
     if (extra?.trim()) parts.push(extra.trim());
     return parts.join(" ");
@@ -206,7 +213,7 @@ export function SessionLauncher() {
     if (!mountedRef.current) { mountedRef.current = true; return; }
     if (isUtilityRef.current) return;
     setCommandLine(buildFullCommand(config, config.extraFlags || undefined));
-  }, [config.cli, config.workingDir, config.model, config.permissionMode, config.effort, config.codexSandboxMode, config.codexApprovalPolicy, config.dangerouslySkipPermissions, config.projectDir, config.resumeSession, config.extraFlags, buildFullCommand]);
+  }, [config.cli, config.workingDir, config.model, config.permissionMode, config.effort, config.codexSandboxMode, config.codexApprovalPolicy, config.dangerouslySkipPermissions, config.projectDir, config.resumeSession, config.forkSession, config.continueSession, config.extraFlags, buildFullCommand]);
 
   useEffect(() => {
     const el = document.getElementById("launcher-path");
@@ -465,9 +472,9 @@ export function SessionLauncher() {
           || "run"
         : storedName || (launchConfig.workingDir ? dirToTabName(launchConfig.workingDir) : "run");
       if (finalConfig.workingDir) addRecentDir(finalConfig.workingDir);
-      // Save config as defaults but strip one-shot resume fields and runMode —
+      // Save config as defaults but strip one-shot launch fields and runMode —
       // these are per-launch, not persistent defaults.
-      setLastConfig({ ...finalConfig, resumeSession: null, continueSession: false, runMode: false });
+      setLastConfig({ ...finalConfig, resumeSession: null, forkSession: false, continueSession: false, runMode: false });
       try {
         // If relaunching an existing session, close it first
         const replaceId = useSettingsStore.getState().replaceSessionId;
@@ -495,12 +502,12 @@ export function SessionLauncher() {
     if (selected) applyWorkspaceDefaults(selected);
   }, [config.workingDir, applyWorkspaceDefaults]);
 
-  // Dismiss launcher: clears replace target and one-shot resume flags
+  // Dismiss launcher: clears replace target and one-shot resume/fork flags.
   const dismissLauncher = useCallback(() => {
     const store = useSettingsStore.getState();
     store.setReplaceSessionId(null);
-    if (store.lastConfig.resumeSession) {
-      store.setLastConfig({ ...store.lastConfig, resumeSession: null, continueSession: false });
+    if (store.lastConfig.resumeSession || store.lastConfig.forkSession) {
+      store.setLastConfig({ ...store.lastConfig, resumeSession: null, forkSession: false, continueSession: false });
     }
     setShowLauncher(false);
   }, [setShowLauncher]);
@@ -577,9 +584,11 @@ export function SessionLauncher() {
   }
 
   const isResuming = !!config.resumeSession;
+  const isForking = isResuming && config.forkSession;
 
   let launchLabel = "Launch";
-  if (isResuming) launchLabel = "Resume";
+  if (isForking) launchLabel = "Fork";
+  else if (isResuming) launchLabel = "Resume";
   else if (isNonSessionCommand) launchLabel = "Run";
 
   // ── Main launcher ──
@@ -590,7 +599,7 @@ export function SessionLauncher() {
 
         {/* Header */}
         <div className="launcher-header">
-          <span className="launcher-title">{isResuming ? "Resume Session" : "New Session"}</span>
+          <span className="launcher-title">{isForking ? "Fork Session" : isResuming ? "Resume Session" : "New Session"}</span>
           <button className="launcher-close" onClick={dismissLauncher} type="button">&times;</button>
         </div>
 
@@ -599,7 +608,7 @@ export function SessionLauncher() {
           <div className="launcher-resume-banner">
             <span className="launcher-resume-banner-icon"><IconReturn size={16} /></span>
             <span className="launcher-resume-banner-text">
-              Resuming in <strong>{dirToTabName(config.workingDir)}</strong>
+              {isForking ? "Forking from" : "Resuming in"} <strong>{dirToTabName(config.workingDir)}</strong>
             </span>
           </div>
         ) : (
@@ -810,7 +819,7 @@ export function SessionLauncher() {
             <div className="launcher-cli-header-right">
               <button
                 className={`launcher-save-defaults${defaultsSaved ? " launcher-save-defaults-saved" : ""}`}
-                onClick={() => { setSavedDefaults(launchConfig); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}
+                onClick={() => { setSavedDefaults({ ...launchConfig, resumeSession: null, forkSession: false, continueSession: false, sessionId: null, runMode: false }); setDefaultsSaved(true); setTimeout(() => setDefaultsSaved(false), 2000); }}
                 disabled={isNonSessionCommand}
                 type="button"
               >

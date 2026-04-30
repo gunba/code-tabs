@@ -80,6 +80,7 @@ export function useTerminalSetup({
           codexPath,
           workingDir: session.config.workingDir,
           resumeSession: session.config.resumeSession,
+          forkSession: session.config.forkSession,
           continueSession: session.config.continueSession,
         },
       });
@@ -172,6 +173,7 @@ export function useTerminalSetup({
             tapPort,
             env,
             resumeSession: session.config.resumeSession,
+            forkSession: session.config.forkSession,
             continueSession: session.config.continueSession,
             permissionMode: session.config.permissionMode,
             model: session.config.model,

@@ -64,6 +64,7 @@ export function useSessionRespawn({
       const newConfig: SessionConfig = config ?? {
         ...session.config,
         resumeSession: canResume ? getResumeId(session) : null,
+        forkSession: false,
         continueSession: false,
         extraFlags: stripWorktreeFlags(session.config.extraFlags),
       };

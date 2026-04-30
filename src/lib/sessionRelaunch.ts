@@ -30,6 +30,7 @@ export async function relaunchDeadSession({
     workingDir: launchWorkingDir,
     launchWorkingDir,
     resumeSession: resumeId,
+    forkSession: false,
     continueSession: false,
     extraFlags: stripWorktreeFlags(session.config.extraFlags),
   };

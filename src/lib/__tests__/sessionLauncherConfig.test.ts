@@ -41,6 +41,26 @@ describe("buildInitialLauncherConfig", () => {
     expect(result.resumeSession).toBe("019dc57d-b78a-75c3-b087-32d7446ebe85");
   });
 
+  it("preserves fork intent when opening a resume config", () => {
+    const result = buildInitialLauncherConfig({
+      lastConfig: config({
+        resumeSession: "019dc57d-b78a-75c3-b087-32d7446ebe85",
+        forkSession: true,
+        continueSession: true,
+        sessionId: "stale",
+        runMode: true,
+      }),
+      savedDefaults: null,
+      workspaceDefaults: {},
+    });
+
+    expect(result.resumeSession).toBe("019dc57d-b78a-75c3-b087-32d7446ebe85");
+    expect(result.forkSession).toBe(true);
+    expect(result.continueSession).toBe(false);
+    expect(result.sessionId).toBeNull();
+    expect(result.runMode).toBe(false);
+  });
+
   it("applies workspace defaults for fresh launches", () => {
     const result = buildInitialLauncherConfig({
       lastConfig: config({ cli: "claude", model: "sonnet", resumeSession: null }),

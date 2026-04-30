@@ -47,6 +47,7 @@ function migrateCodexPerms(cfg: SessionConfig): SessionConfig {
   return next;
 }
 
+// [SL-09] Restore launcher config while preserving fork intent for resume configs.
 export function buildInitialLauncherConfig(params: {
   lastConfig: SessionConfig;
   savedDefaults: SessionConfig | null;
@@ -69,7 +70,7 @@ export function buildInitialLauncherConfig(params: {
     continueSession: false,
     sessionId: null,
     runMode: false,
-    forkSession: false,
+    forkSession: resumeLaunch ? defaults.forkSession : false,
   };
 
   return migrateCodexPerms(merged);

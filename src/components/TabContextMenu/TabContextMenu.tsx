@@ -5,7 +5,7 @@ import {
   getInspectorPort,
   reconnectInspectorForSession,
 } from "../../lib/inspectorPort";
-import { getResumeId } from "../../lib/claude";
+import { canResumeSession, getResumeId } from "../../lib/claude";
 import type { TabGroup } from "../../lib/paths";
 import type { Session, SessionConfig } from "../../types/session";
 
@@ -28,6 +28,7 @@ interface TabContextMenuProps {
   onSetLastConfig: (config: SessionConfig) => void;
   onSetInspectorOff: (sessionId: string, value: boolean) => void;
   onSetShowLauncher: (show: boolean) => void;
+  onForkIntoNewTab: (session: Session) => Promise<void>;
 }
 
 export function TabContextMenu({
@@ -43,6 +44,7 @@ export function TabContextMenu({
   onSetLastConfig,
   onSetInspectorOff,
   onSetShowLauncher,
+  onForkIntoNewTab,
 }: TabContextMenuProps) {
   const session = sessions.find((s) => s.id === menu.sessionId);
   if (!session) return null;
@@ -94,6 +96,18 @@ export function TabContextMenu({
         >
           Open in Explorer
         </button>
+        {/* [SL-24] Fork affordance is shown only when the tab has conversation evidence. */}
+        {canResumeSession(session) && (
+          <button
+            className="tab-context-menu-item"
+            onClick={() => {
+              void onForkIntoNewTab(session);
+              onClose();
+            }}
+          >
+            Fork into New Tab
+          </button>
+        )}
         {inspectorUrl && (
           <>
             <button
@@ -169,6 +183,7 @@ export function TabContextMenu({
               onSetLastConfig({
                 ...session.config,
                 resumeSession: getResumeId(session),
+                forkSession: false,
               });
               onClose();
               onSetShowLauncher(true);

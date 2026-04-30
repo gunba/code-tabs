@@ -19,10 +19,11 @@ export async function quickLaunchSession({
     return;
   }
 
-  // [RS-04] One-shot flags cleared: resumeSession, continueSession never persist in lastConfig.
+  // [RS-04] One-shot launch fields never persist into quick-launch defaults.
   const cleanConfig: SessionConfig = {
     ...defaults,
     resumeSession: null,
+    forkSession: false,
     continueSession: false,
     sessionId: null,
     runMode: false,

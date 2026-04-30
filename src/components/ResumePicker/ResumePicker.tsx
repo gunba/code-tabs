@@ -5,7 +5,15 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useSessionStore } from "../../store/sessions";
 import { useSettingsStore } from "../../store/settings";
 import { dlog } from "../../lib/debugLog";
-import { getResumeId, modelLabel, modelColor, stripWorktreeFlags, effortColor } from "../../lib/claude";
+import {
+  buildForkConfigFromPastSession,
+  buildForkSessionName,
+  getResumeId,
+  modelLabel,
+  modelColor,
+  stripWorktreeFlags,
+  effortColor,
+} from "../../lib/claude";
 import { cliLongLabel, cliShortLabel, resumeSessionCli } from "../../lib/cliDisplay";
 import { dirToTabName, abbreviatePath, normalizeForFilter, parentDir } from "../../lib/paths";
 import { useCtrlKey } from "../../hooks/useCtrlKey";
@@ -402,6 +410,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         ...baseConfig,
         workingDir,
         resumeSession: ps.id,
+        forkSession: false,
         continueSession: false,
         extraFlags: stripWorktreeFlags(baseConfig.extraFlags),
       };
@@ -418,10 +427,35 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
     [deadSessionMap, sessionConfigs, sessionNames, createSession, addRecentDir, onClose]
   );
 
+  // [SL-24] Resume-history fork creates a new forked tab from a past session.
+  const forkById = useCallback(
+    async (ps: PastSession, displayName?: string | null) => {
+      const dead = deadSessionMap.get(ps.id);
+      const cached = sessionConfigs[ps.id];
+      const baseConfig = dead?.config ?? { ...DEFAULT_SESSION_CONFIG, ...cached, cli: ps.cli ?? cached?.cli ?? DEFAULT_SESSION_CONFIG.cli };
+      const forkConfig = buildForkConfigFromPastSession(ps, baseConfig);
+      addRecentDir(forkConfig.workingDir);
+      const name = buildForkSessionName(displayName || sessionNames[ps.id] || dirToTabName(ps.directory), forkConfig.workingDir);
+
+      try {
+        await createSession(name, forkConfig);
+        onClose();
+      } catch (err) {
+        dlog("resume", null, `fork failed: ${err}`, "ERR");
+      }
+    },
+    [deadSessionMap, sessionConfigs, sessionNames, createSession, addRecentDir, onClose]
+  );
+
   // Resume a chain (latest member)
   const handleResume = useCallback(
     (chain: MergedChain) => resumeById(chain.resumeSession, chain.displayName),
     [resumeById]
+  );
+
+  const handleFork = useCallback(
+    (chain: MergedChain) => forkById(chain.resumeSession, chain.displayName),
+    [forkById]
   );
 
   // Open the main launcher with this session pre-filled (Ctrl+Click / Configure)
@@ -435,6 +469,7 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
         ...baseConfig,
         workingDir: ps.directory,
         resumeSession: ps.id,
+        forkSession: false,
         continueSession: false,
         extraFlags: stripWorktreeFlags(baseConfig.extraFlags),
       };
@@ -806,6 +841,15 @@ export function ResumePicker({ onClose }: ResumePickerProps) {
               }}
             >
               Resume
+            </button>
+            <button
+              className={`tab-context-menu-item${!contextMenu.chain.dirExists ? " tab-context-menu-item-disabled" : ""}`}
+              onClick={() => {
+                if (contextMenu.chain.dirExists) handleFork(contextMenu.chain);
+                setContextMenu(null);
+              }}
+            >
+              Fork into New Tab
             </button>
             <button
               className={`tab-context-menu-item${!contextMenu.chain.dirExists ? " tab-context-menu-item-disabled" : ""}`}

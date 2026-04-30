@@ -22,6 +22,11 @@ import {
   TOOL_COLORS,
   EVENT_KIND_COLORS,
   resolveResumeId,
+  buildForkConfigFromPastSession,
+  buildForkSessionConfig,
+  buildForkSessionName,
+  getForkSourceId,
+  normalizeForkExtraFlags,
 } from "../claude";
 import type { PastSession, Session } from "../../types/session";
 import { DEFAULT_SESSION_CONFIG } from "../../types/session";
@@ -349,6 +354,12 @@ describe("getResumeId", () => {
     expect(getResumeId(s)).toBe("resume-target");
   });
 
+  it("prefers current sessionId for forked tabs", () => {
+    const s = makeSession({ resumeSession: "parent-target", sessionId: "fork-target" });
+    s.config.forkSession = true;
+    expect(getResumeId(s)).toBe("fork-target");
+  });
+
   it("returns empty resumeSession if it is an empty string", () => {
     // Empty string is falsy — should fall through to sessionId
     const s = makeSession({ resumeSession: "", sessionId: "fallback" });
@@ -408,6 +419,20 @@ describe("resolveResumeId", () => {
     expect(resolveResumeId(s, ps)).toBe("wanted-id");
   });
 
+  it("uses the current fork id before the parent resume id for forked tabs", () => {
+    const s = sessionFor({
+      workingDir: "C:/dev/code-tabs",
+      sessionId: "fork-id",
+      resumeSession: "parent-id",
+    });
+    s.config.forkSession = true;
+    const ps = [
+      past({ id: "parent-id", directory: "C:/dev/code-tabs", lastModified: "2026-04-28T10:00:00Z" }),
+      past({ id: "fork-id", directory: "C:/dev/code-tabs", lastModified: "2026-04-28T11:00:00Z" }),
+    ];
+    expect(resolveResumeId(s, ps)).toBe("fork-id");
+  });
+
   it("returns the only candidate when cwd has exactly one JSONL", () => {
     // The dead tab carries an id that no JSONL matches (e.g. lost via TAP miss).
     const s = sessionFor({ workingDir: "C:/dev/code-tabs", sessionId: "phantom-id" });
@@ -443,6 +468,113 @@ describe("resolveResumeId", () => {
       past({ id: "claude-id",  directory: "C:/dev/code-tabs", lastModified: "2026-04-28T10:00:00Z" }),
     ];
     expect(resolveResumeId(s, ps)).toBe("claude-id");
+  });
+});
+
+describe("fork session helpers", () => {
+  it("fork source prefers the current CLI session id over the original resume target", () => {
+    const s = makeSession({ sessionId: "current-branch", resumeSession: "shared-research" });
+    s.metadata.assistantMessageCount = 1;
+
+    expect(getForkSourceId(s)).toBe("current-branch");
+  });
+
+  it("builds a fork config from the exact tab session", () => {
+    const s = makeSession({ sessionId: "current-branch", resumeSession: "shared-research" });
+    s.config.workingDir = "/worktree/current";
+    s.config.launchWorkingDir = "/workspace/project";
+    s.config.extraFlags = "--worktree --debug";
+    s.metadata.assistantMessageCount = 1;
+
+    const config = buildForkSessionConfig(s);
+
+    expect(config).toMatchObject({
+      workingDir: "/workspace/project",
+      launchWorkingDir: "/workspace/project",
+      resumeSession: "current-branch",
+      forkSession: true,
+      continueSession: false,
+      sessionId: null,
+      runMode: false,
+      extraFlags: "--worktree --debug",
+    });
+  });
+
+  it("normalizes named worktree flags for tab forks", () => {
+    const s = makeSession({ sessionId: "current-branch" });
+    s.config.workingDir = "/workspace/project";
+    s.config.extraFlags = "--worktree feature-a --debug";
+    s.metadata.assistantMessageCount = 1;
+
+    const config = buildForkSessionConfig(s);
+
+    expect(config?.extraFlags).toBe("--worktree --debug");
+  });
+
+  it("anchors a fork from an active worktree at the project root", () => {
+    const s = makeSession({ sessionId: "current-branch" });
+    s.config.workingDir = "/workspace/project/.claude/worktrees/fix-a";
+    s.config.launchWorkingDir = "";
+    s.metadata.assistantMessageCount = 1;
+
+    const config = buildForkSessionConfig(s);
+
+    expect(config?.workingDir).toBe("/workspace/project");
+    expect(config?.launchWorkingDir).toBe("/workspace/project");
+  });
+
+  it("does not build a fork config without conversation evidence", () => {
+    const s = makeSession({ sessionId: null, resumeSession: null });
+
+    expect(buildForkSessionConfig(s)).toBeNull();
+  });
+
+  it("builds a fork config from a past session entry", () => {
+    const ps: PastSession = {
+      id: "history-id",
+      cli: "claude",
+      path: "/fake/history-id.jsonl",
+      directory: "/workspace/project",
+      lastModified: "2026-04-28T10:00:00Z",
+      sizeBytes: 1024,
+      firstMessage: "first",
+      lastMessage: "last",
+      parentId: null,
+      model: "sonnet",
+      filePath: "/fake/history-id.jsonl",
+      dirExists: true,
+    };
+
+    expect(buildForkConfigFromPastSession(ps, { model: "opus", extraFlags: "--worktree" })).toMatchObject({
+      cli: "claude",
+      model: "opus",
+      workingDir: "/workspace/project",
+      launchWorkingDir: "/workspace/project",
+      resumeSession: "history-id",
+      forkSession: true,
+      continueSession: false,
+      extraFlags: "--worktree",
+      sessionId: null,
+    });
+  });
+
+  it("names forks from the display name when available", () => {
+    expect(buildForkSessionName("Research", "/workspace/project")).toBe("Research Fork");
+    expect(buildForkSessionName("", "/workspace/project")).toBe("project Fork");
+  });
+});
+
+describe("normalizeForkExtraFlags", () => {
+  it("keeps worktree intent but removes explicit worktree names", () => {
+    expect(normalizeForkExtraFlags("--worktree feature-a --debug")).toBe("--worktree --debug");
+    expect(normalizeForkExtraFlags("-w feature-a --verbose")).toBe("--worktree --verbose");
+    expect(normalizeForkExtraFlags("--worktree=feature-a --model sonnet")).toBe("--worktree --model sonnet");
+  });
+
+  it("preserves unnamed worktree flags and unrelated flags", () => {
+    expect(normalizeForkExtraFlags("--worktree --debug")).toBe("--worktree --debug");
+    expect(normalizeForkExtraFlags("--debug --model sonnet")).toBe("--debug --model sonnet");
+    expect(normalizeForkExtraFlags(null)).toBeNull();
   });
 });
 
@@ -497,6 +629,12 @@ describe("stripWorktreeFlags", () => {
 
   it("strips --worktree among other flags", () => {
     expect(stripWorktreeFlags("--verbose --worktree --debug")).toBe("--verbose --debug");
+  });
+
+  it("strips named worktree values", () => {
+    expect(stripWorktreeFlags("--worktree feature-a --debug")).toBe("--debug");
+    expect(stripWorktreeFlags("-w feature-a --verbose")).toBe("--verbose");
+    expect(stripWorktreeFlags("--worktree=feature-a --debug")).toBe("--debug");
   });
 
   it("preserves unrelated flags", () => {

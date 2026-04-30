@@ -15,6 +15,14 @@ export {
 } from "./claudeResume";
 
 export {
+  buildForkConfigFromPastSession,
+  buildForkSessionConfig,
+  buildForkSessionName,
+  getForkSourceId,
+  normalizeForkExtraFlags,
+} from "./sessionFork";
+
+export {
   MODEL_FAMILIES,
   effortColor,
   modelColor,
