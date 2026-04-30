@@ -873,7 +873,7 @@ function drawBeach(
   intensity: number,
   t: number,
 ): void {
-  const { beachW, beachTopYAtZero } = layout;
+  const { beachW, beachTopYAtZero, seaMeanY, beachShoreSlope } = layout;
   if (!beachTile || !decoTile) return;
   // Sand fill, clipped to the curved beach top (mostly flat with a bank
   // dropping off into the water at the right side). The path is sampled
@@ -898,7 +898,29 @@ function drawBeach(
   ctx.drawImage(decoTile, 0, 0);
   ctx.restore();
 
-  // Big landmarks (umbrella, towel, sandcastle) drawn ON TOP of the dune
+  // Underwater bank: sand seen through the water just past the visible
+  // bank, painted semi-transparently over the existing sea so the dune
+  // rounds off into the water rather than dropping vertically.
+  const extension = Math.max(8, Math.round(beachShoreSlope * 0.7));
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(beachW, seaMeanY);
+  for (let i = 1; i <= extension; i++) {
+    const u = i / extension;
+    ctx.lineTo(beachW + i, seaMeanY + smoothstep(u) * extension * 0.6);
+  }
+  ctx.lineTo(beachW + extension, h);
+  ctx.lineTo(beachW, h);
+  ctx.closePath();
+  ctx.clip();
+  const wetGrad = ctx.createLinearGradient(0, seaMeanY, 0, h);
+  wetGrad.addColorStop(0, "rgba(110, 80, 40, 0.55)");
+  wetGrad.addColorStop(1, "rgba(70, 50, 25, 0.25)");
+  ctx.fillStyle = wetGrad;
+  ctx.fillRect(beachW, seaMeanY, extension + 1, h - seaMeanY);
+  ctx.restore();
+
+  // Big landmarks (umbrella, foldout chair) drawn ON TOP of the dune
   // curve so they sit as silhouettes against the sky, not embedded inside.
   drawBeachLandmarks(ctx, layout);
   void w;
@@ -961,11 +983,13 @@ function makeBeachDecoTile(beachW: number, h: number, layout: Layout): HTMLCanva
 
   // Scatter small ornaments along the curved sand surface — each one
   // anchored just below the dune top so they sit "on" the sand rather
-  // than floating in the air.
+  // than floating in the air. Decorations are confined to the dry beach
+  // (t <= 0.82) so none end up under the new wet/underwater bank.
+  const dryW = Math.max(8, Math.round(beachW * 0.82));
   const rng = mulberry32(0x9e3779b1);
   const decoCount = Math.max(4, Math.round(beachW / 18));
   for (let i = 0; i < decoCount; i++) {
-    const x = Math.floor(rng() * (beachW - 6)) + 2;
+    const x = Math.floor(rng() * (dryW - 6)) + 2;
     const surfaceY = shoreYAt(layout, x / Math.max(1, beachW));
     const offsetY = 1 + Math.floor(rng() * 3);
     const y = Math.round(surfaceY + offsetY);
@@ -980,14 +1004,14 @@ function makeBeachDecoTile(beachW: number, h: number, layout: Layout): HTMLCanva
   for (let s = 0; s < 5; s++) {
     const surfaceY = shoreYAt(layout, fx / Math.max(1, beachW));
     const fy = Math.round(surfaceY) + 2 + (s % 2);
-    if (fy < h && fx < beachW - 2) drawFootprint(ctx, fx, fy, s % 2 === 0);
+    if (fy < h && fx < dryW - 2) drawFootprint(ctx, fx, fy, s % 2 === 0);
     fx += 6 + Math.floor(trailRng() * 4);
-    if (fx > beachW - 4) break;
+    if (fx > dryW - 4) break;
   }
   return c;
 }
 
-// Draw the big landmark silhouettes (umbrella, towel, sandcastle) ON TOP
+// Draw the big landmark silhouettes (umbrella, foldout chair) ON TOP
 // of the dune curve. Anchored to the sand surface via shoreYAt so they
 // follow the topography. Drawn after the clip restore so anything taller
 // than the dune is visible against the sky.
@@ -999,17 +1023,9 @@ function drawBeachLandmarks(ctx: CanvasRenderingContext2D, layout: Layout): void
   const umbrellaSurfaceY = shoreYAt(layout, umbrellaT);
   drawUmbrella(ctx, umbrellaCx, Math.round(umbrellaSurfaceY));
 
-  // Towel a bit further down-slope from the umbrella.
-  const towelT = 0.5;
-  const towelCx = Math.round(beachW * towelT);
-  const towelSurfaceY = shoreYAt(layout, towelT);
-  drawTowel(ctx, towelCx, Math.round(towelSurfaceY));
-
-  // Sandcastle on the gentle descent before the bank drop.
-  const castleT = 0.66;
-  const castleCx = Math.round(beachW * castleT);
-  const castleSurfaceY = shoreYAt(layout, castleT);
-  drawSandcastle(ctx, castleCx, Math.round(castleSurfaceY));
+  // Foldout chair on the gentle descent before the bank drop. Legs
+  // sample shoreYAt at offset t so the seat tilts with the slope.
+  drawFoldoutChair(ctx, layout, 0.66);
 }
 
 function drawUmbrella(ctx: CanvasRenderingContext2D, cx: number, surfaceY: number): void {
@@ -1041,89 +1057,69 @@ function drawUmbrella(ctx: CanvasRenderingContext2D, cx: number, surfaceY: numbe
   ctx.fillRect(cx - 2, surfaceY + 1, 5, 1);
 }
 
-function drawTowel(ctx: CanvasRenderingContext2D, cx: number, surfaceY: number): void {
-  // Side-view beach towel: 22 px wide, 3 px tall, lying on the sand.
-  // Visible from the side as a flat striped strip with fringe at both ends.
-  const w = 22;
-  const x0 = cx - Math.floor(w / 2);
-  const y0 = surfaceY - 1;
-  const stripes = ["#3aa1c0", "#f4d35a", "#d96666", "#5fb09a", "#3aa1c0", "#f4d35a"];
-  // Towel face — top row brighter, bottom row shadowed for depth.
-  for (let i = 0; i < w; i++) {
-    const s = Math.floor((i / w) * stripes.length);
-    const col = stripes[Math.min(stripes.length - 1, s)];
-    ctx.fillStyle = col;
-    ctx.fillRect(x0 + i, y0 - 1, 1, 1);
-    ctx.fillStyle = withAlpha(col, 0.7);
-    ctx.fillRect(x0 + i, y0, 1, 1);
-  }
-  // Fringe pixels.
-  ctx.fillStyle = "#ece5cf";
-  ctx.fillRect(x0 - 1, y0 - 1, 1, 1);
-  ctx.fillRect(x0 - 1, y0, 1, 1);
-  ctx.fillRect(x0 + w, y0 - 1, 1, 1);
-  ctx.fillRect(x0 + w, y0, 1, 1);
-  // Sand shadow.
-  ctx.fillStyle = "rgba(40, 25, 10, 0.32)";
-  ctx.fillRect(x0, y0 + 1, w, 1);
-}
+function drawFoldoutChair(ctx: CanvasRenderingContext2D, layout: Layout, t: number): void {
+  // Side-view foldout (camp) chair. Each leg anchors to shoreYAt at an
+  // offset t so the seat naturally inherits the local slope; the back
+  // of the chair sits on the uphill side so a sitter would face the
+  // water.
+  const beachW = layout.beachW;
+  const backT = t - 0.04;
+  const frontT = t + 0.04;
+  const backLegX = Math.round(beachW * backT);
+  const frontLegX = Math.round(beachW * frontT);
+  const backBaseY = Math.round(shoreYAt(layout, backT));
+  const frontBaseY = Math.round(shoreYAt(layout, frontT));
 
-function drawSandcastle(ctx: CanvasRenderingContext2D, cx: number, surfaceY: number): void {
-  // Side-view sandcastle: ~16 px wide, ~14 px tall, three towers + keep
-  // with crenellations and a small flag on top. Anchored so the base sits
-  // at surfaceY (the bottom of the castle is on the sand).
-  const sand = "#b8893f";
-  const sandLight = "#e8c47a";
-  const sandShadow = "#6e4d22";
-  const w = 16;
-  const x0 = cx - Math.floor(w / 2);
-  const baseY = surfaceY - 4;
-  // Base block.
-  ctx.fillStyle = sand;
-  ctx.fillRect(x0, baseY, w, 4);
-  ctx.fillStyle = sandLight;
-  ctx.fillRect(x0, baseY, w, 1);
-  ctx.fillStyle = sandShadow;
-  ctx.fillRect(x0, baseY + 3, w, 1);
-  // Left tower.
-  ctx.fillStyle = sand;
-  ctx.fillRect(x0, baseY - 6, 3, 6);
-  ctx.fillStyle = sandLight;
-  ctx.fillRect(x0, baseY - 6, 1, 6);
-  // Right tower.
-  ctx.fillStyle = sand;
-  ctx.fillRect(x0 + w - 3, baseY - 6, 3, 6);
-  ctx.fillStyle = sandLight;
-  ctx.fillRect(x0 + w - 3, baseY - 6, 1, 6);
-  // Centre keep — taller.
-  const keepX = x0 + Math.floor(w / 2) - 2;
-  ctx.fillStyle = sand;
-  ctx.fillRect(keepX, baseY - 9, 5, 9);
-  ctx.fillStyle = sandLight;
-  ctx.fillRect(keepX, baseY - 9, 1, 9);
-  ctx.fillStyle = sandShadow;
-  ctx.fillRect(keepX + 4, baseY - 9, 1, 9);
-  // Crenellations.
-  ctx.fillStyle = sand;
-  for (const cx2 of [x0, x0 + 2, x0 + w - 3, x0 + w - 1]) {
-    ctx.fillRect(cx2, baseY - 7, 1, 1);
+  const frame = "#3a2410";
+  const fabric = "#2a4a6a";
+  const fabricLight = "#3a6a9a";
+
+  // Legs: 1 px wide × 6 px tall, anchored to the sand surface at each x.
+  const legHeight = 6;
+  const backTopY = backBaseY - legHeight;
+  const frontTopY = frontBaseY - legHeight;
+  ctx.fillStyle = frame;
+  for (let dy = 0; dy <= legHeight; dy++) {
+    ctx.fillRect(backLegX, backBaseY - dy, 1, 1);
+    ctx.fillRect(frontLegX, frontBaseY - dy, 1, 1);
   }
-  for (const cx2 of [keepX, keepX + 2, keepX + 4]) {
-    ctx.fillRect(cx2, baseY - 10, 1, 1);
+
+  // Seat fabric: linearly interpolated 2-px line between the leg tops.
+  // Round-stepped per column so it reads crisply at pixel scale.
+  const dx = frontLegX - backLegX;
+  if (dx > 0) {
+    for (let x = backLegX + 1; x <= frontLegX - 1; x++) {
+      const u = (x - backLegX) / dx;
+      const y = Math.round(backTopY + (frontTopY - backTopY) * u);
+      if (y - 1 >= 0) {
+        ctx.fillStyle = fabricLight;
+        ctx.fillRect(x, y - 1, 1, 1);
+      }
+      ctx.fillStyle = fabric;
+      ctx.fillRect(x, y, 1, 1);
+    }
   }
-  // Door arch on the front of the keep.
-  ctx.fillStyle = sandShadow;
-  ctx.fillRect(keepX + 2, baseY - 2, 1, 2);
-  ctx.fillRect(keepX + 1, baseY - 1, 3, 1);
-  // Flag pole + flag on the keep.
-  ctx.fillStyle = "#3a2410";
-  ctx.fillRect(keepX + 2, baseY - 12, 1, 3);
-  ctx.fillStyle = "#d44a3a";
-  ctx.fillRect(keepX + 3, baseY - 12, 3, 1);
-  ctx.fillRect(keepX + 3, baseY - 11, 2, 1);
-  // Cast shadow on the sand.
-  ctx.fillStyle = "rgba(40, 25, 10, 0.3)";
-  ctx.fillRect(x0 - 1, surfaceY, w + 2, 1);
+
+  // Backrest: 4 px wide × 7 px tall — 2-column frame post on the back
+  // leg, with a 2-column fabric inset alongside it.
+  const backrestH = 7;
+  ctx.fillStyle = frame;
+  ctx.fillRect(backLegX, backTopY - backrestH, 1, backrestH);
+  ctx.fillRect(backLegX + 1, backTopY - backrestH, 1, backrestH);
+  ctx.fillStyle = fabric;
+  ctx.fillRect(backLegX + 2, backTopY - backrestH + 1, 2, backrestH - 1);
+  ctx.fillStyle = fabricLight;
+  ctx.fillRect(backLegX + 2, backTopY - backrestH + 1, 2, 1);
+
+  // Sand shadow: short row beneath the chair, following the slope.
+  ctx.fillStyle = "rgba(40, 25, 10, 0.32)";
+  if (dx > 0) {
+    for (let x = backLegX - 1; x <= frontLegX + 1; x++) {
+      const u = Math.max(0, Math.min(1, (x - backLegX) / dx));
+      const y = Math.round(backBaseY + (frontBaseY - backBaseY) * u) + 1;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
 }
 
 function drawDeco(
@@ -1206,34 +1202,44 @@ function drawShoreChop(
   t: number,
   intensity: number,
 ): void {
-  const { beachW } = layout;
+  const { beachW, seaMeanY, waveAmpMaxPx } = layout;
   if (beachW <= 0) return;
 
-  // 1. Three-row foam band along the bank/water boundary. Each row gets a
-  // coordinated wobble so the band rolls together rather than flickering.
+  // 1. Three-row foam band along the bank/water boundary. The loop
+  // starts past the dune crest plateau (shoreYAt's flat top ends at
+  // t=0.45) so foam never paints on the inland rise, and a geometric
+  // check keeps it off the dry upper descent — only the lower seaward
+  // face where waves can actually reach gets a foam line.
   const wobblePhase = t * 1.8;
   const ampBase = 1.0 + intensity * 1.4;
-  for (let x = 0; x < beachW + 12; x++) {
-    const local = x < beachW ? x / beachW : 1;
-    const bankY = shoreYAt(layout, local);
+  const dryThreshold = seaMeanY - waveAmpMaxPx - 2;
+  const seawardStart = Math.round(beachW * 0.45);
+  for (let x = seawardStart; x <= beachW; x++) {
+    const bankY = shoreYAt(layout, x / beachW);
+    if (bankY < dryThreshold) continue;
     const wobble =
       Math.sin(x * 0.32 + wobblePhase) * ampBase +
       Math.sin(x * 0.18 - wobblePhase * 0.7 + 1.4) * ampBase * 0.45;
     // Top row of foam: brightest, sits 1–2 px below the bank line.
     const yTop = Math.max(Math.round(bankY) + 1, Math.round(bankY + 1 + wobble));
     if (yTop >= 0 && yTop < h) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.fillStyle = "rgba(255, 255, 255, 1.0)";
       ctx.fillRect(x, yTop, 1, 1);
     }
     // Mid foam: lightly cooler, denser fill.
     if (yTop + 1 < h) {
-      ctx.fillStyle = "rgba(228, 240, 250, 0.78)";
+      ctx.fillStyle = "rgba(228, 240, 250, 0.85)";
       ctx.fillRect(x, yTop + 1, 1, 1);
     }
     // Trailing wash: faint blue-white that tapers off into the sea.
     if (yTop + 2 < h) {
-      ctx.fillStyle = "rgba(190, 220, 240, 0.45)";
+      ctx.fillStyle = "rgba(190, 220, 240, 0.55)";
       ctx.fillRect(x, yTop + 2, 1, 1);
+    }
+    // Outer wash: thinnest tail blending into the swell.
+    if (yTop + 3 < h) {
+      ctx.fillStyle = "rgba(170, 205, 230, 0.32)";
+      ctx.fillRect(x, yTop + 3, 1, 1);
     }
   }
 
@@ -1759,13 +1765,13 @@ export function HeaderActivityViz() {
         drawStars(ctx, w, h, t, nightAlpha * (scene === "clear" ? 1 : 0.55));
       }
 
-      // 3. Celestial body — sun by day, moon by night, hidden when overcast.
+      // 3. Celestial body — sun by day, moon by night. Always drawn so
+      // the sky never feels empty; clouds and fog still layer over the
+      // top to partially obscure them.
+      if (phase.isNight) drawMoon(ctx, w, h, t);
+      else drawSun(ctx, w, h, t);
       if (scene === "clouds" || scene === "rain" || scene === "storm") {
         drawClouds(ctx, cloudsRef, w, h, dtSec, scene);
-      }
-      if (scene === "clear" || scene === "snow") {
-        if (phase.isNight) drawMoon(ctx, w, h, t);
-        else drawSun(ctx, w, h, t);
       }
       if (scene === "fog") {
         drawFog(ctx, w, h, t);
