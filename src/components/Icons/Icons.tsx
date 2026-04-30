@@ -483,6 +483,17 @@ export function IconShieldCheck(props: IconProps) {
   );
 }
 
+/** Square with arrow exiting top-right — open externally */
+export function IconExternalLink(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 2.5h4.5V7" />
+      <path d="M13.5 2.5L7.5 8.5" />
+      <path d="M12 9v3.5a1 1 0 01-1 1H3.5a1 1 0 01-1-1V5a1 1 0 011-1H7" />
+    </Icon>
+  );
+}
+
 /** Angle brackets and slash — code/brand mark */
 export function IconCode(props: IconProps) {
   return (

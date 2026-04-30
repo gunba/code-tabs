@@ -1,6 +1,8 @@
 /* ============================================================
    ActivityPanel — Agent file explorer side panel
-   Hierarchical tree view showing files agents have visited.
+   Header (storyteller mascot + narration) over a hierarchical
+   tree of files agents have visited, with click-to-expand
+   inline diffs, footprint trail, and active-row accent rail.
    ============================================================ */
 
 /* -- Panel container -- */
@@ -15,6 +17,145 @@
   overflow: hidden;
 }
 
+/* -- Header band -- */
+
+.activity-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 12px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-family: var(--font-ui);
+  position: relative;
+}
+
+.activity-panel-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 35%, transparent) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.activity-panel-header-mascot {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.activity-panel-header-glow {
+  position: absolute;
+  inset: -6px;
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--accent) 40%, transparent) 0%,
+    transparent 65%
+  );
+  border-radius: 50%;
+  pointer-events: none;
+  animation: panel-header-glow-pulse 4s ease-in-out infinite;
+}
+
+@keyframes panel-header-glow-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.08); }
+}
+
+.activity-panel-header-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.activity-panel-header-narration {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+
+.panel-header-verb {
+  color: var(--text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.panel-header-target {
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Tint chip background by kind. */
+.panel-header-target.file-tree-kind-created {
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+  color: var(--success);
+}
+.panel-header-target.file-tree-kind-modified {
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: var(--warning);
+}
+.panel-header-target.file-tree-kind-deleted {
+  background: color-mix(in srgb, var(--error) 18%, transparent);
+  color: var(--error);
+}
+.panel-header-target.file-tree-kind-read {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-secondary);
+}
+.panel-header-target.file-tree-kind-searched {
+  background: color-mix(in srgb, var(--info) 16%, transparent);
+  color: var(--info);
+}
+
+.panel-header-detail {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 11.5px;
+  flex-shrink: 0;
+}
+
+.activity-panel-header-path {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mono utility: paths and code spans inside the (otherwise Inter) panel. */
+.file-tree-path-mono {
+  font-family: var(--font-mono);
+}
+
 /* -- Body (scrollable) -- */
 
 .activity-panel-body {
@@ -22,12 +163,14 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.15;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.35;
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) transparent;
   background: var(--bg-surface);
+  position: relative;
+  padding: 4px 0;
 }
 
 .activity-panel-body::-webkit-scrollbar { width: 5px; }
@@ -36,35 +179,77 @@
 
 /* -- File tree rows -- */
 
+.file-tree-row-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
 .file-tree-row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   padding: 0 8px;
   cursor: pointer;
-  transition: background 0.1s;
-  min-height: 18px;
-  line-height: 1.2;
+  transition: background 0.1s ease;
+  min-height: 22px;
+  line-height: 1.3;
   user-select: none;
   position: relative;
 }
 
+/* Indent guide lines aligned to INDENT_STEP=16px. Width = depth * 16px set
+   per-row via --indent-width inline style. */
+.file-tree-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--indent-width, 0);
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent 15px,
+    color-mix(in srgb, var(--border-subtle) 75%, transparent) 15px,
+    color-mix(in srgb, var(--border-subtle) 75%, transparent) 16px
+  );
+  pointer-events: none;
+  opacity: 0.7;
+}
+
 .file-tree-row:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-surface));
+  background: color-mix(in srgb, var(--text-primary) 7%, var(--bg-surface));
+}
+
+.file-tree-row:hover .file-tree-open-btn {
+  opacity: 1;
+}
+
+/* Active row: clay rail on the left edge when the floating mascot is here. */
+.file-tree-row-active {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface));
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.file-tree-row-active:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+}
+
+.file-tree-row-expanded {
+  background: color-mix(in srgb, var(--text-primary) 5%, var(--bg-surface));
 }
 
 /* Chevron for folder expand/collapse */
 .file-tree-chevron {
-  font-size: 14px;
+  font-size: 11px;
   color: var(--text-muted);
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
-  transition: transform 0.15s;
+  transition: transform 0.15s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  text-align: center;
 }
 
 .file-tree-chevron.collapsed {
@@ -84,7 +269,7 @@
 
 /* Name text */
 .file-tree-name {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -94,9 +279,9 @@
 .file-tree-foldername {
   color: var(--text-secondary);
   font-weight: 500;
+  font-size: 12.5px;
 }
 
-/* Workspace root folder: accent-colored to distinguish from regular folders */
 .file-tree-workspace-root .file-tree-foldername {
   color: var(--accent);
   font-weight: 600;
@@ -109,26 +294,93 @@
 .file-tree-filename {
   color: var(--text-primary);
   font-weight: 400;
+  font-size: 12.5px;
 }
 
-/* Multi-agent count badge — Claude-themed (subagents are always Claude). */
 .file-tree-agent-count {
-  font-size: 9px;
+  font-size: 9.5px;
   padding: 0 4px;
   border-radius: 4px;
   color: var(--cli-claude);
   background: color-mix(in srgb, var(--cli-claude) 10%, var(--bg-surface));
   flex-shrink: 0;
   font-weight: 500;
+  font-family: var(--font-ui);
 }
+
+/* -- Right-side metadata cluster -- */
+
+.file-tree-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-family: var(--font-ui);
+}
+
+.file-tree-delta {
+  display: inline-flex;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.file-tree-delta-added { color: var(--success); }
+.file-tree-delta-removed { color: var(--error); }
+
+.file-tree-ts {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.file-tree-open-btn {
+  background: transparent;
+  border: none;
+  padding: 2px;
+  margin: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.file-tree-open-btn:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Hide trailing metadata progressively when row is narrow */
+@container (max-width: 240px) {
+  .file-tree-ts { display: none; }
+}
+@container (max-width: 200px) {
+  .file-tree-delta { display: none; }
+}
+
+.activity-panel-body { container-type: inline-size; }
 
 /* -- File state indicators -- */
 
-.file-tree-kind-created  { color: var(--success) !important; }
-.file-tree-kind-modified { color: var(--warning) !important; }
-.file-tree-kind-deleted  { color: var(--error) !important; opacity: 0.7; text-decoration: line-through; }
-.file-tree-kind-read     { color: var(--text-secondary) !important; }
-.file-tree-kind-searched { color: var(--info) !important; }
+.file-tree-kind-created  { color: var(--success); }
+.file-tree-kind-modified { color: var(--warning); }
+.file-tree-kind-deleted  { color: var(--error); opacity: 0.7; text-decoration: line-through; }
+.file-tree-kind-read     { color: var(--text-secondary); }
+.file-tree-kind-searched { color: var(--info); }
+
+/* These rules need to override the base name colors. */
+.file-tree-filename.file-tree-kind-created  { color: var(--success); }
+.file-tree-filename.file-tree-kind-modified { color: var(--warning); }
+.file-tree-filename.file-tree-kind-deleted  { color: var(--error); }
+.file-tree-filename.file-tree-kind-read     { color: var(--text-secondary); }
+.file-tree-filename.file-tree-kind-searched { color: var(--info); }
 
 /* Searched folder: color the icon + name blue */
 .file-tree-folder.file-tree-searched .file-tree-foldername {
@@ -138,6 +390,91 @@
   color: var(--info);
 }
 
+/* -- Inline diff card (click-to-expand) -- */
+
+.file-tree-diff-card {
+  margin: 4px 8px 6px 8px;
+  padding: 6px 8px 6px 12px;
+  border-left: 2px solid var(--accent);
+  background: var(--bg-primary);
+  border-radius: 0 4px 4px 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.file-tree-diff-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  padding: 4px 8px 4px 12px;
+}
+
+.file-tree-diff-empty-text {
+  display: inline-block;
+}
+
+.file-tree-diff-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-tree-diff-line {
+  display: flex;
+  gap: 8px;
+  white-space: pre;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.file-tree-diff-gutter {
+  width: 12px;
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: 600;
+  user-select: none;
+  color: var(--text-muted);
+}
+
+.file-tree-diff-text {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.file-tree-diff-context .file-tree-diff-text {
+  color: var(--text-secondary);
+}
+
+.file-tree-diff-added {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+.file-tree-diff-added .file-tree-diff-gutter,
+.file-tree-diff-added .file-tree-diff-text {
+  color: var(--success);
+}
+
+.file-tree-diff-removed {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+.file-tree-diff-removed .file-tree-diff-gutter,
+.file-tree-diff-removed .file-tree-diff-text {
+  color: var(--error);
+}
+
+/* -- Footprints (recent main-agent positions) -- */
+
+.activity-footprint {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, var(--accent) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 1;
+  transition: top 0.3s ease, left 0.15s ease, opacity 0.4s ease;
+}
 
 /* -- Floating mascot for travel animation -- */
 
@@ -169,10 +506,32 @@
   font-size: 12px;
   text-align: center;
   padding: 24px 12px;
+  font-family: var(--font-ui);
 }
 
 .activity-panel-empty-icon {
   opacity: 0.4;
+}
+
+.activity-panel-empty-rich {
+  gap: 14px;
+}
+
+.activity-panel-empty-rich .agent-mascot {
+  opacity: 0.85;
+}
+
+.activity-panel-empty-title {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.activity-panel-empty-sub {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  max-width: 240px;
+  line-height: 1.4;
 }
 
 /* ============================================================
@@ -191,9 +550,6 @@
   image-rendering: crisp-edges;
 }
 
-/* Subagent variant: an inline SVG (AgentTypeIcon) sits in place of the mascot
-   image. Center it in the slot and tint with the Claude palette so the icon
-   reads consistently with the subagent cards. */
 .agent-mascot-icon {
   display: inline-flex;
   align-items: center;
@@ -206,7 +562,6 @@
   height: 100%;
 }
 
-/* Overlay icon (eye, pencil) positioned bottom-right of mascot */
 .agent-mascot-overlay {
   position: absolute;
   bottom: -1px;
@@ -219,7 +574,6 @@
 
 /* -- Animation states -- */
 
-/* Reading and writing: unified rocking motion anchored at left edge */
 .agent-mascot-reading .agent-mascot-img,
 .agent-mascot-writing .agent-mascot-img,
 .agent-mascot-searching .agent-mascot-img {
@@ -232,7 +586,6 @@
   100% { transform: rotate(8deg); }
 }
 
-/* Moving: hop (single play) */
 .agent-mascot-moving .agent-mascot-img {
   animation: mascot-hop 0.35s ease-out;
 }
@@ -243,7 +596,6 @@
   100% { transform: translateY(0); }
 }
 
-/* Idle: subtle bob */
 .agent-mascot-idle .agent-mascot-img {
   animation: mascot-bob 3s steps(8) infinite;
 }
@@ -253,13 +605,10 @@
   50% { transform: translateY(-1px); }
 }
 
-/* Subagents render with the same Claude-orange tone as the main agent — only
-   dim them slightly so a row with several mascots reads as a hierarchy. */
 .agent-mascot-subagent .agent-mascot-img {
   opacity: 0.85;
 }
 
-/* Completed agent: dimmed to indicate no longer active */
 .agent-mascot-completed {
   opacity: 0.4;
 }
