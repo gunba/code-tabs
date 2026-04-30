@@ -158,10 +158,15 @@
 }
 
 .tab-cli-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
   font-family: var(--font-ui);
   font-size: 9px;
   font-weight: 700;
-  line-height: 13px;
+  line-height: 0;
   flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
