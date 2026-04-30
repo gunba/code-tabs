@@ -104,6 +104,10 @@ export class TapMetadataAccumulator {
   private lastTurnOutputTokens = 0;
   // Sidechain tracking: true when processing subagent events, prevents TurnStart from overwriting main context
   private sidechainActive = false;
+  // [IN-34] Subagent-in-flight gate: covers the SubagentSpawn-to-first-sidechain-message window
+  // where a subagent's SSE TurnStart can arrive before sidechainActive is raised.
+  // Set externally via setSubagentInFlight() each event from tapSubagentTracker.isSubagentInFlight().
+  private subagentInFlight = false;
   // Dedup: skip consecutive identical ApiTelemetry (stringify can serialize the same object multiple times)
   private lastTelemetryKey = "";
   // TAP pipeline expansion
@@ -128,6 +132,13 @@ export class TapMetadataAccumulator {
   private messagesChanged = false;
   private worktreeInfo: SessionMetadata["worktreeInfo"] = null;
   private statusLine: SessionMetadata["statusLine"] = null;
+
+  /** Latch the subagent-in-flight signal from tapSubagentTracker.isSubagentInFlight()
+   *  before each process() call. Used to gate TurnStart model updates during the
+   *  SubagentSpawn-to-first-sidechain-message window. */
+  setSubagentInFlight(flag: boolean): void {
+    this.subagentInFlight = flag;
+  }
 
   /** Process an event and return a metadata diff, or null if unchanged. */
   process(event: TapEvent): Partial<SessionMetadata> | null {
@@ -163,8 +174,12 @@ export class TapMetadataAccumulator {
         // (IN-14) blocked subagent overwrite but also blocked the main conversation
         // model from correcting a title-gen sidecar's Haiku model — the Haiku
         // message_start arrives before Opus since it's a faster/smaller call.
-        // Sidechain gating already handles subagent isolation.
-        if (event.model && !this.sidechainActive) this.runtimeModel = event.model;
+        // sidechainActive alone is insufficient: the subagent's SSE message_start
+        // arrives before any sidechain ConversationMessage flips the flag, so we
+        // also gate on the subagentInFlight signal sourced from tapSubagentTracker.
+        if (event.model && !this.sidechainActive && !this.subagentInFlight) {
+          this.runtimeModel = event.model;
+        }
         // Only update from main session turns (not subagent sidechain turns)
         if (!this.sidechainActive) {
           this.lastCacheRead = event.cacheRead;
@@ -713,6 +728,7 @@ export class TapMetadataAccumulator {
     this.tokPerSec = 0;
     this.lastTurnOutputTokens = 0;
     this.sidechainActive = false;
+    this.subagentInFlight = false;
     this.lastTelemetryKey = "";
     this.linesAdded = 0;
     this.linesRemoved = 0;

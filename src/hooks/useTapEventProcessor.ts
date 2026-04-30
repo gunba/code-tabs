@@ -170,7 +170,24 @@ export function useTapEventProcessor(
       const suppressSubagentWorktreeEvent =
         worktreeSync.shouldSuppressSubagentWorktreeEvent(event, subTracker);
 
-      // 2. Metadata accumulator
+      // 2. Subagent tracker — must run before the metadata accumulator so the
+      // subagent in-flight signal reflects this event when metaAcc gates TurnStart
+      // model updates. Covers the SubagentSpawn-to-first-sidechain-message window
+      // where a subagent's SSE TurnStart can otherwise leak its model into the parent.
+      const subActions = subTracker.process(event);
+      for (const action of subActions) {
+        if (action.type === "add" && action.subagent) {
+          dlog("inspector", sid, `subagent discovered id=${action.subagent.id} desc="${action.subagent.description}"`, "DEBUG");
+          addSubagent(sid, action.subagent);
+        } else if (action.type === "update" && action.subagentId && action.updates) {
+          updateSubagent(sid, action.subagentId, action.updates);
+        }
+      }
+
+      // 3. Metadata accumulator
+      // [IN-34] Latch subagent in-flight signal from tapSubagentTracker before metaAcc gates
+      // runtimeModel updates on TurnStart — closes SSE-vs-JSONL race for the parent's model display.
+      metaAcc.setSubagentInFlight(subTracker.isSubagentInFlight());
       const metaDiff = suppressSubagentWorktreeEvent ? null : metaAcc.process(event);
       if (suppressSubagentWorktreeEvent) {
         dlog("tap", sid, `${event.kind} suppressed — subagent in flight`, "DEBUG");
@@ -214,17 +231,6 @@ export function useTapEventProcessor(
             contextWindowSize: event.contextWindowSize,
             lastSeenAt: Date.now(),
           });
-        }
-      }
-
-      // 3. Subagent tracker
-      const subActions = subTracker.process(event);
-      for (const action of subActions) {
-        if (action.type === "add" && action.subagent) {
-          dlog("inspector", sid, `subagent discovered id=${action.subagent.id} desc="${action.subagent.description}"`, "DEBUG");
-          addSubagent(sid, action.subagent);
-        } else if (action.type === "update" && action.subagentId && action.updates) {
-          updateSubagent(sid, action.subagentId, action.updates);
         }
       }
 

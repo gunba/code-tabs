@@ -281,6 +281,65 @@ describe("TapMetadataAccumulator queryDepth filtering", () => {
     } as TapEvent);
     expect(diff2!.runtimeModel).toBe("claude-opus-4-6");
   });
+
+  it("subagent TurnStart before sidechain ConversationMessage does not overwrite (uses subagentInFlight gate)", () => {
+    // Real ordering: SubagentSpawn raises in-flight before subagent's SSE message_start
+    // arrives. The first sidechain ConversationMessage lands AFTER the subagent's TurnStart
+    // because the JSONL transcript is persisted only after the message completes.
+    const acc = new TapMetadataAccumulator();
+
+    // 1. Parent Opus TurnStart sets the model
+    acc.setSubagentInFlight(false);
+    const diff1 = acc.process({
+      kind: "TurnStart", ts: 1, model: "claude-opus-4-7",
+      inputTokens: 1000, outputTokens: 0, cacheRead: 500, cacheCreation: 0,
+    } as TapEvent);
+    expect(diff1!.runtimeModel).toBe("claude-opus-4-7");
+
+    // 2. SubagentSpawn arrives — subTracker would now report isSubagentInFlight()=true
+    acc.setSubagentInFlight(true);
+    acc.process({
+      kind: "SubagentSpawn", ts: 1.5,
+      description: "Search for X", prompt: "Find all references to ...",
+    } as TapEvent);
+
+    // 3. Subagent's Haiku message_start arrives BEFORE any sidechain ConversationMessage —
+    //    this is the race window the bug exploited
+    acc.setSubagentInFlight(true);
+    const diff3 = acc.process({
+      kind: "TurnStart", ts: 2, model: "claude-haiku-4-5-20251001",
+      inputTokens: 100, outputTokens: 0, cacheRead: 0, cacheCreation: 0,
+    } as TapEvent);
+    expect(diff3!.runtimeModel).toBe("claude-opus-4-7");
+
+    // 4. Sidechain ConversationMessage finally arrives, then more subagent activity
+    acc.setSubagentInFlight(true);
+    acc.process({
+      kind: "ConversationMessage", ts: 2.5, isSidechain: true,
+      messageType: "assistant", toolAction: null, toolNames: [],
+      textSnippet: "", hasToolError: false, toolErrorText: null,
+      agentId: "agent-1", uuid: null, parentUuid: null, promptId: null,
+      stopReason: null, cwd: null, toolResultSnippets: null,
+    } as TapEvent);
+
+    // 5. Subagent ends; parent resumes — sidechainActive flips false, in-flight clears
+    acc.setSubagentInFlight(false);
+    acc.process({
+      kind: "ConversationMessage", ts: 3, isSidechain: false,
+      messageType: "user", toolAction: null, toolNames: [],
+      textSnippet: "", hasToolError: false, toolErrorText: null,
+      agentId: null, uuid: null, parentUuid: null, promptId: null,
+      stopReason: null, cwd: null, toolResultSnippets: null,
+    } as TapEvent);
+
+    // 6. Parent's next TurnStart confirms model is still Opus throughout
+    acc.setSubagentInFlight(false);
+    const diff6 = acc.process({
+      kind: "TurnStart", ts: 4, model: "claude-opus-4-7",
+      inputTokens: 1100, outputTokens: 0, cacheRead: 600, cacheCreation: 0,
+    } as TapEvent);
+    expect(diff6!.runtimeModel).toBe("claude-opus-4-7");
+  });
 });
 
 // ── Tool name prefix stripping ──
