@@ -32,7 +32,9 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::SystemTime;
 
-use notify::{EventKind, RecursiveMode, Watcher};
+use notify::{EventKind, RecursiveMode};
+#[cfg(not(target_os = "windows"))]
+use notify::Watcher as _;
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::Emitter;
@@ -43,12 +45,40 @@ use crate::observability::record_backend_event;
 
 const MAX_CONCURRENT_TAILS: usize = 64;
 const MAX_QUARANTINE_LINE_BYTES: usize = 1024;
+#[cfg(target_os = "windows")]
+const WINDOWS_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(750);
 static TAIL_SEMAPHORE: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 fn tail_semaphore() -> Arc<Semaphore> {
     TAIL_SEMAPHORE
         .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_TAILS)))
         .clone()
+}
+
+/// Build a notify watcher appropriate for the host OS. On Windows we use
+/// `PollWatcher` because `ReadDirectoryChangesW` (the backend behind
+/// `notify::recommended_watcher` on Windows) silently drops events for
+/// directories under OneDrive sync roots and other redirected/roaming
+/// profile paths — which is exactly where `~/.codex/sessions/...` lives
+/// for many corporate users. On Linux/macOS the platform-native backend
+/// (inotify / FSEvents) is reliable and is kept.
+// [CR-04] build_watcher: PollWatcher on Windows (WINDOWS_POLL_INTERVAL=750ms) / RecommendedWatcher elsewhere; works around ReadDirectoryChangesW silently dropping events on OneDrive-redirected ~/.codex
+fn build_watcher<F>(handler: F) -> notify::Result<Box<dyn notify::Watcher + Send>>
+where
+    F: notify::EventHandler,
+{
+    #[cfg(target_os = "windows")]
+    {
+        let cfg = notify::Config::default().with_poll_interval(WINDOWS_POLL_INTERVAL);
+        Ok(Box::new(notify::PollWatcher::new(handler, cfg)?))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(Box::new(notify::RecommendedWatcher::new(
+            handler,
+            notify::Config::default(),
+        )?))
+    }
 }
 
 struct RolloutDirWatcher {
@@ -77,12 +107,24 @@ impl RolloutDirWatcher {
     ) -> Result<Arc<Self>, String> {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<RolloutDirWatcherCommand>();
         let tx_for_notify = tx.clone();
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-            if let Ok(ev) = res {
+        let dir_for_log = dir.clone();
+        let mut watcher = build_watcher(move |res: notify::Result<notify::Event>| match res {
+            Ok(ev) => {
                 if matches!(ev.kind, EventKind::Create(_) | EventKind::Modify(_)) {
                     let _ =
                         tx_for_notify.send(RolloutDirWatcherCommand::Notify { paths: ev.paths });
                 }
+            }
+            Err(e) => {
+                // No AppHandle available here (the dir watcher is shared
+                // across sessions). At minimum surface the error to
+                // stderr so it's not completely silent — without this the
+                // OneDrive failure mode that motivated this watcher being
+                // PollWatcher on Windows would be invisible.
+                eprintln!(
+                    "codex.rollout dir watcher error on {dir:?}: {e}",
+                    dir = dir_for_log
+                );
             }
         })
         .map_err(|e| format!("notify watcher: {e}"))?;
@@ -104,7 +146,7 @@ impl RolloutDirWatcher {
 
 async fn run_rollout_dir_watcher(
     mut rx: tokio::sync::mpsc::UnboundedReceiver<RolloutDirWatcherCommand>,
-    _watcher: notify::RecommendedWatcher,
+    _watcher: Box<dyn notify::Watcher + Send>,
     claimed_rollouts: Arc<Mutex<HashSet<PathBuf>>>,
 ) {
     let mut interests: HashMap<u64, (SystemTime, tokio::sync::oneshot::Sender<PathBuf>)> =
@@ -460,7 +502,22 @@ async fn run_watcher(
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
 ) -> Result<(), String> {
     let dir = todays_sessions_dir().ok_or("could not resolve $CODEX_HOME/sessions/today")?;
+    let dir_existed_before = dir.exists();
     std::fs::create_dir_all(&dir).map_err(|e| format!("create rollout dir: {e}"))?;
+
+    record_backend_event(
+        &app,
+        "DEBUG",
+        "codex.rollout",
+        Some(&session_id),
+        "codex.rollout.watcher_armed",
+        "Codex rollout watcher armed",
+        serde_json::json!({
+            "dir": dir.to_string_lossy(),
+            "windows": cfg!(target_os = "windows"),
+            "dirExistedBefore": dir_existed_before,
+        }),
+    );
 
     // Try to attribute an existing fresh rollout first (handles the
     // race where Codex creates the file before our watcher arms).
@@ -577,10 +634,34 @@ async fn tail_rollout(
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let watch_path = path.to_path_buf();
-    let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if let Ok(ev) = res {
+    let app_for_notify = app.clone();
+    let session_id_for_notify = session_id.to_string();
+    let watch_path_for_notify = watch_path.clone();
+    let notify_err_seen = std::sync::atomic::AtomicBool::new(false);
+    let mut watcher = build_watcher(move |res: notify::Result<notify::Event>| match res {
+        Ok(ev) => {
             if matches!(ev.kind, EventKind::Modify(_) | EventKind::Create(_)) {
                 let _ = tx.send(());
+            }
+        }
+        Err(e) => {
+            // First failure per tail emits a backend event so it shows up
+            // in observability.jsonl alongside the other codex.rollout.*
+            // entries. Subsequent failures are swallowed to avoid log
+            // flooding when a backend is permanently unhappy.
+            if !notify_err_seen.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                record_backend_event(
+                    &app_for_notify,
+                    "WARN",
+                    "codex.rollout",
+                    Some(&session_id_for_notify),
+                    "codex.rollout.notify_error",
+                    "Notify watcher reported an error while tailing rollout",
+                    serde_json::json!({
+                        "path": watch_path_for_notify.to_string_lossy(),
+                        "error": e.to_string(),
+                    }),
+                );
             }
         }
     })
