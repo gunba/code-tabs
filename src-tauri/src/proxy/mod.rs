@@ -6,7 +6,7 @@
 //! What this module is: a localhost HTTP forwarder for Claude Code's
 //! `POST /v1/messages` traffic and Codex's OpenAI Responses traffic. It
 //! applies user-defined regex rules to Claude's `system` field or
-//! OpenAI's `instructions` field (PromptsTab) before forwarding to the
+//! Codex/OpenAI Responses prompt fields before forwarding to the
 //! original provider, and optionally tees request/response to a
 //! per-session `traffic.jsonl`. That's it.
 //!
@@ -31,7 +31,7 @@ use crate::observability::{
     record_backend_event, record_backend_perf_end, record_backend_perf_fail,
     record_backend_perf_start,
 };
-use crate::session::types::SystemPromptRule;
+use crate::session::types::{CliKind, SystemPromptRule};
 
 // ── Proxy state ──────────────────────────────────────────────────────
 
@@ -40,12 +40,12 @@ type ResponseHeaderObserver = Arc<dyn Fn(&reqwest::header::HeaderMap) + Send + S
 #[derive(Clone, Default)]
 struct CompiledRules {
     rules: Vec<CompiledRule>,
-    set: Option<regex::RegexSet>,
 }
 
 #[derive(Clone)]
 struct CompiledRule {
     id: String,
+    cli: CliKind,
     replacement: String,
     regex: regex::Regex,
 }
@@ -53,7 +53,6 @@ struct CompiledRule {
 impl CompiledRules {
     fn compile(rules: &[SystemPromptRule]) -> Result<Self, String> {
         let mut compiled = Vec::new();
-        let mut patterns = Vec::new();
         for rule in rules {
             if !rule.enabled || rule.pattern.is_empty() {
                 continue;
@@ -61,30 +60,18 @@ impl CompiledRules {
             let pattern = compile_pattern(rule);
             let regex = regex::Regex::new(&pattern)
                 .map_err(|e| format!("Invalid regex '{}': {}", rule.pattern, e))?;
-            patterns.push(pattern);
             compiled.push(CompiledRule {
                 id: rule.id.clone(),
+                cli: rule.cli,
                 replacement: rule.replacement.clone(),
                 regex,
             });
         }
-        let set = if patterns.is_empty() {
-            None
-        } else {
-            Some(regex::RegexSet::new(patterns).map_err(|e| format!("Invalid regex set: {e}"))?)
-        };
-        Ok(Self {
-            rules: compiled,
-            set,
-        })
+        Ok(Self { rules: compiled })
     }
 
     fn is_empty(&self) -> bool {
         self.rules.is_empty()
-    }
-
-    fn matches(&self, text: &str) -> bool {
-        self.set.as_ref().map_or(false, |set| set.is_match(text))
     }
 }
 
@@ -590,8 +577,12 @@ const ANTHROPIC_UPSTREAM_BASE_URL: &str = "https://api.anthropic.com";
 const OPENAI_UPSTREAM_BASE_URL: &str = "https://api.openai.com";
 const CHATGPT_UPSTREAM_BASE_URL: &str = "https://chatgpt.com";
 const LARGE_REWRITE_BODY_BYTES: usize = 64 * 1024;
+const CODEX_AGENTS_MD_START_MARKER: &str = "# AGENTS.md instructions for ";
+const CODEX_AGENTS_MD_END_MARKER: &str = "</INSTRUCTIONS>";
+const CODEX_SKILL_START_MARKER: &str = "<skill>";
+const CODEX_SKILL_END_MARKER: &str = "</skill>";
 
-// [SP-02] Per-request upstream resolver: anthropic / openai / chatgpt routing + path matchers + Responses API instructions rewrite (Codex/OpenAI Responses analog of Claude system field). ChatGpt covers the chatgpt.com/backend-api/codex endpoints used by Codex sessions authenticated via ChatGPT subscription; OpenAi covers api.openai.com/v1 used by API-key-authenticated sessions.
+// [SP-02] Per-request upstream resolver: anthropic / openai / chatgpt routing + path matchers + Responses API prompt rewrite (Codex/OpenAI Responses analog of Claude system field). ChatGpt covers the chatgpt.com/backend-api/codex endpoints used by Codex sessions authenticated via ChatGPT subscription; OpenAi covers api.openai.com/v1 used by API-key-authenticated sessions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum UpstreamKind {
     Anthropic,
@@ -752,9 +743,9 @@ async fn handle_connection(
         }
     }
 
-    // Apply prompt rewrite rules to the provider-native prompt field:
-    // Claude/Anthropic => `system`, OpenAI / ChatGPT Responses => `instructions`
-    // (same wire shape on both endpoints).
+    // Apply prompt rewrite rules to provider-native prompt fields:
+    // Claude/Anthropic => `system`; Codex/OpenAI Responses => top-level
+    // `instructions` plus developer/system input message text.
     let (final_body, matched_ids) = if rules.is_empty() || !rewritable_prompt_endpoint {
         (body, Vec::new())
     } else if body.len() > LARGE_REWRITE_BODY_BYTES {
@@ -1135,9 +1126,7 @@ fn rewrite_body_for_upstream(
 ) -> (Vec<u8>, Vec<String>) {
     match upstream {
         UpstreamKind::Anthropic => rewrite_system_prompt_in_body(body, rules),
-        UpstreamKind::OpenAi | UpstreamKind::ChatGpt => {
-            rewrite_openai_instructions_in_body(body, rules)
-        }
+        UpstreamKind::OpenAi | UpstreamKind::ChatGpt => rewrite_openai_prompt_in_body(body, rules),
     }
 }
 
@@ -1159,17 +1148,14 @@ fn rewrite_system_prompt_in_body(body: &[u8], rules: &CompiledRules) -> (Vec<u8>
         }
     };
     let mut matched: Vec<String> = Vec::new();
-    apply_rules_to_system_value(system, rules, &mut matched);
+    apply_rules_to_system_value(system, rules, CliKind::Claude, &mut matched);
     (
         serde_json::to_vec(&json).unwrap_or_else(|_| body.to_vec()),
         matched,
     )
 }
 
-fn rewrite_openai_instructions_in_body(
-    body: &[u8],
-    rules: &CompiledRules,
-) -> (Vec<u8>, Vec<String>) {
+fn rewrite_openai_prompt_in_body(body: &[u8], rules: &CompiledRules) -> (Vec<u8>, Vec<String>) {
     if rules.is_empty() {
         return (body.to_vec(), Vec::new());
     }
@@ -1177,12 +1163,16 @@ fn rewrite_openai_instructions_in_body(
         Ok(j) => j,
         Err(_) => return (body.to_vec(), Vec::new()),
     };
-    let instructions = match json.get_mut("instructions") {
-        Some(serde_json::Value::String(s)) => s,
-        _ => return (body.to_vec(), Vec::new()),
-    };
     let mut matched: Vec<String> = Vec::new();
-    *instructions = apply_rules_to_text(instructions, rules, &mut matched);
+    if let Some(serde_json::Value::String(instructions)) = json.get_mut("instructions") {
+        *instructions = apply_rules_to_text(instructions, rules, CliKind::Codex, &mut matched);
+    }
+    if let Some(input) = json.get_mut("input") {
+        apply_rules_to_openai_input(input, rules, &mut matched);
+    }
+    if matched.is_empty() {
+        return (body.to_vec(), Vec::new());
+    }
     (
         serde_json::to_vec(&json).unwrap_or_else(|_| body.to_vec()),
         matched,
@@ -1192,11 +1182,12 @@ fn rewrite_openai_instructions_in_body(
 fn apply_rules_to_system_value(
     system: &mut serde_json::Value,
     rules: &CompiledRules,
+    cli: CliKind,
     matched: &mut Vec<String>,
 ) {
     match system {
         serde_json::Value::String(s) => {
-            *s = apply_rules_to_text(s, rules, matched);
+            *s = apply_rules_to_text(s, rules, cli, matched);
         }
         serde_json::Value::Array(arr) => {
             for item in arr.iter_mut() {
@@ -1204,7 +1195,7 @@ fn apply_rules_to_system_value(
                     if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
                         if let Some(text_val) = obj.get_mut("text") {
                             if let serde_json::Value::String(ref mut s) = text_val {
-                                *s = apply_rules_to_text(s, rules, matched);
+                                *s = apply_rules_to_text(s, rules, cli, matched);
                             }
                         }
                     }
@@ -1215,13 +1206,82 @@ fn apply_rules_to_system_value(
     }
 }
 
-fn apply_rules_to_text(text: &str, rules: &CompiledRules, matched: &mut Vec<String>) -> String {
-    if text.is_empty() || !rules.matches(text) {
+fn apply_rules_to_openai_input(
+    input: &mut serde_json::Value,
+    rules: &CompiledRules,
+    matched: &mut Vec<String>,
+) {
+    let serde_json::Value::Array(items) = input else {
+        return;
+    };
+
+    for item in items.iter_mut() {
+        let Some(obj) = item.as_object_mut() else {
+            continue;
+        };
+        let role = obj.get("role").and_then(|v| v.as_str());
+        let rewrite_all_text_blocks = matches!(role, Some("developer" | "system"));
+        let rewrite_marked_user_blocks = role == Some("user");
+        if !rewrite_all_text_blocks && !rewrite_marked_user_blocks {
+            continue;
+        }
+        let Some(serde_json::Value::Array(content)) = obj.get_mut("content") else {
+            continue;
+        };
+        for block in content.iter_mut() {
+            let Some(block_obj) = block.as_object_mut() else {
+                continue;
+            };
+            if block_obj.get("type").and_then(|v| v.as_str()) != Some("input_text") {
+                continue;
+            }
+            if let Some(serde_json::Value::String(text)) = block_obj.get_mut("text") {
+                if !rewrite_all_text_blocks && !is_codex_contextual_prompt_user_text(text) {
+                    continue;
+                }
+                *text = apply_rules_to_text(text, rules, CliKind::Codex, matched);
+            }
+        }
+    }
+}
+
+fn is_codex_contextual_prompt_user_text(text: &str) -> bool {
+    matches_marked_contextual_text(
+        text,
+        CODEX_AGENTS_MD_START_MARKER,
+        CODEX_AGENTS_MD_END_MARKER,
+    ) || matches_marked_contextual_text(text, CODEX_SKILL_START_MARKER, CODEX_SKILL_END_MARKER)
+}
+
+fn matches_marked_contextual_text(text: &str, start_marker: &str, end_marker: &str) -> bool {
+    let trimmed_start = text.trim_start();
+    let starts_with_marker = trimmed_start
+        .get(..start_marker.len())
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(start_marker));
+    if !starts_with_marker {
+        return false;
+    }
+    let trimmed = trimmed_start.trim_end();
+    trimmed
+        .get(trimmed.len().saturating_sub(end_marker.len())..)
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(end_marker))
+}
+
+fn apply_rules_to_text(
+    text: &str,
+    rules: &CompiledRules,
+    cli: CliKind,
+    matched: &mut Vec<String>,
+) -> String {
+    if text.is_empty() {
         return text.to_string();
     }
 
     let mut result = Cow::Borrowed(text);
     for rule in &rules.rules {
+        if rule.cli != cli {
+            continue;
+        }
         let replaced = rule
             .regex
             .replace_all(result.as_ref(), rule.replacement.as_str());
@@ -1453,8 +1513,19 @@ mod tests {
     use super::*;
 
     fn make_rule(id: &str, pattern: &str, replacement: &str, enabled: bool) -> SystemPromptRule {
+        make_rule_for_cli(id, CliKind::Claude, pattern, replacement, enabled)
+    }
+
+    fn make_rule_for_cli(
+        id: &str,
+        cli: CliKind,
+        pattern: &str,
+        replacement: &str,
+        enabled: bool,
+    ) -> SystemPromptRule {
         SystemPromptRule {
             id: id.into(),
+            cli,
             name: id.into(),
             pattern: pattern.into(),
             flags: String::new(),
@@ -1595,8 +1666,14 @@ mod tests {
     #[test]
     fn test_rewrite_openai_instructions_prompt() {
         let body = br#"{"model":"gpt-5.2","instructions":"hello world","input":[]}"#;
-        let rules = compile_rules(vec![make_rule("r1", "hello", "goodbye", true)]);
-        let (out, matched) = rewrite_openai_instructions_in_body(body, &rules);
+        let rules = compile_rules(vec![make_rule_for_cli(
+            "r1",
+            CliKind::Codex,
+            "hello",
+            "goodbye",
+            true,
+        )]);
+        let (out, matched) = rewrite_openai_prompt_in_body(body, &rules);
         let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(v["instructions"], "goodbye world");
         assert_eq!(matched, vec!["r1".to_string()]);
@@ -1605,10 +1682,129 @@ mod tests {
     #[test]
     fn test_rewrite_openai_instructions_missing_is_noop() {
         let body = br#"{"model":"gpt-5.2","input":[]}"#;
-        let rules = compile_rules(vec![make_rule("r1", "hello", "goodbye", true)]);
-        let (out, matched) = rewrite_openai_instructions_in_body(body, &rules);
+        let rules = compile_rules(vec![make_rule_for_cli(
+            "r1",
+            CliKind::Codex,
+            "hello",
+            "goodbye",
+            true,
+        )]);
+        let (out, matched) = rewrite_openai_prompt_in_body(body, &rules);
         assert_eq!(out, body);
         assert!(matched.is_empty());
+    }
+
+    #[test]
+    fn test_rewrite_openai_developer_input_text() {
+        let body = br#"{"model":"gpt-5.2","instructions":"","input":[{"type":"message","role":"developer","content":[{"type":"input_text","text":"hello dev"}]}]}"#;
+        let rules = compile_rules(vec![make_rule_for_cli(
+            "r1",
+            CliKind::Codex,
+            "hello",
+            "goodbye",
+            true,
+        )]);
+        let (out, matched) = rewrite_openai_prompt_in_body(body, &rules);
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(v["input"][0]["content"][0]["text"], "goodbye dev");
+        assert_eq!(matched, vec!["r1".to_string()]);
+    }
+
+    #[test]
+    fn test_rewrite_openai_contextual_user_agents_text() {
+        let body = serde_json::to_vec(&serde_json::json!({
+            "model": "gpt-5.2",
+            "instructions": "",
+            "input": [{
+                "type": "message",
+                "role": "user",
+                "content": [{
+                    "type": "input_text",
+                    "text": "# AGENTS.md instructions for /repo\n\n<INSTRUCTIONS>\nhello context\n</INSTRUCTIONS>",
+                }],
+            }],
+        }))
+        .unwrap();
+        let rules = compile_rules(vec![make_rule_for_cli(
+            "r1",
+            CliKind::Codex,
+            "hello",
+            "goodbye",
+            true,
+        )]);
+        let (out, matched) = rewrite_openai_prompt_in_body(&body, &rules);
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(
+            v["input"][0]["content"][0]["text"],
+            "# AGENTS.md instructions for /repo\n\n<INSTRUCTIONS>\ngoodbye context\n</INSTRUCTIONS>"
+        );
+        assert_eq!(matched, vec!["r1".to_string()]);
+    }
+
+    #[test]
+    fn test_rewrite_openai_contextual_user_skill_text() {
+        let body = serde_json::to_vec(&serde_json::json!({
+            "model": "gpt-5.2",
+            "instructions": "",
+            "input": [{
+                "type": "message",
+                "role": "user",
+                "content": [{
+                    "type": "input_text",
+                    "text": "<skill>\n<name>demo</name>\n<path>/skills/demo/SKILL.md</path>\nhello skill\n</skill>",
+                }],
+            }],
+        }))
+        .unwrap();
+        let rules = compile_rules(vec![make_rule_for_cli(
+            "r1",
+            CliKind::Codex,
+            "hello",
+            "goodbye",
+            true,
+        )]);
+        let (out, matched) = rewrite_openai_prompt_in_body(&body, &rules);
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(
+            v["input"][0]["content"][0]["text"],
+            "<skill>\n<name>demo</name>\n<path>/skills/demo/SKILL.md</path>\ngoodbye skill\n</skill>"
+        );
+        assert_eq!(matched, vec!["r1".to_string()]);
+    }
+
+    #[test]
+    fn test_rewrite_openai_skips_user_input_text() {
+        let body = br#"{"model":"gpt-5.2","instructions":"","input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hello user"}]}]}"#;
+        let rules = compile_rules(vec![make_rule_for_cli(
+            "r1",
+            CliKind::Codex,
+            "hello",
+            "goodbye",
+            true,
+        )]);
+        let (out, matched) = rewrite_openai_prompt_in_body(body, &rules);
+        assert_eq!(out, body);
+        assert!(matched.is_empty());
+    }
+
+    #[test]
+    fn test_prompt_rules_are_scoped_by_cli() {
+        let claude_body = br#"{"model":"x","system":"hello claude","messages":[]}"#;
+        let codex_body = br#"{"model":"gpt-5.2","instructions":"hello codex","input":[]}"#;
+        let rules = compile_rules(vec![
+            make_rule("claude", "hello", "hi", true),
+            make_rule_for_cli("codex", CliKind::Codex, "hello", "hi", true),
+        ]);
+
+        let (claude_out, claude_matched) = rewrite_system_prompt_in_body(claude_body, &rules);
+        let claude_json: serde_json::Value = serde_json::from_slice(&claude_out).unwrap();
+        assert_eq!(claude_json["system"], "hi claude");
+        assert_eq!(claude_matched, vec!["claude".to_string()]);
+
+        let (codex_out, codex_matched) = rewrite_openai_prompt_in_body(codex_body, &rules);
+        let codex_json: serde_json::Value = serde_json::from_slice(&codex_out).unwrap();
+        assert_eq!(codex_json["instructions"], "hi codex");
+        assert_eq!(codex_matched, vec!["codex".to_string()]);
     }
 
     #[test]
@@ -1679,8 +1875,8 @@ mod tests {
     #[test]
     fn test_chatgpt_upstream_rewrites_instructions() {
         // Routing test: confirm a request targeted at the ChatGPT-codex
-        // Responses endpoint runs through the same instructions-rewrite
-        // path as the api.openai.com Responses endpoint.
+        // Responses endpoint runs through the same prompt-rewrite path as
+        // the api.openai.com Responses endpoint.
         let path = "/backend-api/codex/responses";
         let upstream = resolve_upstream(path).unwrap();
         assert_eq!(upstream, UpstreamKind::ChatGpt);
@@ -1692,8 +1888,14 @@ mod tests {
         assert!(rewritable);
 
         let body = br#"{"model":"gpt-5.2","instructions":"hello world","input":[]}"#;
-        let rules = compile_rules(vec![make_rule("r1", "hello", "goodbye", true)]);
-        let (out, matched) = rewrite_openai_instructions_in_body(body, &rules);
+        let rules = compile_rules(vec![make_rule_for_cli(
+            "r1",
+            CliKind::Codex,
+            "hello",
+            "goodbye",
+            true,
+        )]);
+        let (out, matched) = rewrite_openai_prompt_in_body(body, &rules);
         let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
         assert_eq!(v["instructions"], "goodbye world");
         assert_eq!(matched, vec!["r1".to_string()]);

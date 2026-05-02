@@ -146,6 +146,27 @@ describe("settings schema persistence", () => {
 
     expect(migrated.settingsSchemaByCli).toEqual({ claude: null, codex: null });
   });
+
+  it("duplicates legacy unscoped prompt rules into per-CLI rules during migration", () => {
+    const migrated = migrateSettings(
+      {
+        systemPromptRules: [{
+          id: "rule-1",
+          name: "Rule",
+          pattern: "Claude",
+          replacement: "Assistant",
+          flags: "g",
+          enabled: true,
+        }],
+      },
+      25,
+    ) as { systemPromptRules: Array<{ id: string; cli: string }> };
+
+    expect(migrated.systemPromptRules).toEqual([
+      expect.objectContaining({ id: "rule-1", cli: "claude" }),
+      expect.objectContaining({ id: "rule-1-codex", cli: "codex" }),
+    ]);
+  });
 });
 
 describe("addObservedPrompt", () => {
@@ -299,11 +320,17 @@ describe("systemPromptRules CRUD", () => {
     const rules = useSettingsStore.getState().systemPromptRules;
     expect(rules).toHaveLength(1);
     expect(rules[0].name).toBe("New Rule");
+    expect(rules[0].cli).toBe("claude");
     expect(rules[0].pattern).toBe("");
     expect(rules[0].replacement).toBe("");
     expect(rules[0].flags).toBe("g");
     expect(rules[0].enabled).toBe(true);
     expect(rules[0].id).toBeTruthy();
+  });
+
+  it("addSystemPromptRule accepts a Codex scope", () => {
+    useSettingsStore.getState().addSystemPromptRule("codex");
+    expect(useSettingsStore.getState().systemPromptRules[0].cli).toBe("codex");
   });
 
   it("updateSystemPromptRule modifies matching rule", () => {
@@ -340,6 +367,23 @@ describe("systemPromptRules CRUD", () => {
     const reordered = useSettingsStore.getState().systemPromptRules;
     expect(reordered[0].id).toBe(secondId);
     expect(reordered[1].id).toBe(firstId);
+  });
+
+  it("reorderSystemPromptRules only swaps within a rule's CLI scope", () => {
+    const store = useSettingsStore.getState();
+    store.addSystemPromptRule("claude");
+    store.addSystemPromptRule("codex");
+    store.addSystemPromptRule("claude");
+
+    let rules = useSettingsStore.getState().systemPromptRules;
+    const firstClaudeId = rules[0].id;
+    const codexId = rules[1].id;
+    const secondClaudeId = rules[2].id;
+
+    store.reorderSystemPromptRules(secondClaudeId, -1);
+    rules = useSettingsStore.getState().systemPromptRules;
+
+    expect(rules.map((r) => r.id)).toEqual([secondClaudeId, codexId, firstClaudeId]);
   });
 
   it("reorderSystemPromptRules is a no-op at boundaries", () => {

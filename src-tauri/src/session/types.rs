@@ -231,6 +231,8 @@ fn default_true() -> bool {
 #[serde(rename_all = "camelCase")]
 pub struct SystemPromptRule {
     pub id: String,
+    #[serde(default)]
+    pub cli: CliKind,
     pub name: String,
     pub pattern: String,
     pub replacement: String,

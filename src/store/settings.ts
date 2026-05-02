@@ -507,9 +507,11 @@ export const useSettingsStore = create<SettingsState>()(
 
       setProxyPort: (port) => set({ proxyPort: port }),
 
-      addSystemPromptRule: () => set((s) => ({
+      // [CM-35] Prompt rewrite rules are CLI-scoped; migration v26 duplicates legacy unscoped rules.
+      addSystemPromptRule: (cli = "claude") => set((s) => ({
         systemPromptRules: [...s.systemPromptRules, {
           id: crypto.randomUUID(),
+          cli,
           name: "New Rule",
           pattern: "",
           replacement: "",
@@ -538,8 +540,15 @@ export const useSettingsStore = create<SettingsState>()(
         set((s) => {
           const idx = s.systemPromptRules.findIndex((r) => r.id === id);
           if (idx < 0) return s;
-          const target = idx + direction;
-          if (target < 0 || target >= s.systemPromptRules.length) return s;
+          const cli = s.systemPromptRules[idx].cli ?? "claude";
+          const scopedIndexes = s.systemPromptRules
+            .map((rule, index) => ({ rule, index }))
+            .filter(({ rule }) => (rule.cli ?? "claude") === cli);
+          const scopedIdx = scopedIndexes.findIndex(({ index }) => index === idx);
+          if (scopedIdx < 0) return s;
+          const scopedTarget = scopedIdx + direction;
+          if (scopedTarget < 0 || scopedTarget >= scopedIndexes.length) return s;
+          const target = scopedIndexes[scopedTarget].index;
           const arr = [...s.systemPromptRules];
           [arr[idx], arr[target]] = [arr[target], arr[idx]];
           return { systemPromptRules: arr };
@@ -617,7 +626,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "code-tabs-settings",
-      version: 25,
+      version: 26,
       storage: createJSONStorage(() => localStorage),
       migrate: migrateSettings,
       // Don't persist transient UI state

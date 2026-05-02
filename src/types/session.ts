@@ -337,6 +337,8 @@ export interface CapturedMessage {
 
 export interface SystemPromptRule {
   id: string;
+  /** Missing on pre-v26 persisted rules; treated as Claude until migration runs. */
+  cli?: CliKind;
   name: string;
   pattern: string;
   replacement: string;

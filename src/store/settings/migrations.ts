@@ -226,5 +226,20 @@ export function migrateSettings(persisted: unknown, version: number) {
     // persisted schemas across app starts; loaders repopulate these in-memory.
     state.settingsSchemaByCli = { claude: null, codex: null };
   }
+  if (version < 26) {
+    const rules = Array.isArray(state.systemPromptRules)
+      ? state.systemPromptRules as Array<Record<string, unknown>>
+      : [];
+    state.systemPromptRules = rules.flatMap((rule, index) => {
+      if (rule.cli === "claude" || rule.cli === "codex") return [rule];
+      const id = typeof rule.id === "string" && rule.id.length > 0
+        ? rule.id
+        : `prompt-rule-${index}`;
+      return [
+        { ...rule, id, cli: "claude" },
+        { ...rule, id: `${id}-codex`, cli: "codex" },
+      ];
+    });
+  }
   return state;
 }

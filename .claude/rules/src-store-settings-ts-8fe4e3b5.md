@@ -21,3 +21,7 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 - [SL-20 L110] Recent dir pruning: pruneRecentDirs() called on app init; invokes dir_exists for each recentDir in parallel, removes any that no longer exist on disk
 - [SL-21 L141] Workspace-specific launch defaults: setSavedDefaults writes per-workspace entry into workspaceDefaults map (keyed by lowercased project root, worktree paths collapsed); SessionLauncher layers matching workspace defaults on mount and when switching workspace via browse or recent chip; no-entry workspace resets to global savedDefaults/lastConfig baseline; forkSession:false and other transient fields excluded from workspace entry
 - [SL-08 L306] Config pruning: both `sessionNames` and `sessionConfigs` maps pruned to only IDs present in loaded past sessions
+
+## Config Editors
+
+- [CM-35 L510] System prompt rewrite rules are CLI-scoped end to end. SystemPromptRule carries a cli field (Rust serde default Claude; TS optional for pre-v26 persisted data), addSystemPromptRule(cli = 'claude') stores the scope, reorderSystemPromptRules swaps only among rules with the same scope, PromptsTab filters observed prompts and rule cards by active CLI and creates generated rules with that CLI, and v26 migration duplicates legacy unscoped rules into Claude- and Codex-scoped copies. The proxy preserves the compiled rule cli and applies rules only to matching Claude or Codex prompt fields.

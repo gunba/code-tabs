@@ -100,7 +100,7 @@ export interface SettingsState {
   updateSavedPrompt: (id: string, updates: { name?: string; text?: string }) => void;
   removeSavedPrompt: (id: string) => void;
   setProxyPort: (port: number | null) => void;
-  addSystemPromptRule: () => void;
+  addSystemPromptRule: (cli?: CliKind) => void;
   updateSystemPromptRule: (id: string, updates: Partial<Omit<SystemPromptRule, "id">>) => void;
   removeSystemPromptRule: (id: string) => void;
   reorderSystemPromptRules: (id: string, direction: -1 | 1) => void;

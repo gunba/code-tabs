@@ -229,7 +229,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   const updateSavedPrompt = useSettingsStore((s) => s.updateSavedPrompt);
   const removeSavedPrompt = useSettingsStore((s) => s.removeSavedPrompt);
 
-  const systemPromptRules = useSettingsStore((s) => s.systemPromptRules);
+  const allSystemPromptRules = useSettingsStore((s) => s.systemPromptRules);
   const addSystemPromptRule = useSettingsStore((s) => s.addSystemPromptRule);
   const updateSystemPromptRule = useSettingsStore((s) => s.updateSystemPromptRule);
   const removeSystemPromptRule = useSettingsStore((s) => s.removeSystemPromptRule);
@@ -268,6 +268,10 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   const observedPrompts = useMemo(
     () => allObservedPrompts.filter((p) => (p.cli ?? "claude") === cli),
     [allObservedPrompts, cli],
+  );
+  const systemPromptRules = useMemo(
+    () => allSystemPromptRules.filter((rule) => (rule.cli ?? "claude") === cli),
+    [allSystemPromptRules, cli],
   );
 
   // Collapse expanded rule on tab switch
@@ -431,11 +435,11 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
   }, [removeSystemPromptRule, expandedRuleId]);
 
   const handleAddRule = useCallback(() => {
-    addSystemPromptRule();
+    addSystemPromptRule(cli);
     const newest = useSettingsStore.getState().systemPromptRules;
-    const last = newest[newest.length - 1];
+    const last = [...newest].reverse().find((rule) => (rule.cli ?? "claude") === cli);
     if (last) setExpandedRuleId(last.id);
-  }, [addSystemPromptRule]);
+  }, [addSystemPromptRule, cli]);
 
   // ── Observed prompt handlers ───────────────────────────────────────
 
@@ -457,9 +461,9 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
       store.removeSystemPromptRule(rule.id);
     }
     for (const rule of pendingRules.adds) {
-      store.addSystemPromptRule();
+      store.addSystemPromptRule(cli);
       const newest = useSettingsStore.getState().systemPromptRules;
-      const last = newest[newest.length - 1];
+      const last = [...newest].reverse().find((candidate) => (candidate.cli ?? "claude") === cli);
       if (last) {
         store.updateSystemPromptRule(last.id, {
           name: rule.name,
@@ -478,7 +482,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
     setObservedBaseline(observedEditText);
     setPendingRules(null);
     flashStatus({ type: "success", text: parts.join(", ") }, 3000);
-  }, [pendingRules, observedEditText, flashStatus]);
+  }, [pendingRules, observedEditText, flashStatus, cli]);
 
   // Ctrl+S for saved prompts only
   useEffect(() => {
@@ -662,7 +666,7 @@ export function PromptsTab({ cli, onStatus }: PromptsTabProps) {
         /* ── Rules sub-tab ──────────────────────────────────────────── */
         <div className="prompts-rules-panel prompts-rules-standalone">
           <div className="prompts-section-header">
-            Prompt Rules
+            {cli === "codex" ? "Codex Prompt Rules" : "Claude Prompt Rules"}
             {systemPromptRules.length > 0 && (
               <span className="prompts-observed-count">
                 {systemPromptRules.filter((r) => r.enabled).length}/{systemPromptRules.length}
