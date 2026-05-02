@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampPx, hash32, makeSlotInit, withAlpha } from "../HeaderActivityViz";
+import { clampPx, hash32, makeSlotInit, shoreYAt, withAlpha } from "../HeaderActivityViz";
 
 describe("hash32", () => {
   it("is deterministic for the same input", () => {
@@ -83,5 +83,45 @@ describe("clampPx", () => {
     expect(clampPx(0, 100)).toBe(0);
     expect(clampPx(100, 100)).toBe(100);
     expect(clampPx(0.5, 100)).toBe(0.5);
+  });
+});
+
+describe("shoreYAt", () => {
+  // Layout shape mirrors what computeLayout returns; only the three fields
+  // shoreYAt actually reads (seaMeanY, beachShoreSlope, plus the rest of
+  // the Layout contract for type safety).
+  const layout = {
+    beachW: 180,
+    seaMeanY: 24,
+    waveAmpMaxPx: 5,
+    beachShoreSlope: 9,
+    beachTopYAtZero: 15,
+    skyHorizonY: 18,
+  };
+
+  it("crosses sea level around tt=0.645", () => {
+    // Solving 0.95 - smoothstep(u) * 2.95 = 0 gives u ≈ 0.359, so
+    // tt = 0.45 + u * 0.55 ≈ 0.6475. Sample either side and confirm
+    // the crossing happens within ±0.01 of that.
+    expect(shoreYAt(layout, 0.63)).toBeLessThan(layout.seaMeanY);
+    expect(shoreYAt(layout, 0.66)).toBeGreaterThan(layout.seaMeanY);
+  });
+
+  it("ends below sea level at tt=1.0 (bank dips under water)", () => {
+    // shoreYAt(1) = seaMeanY - elev*beachShoreSlope with elev=-2,
+    // so the seaward end is exactly seaMeanY + 2*beachShoreSlope.
+    expect(shoreYAt(layout, 1.0)).toBeCloseTo(
+      layout.seaMeanY + 2 * layout.beachShoreSlope,
+      6,
+    );
+  });
+
+  it("is monotonically non-decreasing past the plateau (justifies break in drawShoreChop)", () => {
+    let prev = shoreYAt(layout, 0.45);
+    for (let tt = 0.46; tt <= 1.0001; tt += 0.01) {
+      const y = shoreYAt(layout, tt);
+      expect(y).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = y;
+    }
   });
 });

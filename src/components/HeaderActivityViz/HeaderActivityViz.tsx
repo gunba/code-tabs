@@ -320,9 +320,15 @@ function smoothstep(u: number): number {
   return c * c * (3 - 2 * c);
 }
 
-// Side-view dune profile: rises from inland, plateaus across a crest,
-// descends gently, then drops sharply at the bank to meet the water.
-// Returns the Y of the sand surface at parametric x (localT in 0..1).
+// Side-view dune profile: rises from inland, plateaus across a crest, then
+// runs a single continuous smoothstep descent that carries the surface past
+// sea level. The bank "disappears" smoothly under the water rather than
+// terminating in a vertical cliff at the wave line. Returns the Y of the
+// sand surface at parametric x (localT in 0..1). At the seaward end
+// shoreYAt(1) = seaMeanY + 2*beachShoreSlope; for thin canvases (h < 44)
+// that exceeds h and the polygon clip drops it off-canvas. For taller
+// canvases a few pixels of sand remain visible at x=beachW, harmlessly
+// covered by the overlapping sea polygon.
 export function shoreYAt(layout: Layout, localT: number): number {
   const tt = Math.max(0, Math.min(1, localT));
   let elev: number;
@@ -332,14 +338,13 @@ export function shoreYAt(layout: Layout, localT: number): number {
   } else if (tt < 0.45) {
     // Plateau across the dune crest.
     elev = 0.95;
-  } else if (tt < 0.85) {
-    // Gentle descent down the seaward face.
-    const u = (tt - 0.45) / 0.4;
-    elev = 0.95 - smoothstep(u) * 0.55;
   } else {
-    // Sharp bank drop to sea level.
-    const u = (tt - 0.85) / 0.15;
-    elev = 0.4 - smoothstep(u) * 0.4;
+    // One continuous smoothstep descent from plateau (elev=0.95) past sea
+    // level (elev=0) and continuing to elev=-2 at the seaward edge so the
+    // sand surface dips below the canvas bottom. The visible curve tapers
+    // out of frame instead of meeting the waterline as a vertical drop.
+    const u = (tt - 0.45) / 0.55;
+    elev = 0.95 - smoothstep(u) * 2.95;
   }
   return layout.seaMeanY - elev * layout.beachShoreSlope;
 }
@@ -489,6 +494,27 @@ function drawSky(
     horizonGrad.addColorStop(0, "rgba(255, 200, 130, 0)");
     horizonGrad.addColorStop(1, "rgba(255, 195, 130, 0.18)");
     ctx.fillStyle = horizonGrad;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  // Atmospheric backlight from the celestial body — a uniform vertical
+  // gradient that brightens the upper sky and fades to transparent toward
+  // the horizon. Without this, the sky reads as a flat slab of one colour
+  // top-to-bottom and the moon/sun looks pasted on. Cool silver-blue at
+  // night (moon), warmer/weaker by clear day (sun). Suppressed when the
+  // sky is too overcast for atmospheric scatter to read (fog, storm).
+  const showNightGlow = phase.isNight && scene !== "fog" && scene !== "storm";
+  const showDayGlow =
+    !phase.isNight &&
+    phase.light > 0.55 &&
+    (scene === "clear" || scene === "clouds" || scene === "snow");
+  if (showNightGlow || showDayGlow) {
+    const a = showNightGlow ? 0.18 : 0.1;
+    const tint = showNightGlow ? "180, 200, 235" : "255, 240, 200";
+    const backlight = ctx.createLinearGradient(0, 0, 0, h * 0.7);
+    backlight.addColorStop(0, `rgba(${tint}, ${a.toFixed(3)})`);
+    backlight.addColorStop(1, `rgba(${tint}, 0)`);
+    ctx.fillStyle = backlight;
     ctx.fillRect(0, 0, w, h);
   }
 }
@@ -687,31 +713,74 @@ function drawClouds(
   ctx: CanvasRenderingContext2D,
   cloudsRef: { current: Cloud[] | null },
   w: number,
-  h: number,
   dtSec: number,
   scene: WeatherScene,
+  t: number,
 ): void {
   if (!cloudsRef.current) {
     const list: Cloud[] = [];
-    const count = scene === "storm" ? 5 : 4;
+    // Heavier weather gets more puffs and a wider average size so the
+    // discrete clouds layer convincingly over the overcast band.
+    const count = scene === "storm" ? 6 : scene === "rain" ? 5 : 4;
     for (let i = 0; i < count; i++) {
       list.push({
         xPx: (i / count) * w,
-        yPx: 4 + ((i * 7) % 14),
-        width: 38 + (i % 3) * 22,
+        yPx: 4 + ((i * 7) % 12),
+        width: 48 + (i % 3) * 26,
         speedPxPerS: 6 + (i % 4) * 2.5,
         shape: i % 3,
       });
     }
     cloudsRef.current = list;
   }
-  const baseAlpha = scene === "storm" ? 0.7 : scene === "rain" ? 0.55 : 0.45;
+  // Broad overcast for rain/storm: a continuous band along the top of the
+  // canvas with a softly undulating bumpy bottom edge. Painted first so
+  // discrete puffs layer over it as darker / lighter cumulus accents.
+  if (scene === "rain" || scene === "storm") {
+    drawOvercast(ctx, w, t, scene === "storm");
+  }
+  const baseAlpha = scene === "storm" ? 0.78 : scene === "rain" ? 0.65 : 0.55;
   for (const cl of cloudsRef.current) {
     cl.xPx += cl.speedPxPerS * dtSec;
     if (cl.xPx > w + cl.width) cl.xPx = -cl.width;
     drawCloud(ctx, cl.xPx, cl.yPx, cl.width, baseAlpha, cl.shape, scene === "storm");
   }
-  void h;
+}
+
+// Continuous overcast ceiling for rain/storm scenes. A flat-topped band
+// along the canvas top with a sine-wobbled bottom edge — three layered
+// frequencies make the wobble look organic without a discernible repeat.
+function drawOvercast(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  t: number,
+  dark: boolean,
+): void {
+  const baseY = dark ? 16 : 13;
+  const grad = ctx.createLinearGradient(0, 0, 0, baseY + 6);
+  if (dark) {
+    grad.addColorStop(0, "rgba(120, 125, 140, 0.78)");
+    grad.addColorStop(1, "rgba(85, 90, 105, 0.78)");
+  } else {
+    grad.addColorStop(0, "rgba(178, 188, 202, 0.62)");
+    grad.addColorStop(1, "rgba(142, 152, 168, 0.62)");
+  }
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(w, 0);
+  // Wavy bottom edge — three layered sines give an organic ceiling without
+  // a discernible repeat pattern.
+  for (let x = w; x >= 0; x -= 2) {
+    const wob =
+      Math.sin(x * 0.06 + t * 0.18) * 1.8 +
+      Math.sin(x * 0.17 - t * 0.07) * 1.0 +
+      Math.sin(x * 0.31 + t * 0.05) * 0.55;
+    ctx.lineTo(x, baseY + wob);
+  }
+  ctx.lineTo(0, baseY);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawCloud(
@@ -723,36 +792,37 @@ function drawCloud(
   shape: number,
   dark: boolean,
 ): void {
-  const top = dark ? "rgba(180, 185, 200, " : "rgba(225, 232, 245, ";
-  const bottom = dark ? "rgba(115, 120, 140, " : "rgba(180, 195, 215, ";
-  const grad = ctx.createLinearGradient(0, y - 4, 0, y + 8);
-  grad.addColorStop(0, top + alpha + ")");
-  grad.addColorStop(1, bottom + alpha * 0.85 + ")");
-  ctx.fillStyle = grad;
-  // Three overlapping ellipses give a fluffy silhouette.
-  const layouts = [
-    [
-      [0, 3, 0.32, 4],
-      [0.32, 0, 0.42, 5.5],
-      [0.62, 3, 0.38, 4],
-    ],
-    [
-      [0.05, 2, 0.28, 3.5],
-      [0.28, -1, 0.36, 5],
-      [0.55, 2, 0.45, 4.5],
-    ],
-    [
-      [0, 2, 0.36, 4],
-      [0.3, 0, 0.42, 5],
-      [0.65, 2, 0.36, 4.5],
-    ],
+  // Simpsons-style cumulus: a union of overlapping circles painted as one
+  // filled path so the alpha doesn't double-up at the overlaps. Each circle
+  // is its own subpath (moveTo + full-circle arc), and the nonzero winding
+  // rule unions them since every arc is wound clockwise. The thin canvas
+  // crops the upper bumps to a few pixels — what's visible is mostly the
+  // scalloped bottom edge.
+  // Layouts: [tRel, radius]. Outer bulges are inset enough that cx±r stays
+  // within [x, x+w] for the narrowest cloud width (48 px); adjacent radii
+  // overlap so the union has no gaps between bumps.
+  const layouts: ReadonlyArray<ReadonlyArray<readonly [number, number]>> = [
+    [[0.16, 6], [0.32, 10], [0.52, 9], [0.70, 11], [0.86, 6]],
+    [[0.12, 5], [0.26, 8], [0.42, 10], [0.58, 9], [0.74, 8], [0.88, 5]],
+    [[0.20, 7], [0.42, 12], [0.62, 11], [0.83, 7]],
   ];
-  for (const seg of layouts[shape]) {
-    const [dx, dy, rxRel, ry] = seg;
-    ctx.beginPath();
-    ctx.ellipse(x + dx * w + (rxRel * w) / 2, y + dy, (rxRel * w) / 2, ry, 0, 0, Math.PI * 2);
-    ctx.fill();
+  const bulges = layouts[shape % layouts.length];
+  const grad = ctx.createLinearGradient(0, y - 12, 0, y + 14);
+  if (dark) {
+    grad.addColorStop(0, `rgba(195, 200, 215, ${alpha.toFixed(3)})`);
+    grad.addColorStop(1, `rgba(115, 120, 135, ${alpha.toFixed(3)})`);
+  } else {
+    grad.addColorStop(0, `rgba(255, 255, 255, ${alpha.toFixed(3)})`);
+    grad.addColorStop(1, `rgba(195, 205, 220, ${alpha.toFixed(3)})`);
   }
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  for (const [tBulge, r] of bulges) {
+    const cx = x + tBulge * w;
+    ctx.moveTo(cx + r, y);
+    ctx.arc(cx, y, r, 0, Math.PI * 2);
+  }
+  ctx.fill();
 }
 
 function darkenForNight(hex: string, nightMix: number): string {
@@ -812,9 +882,18 @@ function drawSea(
   seaGrad.addColorStop(0.55, darkenForNight(midHex, nightMix));
   seaGrad.addColorStop(1, darkenForNight(botHex, nightMix));
   ctx.fillStyle = seaGrad;
+  // Sea polygon starts inland of beachW so it covers the underwater bank
+  // that shoreYAt now traces below sea level — without this, columns where
+  // the sand surface dips below seaMeanY but isn't yet past beachW would
+  // show only the sky background. crests[x] is seaMeanY for x < beachW
+  // (no waves on the dry side), so the polygon top is a flat line in that
+  // overlap region. The beach polygon (drawn after sea) paints opaque sand
+  // back over the dry portion, leaving water visible only where the sand
+  // surface is below sea level.
+  const seaStart = Math.max(0, Math.round(beachW * 0.55));
   ctx.beginPath();
-  ctx.moveTo(beachW, h + 1);
-  for (let x = beachW; x < w; x++) {
+  ctx.moveTo(seaStart, h + 1);
+  for (let x = seaStart; x < w; x++) {
     ctx.lineTo(x, crests[x]);
   }
   ctx.lineTo(w, h + 1);
@@ -873,11 +952,11 @@ function drawBeach(
   intensity: number,
   t: number,
 ): void {
-  const { beachW, beachTopYAtZero, seaMeanY, beachShoreSlope } = layout;
+  const { beachW, beachTopYAtZero } = layout;
   if (!beachTile || !decoTile) return;
-  // Sand fill, clipped to the curved beach top (mostly flat with a bank
-  // dropping off into the water at the right side). The path is sampled
-  // along shoreYAt at 1-px x steps so the curve reads as smooth.
+  // Sand fill, clipped to the curved beach top. shoreYAt's seaward end now
+  // returns Y values below h, so the polygon naturally tapers off below the
+  // canvas without needing a separate underwater bank overlay.
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(0, beachTopYAtZero);
@@ -896,28 +975,6 @@ function drawBeach(
     }
   }
   ctx.drawImage(decoTile, 0, 0);
-  ctx.restore();
-
-  // Underwater bank: sand seen through the water just past the visible
-  // bank, painted semi-transparently over the existing sea so the dune
-  // rounds off into the water rather than dropping vertically.
-  const extension = Math.max(8, Math.round(beachShoreSlope * 0.7));
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(beachW, seaMeanY);
-  for (let i = 1; i <= extension; i++) {
-    const u = i / extension;
-    ctx.lineTo(beachW + i, seaMeanY + smoothstep(u) * extension * 0.6);
-  }
-  ctx.lineTo(beachW + extension, h);
-  ctx.lineTo(beachW, h);
-  ctx.closePath();
-  ctx.clip();
-  const wetGrad = ctx.createLinearGradient(0, seaMeanY, 0, h);
-  wetGrad.addColorStop(0, "rgba(110, 80, 40, 0.55)");
-  wetGrad.addColorStop(1, "rgba(70, 50, 25, 0.25)");
-  ctx.fillStyle = wetGrad;
-  ctx.fillRect(beachW, seaMeanY, extension + 1, h - seaMeanY);
   ctx.restore();
 
   // Big landmarks (umbrella, foldout chair) drawn ON TOP of the dune
@@ -983,9 +1040,9 @@ function makeBeachDecoTile(beachW: number, h: number, layout: Layout): HTMLCanva
 
   // Scatter small ornaments along the curved sand surface — each one
   // anchored just below the dune top so they sit "on" the sand rather
-  // than floating in the air. Decorations are confined to the dry beach
-  // (t <= 0.82) so none end up under the new wet/underwater bank.
-  const dryW = Math.max(8, Math.round(beachW * 0.82));
+  // than floating in the air. Confined to tt <= 0.6, which leaves a ~5%
+  // dry-sand margin before the waterline at tt≈0.65.
+  const dryW = Math.max(8, Math.round(beachW * 0.6));
   const rng = mulberry32(0x9e3779b1);
   const decoCount = Math.max(4, Math.round(beachW / 18));
   for (let i = 0; i < decoCount; i++) {
@@ -1023,9 +1080,11 @@ function drawBeachLandmarks(ctx: CanvasRenderingContext2D, layout: Layout): void
   const umbrellaSurfaceY = shoreYAt(layout, umbrellaT);
   drawUmbrella(ctx, umbrellaCx, Math.round(umbrellaSurfaceY));
 
-  // Foldout chair on the gentle descent before the bank drop. Legs
-  // sample shoreYAt at offset t so the seat tilts with the slope.
-  drawFoldoutChair(ctx, layout, 0.66);
+  // Foldout chair on the upper part of the seaward descent, comfortably
+  // above the waterline (sea level falls around tt=0.65 with the new
+  // shoreYAt). Legs sample shoreYAt at offset t so the seat tilts with
+  // the slope.
+  drawFoldoutChair(ctx, layout, 0.55);
 }
 
 function drawUmbrella(ctx: CanvasRenderingContext2D, cx: number, surfaceY: number): void {
@@ -1205,18 +1264,19 @@ function drawShoreChop(
   const { beachW, seaMeanY, waveAmpMaxPx } = layout;
   if (beachW <= 0) return;
 
-  // 1. Three-row foam band along the bank/water boundary. The loop
-  // starts past the dune crest plateau (shoreYAt's flat top ends at
-  // t=0.45) so foam never paints on the inland rise, and a geometric
-  // check keeps it off the dry upper descent — only the lower seaward
-  // face where waves can actually reach gets a foam line.
+  // 1. Foam band gated to the actual waterline. The previous gate excluded
+  // only the inland plateau, which left foam tracing a continuous diagonal
+  // down the seaward slope (the "white line halfway up the beach"). The
+  // band is now restricted to columns where the sand surface is within
+  // ±wlBand of seaMeanY — i.e., where waves actually meet the shore.
   const wobblePhase = t * 1.8;
   const ampBase = 1.0 + intensity * 1.4;
-  const dryThreshold = seaMeanY - waveAmpMaxPx - 2;
-  const seawardStart = Math.round(beachW * 0.45);
+  const wlBand = Math.max(2, Math.round(waveAmpMaxPx * 0.5));
+  const seawardStart = Math.round(beachW * 0.5);
   for (let x = seawardStart; x <= beachW; x++) {
     const bankY = shoreYAt(layout, x / beachW);
-    if (bankY < dryThreshold) continue;
+    if (bankY < seaMeanY - wlBand) continue; // above the waterline
+    if (bankY > seaMeanY + wlBand + 2) break; // already underwater, no foam past here
     const wobble =
       Math.sin(x * 0.32 + wobblePhase) * ampBase +
       Math.sin(x * 0.18 - wobblePhase * 0.7 + 1.4) * ampBase * 0.45;
@@ -1252,9 +1312,10 @@ function drawShoreChop(
     const seed = (i * 1103515245 + tBucket * 12345) >>> 0;
     const phase = (seed % 9) - 1;
     if (phase < 0 || phase > 3) continue;
-    // Anchor splashes to the bank shoulder, where the wave would actually
-    // break against the cliff — not on the flat dune top.
-    const xPlume = Math.round(beachW * 0.75 + ((seed >>> 8) % Math.max(1, Math.round(beachW * 0.3))));
+    // Anchor splashes near the waterline where waves break against the
+    // bank — sea level sits around tt=0.65 in shoreYAt, so spread the
+    // bursts across tt=[0.55, 0.70] for a visible plume above water.
+    const xPlume = Math.round(beachW * 0.55 + ((seed >>> 8) % Math.max(1, Math.round(beachW * 0.15))));
     const lifeT = phase / 3;
     const heightPx = (3 + ((seed >>> 12) % 4)) * (1 - lifeT * 0.4);
     const local = xPlume / Math.max(1, beachW);
@@ -1771,7 +1832,7 @@ export function HeaderActivityViz() {
       if (phase.isNight) drawMoon(ctx, w, h, t);
       else drawSun(ctx, w, h, t);
       if (scene === "clouds" || scene === "rain" || scene === "storm") {
-        drawClouds(ctx, cloudsRef, w, h, dtSec, scene);
+        drawClouds(ctx, cloudsRef, w, dtSec, scene, t);
       }
       if (scene === "fog") {
         drawFog(ctx, w, h, t);
