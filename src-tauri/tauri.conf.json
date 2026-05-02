@@ -22,7 +22,8 @@
         "theme": "Dark",
         "resizable": true,
         "center": true,
-        "zoomHotkeysEnabled": false
+        "zoomHotkeysEnabled": false,
+        "dragDropEnabled": false
       }
     ],
     "security": {
