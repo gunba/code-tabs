@@ -97,3 +97,24 @@ export function buildWorkspaceLauncherConfig(params: {
     workspaceDefaults: params.workspaceDefaults,
   });
 }
+
+export function buildFinalLauncherConfig(
+  launchConfig: SessionConfig,
+  isNonSessionCommand: boolean,
+): SessionConfig {
+  return isNonSessionCommand
+    ? {
+        ...launchConfig,
+        runMode: true,
+        model: null,
+        permissionMode: "default",
+        effort: null,
+        dangerouslySkipPermissions: false,
+        projectDir: false,
+      }
+    : {
+        ...launchConfig,
+        launchWorkingDir: launchConfig.workingDir,
+        runMode: false,
+      };
+}

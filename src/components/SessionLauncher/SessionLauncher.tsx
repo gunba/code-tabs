@@ -7,7 +7,7 @@ import { dlog } from "../../lib/debugLog";
 import type { CliOption, CliCommand } from "../../store/settings";
 import { dirToTabName, computeHeatLevel, heatClassName } from "../../lib/claude";
 import { normalizePath, parseWorktreePath } from "../../lib/paths";
-import { workspaceDefaultsKey } from "../../lib/sessionLauncherConfig";
+import { buildFinalLauncherConfig, workspaceDefaultsKey } from "../../lib/sessionLauncherConfig";
 import {
   type SessionConfig,
   type PermissionMode,
@@ -460,9 +460,7 @@ export function SessionLauncher() {
           return;
         }
       }
-      const finalConfig: SessionConfig = isNonSessionCommand
-        ? { ...launchConfig, runMode: true, model: null, permissionMode: "default", effort: null, dangerouslySkipPermissions: false, projectDir: false }
-        : { ...launchConfig, runMode: false };
+      const finalConfig = buildFinalLauncherConfig(launchConfig, isNonSessionCommand);
       const storedName = finalConfig.resumeSession
         ? useSettingsStore.getState().sessionNames[finalConfig.resumeSession]
         : undefined;

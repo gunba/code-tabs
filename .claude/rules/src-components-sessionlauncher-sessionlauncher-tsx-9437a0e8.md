@@ -23,9 +23,9 @@ Tag line: `L<n>`; code usually starts at `L<n+1>`.
 - [SL-14 L69] Non-session flags (`--version`, `--help`, `--print`, etc.): rendered in separate Utility Commands section (collapsed by default) with muted styling; selecting them changes Launch button to "Run" (blue) and removes the working directory requirement
 - [SL-12 L373] Active flag indicators: pills highlight with accent color when their flag is present in the command line (reactive to manual edits in textarea)
 - [SL-10 L401] CLI command pills sorted by usage frequency (same heat gradient as Command Bar)
-- [SL-13 L531] Toggle behavior: clicking an active pill removes the flag; clicking an inactive pill adds it
-- [SL-15 L544] Utility mode mutual exclusion: clicking a non-session flag or subcommand replaces the entire command line (not toggle-into); session controls disabled and dimmed; clicking the flag again restores; reset button (↺) escapes utility mode
-- [SL-16 L876] Subcommand toggle: clicking a subcommand replaces command line with `claude <cmd>`; clicking again resets to generated command
+- [SL-13 L529] Toggle behavior: clicking an active pill removes the flag; clicking an inactive pill adds it
+- [SL-15 L542] Utility mode mutual exclusion: clicking a non-session flag or subcommand replaces the entire command line (not toggle-into); session controls disabled and dimmed; clicking the flag again restores; reset button (↺) escapes utility mode
+- [SL-16 L874] Subcommand toggle: clicking a subcommand replaces command line with `claude <cmd>`; clicking again resets to generated command
 
 ## Session Launcher
 

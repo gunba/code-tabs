@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildFinalLauncherConfig,
   buildInitialLauncherConfig,
   buildWorkspaceLauncherConfig,
 } from "../sessionLauncherConfig";
@@ -241,5 +242,79 @@ describe("buildWorkspaceLauncherConfig", () => {
     expect(result.workingDir).toBe("/projects/other");
     expect(result.cli).toBe("codex");
     expect(result.model).toBe("gpt-5");
+  });
+});
+
+describe("buildFinalLauncherConfig", () => {
+  it("stamps launchWorkingDir from workingDir for fresh session launches", () => {
+    const result = buildFinalLauncherConfig(
+      config({
+        workingDir: "/projects/ato-mcp",
+        launchWorkingDir: "/projects",
+        runMode: true,
+        resumeSession: null,
+        forkSession: false,
+      }),
+      false,
+    );
+
+    expect(result.workingDir).toBe("/projects/ato-mcp");
+    expect(result.launchWorkingDir).toBe("/projects/ato-mcp");
+    expect(result.runMode).toBe(false);
+  });
+
+  it("stamps launchWorkingDir for resume launches while preserving resume identity", () => {
+    const result = buildFinalLauncherConfig(
+      config({
+        workingDir: "/projects/ato-mcp",
+        launchWorkingDir: "/projects",
+        resumeSession: "019dc57d-b78a-75c3-b087-32d7446ebe85",
+        forkSession: false,
+      }),
+      false,
+    );
+
+    expect(result.launchWorkingDir).toBe("/projects/ato-mcp");
+    expect(result.resumeSession).toBe("019dc57d-b78a-75c3-b087-32d7446ebe85");
+    expect(result.forkSession).toBe(false);
+  });
+
+  it("stamps launchWorkingDir for fork launches while preserving fork intent", () => {
+    const result = buildFinalLauncherConfig(
+      config({
+        workingDir: "/projects/ato-mcp",
+        launchWorkingDir: "/projects",
+        resumeSession: "019dc57d-b78a-75c3-b087-32d7446ebe85",
+        forkSession: true,
+      }),
+      false,
+    );
+
+    expect(result.launchWorkingDir).toBe("/projects/ato-mcp");
+    expect(result.resumeSession).toBe("019dc57d-b78a-75c3-b087-32d7446ebe85");
+    expect(result.forkSession).toBe(true);
+  });
+
+  it("normalizes utility commands without stamping session launchWorkingDir", () => {
+    const result = buildFinalLauncherConfig(
+      config({
+        workingDir: "/projects/ato-mcp",
+        launchWorkingDir: "/projects",
+        model: "gpt-5",
+        permissionMode: "bypassPermissions",
+        effort: "high",
+        dangerouslySkipPermissions: true,
+        projectDir: true,
+      }),
+      true,
+    );
+
+    expect(result.runMode).toBe(true);
+    expect(result.model).toBeNull();
+    expect(result.permissionMode).toBe("default");
+    expect(result.effort).toBeNull();
+    expect(result.dangerouslySkipPermissions).toBe(false);
+    expect(result.projectDir).toBe(false);
+    expect(result.launchWorkingDir).toBe("/projects");
   });
 });

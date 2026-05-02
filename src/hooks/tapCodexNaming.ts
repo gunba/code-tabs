@@ -2,34 +2,29 @@ import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../store/sessions";
 import { useSettingsStore } from "../store/settings";
 import { dlog } from "../lib/debugLog";
-import { dirToTabName } from "../lib/paths";
 import { getResumeId } from "../lib/claude";
-
-function deriveCodexPromptTitle(display: string): string | null {
-  const cleaned = display
-    .replace(/<[^>]+>/g, " ")
-    .replace(/[`*_#[\]()>]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!cleaned || cleaned.startsWith("/")) return null;
-  const words = cleaned.match(/[A-Za-z0-9][A-Za-z0-9._/-]*/g) ?? [];
-  if (words.length === 0) return null;
-  const title = words.slice(0, 7).join(" ");
-  return title.length > 54 ? `${title.slice(0, 51).trim()}...` : title;
-}
-
-function isAutoNameableCodexName(name: string | null | undefined, defaultName: string): boolean {
-  if (!name) return true;
-  const normalized = name.trim().toLowerCase();
-  return name === defaultName || normalized === "run" || normalized === "codex" || normalized === "new session";
-}
+import {
+  codexDefaultTabNameCandidates,
+  deriveCodexPromptTitle,
+  isAutoNameableCodexName,
+} from "../lib/codexNaming";
 
 function maybeAutoNameCodexSession(sid: string, display: string, seen: Set<string>): string | null {
   if (seen.has(sid)) return null;
   const session = useSessionStore.getState().sessions.find((s) => s.id === sid);
   if (!session || session.config.cli !== "codex") return null;
-  const defaultName = dirToTabName(session.config.launchWorkingDir || session.config.workingDir);
-  if (!isAutoNameableCodexName(session.name, defaultName)) {
+  const defaultNames = codexDefaultTabNameCandidates(
+    session.config.workingDir,
+    session.config.launchWorkingDir,
+  );
+  if (!isAutoNameableCodexName(session.name, defaultNames)) {
+    dlog("tap", sid, `codex auto-rename skipped; tab name "${session.name}" is not default`, "DEBUG", {
+      event: "codex.auto_rename_skipped",
+      data: {
+        name: session.name,
+        defaultNames,
+      },
+    });
     seen.add(sid);
     return null;
   }
