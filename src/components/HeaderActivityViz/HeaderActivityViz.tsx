@@ -449,14 +449,16 @@ function drawSky(
   let midA = 0.32;
   switch (scene) {
     case "clear":
-      [topR, topG, topB] = [40, 60, 95];
-      [midR, midG, midB] = [80, 110, 150];
+      [topR, topG, topB] = [110, 180, 230];
+      [midR, midG, midB] = [180, 225, 245];
+      topA = 0.92;
+      midA = 0.7;
       break;
     case "clouds":
-      [topR, topG, topB] = [70, 80, 95];
-      [midR, midG, midB] = [110, 120, 135];
-      topA = 0.55;
-      midA = 0.35;
+      [topR, topG, topB] = [130, 155, 180];
+      [midR, midG, midB] = [185, 205, 220];
+      topA = 0.72;
+      midA = 0.5;
       break;
     case "rain":
       [topR, topG, topB] = [60, 70, 95];
@@ -698,11 +700,13 @@ function drawSun(ctx: CanvasRenderingContext2D, w: number, _h: number, t: number
   const pulse = 0.85 + 0.15 * Math.sin(t * 1.2);
   const rotation = t * 0.18;
   // Outer halo
-  const halo = ctx.createRadialGradient(cx, cy, radius - 1, cx, cy, radius + 14);
-  halo.addColorStop(0, "rgba(253, 218, 107, 0.55)");
-  halo.addColorStop(1, "rgba(253, 218, 107, 0)");
+  const haloR = radius + 22;
+  const halo = ctx.createRadialGradient(cx, cy, radius - 1, cx, cy, haloR);
+  halo.addColorStop(0, "rgba(255, 232, 145, 0.78)");
+  halo.addColorStop(0.45, "rgba(253, 205, 95, 0.32)");
+  halo.addColorStop(1, "rgba(253, 200, 90, 0)");
   ctx.fillStyle = halo;
-  ctx.fillRect(cx - radius - 14, cy - radius - 14, (radius + 14) * 2, (radius + 14) * 2);
+  ctx.fillRect(cx - haloR, cy - haloR, haloR * 2, haloR * 2);
   // Rays
   ctx.strokeStyle = `rgba(253, 218, 107, ${0.65 * pulse})`;
   ctx.lineWidth = 1.5;
@@ -976,6 +980,7 @@ function drawBeach(
   layout: Layout,
   beachTile: HTMLCanvasElement | null,
   decoTile: HTMLCanvasElement | null,
+  crests: Float32Array,
   w: number,
   h: number,
   intensity: number,
@@ -1005,6 +1010,22 @@ function drawBeach(
   }
   ctx.drawImage(decoTile, 0, 0);
   ctx.restore();
+
+  // Submerged bank: tint columns where the sand surface dips below the wave
+  // line so the underwater portion of the dune reads as being beneath the
+  // water rather than dry sand sticking into the sea.
+  for (let x = layout.seaStart; x <= beachW; x++) {
+    const sandY = shoreYAt(layout, x / beachW);
+    const waveY = crests[x];
+    if (sandY > waveY + 0.5) {
+      const yTop = Math.floor(waveY);
+      const hPx = Math.min(h - yTop, Math.ceil(sandY - waveY));
+      if (hPx > 0) {
+        ctx.fillStyle = "rgba(28, 95, 110, 0.55)";
+        ctx.fillRect(x, yTop, 1, hPx);
+      }
+    }
+  }
 
   // Big landmarks (umbrella, foldout chair) drawn ON TOP of the dune
   // curve so they sit as silhouettes against the sky, not embedded inside.
@@ -1888,7 +1909,7 @@ export function HeaderActivityViz() {
       }
 
       // 5. Beach (tiled sand + decorations + shore wash with chop).
-      drawBeach(ctx, layout, beachTileRef.current, decoTileRef.current, w, h, intensity, t);
+      drawBeach(ctx, layout, beachTileRef.current, decoTileRef.current, crests, w, h, intensity, t);
       drawShoreChop(ctx, layout, w, h, t, intensity);
 
       // 5. Slots (mascots / icons) and their bubble trails.
