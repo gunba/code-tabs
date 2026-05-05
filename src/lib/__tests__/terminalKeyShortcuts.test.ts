@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyTerminalKey,
+  isTerminalInterruptKey,
   isTerminalModalOpen,
   SHIFT_ENTER_SEQUENCE,
   type TerminalKeyEventLike,
@@ -78,6 +79,20 @@ describe("classifyTerminalKey", () => {
     expect(classify({ key: "Tab", ctrlKey: true })).toEqual({ kind: "swallow" });
     expect(classify({ key: "F", ctrlKey: true, shiftKey: true })).toEqual({ kind: "swallow" });
     expect(classify({ key: "Escape" })).toEqual({ kind: "swallow" });
+  });
+});
+
+describe("isTerminalInterruptKey", () => {
+  it("detects bare Escape and Ctrl+C without a selection", () => {
+    expect(isTerminalInterruptKey(keyEvent({ key: "Escape" }), { modalOpen: false, hasSelection: false })).toBe(true);
+    expect(isTerminalInterruptKey(keyEvent({ key: "c", ctrlKey: true }), { modalOpen: false, hasSelection: false })).toBe(true);
+    expect(isTerminalInterruptKey(keyEvent({ key: "C", ctrlKey: true }), { modalOpen: false, hasSelection: false })).toBe(true);
+  });
+
+  it("ignores copy and modal cases", () => {
+    expect(isTerminalInterruptKey(keyEvent({ key: "c", ctrlKey: true }), { modalOpen: false, hasSelection: true })).toBe(false);
+    expect(isTerminalInterruptKey(keyEvent({ key: "Escape" }), { modalOpen: true, hasSelection: false })).toBe(false);
+    expect(isTerminalInterruptKey(keyEvent({ key: "Escape", shiftKey: true }), { modalOpen: false, hasSelection: false })).toBe(false);
   });
 });
 

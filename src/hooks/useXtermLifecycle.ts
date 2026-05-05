@@ -16,6 +16,8 @@ import { IS_WINDOWS, IS_LINUX } from "../lib/paths";
 import { createPathLinkProvider } from "../lib/terminalPathLinks";
 import {
   classifyTerminalKey,
+  END_SYNCHRONIZED_OUTPUT_SEQUENCE,
+  isTerminalInterruptKey,
   isTerminalModalOpen,
 } from "../lib/terminalKeyShortcuts";
 import { resetTerminalWriteQueue, type TerminalWriteQueue } from "../lib/terminalWriteQueue";
@@ -354,10 +356,15 @@ export function useXtermLifecycle({
       // xterm.js convention: return false = "I handled this, suppress default"
       // return true = "let xterm.js handle normally"
       term.attachCustomKeyEventHandler((ev) => {
+        const modalOpen = isTerminalModalOpen();
+        const hasSelection = term!.hasSelection();
+        if (isTerminalInterruptKey(ev, { modalOpen, hasSelection })) {
+          term!.write(END_SYNCHRONIZED_OUTPUT_SEQUENCE);
+        }
         const decision = classifyTerminalKey(ev, {
           isLinux: IS_LINUX,
-          modalOpen: isTerminalModalOpen(),
-          hasSelection: term!.hasSelection(),
+          modalOpen,
+          hasSelection,
         });
 
         if (decision.kind === "passthrough") return true;

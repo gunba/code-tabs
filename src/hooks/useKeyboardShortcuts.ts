@@ -3,7 +3,7 @@ import { CONFIG_MANAGER_CLOSE_REQUEST_EVENT } from "../components/ConfigManager/
 import { useSettingsStore } from "../store/settings";
 import type { Session, SessionConfig } from "../types/session";
 import { writeToPty } from "../lib/ptyRegistry";
-import { focusTerminal } from "../lib/terminalRegistry";
+import { focusTerminal, releaseTerminalSynchronizedOutput } from "../lib/terminalRegistry";
 import { cycleTabId, jumpTabId } from "../lib/tabCycle";
 import type { ChangelogRequest } from "../lib/changelog";
 import type { TabContextMenuRequest } from "../components/TabContextMenu/TabContextMenu";
@@ -148,6 +148,8 @@ export function useKeyboardShortcuts(snapshot: ShortcutSnapshot, actions: Shortc
             requestAnimationFrame(() => focusTerminal(activeTabId));
           }
         } else if (activeTabId) {
+          e.preventDefault();
+          releaseTerminalSynchronizedOutput(activeTabId);
           writeToPty(activeTabId, "\x1b");
         }
       }

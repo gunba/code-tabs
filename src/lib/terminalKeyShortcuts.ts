@@ -1,4 +1,5 @@
 export const SHIFT_ENTER_SEQUENCE = "\x1b[13;2u";
+export const END_SYNCHRONIZED_OUTPUT_SEQUENCE = "\x1b[?2026l";
 
 export type TerminalKeyEventLike = Pick<KeyboardEvent, "type" | "key" | "code" | "shiftKey" | "ctrlKey" | "altKey" | "metaKey">;
 
@@ -36,6 +37,22 @@ export function getTerminalKeySequenceOverride(ev: TerminalKeyEventLike): string
     return SHIFT_ENTER_SEQUENCE;
   }
   return null;
+}
+
+export function isTerminalInterruptKey(
+  ev: TerminalKeyEventLike,
+  ctx: {
+    modalOpen: boolean;
+    hasSelection: boolean;
+  },
+): boolean {
+  if (ctx.modalOpen || ev.type !== "keydown" || ev.altKey || ev.metaKey) return false;
+
+  if (ev.key === "Escape" && !ev.ctrlKey && !ev.shiftKey) {
+    return true;
+  }
+
+  return ev.ctrlKey && !ev.shiftKey && (ev.key === "c" || ev.key === "C") && !ctx.hasSelection;
 }
 
 export function classifyTerminalKey(

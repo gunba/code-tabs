@@ -1,6 +1,7 @@
 // [TR-16] Terminal buffer reader and render-wait registry
 
 import type { Terminal } from "@xterm/xterm";
+import { END_SYNCHRONIZED_OUTPUT_SEQUENCE } from "./terminalKeyShortcuts";
 
 const bufferReaders = new Map<string, () => string>();
 const terminals = new Map<string, Terminal>();
@@ -37,6 +38,13 @@ export function registerTerminal(sessionId: string, term: Terminal): void {
 
 export function focusTerminal(sessionId: string): void {
   terminals.get(sessionId)?.focus();
+}
+
+export function releaseTerminalSynchronizedOutput(sessionId: string): boolean {
+  const term = terminals.get(sessionId);
+  if (!term) return false;
+  term.write(END_SYNCHRONIZED_OUTPUT_SEQUENCE);
+  return true;
 }
 
 export function unregisterTerminal(sessionId: string): void {

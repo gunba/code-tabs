@@ -195,7 +195,13 @@ export function useTerminalSetup({
             }
           }
           try {
-            await invoke("start_codex_rollout", { sessionId: session.id });
+            const codexSessionId =
+              session.config.resumeSession
+              && !session.config.forkSession
+              && !session.config.continueSession
+                ? session.config.resumeSession
+                : null;
+            await invoke("start_codex_rollout", { sessionId: session.id, codexSessionId });
             codexRolloutStarted = true;
           } catch (err) {
             dlog("terminal", session.id, `start_codex_rollout failed: ${err}`, "WARN");
