@@ -1,5 +1,6 @@
 import type { TapCategory } from "./inspectorHooks";
 import type { TapEntry } from "../types/tapEvents";
+import type { CliKind } from "../types/session";
 
 export interface TapCategoryMeta {
   key: TapCategory;
@@ -15,12 +16,16 @@ export interface RecordedTapEntry extends Omit<TapEntry, "cat"> {
   hookSource: string;
 }
 
-export const TAP_CATEGORY_GROUPS: Array<{
+export interface TapCategoryGroup {
   label: string;
+  cli: CliKind;
   categories: TapCategoryMeta[];
-}> = [
+}
+
+export const TAP_CATEGORY_GROUPS: TapCategoryGroup[] = [
   {
     label: "Core (always on)",
+    cli: "claude",
     categories: [
       { key: "parse", label: "JSON.parse (SSE)", group: "core", hookSource: "JSON.parse()", locked: true },
       { key: "stringify", label: "JSON.stringify (requests)", group: "core", hookSource: "JSON.stringify()", locked: true },
@@ -28,6 +33,7 @@ export const TAP_CATEGORY_GROUPS: Array<{
   },
   {
     label: "Process I/O",
+    cli: "claude",
     categories: [
       { key: "console", label: "Console Output", group: "io", hookSource: "console.log() / warn() / error()" },
       { key: "stdout", label: "Stdout Writes", group: "io", hookSource: "process.stdout.write()" },
@@ -36,6 +42,7 @@ export const TAP_CATEGORY_GROUPS: Array<{
   },
   {
     label: "File System",
+    cli: "claude",
     categories: [
       { key: "fs", label: "File System (sync)", group: "fs", hookSource: "fs.readFileSync() / writeFileSync() / existsSync() / statSync() / readdirSync()" },
       { key: "fspromises", label: "File System (async)", group: "fs", hookSource: "fs.promises.*()" },
@@ -45,6 +52,7 @@ export const TAP_CATEGORY_GROUPS: Array<{
   },
   {
     label: "Network",
+    cli: "claude",
     categories: [
       { key: "fetch", label: "HTTP / Fetch", group: "net", hookSource: "globalThis.fetch() / https.request()" },
       { key: "websocket", label: "WebSocket", group: "net", hookSource: "WebSocket()" },
@@ -56,6 +64,7 @@ export const TAP_CATEGORY_GROUPS: Array<{
   },
   {
     label: "Process Lifecycle",
+    cli: "claude",
     categories: [
       { key: "spawn", label: "Subprocess Spawns", group: "process", hookSource: "child_process.spawn() / exec() / spawnSync() / execSync()" },
       { key: "exit", label: "Process Exit", group: "process", hookSource: "process.exit()" },
@@ -66,6 +75,7 @@ export const TAP_CATEGORY_GROUPS: Array<{
   },
   {
     label: "Codex Rollout",
+    cli: "codex",
     categories: [
       { key: "system-prompt", label: "Prompt Capture", group: "codex", hookSource: "Claude system prompt hook / Codex rollout prompt context" },
       { key: "codex-session", label: "Codex Session", group: "codex", hookSource: "$CODEX_HOME/sessions/.../rollout-*.jsonl session_meta" },
@@ -83,12 +93,17 @@ export const TAP_CATEGORY_GROUPS: Array<{
   },
   {
     label: "Internals",
+    cli: "claude",
     categories: [
       { key: "events", label: "Event Emitters", group: "internal", hookSource: "EventEmitter.prototype.emit()" },
       { key: "envproxy", label: "Environment Access", group: "internal", hookSource: "process.env reads" },
     ],
   },
 ];
+
+export function getTapCategoryGroupsForCli(cli: CliKind): TapCategoryGroup[] {
+  return TAP_CATEGORY_GROUPS.filter((g) => g.cli === cli);
+}
 
 const META_BY_KEY: Record<string, TapCategoryMeta> = Object.fromEntries(
   TAP_CATEGORY_GROUPS.flatMap((group) => group.categories.map((category) => [category.key, category])),

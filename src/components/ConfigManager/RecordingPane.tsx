@@ -4,7 +4,7 @@ import { useSettingsStore } from "../../store/settings";
 import { useSessionStore } from "../../store/sessions";
 import seedEventKinds from "../../types/eventKinds.json";
 import type { StatusMessage } from "../../lib/settingsSchema";
-import { TAP_CATEGORY_GROUPS } from "../../lib/tapCatalog";
+import { getTapCategoryGroupsForCli } from "../../lib/tapCatalog";
 import type { CliKind } from "../../types/session";
 import "./RecordingPane.css";
 
@@ -131,45 +131,42 @@ export function RecordingPane({ cli, onStatus }: RecordingPaneProps) {
 
   return (
     <div className="recording-pane">
-      {/* TAP Recording — Claude only (TAP intercepts Claude Code's JS bundle). */}
-      {cli === "claude" && (
-        <div className="recording-section">
-          <label className="recording-master-toggle">
-            <input
-              type="checkbox"
-              checked={recordingConfig.taps.enabled}
-              onChange={toggleTapEnabled}
-            />
-            <span className="recording-section-title">TAP Recording</span>
-            <span className="recording-hint">Write intercepted events to disk</span>
-          </label>
+      {/* [CM-27] TAP Recording: groups filtered by current CLI via getTapCategoryGroupsForCli. Claude-only JS-runtime hooks render under "claude"; "Codex Rollout" renders under "codex". The master taps.enabled toggle is per-CLI in recordingConfigsByCli. */}
+      <div className="recording-section">
+        <label className="recording-master-toggle">
+          <input
+            type="checkbox"
+            checked={recordingConfig.taps.enabled}
+            onChange={toggleTapEnabled}
+          />
+          <span className="recording-section-title">TAP Recording</span>
+          <span className="recording-hint">Write intercepted events to disk</span>
+        </label>
 
-          {/* [CM-27] TAP categories grouped by subsystem (TAP_CATEGORY_GROUPS); each row shows label + hookSource. The raw cat.key is React key + checkbox lookup, not user-facing. */}
-          <div className={`recording-categories${!recordingConfig.taps.enabled ? " recording-disabled" : ""}`}>
-            {TAP_CATEGORY_GROUPS.map((group) => (
-              <div key={group.label} className="recording-group">
-                <div className="recording-group-label">{group.label}</div>
-                <div className="recording-group-items">
-                  {group.categories.map((cat) => (
-                    <label key={cat.key} className="recording-category">
-                      <input
-                        type="checkbox"
-                        checked={cat.locked || !!recordingConfig.taps.categories[cat.key]}
-                        onChange={() => !cat.locked && toggleCategory(cat.key)}
-                        disabled={cat.locked || !recordingConfig.taps.enabled}
-                      />
-                      <span className="recording-category-copy">
-                        <span className="recording-category-label">{cat.label}</span>
-                        <span className="recording-category-source">{cat.hookSource}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
+        <div className={`recording-categories${!recordingConfig.taps.enabled ? " recording-disabled" : ""}`}>
+          {getTapCategoryGroupsForCli(cli).map((group) => (
+            <div key={group.label} className="recording-group">
+              <div className="recording-group-label">{group.label}</div>
+              <div className="recording-group-items">
+                {group.categories.map((cat) => (
+                  <label key={cat.key} className="recording-category">
+                    <input
+                      type="checkbox"
+                      checked={cat.locked || !!recordingConfig.taps.categories[cat.key]}
+                      onChange={() => !cat.locked && toggleCategory(cat.key)}
+                      disabled={cat.locked || !recordingConfig.taps.enabled}
+                    />
+                    <span className="recording-category-copy">
+                      <span className="recording-category-label">{cat.label}</span>
+                      <span className="recording-category-source">{cat.hookSource}</span>
+                    </span>
+                  </label>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* Event Filtering */}
       <div className="recording-section">

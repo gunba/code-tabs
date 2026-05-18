@@ -14,16 +14,41 @@ interface ResolvedPath {
 //   (c) bare filenames with extension: package.json, useTerminal.ts
 // Optional :line[:col] suffix. Lookbehind rejects mid-token matches (URL
 // tails, filename fragments inside other identifiers).
-// Internal segments (between two slashes) may contain ONE space-separated
-// word so paths like "src/My Folder/file.tsx" or "~/My Documents/config.json"
-// are detected. Allowing multiple words per segment would let the regex
-// bridge two adjacent paths (e.g. "a/b.ts and a/b.ts" collapses into one
-// match). Trailing segments stay space-free so we don't bleed into prose.
-// The trailing lookahead excludes [\w.\\/-] but NOT ":", because in real
-// terminal output paths are frequently followed by ": description" --
-// rejecting on ":" would miss every "src/App.tsx: explanation" form.
-const PATH_RE =
-  /(?<![\w\/\\:.])(?:(?:[A-Za-z]:|~|\.{1,2})?[\/\\](?:[\w.\-]+(?:[ ][\w.\-]+)?[\/\\])*[\w.\-]+|[\w.\-]+(?:[\/\\][\w.\-]+(?:[ ][\w.\-]+)?)*[\/\\][\w.\-]+|[\w\-]+\.[\w\-]{1,10})(?::\d+(?::\d+)?)?(?![\w.\/\\-])/g;
+//
+// Segments split into three flavours to balance space-tolerance against the
+// risk of bridging two adjacent paths:
+//
+//   SEG_RICH (anchored INTERNAL segments only): allow multiple
+//   space-separated words AND balanced (word) parens, so
+//   "C:\Program Files (x86)\app.exe" and "~/My Cool Folder/file.tsx"
+//   detect. Anchored paths can't easily collide with prose because the
+//   anchor pins the start.
+//
+//   SEG_PLAIN (bare INTERNAL segments): one optional space-separated
+//   word so "src/My Folder/file.tsx" detects, but bare prose like
+//   "ratio 100/200/300 is" does not bridge — the strict leading/trailing
+//   segments below guard the outer ends.
+//
+//   SEG_STRICT (all leading and trailing segments): strictly word chars
+//   + dot/dash. The final segment of every alternative is SEG_STRICT so
+//   trailing prose like "~/My Documents/config.json today" stops at
+//   "config.json" — the regex never bleeds into the next word.
+//
+// The trailing lookahead excludes [\w.\\/-] but NOT ":" so "src/App.tsx:
+// explanation" still extracts "src/App.tsx".
+const SEG_RICH = "(?:[\\w.\\-]+|\\([\\w.\\-]+\\))(?:[ ](?:[\\w.\\-]+|\\([\\w.\\-]+\\)))*";
+const SEG_PLAIN = "[\\w.\\-]+(?:[ ][\\w.\\-]+)?";
+const SEG_STRICT = "[\\w.\\-]+";
+const PATH_RE = new RegExp(
+  "(?<![\\w/\\\\:.])(?:" +
+    "(?:[A-Za-z]:|~|\\.{1,2})?[/\\\\](?:" + SEG_RICH + "[/\\\\])*" + SEG_STRICT +
+    "|" +
+    SEG_STRICT + "(?:[/\\\\]" + SEG_PLAIN + ")*[/\\\\]" + SEG_STRICT +
+    "|" +
+    "[\\w\\-]+\\.[\\w\\-]{1,10}" +
+  ")(?::\\d+(?::\\d+)?)?(?![\\w./\\\\\\-])",
+  "g",
+);
 
 // Wrapper characters commonly stripped from path tokens found in prose.
 const LEADING_PUNCT_RE = /^[("'`<{\[]+/;
@@ -37,6 +62,14 @@ function trimPathPunct(raw: string): string {
   // Preserve `:line[:col]` suffix: only trim non-digit trailing punct.
   const trimmedLeading = raw.replace(LEADING_PUNCT_RE, "");
   if (/:\d+(?::\d+)?$/.test(trimmedLeading)) return trimmedLeading;
+  // Keep trailing `)` when the path contains balanced parens internally
+  // (e.g. "C:\Program Files (x86)\app.exe" — but apply only to a candidate
+  // whose final ')' is part of a balanced pair, not stray prose punctuation).
+  const opens = (trimmedLeading.match(/\(/g) || []).length;
+  const closes = (trimmedLeading.match(/\)/g) || []).length;
+  if (opens > 0 && opens === closes && trimmedLeading.endsWith(")")) {
+    return trimmedLeading.replace(/[.,;:"'>\]]+$/, "");
+  }
   return trimmedLeading.replace(TRAILING_PUNCT_RE, "");
 }
 

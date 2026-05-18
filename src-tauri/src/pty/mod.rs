@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::io::Write;
 use std::sync::{
-    atomic::{AtomicU32, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
     Arc,
 };
 
@@ -177,26 +177,71 @@ fn pty_spawn_env(env: &BTreeMap<String, String>) -> BTreeMap<String, String> {
 /// behaviour `useXtermLifecycle.ts` already documents for `\e[?1003h` mouse
 /// tracking. So xterm.js never sees the sync wrapper and the flicker is
 /// constant. OpenAI declines to fix this in Codex (openai/codex#9081, closed
-/// not-planned). To compensate, we wrap each ConPTY read batch in synthetic
-/// BSU/ESU so xterm.js 6.0's synchronized-output handler renders the whole
-/// batch as one frame. Any inner BSU/ESU that does survive ConPTY is
-/// idempotent under xterm.js's boolean+timer implementation.
-fn maybe_wrap_sync_output(data: Vec<u8>, cli_kind: Option<CliKind>) -> Vec<u8> {
+/// not-planned). To compensate, we wrap synthetic BSU/ESU around each Codex
+/// frame so xterm.js 6.0's synchronized-output handler renders it atomically.
+///
+/// [PT-28] Frame-aware (cross-batch) sync wrapping. The previous per-batch
+/// wrapper closed every read with ESU, which produced a visible half-frame
+/// when Codex emitted a single frame across two ConPTY reads (256KB drain
+/// boundary) — the first batch's synthetic ESU forced an early paint, then
+/// the second batch's BSU/ESU painted the rest. The per-session `inside_sync`
+/// bit tracks whether the previous batch ended mid-frame; if it did, we
+/// suppress the leading BSU on the next batch and continue the synchronised
+/// region. We also detect any *unmatched* inner DEC-2026 toggle in the batch
+/// so a frame that genuinely spans batches stays inside one continuous sync
+/// region.
+fn maybe_wrap_sync_output(
+    data: Vec<u8>,
+    cli_kind: Option<CliKind>,
+    inside_sync: &AtomicBool,
+) -> Vec<u8> {
     #[cfg(windows)]
     {
         if cli_kind == Some(CliKind::Codex) && !data.is_empty() {
             const BSU: &[u8] = b"\x1b[?2026h";
             const ESU: &[u8] = b"\x1b[?2026l";
-            let mut wrapped = Vec::with_capacity(BSU.len() + data.len() + ESU.len());
-            wrapped.extend_from_slice(BSU);
+            let started_inside = inside_sync.load(Ordering::Relaxed);
+            // Net toggle inside this batch: scan the body for raw BSU/ESU
+            // sequences (Codex emits them; ConPTY strips outer but inner can
+            // survive). Each BSU pushes +1, each ESU pops -1; final balance
+            // tells us whether the batch ends mid-frame.
+            let mut balance: i32 = if started_inside { 1 } else { 0 };
+            let mut i = 0;
+            while i + BSU.len() <= data.len() {
+                if &data[i..i + BSU.len()] == BSU {
+                    balance += 1;
+                    i += BSU.len();
+                    continue;
+                }
+                if &data[i..i + ESU.len()] == ESU {
+                    balance = balance.saturating_sub(1);
+                    i += ESU.len();
+                    continue;
+                }
+                i += 1;
+            }
+            let ends_inside = balance > 0;
+            inside_sync.store(ends_inside, Ordering::Relaxed);
+
+            let prepend = !started_inside;
+            let append = !ends_inside;
+            let mut wrapped = Vec::with_capacity(
+                if prepend { BSU.len() } else { 0 } + data.len() + if append { ESU.len() } else { 0 },
+            );
+            if prepend {
+                wrapped.extend_from_slice(BSU);
+            }
             wrapped.extend_from_slice(&data);
-            wrapped.extend_from_slice(ESU);
+            if append {
+                wrapped.extend_from_slice(ESU);
+            }
             return wrapped;
         }
     }
     #[cfg(not(windows))]
     {
         let _ = cli_kind;
+        let _ = inside_sync;
     }
     data
 }
@@ -220,6 +265,12 @@ struct Session {
     exit_tx: watch::Sender<ExitState>,
     shutdown_tx: watch::Sender<bool>,
     process_id: u32,
+    // [PT-28] Frame-aware sync wrapping state (Windows + Codex only). True
+    // when the previous pty_read batch ended inside an unmatched DEC-2026
+    // synchronized-output region. maybe_wrap_sync_output consults and updates
+    // this so a single Codex frame split across two ConPTY reads stays in one
+    // continuous synchronised region in the host stream.
+    inside_sync: AtomicBool,
 }
 
 // ── Commands ─────────────────────────────────────────────────────────
@@ -282,6 +333,7 @@ pub async fn pty_spawn(
         exit_tx,
         shutdown_tx,
         process_id: result.process_id,
+        inside_sync: AtomicBool::new(false),
     });
 
     state.sessions.write().await.insert(handler, session);
@@ -364,7 +416,7 @@ pub async fn pty_read(
             Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
         }
     }
-    let data = maybe_wrap_sync_output(data, session.cli_kind);
+    let data = maybe_wrap_sync_output(data, session.cli_kind, &session.inside_sync);
     Ok(Response::new(data))
 }
 
@@ -552,35 +604,76 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn wrap_sync_output_brackets_codex_batches_on_windows() {
-        let wrapped = maybe_wrap_sync_output(b"hello".to_vec(), Some(CliKind::Codex));
+        let state = AtomicBool::new(false);
+        let wrapped = maybe_wrap_sync_output(b"hello".to_vec(), Some(CliKind::Codex), &state);
         assert_eq!(&wrapped[..8], b"\x1b[?2026h");
         assert_eq!(&wrapped[8..13], b"hello");
         assert_eq!(&wrapped[13..], b"\x1b[?2026l");
+        assert!(!state.load(Ordering::Relaxed));
     }
 
     #[cfg(windows)]
     #[test]
     fn wrap_sync_output_skips_claude_empty_and_unknown() {
+        let state = AtomicBool::new(false);
         assert_eq!(
-            maybe_wrap_sync_output(b"hello".to_vec(), Some(CliKind::Claude)),
+            maybe_wrap_sync_output(b"hello".to_vec(), Some(CliKind::Claude), &state),
             b"hello".to_vec()
         );
         assert_eq!(
-            maybe_wrap_sync_output(b"hello".to_vec(), None),
+            maybe_wrap_sync_output(b"hello".to_vec(), None, &state),
             b"hello".to_vec()
         );
         assert_eq!(
-            maybe_wrap_sync_output(Vec::new(), Some(CliKind::Codex)),
+            maybe_wrap_sync_output(Vec::new(), Some(CliKind::Codex), &state),
             Vec::<u8>::new()
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn wrap_sync_output_holds_open_across_batches_when_frame_straddles() {
+        // [PT-28] A Codex frame can straddle two ConPTY read batches. The
+        // first batch contains an inner BSU (Codex's own) with no matching
+        // ESU; the second batch contains the matching ESU. With the per-batch
+        // wrapper we used to close-and-reopen the sync region in between,
+        // forcing xterm.js to paint a half-frame. With cross-batch state,
+        // the leading BSU is only emitted once and the trailing ESU only
+        // once when the frame truly ends.
+        let state = AtomicBool::new(false);
+        let batch_a = {
+            let mut v = Vec::new();
+            v.extend_from_slice(b"\x1b[?2026h"); // inner BSU
+            v.extend_from_slice(b"part-a");
+            v
+        };
+        let wrapped_a = maybe_wrap_sync_output(batch_a.clone(), Some(CliKind::Codex), &state);
+        // Leading synthetic BSU prepended; no trailing ESU because we're mid-frame.
+        assert_eq!(&wrapped_a[..8], b"\x1b[?2026h");
+        assert!(state.load(Ordering::Relaxed));
+        assert!(!wrapped_a.ends_with(b"\x1b[?2026l"));
+
+        let batch_b = {
+            let mut v = Vec::new();
+            v.extend_from_slice(b"part-b");
+            v.extend_from_slice(b"\x1b[?2026l"); // inner ESU closes the frame
+            v
+        };
+        let wrapped_b = maybe_wrap_sync_output(batch_b.clone(), Some(CliKind::Codex), &state);
+        // No leading BSU prepended (continuing the frame); inner ESU left intact;
+        // no synthetic trailing ESU because the inner ESU already closed it.
+        assert!(!wrapped_b.starts_with(b"\x1b[?2026h"));
+        assert!(!state.load(Ordering::Relaxed));
+        assert!(wrapped_b.ends_with(b"\x1b[?2026l"));
     }
 
     #[cfg(not(windows))]
     #[test]
     fn wrap_sync_output_is_passthrough_off_windows() {
+        let state = AtomicBool::new(false);
         let data = b"hello".to_vec();
         assert_eq!(
-            maybe_wrap_sync_output(data.clone(), Some(CliKind::Codex)),
+            maybe_wrap_sync_output(data.clone(), Some(CliKind::Codex), &state),
             data
         );
     }

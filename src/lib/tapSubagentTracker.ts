@@ -152,20 +152,31 @@ export class TapSubagentTracker {
   }
 
   /** Sweep every non-dead known subagent to dead+completed, emitting update +
-   *  FIFO-eviction actions. Used by every clean-completion code path. */
+   *  FIFO-eviction actions. Used by every clean-completion code path.
+   *
+   *  [IN-36] Insta-complete fix: subagents that have not yet shown a single
+   *  conversation message are marked dead but NOT completed=true, so the
+   *  SubagentBar renders them as a neutral "dead" card instead of stamping a
+   *  green checkmark on an agent the user has never seen working. Late
+   *  sidechain messages can still arrive via the transcript-only append path
+   *  in the ConversationMessage handler. */
   private sweepNonDeadToDead(actions: SubagentAction[], reason: string): void {
     for (const agentId of this.knownIds) {
       const currentState = this.agentStates.get(agentId);
       if (currentState && currentState !== "dead") {
-        dlog("inspector", this.parentSessionId, `subagent ${agentId} ${currentState} → dead+completed (${reason})`, "DEBUG");
+        const hasMessages = (this.subagentMsgs.get(agentId)?.length ?? 0) > 0;
+        dlog("inspector", this.parentSessionId, `subagent ${agentId} ${currentState} → dead${hasMessages ? "+completed" : ""} (${reason})`, "DEBUG");
         this.agentStates.set(agentId, "dead");
-        actions.push({ type: "update", subagentId: agentId, updates: {
+        const updates: Partial<Subagent> = {
           state: "dead",
-          completed: true,
           currentToolName: null,
           currentEventKind: null,
           currentAction: null,
-        } });
+        };
+        if (hasMessages) {
+          updates.completed = true;
+        }
+        actions.push({ type: "update", subagentId: agentId, updates });
         this.recordDead(agentId, actions);
       }
     }
@@ -224,8 +235,18 @@ export class TapSubagentTracker {
 
       case "CodexSubagentSpawned": {
         if (!event.agentId) break;
-        const state = codexStateFromStatus(event.status);
-        const completed = isCodexCompletedStatus(event.status);
+        const rawState = codexStateFromStatus(event.status);
+        const rawCompleted = isCodexCompletedStatus(event.status);
+        // [IN-36] Insta-complete fix: spawn telemetry must not mark an agent
+        // dead. The spawn event tells us "this agent now exists"; lifecycle
+        // (CodexSubagentStatus) tells us "this agent finished". If we see the
+        // agent's status as already completed at spawn time (fast errors,
+        // batched rollout reads, etc.) we still create the entry in an active
+        // state so the UI doesn't pop straight to checkmark; the next genuine
+        // CodexSubagentStatus(completed) drives the transition.
+        const isKnown = this.knownIds.has(event.agentId);
+        const state: SessionState = isKnown ? rawState : (rawState === "dead" ? "thinking" : rawState);
+        const completed = isKnown ? rawCompleted : false;
         const description = event.nickname || event.role || "Codex agent";
         this.codexSubagentIds.add(event.agentId);
         this.subagentTokens.set(event.agentId, this.subagentTokens.get(event.agentId) ?? 0);
@@ -283,8 +304,16 @@ export class TapSubagentTracker {
 
       case "CodexSubagentStatus": {
         if (!event.agentId) break;
-        const state = codexStateFromStatus(event.status);
-        const completed = isCodexCompletedStatus(event.status);
+        const rawState = codexStateFromStatus(event.status);
+        const rawCompleted = isCodexCompletedStatus(event.status);
+        // [IN-36] Insta-complete fix mirror: when we encounter a status event
+        // for an agent we've never seen before, treat it like a spawn and
+        // keep the entry alive until at least one further telemetry event
+        // confirms the dead transition. Updates to known agents keep their
+        // genuine lifecycle semantics.
+        const isKnown = this.knownIds.has(event.agentId);
+        const state: SessionState = isKnown ? rawState : (rawState === "dead" ? "thinking" : rawState);
+        const completed = isKnown ? rawCompleted : false;
         this.codexSubagentIds.add(event.agentId);
         this.agentStates.set(event.agentId, state);
         this.lastActiveAgent = event.agentId;
@@ -303,7 +332,7 @@ export class TapSubagentTracker {
         }
         if (completed && event.statusMessage) updates.resultText = event.statusMessage;
 
-        if (this.knownIds.has(event.agentId)) {
+        if (isKnown) {
           actions.push({ type: "update", subagentId: event.agentId, updates });
         } else {
           this.knownIds.add(event.agentId);
@@ -352,11 +381,52 @@ export class TapSubagentTracker {
 
         const agentId = event.agentId;
 
-        // Don't re-activate agents already marked idle/dead by SubagentNotification,
-        // SubagentLifecycle, or UserInterruption. Late sidechain messages arriving after
-        // completion should not flip hasActiveAgents() back to true.
+        // [IN-37] Late sidechain message → still append to the transcript even
+        // when the agent is no longer active. Decouples lifecycle authority
+        // (SubagentNotification / SubagentLifecycle / sidechain-exit sweep)
+        // from transcript completeness so the inspector renders real content
+        // even after the subagent has been swept dead. Skip state/lastActive
+        // updates so hasActiveAgents() does not flip back to true.
         if (this.knownIds.has(agentId) && !isSubagentActive(this.agentStates.get(agentId) ?? "dead")) {
-          dlog("inspector", this.parentSessionId, `subagent ${agentId} late msg dropped (state=${this.agentStates.get(agentId)})`, "DEBUG");
+          const now = Date.now();
+          const isNewUuid = !event.uuid || !this.processedUuids.has(event.uuid);
+          if (!isNewUuid) {
+            dlog("inspector", this.parentSessionId, `subagent ${agentId} late msg dedup'd uuid=${event.uuid}`, "DEBUG");
+            break;
+          }
+          if (event.uuid) this.processedUuids.add(event.uuid);
+          const lateMsgs: SubagentMessage[] = [];
+          if (event.messageType === "assistant") {
+            if (event.textSnippet) {
+              lateMsgs.push({ role: "assistant", text: event.textSnippet, timestamp: now });
+            }
+            if (event.toolAction) {
+              const toolName = event.toolNames.length > 0 ? event.toolNames[event.toolNames.length - 1] : undefined;
+              let toolText = event.toolAction;
+              if (toolName && toolText.startsWith(toolName + ": ")) {
+                toolText = toolText.slice(toolName.length + 2);
+              }
+              lateMsgs.push({ role: "tool", text: toolText, toolName, timestamp: now });
+            }
+          }
+          if (event.messageType === "user" && event.toolResultSnippets) {
+            for (const snippet of event.toolResultSnippets) {
+              if (snippet.content) {
+                lateMsgs.push({ role: "tool", text: snippet.content, toolName: "result", timestamp: now });
+              }
+            }
+          }
+          if (lateMsgs.length > 0) {
+            const existing = this.subagentMsgs.get(agentId) || [];
+            const allMsgs = [...existing, ...lateMsgs];
+            this.subagentMsgs.set(agentId, allMsgs);
+            actions.push({
+              type: "update",
+              subagentId: agentId,
+              updates: { messages: allMsgs },
+            });
+            dlog("inspector", this.parentSessionId, `subagent ${agentId} late msg appended (state=${this.agentStates.get(agentId)}) +${lateMsgs.length}`, "DEBUG");
+          }
           break;
         }
 
@@ -544,9 +614,15 @@ export class TapSubagentTracker {
           });
         } else if (event.variant === "end") {
           dlog("inspector", this.parentSessionId, `subagent lifecycle end target=${targetId} tools=${event.totalToolUses} dur=${event.durationMs}ms`, "DEBUG");
-          // Enrich lastActiveAgent with metadata if available
+          // Enrich lastActiveAgent with metadata if available.
+          // [IN-36] Only stamp completed=true when the agent has accumulated
+          // at least one conversation message, so 0-message agents render as
+          // a neutral dead card rather than a green checkmark on something
+          // the user never saw working.
           if (targetId && this.knownIds.has(targetId)) {
-            const metaUpdates: Partial<Subagent> = { completed: true };
+            const hasMessages = (this.subagentMsgs.get(targetId)?.length ?? 0) > 0;
+            const metaUpdates: Partial<Subagent> = {};
+            if (hasMessages) metaUpdates.completed = true;
             if (event.totalToolUses != null) metaUpdates.totalToolUses = event.totalToolUses;
             if (event.durationMs != null) metaUpdates.durationMs = event.durationMs;
             actions.push({ type: "update", subagentId: targetId, updates: metaUpdates });

@@ -75,6 +75,30 @@ const NON_SESSION_FLAGS = new Set([
   "--no-input",             // Disables interactive input
 ]);
 
+// [SL-22] Structural validity check for cwd paths. A path is structurally valid
+// if it's a syntactically plausible directory path on the current OS, so the
+// launcher can create it on launch. Cross-platform: Windows uses forbidden chars
+// `<>:"|?*` (allow `:` only as drive-letter); Linux only rejects NUL bytes.
+function isStructurallyValidPath(raw: string): boolean {
+  const path = raw.trim();
+  if (!path) return false;
+  if (path.includes("\0")) return false;
+  // Windows-specific forbidden chars. Allow `:` as the second char of a drive
+  // letter (`C:\...`) but reject elsewhere.
+  if (/^[A-Za-z]:[/\\]/.test(path)) {
+    const tail = path.slice(2);
+    if (/[<>:"|?*]/.test(tail)) return false;
+  } else if (/[<>"|?*]/.test(path)) {
+    return false;
+  } else if (path.includes(":")) {
+    // Standalone `:` is illegal on Windows; Linux allows it.
+    // Keep the cross-platform rule conservative: reject `:` outside drive letters.
+    // This matches what create_dir_all would error out on under Windows anyway.
+    if (navigator.userAgent.toLowerCase().includes("windows")) return false;
+  }
+  return true;
+}
+
 // ── Main component ──────────────────────────────────────────────────
 
 // [SL-01] Modal for new session, resume, or fork.
@@ -116,6 +140,10 @@ export function SessionLauncher() {
     codex: { model: config.cli === "codex" ? config.model : null, effort: config.cli === "codex" ? config.effort : null },
   });
   const [launchError, setLaunchError] = useState<string>("");
+  // [SL-22] Path hint: shown when workingDir is a structurally-valid but
+  // non-existent directory. The launcher creates the folder on launch instead
+  // of blocking. null = no hint, "missing-valid" = will-create info banner.
+  const [pathHint, setPathHint] = useState<null | "missing-valid">(null);
   const [showCliOptions, setShowCliOptions] = useState(true);
   const [showUtility, setShowUtility] = useState(false);
   const [defaultsSaved, setDefaultsSaved] = useState(false);
@@ -124,7 +152,10 @@ export function SessionLauncher() {
 
   const updateConfig = useCallback(
     <K extends keyof SessionConfig>(key: K, value: SessionConfig[K]) => {
-      if (key === "workingDir") setLaunchError("");
+      if (key === "workingDir") {
+        setLaunchError("");
+        setPathHint(null);
+      }
       dispatchConfigUpdate(key, value);
     },
     [dispatchConfigUpdate],
@@ -250,6 +281,37 @@ export function SessionLauncher() {
   useEffect(() => {
     cliSelectionsRef.current[config.cli] = { model: config.model, effort: config.effort };
   }, [config.cli, config.model, config.effort]);
+
+  // [SL-22] Debounced cwd existence check: if the typed directory does not
+  // exist but is structurally valid, surface a neutral "Folder will be
+  // created on launch" hint instead of blocking the launch. Reset on edits.
+  useEffect(() => {
+    const trimmed = config.workingDir.trim();
+    if (!trimmed) {
+      setPathHint(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const exists = await invoke<boolean>("dir_exists", { path: normalizePath(trimmed) });
+        if (cancelled) return;
+        if (exists) {
+          setPathHint(null);
+        } else if (isStructurallyValidPath(trimmed)) {
+          setPathHint("missing-valid");
+        } else {
+          setPathHint(null);
+        }
+      } catch {
+        if (!cancelled) setPathHint(null);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [config.workingDir]);
 
   const handleCliSelect = useCallback((cli: SessionConfig["cli"]) => {
     if (cli === config.cli) return;
@@ -452,12 +514,24 @@ export function SessionLauncher() {
         return;
       }
       if (!isNonSessionCommand && !launchConfig.workingDir.trim()) return;
-      // [SL-19] Validate that the working directory actually exists on disk
+      // [SL-19] [SL-22] Validate that the working directory exists. If it
+      // doesn't but the path is structurally valid, create it on launch
+      // instead of blocking. This matches the inline "Folder will be
+      // created on launch" hint shown to the user before clicking Launch.
       if (!isNonSessionCommand && launchConfig.workingDir.trim()) {
-        const exists = await invoke<boolean>("dir_exists", { path: normalizePath(launchConfig.workingDir.trim()) });
+        const normalized = normalizePath(launchConfig.workingDir.trim());
+        const exists = await invoke<boolean>("dir_exists", { path: normalized });
         if (!exists) {
-          setLaunchError("Directory does not exist");
-          return;
+          if (!isStructurallyValidPath(launchConfig.workingDir.trim())) {
+            setLaunchError("Directory does not exist");
+            return;
+          }
+          try {
+            await invoke<void>("create_directory", { path: normalized });
+          } catch (e) {
+            setLaunchError(typeof e === "string" ? e : "Could not create directory");
+            return;
+          }
         }
       }
       const finalConfig = buildFinalLauncherConfig(launchConfig, isNonSessionCommand);
@@ -626,6 +700,9 @@ export function SessionLauncher() {
           </div>
         )}
         {launchError && <div className="launcher-path-error">{launchError}</div>}
+        {!launchError && pathHint === "missing-valid" && (
+          <div className="launcher-path-hint">Folder will be created on launch.</div>
+        )}
 
         {/* Recent directories — only for new sessions */}
         {!isResuming && uniqueRecentDirs.length > 0 && (

@@ -200,6 +200,106 @@ describe("TapSubagentTracker", () => {
       });
       expect(tracker.hasActiveAgents()).toBe(false);
     });
+
+    it("[IN-36] CodexSubagentSpawned with status=completed on first sight is not insta-completed", () => {
+      // Fast Codex subagents can show status="completed" on the very first
+      // spawn telemetry. We must not mark them dead+completed yet — the UI
+      // would pop straight to checkmark with nothing to look at.
+      const actions = tracker.process({
+        kind: "CodexSubagentSpawned",
+        ts: 10,
+        callId: "call_spawn",
+        parentThreadId: "parent-thread",
+        agentId: "agent-fast",
+        nickname: "fast",
+        role: "default",
+        prompt: "instant",
+        model: "gpt-5.5",
+        reasoningEffort: "low",
+        status: "completed",
+        statusMessage: "done",
+      } as TapEvent);
+      const add = actions.find(a => a.type === "add")!;
+      expect(add.subagent!.completed).toBe(false);
+      expect(add.subagent!.state).not.toBe("dead");
+    });
+
+    it("[IN-36] CodexSubagentStatus with status=completed on first sight is not insta-completed", () => {
+      const actions = tracker.process({
+        kind: "CodexSubagentStatus",
+        ts: 20,
+        callId: "call_wait",
+        agentId: "agent-only-status",
+        nickname: "no-spawn",
+        role: "default",
+        status: "completed",
+        statusMessage: "done",
+        source: "wait",
+      } as TapEvent);
+      const add = actions.find(a => a.type === "add")!;
+      expect(add.subagent!.completed).toBe(false);
+      expect(add.subagent!.state).not.toBe("dead");
+    });
+  });
+
+  describe("[IN-36] insta-complete + [IN-37] transcript decouple (Claude path)", () => {
+    function makeNotification(status: "completed" | "killed" | "failed" | "stopped"): TapEvent {
+      return {
+        kind: "SubagentNotification",
+        ts: 100,
+        status,
+        summary: "",
+        taskId: null,
+        toolUseId: null,
+        taskType: null,
+        outputFile: null,
+        result: null,
+        usageTotalTokens: null,
+        usageToolUses: null,
+        usageDurationMs: null,
+        worktreePath: null,
+        worktreeBranch: null,
+      } as TapEvent;
+    }
+
+    it("SubagentNotification(completed) does not stamp completed=true on a 0-message agent", () => {
+      tracker.process(makeSpawn("test", "do it"));
+      // First sidechain message creates the agent. Bare empty content so
+      // subagentMsgs stays empty (no assistant text, no tool result).
+      tracker.process(makeSidechainMsg("agent-empty", {
+        messageType: "user",
+        toolNames: [],
+        toolAction: null,
+        textSnippet: null,
+        toolResultSnippets: null,
+      }));
+      const actions = tracker.process(makeNotification("completed"));
+      const update = actions.find(a => a.subagentId === "agent-empty" && a.type === "update");
+      expect(update).toBeDefined();
+      expect(update!.updates!).toMatchObject({ state: "dead" });
+      expect(update!.updates!.completed).toBeUndefined();
+    });
+
+    it("[IN-37] late sidechain message after sweep still appends to the transcript", () => {
+      tracker.process(makeSpawn("test", "do it"));
+      tracker.process(makeSidechainMsg("agent-late"));
+      // Force the agent dead via SubagentNotification.
+      tracker.process(makeNotification("completed"));
+      // Late sidechain message arrives after the sweep — must still append.
+      const actions = tracker.process(makeSidechainMsg("agent-late", {
+        ts: 200,
+        uuid: "late-uuid-1",
+        messageType: "assistant",
+        textSnippet: "late content",
+        toolAction: null,
+        toolNames: [],
+        stopReason: "end_turn",
+      }));
+      const update = actions.find(a => a.subagentId === "agent-late" && a.type === "update");
+      expect(update).toBeDefined();
+      const msgs = update!.updates!.messages!;
+      expect(msgs.some(m => m.role === "assistant" && m.text === "late content")).toBe(true);
+    });
   });
 
   // ── ConversationMessage filtering ──
@@ -336,32 +436,42 @@ describe("TapSubagentTracker", () => {
     });
   });
 
-  // ── Late message suppression ──
+  // ── Late message handling ([IN-37]: transcript-only append, no lifecycle flip) ──
 
-  describe("late message suppression", () => {
-    it("drops messages for agents marked dead", () => {
+  describe("late sidechain messages (transcript decoupled from lifecycle)", () => {
+    it("appends to the transcript for agents marked dead without re-activating", () => {
       spawnAndActivate(tracker, "agent-1");
       tracker.process({ kind: "SubagentNotification", ts: 5, status: "completed", summary: "" } as TapEvent);
 
-      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 10 }));
-      expect(actions).toEqual([]);
+      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 10, uuid: "late-1" }));
+      // Late message appended to messages; no state/lifecycle flip.
+      const update = actions.find(a => a.subagentId === "agent-1" && a.type === "update");
+      expect(update).toBeDefined();
+      expect(update!.updates!.state).toBeUndefined();
+      expect(update!.updates!.messages).toBeDefined();
       expect(tracker.hasActiveAgents()).toBe(false);
     });
 
-    it("drops messages for agents marked idle", () => {
+    it("appends to the transcript for agents marked idle without re-activating", () => {
       spawnAndActivate(tracker, "agent-1");
       tracker.process(makeSidechainMsg("agent-1", { stopReason: "end_turn" }));
 
-      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 20 }));
-      expect(actions).toEqual([]);
+      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 20, uuid: "late-2" }));
+      const update = actions.find(a => a.subagentId === "agent-1" && a.type === "update");
+      expect(update).toBeDefined();
+      expect(update!.updates!.state).toBeUndefined();
+      expect(update!.updates!.messages).toBeDefined();
     });
 
-    it("drops messages for agents marked interrupted", () => {
+    it("appends to the transcript for agents marked interrupted without re-activating", () => {
       spawnAndActivate(tracker, "agent-1");
       tracker.process({ kind: "UserInterruption", ts: 5, forToolUse: false } as TapEvent);
 
-      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 20 }));
-      expect(actions).toEqual([]);
+      const actions = tracker.process(makeSidechainMsg("agent-1", { ts: 20, uuid: "late-3" }));
+      const update = actions.find(a => a.subagentId === "agent-1" && a.type === "update");
+      expect(update).toBeDefined();
+      expect(update!.updates!.state).toBeUndefined();
+      expect(update!.updates!.messages).toBeDefined();
     });
   });
 

@@ -320,6 +320,7 @@ pub fn run() {
             commands::plugin_enable,
             commands::plugin_disable,
             commands::dir_exists,
+            commands::create_directory,
             commands::git_repo_check,
             commands::git_list_changes,
             commands::paths_exist,

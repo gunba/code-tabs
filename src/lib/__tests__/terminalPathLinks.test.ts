@@ -91,6 +91,30 @@ describe("findPathLinkCandidates", () => {
     expect(matches[0]?.raw).toBe("~/My Documents/config.json");
   });
 
+  it("supports multi-word segments and parens in anchored paths", () => {
+    expect(
+      findPathLinkCandidates("C:\\Program Files (x86)\\app.exe")[0]?.raw,
+    ).toBe("C:\\Program Files (x86)\\app.exe");
+    expect(
+      findPathLinkCandidates("~/My Cool Folder/file.tsx")[0]?.raw,
+    ).toBe("~/My Cool Folder/file.tsx");
+    expect(
+      findPathLinkCandidates("/home/user/Project (alpha)/main.rs")[0]?.raw,
+    ).toBe("/home/user/Project (alpha)/main.rs");
+    expect(
+      findPathLinkCandidates("./My Multi Word Folder/index.ts")[0]?.raw,
+    ).toBe("./My Multi Word Folder/index.ts");
+  });
+
+  it("does not bridge into trailing prose after the final filename", () => {
+    expect(
+      findPathLinkCandidates("edit C:\\Program Files (x86)\\app.exe today")[0]?.raw,
+    ).toBe("C:\\Program Files (x86)\\app.exe");
+    expect(
+      findPathLinkCandidates("see /home/me/My Folder/file.tsx now")[0]?.raw,
+    ).toBe("/home/me/My Folder/file.tsx");
+  });
+
   it("does not match bare prose with spaces around a slash", () => {
     expect(findPathLinkCandidates("let me see what")).toEqual([]);
     expect(findPathLinkCandidates("ratio 100/200/300 is not")).toEqual([]);

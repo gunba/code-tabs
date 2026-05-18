@@ -674,6 +674,44 @@ fn resolve_session_chains(
     }
 }
 
+/// Scan a Codex rollout JSONL for `collab_agent_spawn_end` records and return
+/// the `new_thread_id` of every spawned subagent thread. Used to filter
+/// Codex subagent rollouts out of the resume-history list — only top-level
+/// parent sessions surface to the user.
+fn collect_codex_subagent_thread_ids(path: &std::path::Path) -> Vec<String> {
+    let Ok(file) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
+    use std::io::BufRead;
+    let reader = std::io::BufReader::new(file);
+    let mut ids = Vec::new();
+    for line in reader.lines().map_while(Result::ok) {
+        // Only bother parsing lines that look like they could contain the
+        // payload type — cheap substring guard before JSON parse.
+        if !line.contains("collab_agent_spawn_end") {
+            continue;
+        }
+        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        let payload = &parsed["payload"];
+        // collab_agent_spawn_end appears as response_item payload OR top-level
+        // event with payload.type. Cover both shapes.
+        let kind = parsed["type"].as_str();
+        let payload_kind = payload["type"].as_str();
+        if kind == Some("collab_agent_spawn_end")
+            || payload_kind == Some("collab_agent_spawn_end")
+        {
+            if let Some(id) = payload["new_thread_id"].as_str() {
+                if !id.is_empty() {
+                    ids.push(id.to_string());
+                }
+            }
+        }
+    }
+    ids
+}
+
 // [RC-04] list_past_sessions_sync detects plan-mode forks by capturing sourceToolAssistantUUID during the head pass and resolving it during chain detection.
 fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
     let home = dirs::home_dir().ok_or("Could not determine home directory")?;
@@ -727,17 +765,25 @@ fn list_past_sessions_sync() -> Result<Vec<serde_json::Value>, String> {
     }
 
     let mut codex_entries_by_id: HashMap<String, PastSessionRawEntry> = HashMap::new();
+    let mut codex_subagent_ids: HashSet<String> = HashSet::new();
     for fpath in collect_codex_rollout_files() {
         let metadata = match std::fs::metadata(&fpath) {
             Ok(m) => m,
             Err(_) => continue,
         };
+        // [SR-10] Subagent rollouts are not resumable as top-level sessions:
+        // gather every collab_agent_spawn_end.new_thread_id and drop matching
+        // entries below.
+        for id in collect_codex_subagent_thread_ids(&fpath) {
+            codex_subagent_ids.insert(id);
+        }
         let Some(summary) = summarize_codex_rollout(&fpath) else {
             continue;
         };
         let entry = codex_raw_entry(&fpath, &metadata, summary);
         keep_newest_codex_entry_by_id(&mut codex_entries_by_id, entry);
     }
+    codex_entries_by_id.retain(|id, _| !codex_subagent_ids.contains(id));
     raw_entries.extend(codex_entries_by_id.into_values());
 
     resolve_session_chains(&mut raw_entries, &uuid_to_session);
@@ -2045,6 +2091,16 @@ pub fn reveal_in_file_manager(path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn dir_exists(path: String) -> bool {
     std::path::Path::new(&path).is_dir()
+}
+
+/// [SL-22] Create a directory (and any missing parents) for the launch flow. Used by
+/// SessionLauncher when the user enters a structurally valid but non-existent cwd:
+/// the launcher downgrades the validation error to an informational hint and calls
+/// this command from handleLaunch before spawning the session.
+#[tauri::command]
+pub fn create_directory(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(&path)
+        .map_err(|e| format!("Failed to create directory {}: {}", path, e))
 }
 
 const MAX_CONVERSATION_FILE_SIZE: u64 = 20 * 1024 * 1024;
